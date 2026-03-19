@@ -2,7 +2,7 @@
 
 server:
   host: 0.0.0.0
-  port: 8080
+  port: 8090
   timeout: 30s
   keep_alive: 60s
   tls:
@@ -15,8 +15,8 @@ server:
     # API keys loaded from env: LLM_PROXY_API_KEYS (comma-separated)
     api_keys_env: "LLM_PROXY_API_KEYS"
   metrics:
-    enabled: true
-    port: 9090
+    enabled: false
+    port: 9091
   vllm:
     enabled: true
     model_path: "smollm-360m-instruct-mlx"
@@ -28,14 +28,14 @@ server:
     link_sanitization:
       enabled: true
       blocked_domains: ["malicious-site.com", "phishing.net"]
-  local_llm:
-    enabled: true
-    host: "http://localhost:1234"
-    model: "smollm-360m-instruct-mlx"
-    # Modern 2026 Choice: Qwen2.5-0.5B-Instruct or Qwen3-0.6B
-    orchestrator_model: "qwen2.5-0.5b-instruct"
-    vision_model: "qwen3.5-4b-mlx"
-    max_recursion_depth: 3
+local_llm:
+  enabled: true
+  host: "http://localhost:1234"
+  model: "smollm-360m-instruct-mlx"
+  # Modern 2026 Choice: Qwen2.5-0.5B-Instruct or Qwen3-0.6B
+  orchestrator_model: "qwen2.5-0.5b-instruct"
+  vision_model: "qwen3.5-4b-mlx"
+  max_recursion_depth: 3
 
 # Strategy for rotating between different providers or keys
 rotation:

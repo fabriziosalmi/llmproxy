@@ -20,30 +20,30 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-.venv
+
+# Virtual Environment
 venv/
 ENV/
 
-# System
+# Environment Variables
+.env
+
+# Database
+*.db
+*.sqlite3
+
+# Logs
+*.log
+
+# OS
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
 
-# LLMPROXY
-.env
-*.db
-*.log
-config.yaml.bak
-!config.yaml
-VERSION
-scripts/bump_version.py
-
-# IDE
+# IDEs
 .vscode/
 .idea/
-*.swp
-*.swo
+
+# UI
+node_modules/
+.npm/
+dist/

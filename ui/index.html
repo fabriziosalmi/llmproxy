@@ -17,10 +17,14 @@
     <aside id="sidebar" class="sidebar h-full flex flex-col glass-sidebar z-50 transition-all duration-300 w-64 shrink-0">
         <div class="px-6 py-8 flex items-center justify-between">
             <div class="flex items-center gap-3 overflow-hidden" id="logo-container">
-                <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-sky-500 to-blue-600 flex items-center justify-center font-bold text-white shadow-lg shadow-sky-500/20 shrink-0">L</div>
+                <div class="w-8 h-8 rounded-xl bg-sky-500/10 flex items-center justify-center shrink-0 border border-sky-500/20">
+                    <svg class="w-5 h-5 text-sky-500 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/>
+                    </svg>
+                </div>
                 <div class="sidebar-text truncate">
-                    <h1 class="text-xs font-black tracking-tight text-white uppercase italic">LLMPROXY</h1>
-                    <span id="app-version-badge" class="text-[8px] font-mono font-bold text-sky-400 bg-sky-400/5 px-2 py-0.5 rounded-full border border-sky-400/10 tracking-widest">...</span>
+                    <h1 class="text-xs font-black tracking-widest text-white uppercase italic">LLMPROXY</h1>
+                    <span id="app-version-badge" class="text-[8px] font-mono font-bold text-sky-400 bg-sky-400/5 px-2 py-0.5 rounded-full border border-sky-400/10 tracking-widest">v0.1.0</span>
                 </div>
             </div>
             <button onclick="toggleSidebar()" class="p-1 hover:bg-white/5 rounded-lg text-slate-500 hover:text-white transition-all">

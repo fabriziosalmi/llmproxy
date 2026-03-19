@@ -17,10 +17,12 @@ class SQLiteStore:
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS endpoints (
                     id TEXT PRIMARY KEY,
-                    url TEXT NOT NULL,
-                    status TEXT NOT NULL,
+                    url TEXT UNIQUE,
+                    status INTEGER,
                     metadata TEXT,
-                    last_verified TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    last_verified TEXT,
+                    latency_ms REAL,
+                    success_rate REAL
                 )
             """)
             await conn.execute("""
@@ -55,11 +57,15 @@ class SQLiteStore:
 
     async def get_pool(self) -> List[LLMEndpoint]:
         """Returns all verified endpoints."""
+        return await self.get_by_status(EndpointStatus.VERIFIED)
+
+    async def get_by_status(self, status: EndpointStatus) -> List[LLMEndpoint]:
+        """Returns all endpoints with a specific status."""
         async with aiosqlite.connect(self.db_path) as conn:
-            async with conn.execute("SELECT id, url, status, metadata FROM endpoints WHERE status = ?", (EndpointStatus.VERIFIED.value,)) as cursor:
+            async with conn.execute("SELECT id, url, status, metadata FROM endpoints WHERE status = ?", (status.value,)) as cursor:
                 rows = await cursor.fetchall()
                 return [
-                    LLMEndpoint(id=r[0], url=r[1], status=EndpointStatus(r[2]), metadata=json.loads(r[3]))
+                    LLMEndpoint(id=r[0], url=r[1], status=EndpointStatus(int(r[2])), metadata=json.loads(r[3]))
                     for r in rows
                 ]
 
@@ -69,7 +75,7 @@ class SQLiteStore:
             async with conn.execute("SELECT id, url, status, metadata FROM endpoints") as cursor:
                 rows = await cursor.fetchall()
                 return [
-                    LLMEndpoint(id=r[0], url=r[1], status=EndpointStatus(r[2]), metadata=json.loads(r[3]))
+                    LLMEndpoint(id=r[0], url=r[1], status=EndpointStatus(int(r[2])), metadata=json.loads(r[3]))
                     for r in rows
                 ]
             

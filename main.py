@@ -11,6 +11,7 @@ from agents.admin_agent import AdminAgent
 from core.metrics import start_metrics_server
 from core.local_assistant import LocalAssistant
 from core.supervisor import AgentSupervisor
+from core.discovery_utils import get_tailscale_ip
 from repl.interface import start_repl
 from dotenv import load_dotenv
 import yaml
@@ -30,6 +31,12 @@ async def main():
     # Load config
     with open("config.yaml", 'r') as f:
         config = yaml.safe_load(f)
+
+    # Tailscale Discovery
+    ts_ip = get_tailscale_ip()
+    if ts_ip != "0.0.0.0":
+        config["server"]["host"] = ts_ip
+        logger.info(f"Binding to Tailscale interface: {ts_ip}")
 
     # Initialize store
     store = EndpointStore()

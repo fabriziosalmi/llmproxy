@@ -25,6 +25,9 @@ class EndpointStore:
     async def get_pool(self) -> List[LLMEndpoint]:
         return await self.sql.get_pool()
 
+    async def get_by_status(self, status: EndpointStatus) -> List[LLMEndpoint]:
+        return await self.sql.get_by_status(status)
+
     async def get_all(self) -> List[LLMEndpoint]:
         return await self.sql.get_all()
 

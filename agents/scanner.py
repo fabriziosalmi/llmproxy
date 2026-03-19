@@ -19,6 +19,7 @@ class ScannerAgent(BaseAgent):
         self.fsm.add_transition("IDLE", "scan", "SCANNING")
         self.fsm.add_transition("SCANNING", "parse", "PARSING")
         self.fsm.add_transition("PARSING", "finish", "IDLE")
+        self.fsm.add_transition("SCANNING", "finish", "IDLE")
 
     async def run(self):
         """Main loop for scanning."""

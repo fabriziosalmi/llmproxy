@@ -14,7 +14,7 @@ class ValidatorAgent(BaseAgent):
         """Main loop for validation."""
         while True:
             self.logger.info("Validating endpoint pool...")
-            endpoints = self.store._endpoints # Simplified access
+            endpoints = await self.store.get_all()
             for endpoint in endpoints:
                 if endpoint.status in [EndpointStatus.FOUND, EndpointStatus.VERIFIED]:
                     await self.execute_task(self.validate_endpoint, endpoint)

@@ -15,6 +15,22 @@ const state = {
 
 const BASE_URL = window.location.origin;
 
+async function fetchNetworkInfo() {
+    try {
+        const response = await fetch(`${BASE_URL}/api/v1/network/info`);
+        const data = await response.json();
+        const addressEl = document.getElementById('ts-address');
+        const statusEl = document.getElementById('ts-status');
+        const endpointEl = document.getElementById('service-endpoint');
+        
+        if (addressEl) addressEl.textContent = `${data.host}:${data.port}`;
+        if (statusEl) statusEl.textContent = data.tailscale_active ? 'ENFORCED' : 'LOCAL';
+        if (endpointEl) endpointEl.textContent = `${data.host}:${data.port}`;
+    } catch (err) {
+        console.error("Failed to fetch network info:", err);
+    }
+}
+
 async function fetchVersion() {
     try {
         const response = await fetch(`${BASE_URL}/api/v1/version`);
@@ -338,18 +354,48 @@ async function toggleFeature(name) {
 
 function renderFeatures() {
     const container = document.getElementById('feature-toggles');
+    const settingsContainer = document.querySelector('#view-settings .space-y-4');
+    
     if (!container) return;
     container.innerHTML = '';
     
+    if (settingsContainer) {
+        settingsContainer.innerHTML = '';
+    }
+    
     Object.entries(state.features).forEach(([name, enabled]) => {
+        // Injected in Proxy View
         const btn = document.createElement('button');
         btn.onclick = () => toggleFeature(name);
-        btn.className = `flex items-center gap-2 px-3 py-1 rounded-full border text-[8px] font-black uppercase tracking-widest transition-all ${enabled ? 'bg-sky-500/10 border-sky-500/30 text-sky-400' : 'bg-white/5 border-white/10 text-slate-600'}`;
+        btn.className = `flex items-center gap-2 px-3 py-1 rounded-full border text-[8px] font-black uppercase tracking-widest transition-all ${enabled ? 'bg-sky-500/10 border-sky-500/30 text-sky-400 font-bold' : 'bg-white/5 border-white/10 text-slate-600'}`;
         btn.innerHTML = `
             <div class="w-1.5 h-1.5 rounded-full ${enabled ? 'bg-sky-400 animate-pulse' : 'bg-slate-700'}"></div>
-            ${name.replace('_', ' ')}
+            ${name.replace(/_/g, ' ')}
         `;
         container.appendChild(btn);
+
+        // Injected in Settings View
+        if (settingsContainer) {
+            const item = document.createElement('div');
+            item.className = "glass p-6 rounded-3xl border border-white/5 flex items-center justify-between group hover:bg-white/[0.04] transition-all";
+            item.innerHTML = `
+                <div class="flex gap-5 items-center">
+                    <div class="p-3 bg-white/5 rounded-2xl text-slate-400 group-hover:text-sky-400 transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-bold text-white mb-0.5 uppercase tracking-tight">${name.replace(/_/g, ' ')}</h4>
+                        <p class="text-[10px] text-slate-500">Autonomous neural hardening and adaptive routing management.</p>
+                    </div>
+                </div>
+                <button onclick="toggleFeature('${name}')" class="w-11 h-6 ${enabled ? 'bg-sky-500' : 'bg-slate-800'} rounded-full flex items-center px-1 transition-all">
+                    <div class="w-4 h-4 bg-white rounded-full shadow-md ${enabled ? 'ml-auto' : ''} transition-all"></div>
+                </button>
+            `;
+            settingsContainer.appendChild(item);
+        }
     });
 }
 
@@ -362,6 +408,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchVersion();
     fetchServiceInfo();
     fetchFeatures();
+    fetchNetworkInfo();
     connectToLogs();
     initCharts();
     document.getElementById('chat-input').addEventListener('keydown', (e) => {

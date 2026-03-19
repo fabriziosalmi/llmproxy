@@ -30,7 +30,7 @@ class SOTAInterfaceAgent(BaseAgent):
         while True:
             self.logger.info("SOTA Interfacing cycle started...")
             # Pick endpoints that were FOUND but not yet analyzed
-            targets = self.store.get_by_status(EndpointStatus.FOUND)
+            targets = await self.store.get_by_status(EndpointStatus.FOUND)
             
             for target in targets:
                 await self.execute_task(self.analyze_and_map, target)

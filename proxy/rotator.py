@@ -1,8 +1,25 @@
-from core.base_agent import BaseAgent
-from store.store import EndpointStore
-from fastapi import FastAPI, Request, HTTPException, Depends
+import os
+import json
+import uuid
+import yaml
+import asyncio
+import logging
+import uvicorn
+import random
+import aiohttp
+import time
+from datetime import datetime
+from typing import List, Optional, Dict, Any
+
+from fastapi import FastAPI, Request, HTTPException, BackgroundTasks, Depends
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
+from fastapi.staticfiles import StaticFiles
+
+from core.base_agent import BaseAgent
+from store.store import EndpointStore
+from models import LLMEndpoint, EndpointStatus
 from core.metrics import MetricsTracker
 from core.tracing import TraceManager
 from core.vllm_engine import VLLMEngine
@@ -11,23 +28,12 @@ from core.semantic_router import SemanticRouter, TaskComplexity
 from core.rl_rotator import RLRotator, ModelRegistry
 from core.security import SecurityShield
 from core.logger import setup_logger
-from fastapi.staticfiles import StaticFiles
-from typing import Optional
-import uvicorn
-import random
-import aiohttp
-import asyncio
-import time
-import yaml
-import os
-import json
 
 API_KEY_HEADER = APIKeyHeader(name="Authorization", auto_error=False)
 
 class RotatorAgent(BaseAgent):
     def __init__(self, store: EndpointStore, config_path: str = "config.yaml"):
         super().__init__("rotator")
-        self.logger = setup_logger("rotator")
         self.store = store
         self.config_path = config_path
         self.config = self._load_config()
@@ -112,32 +118,14 @@ class RotatorAgent(BaseAgent):
                 "session_active": self._session is not None and not self._session.closed
             }
 
-        @self.app.get("/api/v1/registry")
-        async def get_registry():
-            pool = await self.store.get_all()
-            registry = []
-            for e in pool:
-                # RL metrics (hypothetically)
-                success_rate = self.rl_rotator.success_rates.get(e.id, 0.0)
-                avg_latency = self.rl_rotator.avg_latencies.get(e.id, 0.0)
-                
-                registry.append({
-                    "id": e.id,
-                    "name": e.metadata.get("nickname", e.id),
-                    "type": e.metadata.get("type", "OpenAI API"),
-                    "auth": e.metadata.get("auth_method", "Bearer"),
-                    "latency": f"{round(avg_latency, 2)}s" if avg_latency > 0 else "N/A",
-                    "status": "Live" if e.status == EndpointStatus.VERIFIED else "Offline",
-                    "success_rate": f"{round(success_rate * 100, 1)}%",
-                    "priority": e.metadata.get("priority", 0)
-                })
-            return registry
+
 
         @self.app.post("/api/v1/proxy/toggle")
-        async def toggle_proxy(request: Request):
+        async def toggle_proxy_service(request: Request):
             data = await request.json()
-            self.proxy_enabled = data.get("enabled", True)
-            status = "STARTED" if self.proxy_enabled else "STOPPED"
+            self.proxy_enabled = data.get("enabled", not self.proxy_enabled)
+            await self.store.set_state("proxy_enabled", self.proxy_enabled)
+            status = "ACTIVE" if self.proxy_enabled else "STOPPED"
             await self._add_log(f"SYSTEM: Proxy service {status}")
             return {"status": status, "enabled": self.proxy_enabled}
 
@@ -155,15 +143,24 @@ class RotatorAgent(BaseAgent):
 
         @self.app.get("/api/v1/service-info")
         async def get_service_info(request: Request):
+            port = self.config.get("server", {}).get("port", 8090)
             return {
                 "host": request.client.host if request.client else "0.0.0.0",
-                "port": 8000, # Hardcoded for now as per start command
-                "url": f"http://{request.client.host or 'localhost'}:8000/v1"
+                "port": port,
+                "url": f"http://{request.client.host or 'localhost'}:{port}/v1"
             }
 
         @self.app.get("/api/v1/features")
         async def get_features():
             return self.features
+
+        @self.app.get("/api/v1/network/info")
+        async def get_network_info():
+            return {
+                "host": self.config.get("server", {}).get("host", "0.0.0.0"),
+                "port": self.config.get("server", {}).get("port", 8090),
+                "tailscale_active": self.config.get("server", {}).get("host") != "0.0.0.0" and self.config.get("server", {}).get("host") != "127.0.0.1"
+            }
 
         @self.app.post("/api/v1/features/toggle")
         async def toggle_feature(request: Request):
@@ -217,6 +214,18 @@ class RotatorAgent(BaseAgent):
             metadata["priority"] = priority
             await self.store.update_status(endpoint_id, target.status, metadata)
             return {"id": endpoint_id, "priority": priority}
+        @self.app.get("/api/v1/registry")
+        async def get_registry():
+            endpoints = await self.store.get_all()
+            return [{
+                "id": e.id,
+                "name": e.url.host if e.url.host else str(e.url),
+                "url": str(e.url),
+                "status": "Live" if e.status == EndpointStatus.VERIFIED else e.status.name,
+                "latency": f"{e.latency_ms:.0f}ms" if e.latency_ms else "--",
+                "priority": e.metadata.get("priority", 0),
+                "type": e.metadata.get("provider_type", "Generic")
+            } for e in endpoints]
 
         @self.app.get("/api/v1/logs")
         async def stream_logs():
@@ -250,7 +259,10 @@ class RotatorAgent(BaseAgent):
             
         self.logger.info("RotatorAgent state hydrated and async store ready.")
 
-    async def run(self, port: int = 8000):
+    async def run(self, port: int = None):
+        if port is None:
+            port = self.config.get("server", {}).get("port", 8000)
+            
         await self.setup()
         self.logger.info(f"Starting proxy server on port {port}...")
         config = uvicorn.Config(self.app, host="0.0.0.0", port=port, log_level="info")
@@ -279,7 +291,7 @@ class RotatorAgent(BaseAgent):
             complexity = self.router.classify(prompt)
             preferred_tier = self.router.get_preferred_model_tier(complexity)
             log_msg = f"Inbound Request: {prompt[:50]}... -> Complexity: {complexity.value}"
-            await self._add_log(log_msg, metadata={"complexity": complexity.value, "tier": preferred_tier.value})
+            await self._add_log(log_msg, metadata={"complexity": complexity.value, "tier": preferred_tier})
             self.logger.info(log_msg)
 
             # 3. RL-Based Endpoint Selection

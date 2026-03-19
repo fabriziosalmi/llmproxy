@@ -1,79 +1,54 @@
-# LLMPROXY
+# LLMPROXY: Enterprise-Grade Neural Gateway
 
-LLMPROXY is a high-performance, asynchronous orchestration layer for Large Language Model (LLM) endpoints. It provides a unified interface for routing, load balancing, and securing neural traffic across multiple remote providers (Groq, Infercom, HuggingFace, etc.) and local inference engines.
+LLMPROXY is a high-performance orchestration layer designed for secure, asynchronous management of Large Language Model (LLM) endpoints. The system provides a unified interface for routing, load balancing, and securing neural traffic across heterogeneous providers and local inference engines.
 
-## Overview
+## Core Architecture
 
-The system is designed for deterministic control and deep transparency. It implements a multi-agent architecture that autonomously discovers, validates, and rotates endpoints based on real-time latency, success rates, and semantic intent.
+The system utilizes a multi-agent framework to maintain a validated pool of LLM resources. It implements autonomous discovery and continuous health monitoring to ensure high availability and deterministic performance.
 
-## Core Features
+### Key Functional Components
+- **Neural Interfacing**: Unified REST API for chat completions with provider-agnostic schemas.
+- **Adaptive Routing**: Semantic classification of inbound requests to optimize endpoint selection based on task complexity.
+- **Resiliancy Layer**: Integrated circuit breakers, retry logic, and fallback mechanisms (including local-first execution).
+- **Security Hardening**: Real-time prompt sanitization and response validation to prevent data exfiltration and instruction injection.
 
-### Asynchronous Flow Engine
-Built on `FastAPI` and `aiosqlite`, the proxy operates on a non-blocking I/O loop. This architecture eliminates database contention and ensures consistent throughput even under intense concurrent load.
+## Deployment and Security
 
-### Neural Shield (Defensive Perimeter)
-LLMPROXY implements a dual-sided security protocol:
-*   **Inbound Protection**: Payload flooding prevention and prompt injection detection.
-*   **Outbound Validation (Language Guard)**: Response inspection for charset anomalies and entropy-based gibberish detection.
-*   **Response Injection Guard**: Prevents remote models from leaking system instructions or spoofing conversational turns.
+LLMPROXY is engineered for internal mesh networks. It should not be exposed to the public internet without additional authentication layers (e.g., OIDC, mTLS). 
 
-### Intelligence-Aware Routing
-*   **Semantic Router**: Classifies incoming requests by complexity to steer traffic toward the most cost-effective or highest-performing node.
-*   **RL Rotator**: Uses a Reinforcement Learning (Epsilon-Greedy) approach to dynamically adjust traffic weighting based on endpoint performance tiers.
-*   **Priority Steering**: Allows for a manual override of the AI balancer through the management interface.
+### Security Deployment Best Practices
+- **Restricted Access**: Deploy behind a VPN or within a private VPC.
+- **Tailscale Integration**: The system natively supports Tailscale for secure, peer-to-peer connectivity across restricted environments.
+- **Controlled Ingress**: Limit wild/free usage through strict API key management and rate limiting.
 
-### Unified SOTA Interface
-The system features a premium web-based cockpit with:
-*   Real-time terminal log streaming (SSE).
-*   Dynamic feature control (Hot-toggling of neural guards).
-*   Granular endpoint management (Quick Actions: Toggle, Delete, Priority).
-*   Live metrics dashboard for latency and success rate monitoring.
+## Port Configuration
+The system defaults to the following ports:
+- **Proxy Gateway / UI**: 8090
+- **Admin Management**: 8081
 
-## Architecture
-
-```mermaid
-graph TD
-    Client[Neural Client] --> Proxy[LLMPROXY Core]
-    Proxy --> Shield[Neural Shield]
-    Shield --> Router[Semantic Router]
-    Router --> Rotator[RL Rotator]
-    Rotator --> Remote1[Groq]
-    Rotator --> Remote2[Infercom]
-    Rotator --> Local[vLLM / LM Studio]
-    Remote1 --> ResponseGuard[Response Guard]
-    ResponseGuard --> Proxy
-    Proxy --> Client
-```
-
-## Setup and Installation
-
-### Prerequisites
-*   Python 3.12+
-*   Virtual Environment recommended
+## Getting Started
 
 ### Installation
-1.  Clone the repository and install dependencies:
-    ```bash
-    pip install -r requirements.txt
-    ```
-2.  Configure environment variables in `.env`:
-    ```bash
-    LLM_PROXY_API_KEYS=["your-internal-keys"]
-    GROQ_API_KEY=...
-    HF_TOKEN=...
-    ```
-3.  Launch the system:
-    ```bash
-    python3 main.py
-    ```
+1. Initialize the environment:
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+2. Configure environmental variables in `.env` (refer to `config.yaml` for structure).
 
-## Security Protocol
+### Execution
+Run the main controller:
+```bash
+python3 main.py
+```
+Access the management console at `http://localhost:8090/ui/index.html`.
 
-LLMPROXY treats all remote traffic as untrusted. Every response is sanitized and validated for:
-1.  **Semantic Integrity**: No leaking of internal proxy logic.
-2.  **Structural Purity**: No non-standard charsets or malformed encoding.
-3.  **Link Sanitization**: Malicious domains are automatically redacted.
+## Technical Specifications
+- **Language**: Python 3.12+
+- **Framework**: FastAPI / Uvicorn
+- **Storage**: Asynchronous SQLite (aiosqlite)
+- **Monitoring**: Real-time Server-Sent Events (SSE) for telemetry and logging.
 
-## Versioning
-
-The project follows Semantic Versioning (SemVer). Version updates are managed via `scripts/bump_version.py` and reflected dynamically in the UI and Backend headers.
+## Governance
+This software is intended for professional intelligence operations. Access to the routing adapters and internal logic must be strictly audited and monitored to prevent unauthorized utilization of neural assets.
