@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agentic LLM Proxy | Chatbot</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+<body class="dark-theme">
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="logo">
+                <span class="logo-icon">▲</span>
+                <h1>LLM Proxy</h1>
+            </div>
+            <nav class="test-controls">
+                <h3>Shield Tests</h3>
+                <button id="btn-injection" class="control-btn">Prompt Injection</button>
+                <button id="btn-flooding" class="control-btn">Body Flooding</button>
+                <button id="btn-links" class="control-btn">Unsafe Links</button>
+                
+                <hr>
+                <h3>Status</h3>
+                <div class="status-indicator">
+                    <span class="dot online"></span>
+                    <span>Proxy: Online</span>
+                </div>
+            </nav>
+        </aside>
+
+        <main class="chat-area">
+            <header class="chat-header">
+                <div class="model-info">
+                    <span class="badge">SOTA Adapter</span>
+                    <span id="current-tier" class="tier-badge">Tier: Detecting...</span>
+                </div>
+            </header>
+
+            <div id="chat-messages" class="messages-container">
+                <div class="message assistant">
+                    <div class="msg-content">Hello! I am the Agentic Proxy consultant. Test my security or just chat.</div>
+                </div>
+            </div>
+
+            <footer class="chat-input-area">
+                <div class="input-wrapper">
+                    <textarea id="user-input" placeholder="Type a message or trigger a test..."></textarea>
+                    <button id="send-btn" class="send-icon">➔</button>
+                </div>
+            </footer>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>

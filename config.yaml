@@ -1,0 +1,116 @@
+# LLM Proxy Configuration
+
+server:
+  host: 0.0.0.0
+  port: 8080
+  timeout: 30s
+  keep_alive: 60s
+  tls:
+    enabled: true
+    cert_file: "/etc/llmproxy/certs/server.crt"
+    key_file: "/etc/llmproxy/certs/server.key"
+    min_version: "1.2"
+  auth:
+    enabled: true
+    api_keys: ["sk-proxy-master-key-123", "sk-proxy-dev-key-456"]
+  metrics:
+    enabled: true
+    port: 9090
+  vllm:
+    enabled: true
+    model_path: "smollm-360m-instruct-mlx"
+    fallback_threshold: 0.1 # Fallback if pool success rate < 10%
+  security:
+    enabled: true
+    max_payload_size_kb: 512
+    max_messages: 50
+    link_sanitization:
+      enabled: true
+      blocked_domains: ["malicious-site.com", "phishing.net"]
+  local_llm:
+    enabled: true
+    host: "http://localhost:1234"
+    model: "smollm-360m-instruct-mlx"
+    max_recursion_depth: 3
+
+# Strategy for rotating between different providers or keys
+rotation:
+  strategy: "round_robin"  # Options: round_robin, weighted, least_used, random
+  failover:
+    enabled: true
+    max_retries: 3
+    retry_delay: 1s
+    switch_on_status: [429, 500, 503]
+
+# LLM Providers Configuration
+endpoints:
+  openai:
+    base_url: "https://api.openai.com/v1"
+    keys:
+      - "sk-proj-xxxxxxxxxxxxxxxxxxxxxxxx"
+      - "sk-proj-yyyyyyyyyyyyyyyyyyyyyyyy"
+    organization_ids:
+      - "org-123"
+    proxy_chain: "high_anonymity"
+    rate_limit:
+      rpm: 3500
+      tpm: 60000
+
+  anthropic:
+    base_url: "https://api.anthropic.com/v1"
+    keys:
+      - "sk-ant-xxxxxxxxxxxxxxxxxxxxxxxx"
+    proxy_chain: "residential_rotation"
+    rate_limit:
+      rpm: 1000
+
+  generic_llm:
+    base_url: "http://localhost:11434" # e.g. Ollama
+    auth_type: "none"
+
+# Hiding the proxy nature and spoofing clients
+cloaking:
+  enabled: true
+  user_agents:
+    - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    - "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+  headers:
+    inject:
+      X-Forwarded-For: "1.2.3.4" # Or "random"
+      X-Real-IP: "random"
+    strip:
+      - "Via"
+      - "X-LLM-Proxy-Trace"
+  response_masking:
+    hide_errors: true # Replace internal errors with generic 500
+    remove_headers: ["Server", "X-Powered-By"]
+
+# Advanced TLS Fingerprinting (Bypassing blocks)
+tls_forging:
+  enabled: true
+  engine: "utls" # Uses uTLS to forge Client Hello
+  profile: "chrome_120" # Options: chrome, safari, firefox, edge, ios, random
+  ja3_template: "771,4866-4865-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-21,29-23-24,0"
+  alpn: ["h2", "http/1.1"]
+
+# Generic Upstream Proxy Configuration
+upstream_proxies:
+  residential_rotation:
+    type: "socks5"
+    url: "socks5://user:pass@geo.proxy-provider.com:12345"
+    rotate_per_request: true
+  
+  high_anonymity:
+    type: "http"
+    url: "http://proxy-cluster.local:8081"
+    tls:
+      insecure_skip_verify: true
+
+# Monitoring and Logging
+logging:
+  level: "info"
+  format: "json"
+  output: "/var/log/llmproxy/proxy.log"
+  audit_trail:
+    enabled: true
+    mask_pii: true # Redact keys, email, etc. from logs
