@@ -12,7 +12,8 @@ server:
     min_version: "1.2"
   auth:
     enabled: true
-    api_keys: ["sk-proxy-master-key-123", "sk-proxy-dev-key-456"]
+    # API keys loaded from env: LLM_PROXY_API_KEYS (comma-separated)
+    api_keys_env: "LLM_PROXY_API_KEYS"
   metrics:
     enabled: true
     port: 9090
@@ -31,6 +32,9 @@ server:
     enabled: true
     host: "http://localhost:1234"
     model: "smollm-360m-instruct-mlx"
+    # Modern 2026 Choice: Qwen2.5-0.5B-Instruct or Qwen3-0.6B
+    orchestrator_model: "qwen2.5-0.5b-instruct"
+    vision_model: "qwen3.5-4b-mlx"
     max_recursion_depth: 3
 
 # Strategy for rotating between different providers or keys

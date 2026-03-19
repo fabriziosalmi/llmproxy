@@ -7,7 +7,9 @@ from agents.sota_interface_agent import SOTAInterfaceAgent
 from agents.validator import ValidatorAgent
 from agents.advanced_validator import AdvancedValidatorAgent
 from proxy.rotator import RotatorAgent
+from agents.admin_agent import AdminAgent
 from core.metrics import start_metrics_server
+from core.local_assistant import LocalAssistant
 from core.supervisor import AgentSupervisor
 from repl.interface import start_repl
 from dotenv import load_dotenv
@@ -31,17 +33,25 @@ async def main():
 
     # Initialize store
     store = EndpointStore()
+    await store.init()
     
     # Initialize supervisor
     supervisor = AgentSupervisor()
     
+    # Initialize local AI assistant
+    local_llm = LocalAssistant(
+        host=config["local_llm"]["host"],
+        default_model=config["local_llm"]["model"]
+    )
+    
     # Initialize agents
     scanner = ScannerAgent(store)
     crawler = CrawlerAgent()
-    interface = SOTAInterfaceAgent(store)
+    interface = SOTAInterfaceAgent(store, local_llm)
     validator = ValidatorAgent(store)
     adv_validator = AdvancedValidatorAgent(store)
     rotator = RotatorAgent(store)
+    admin = AdminAgent(store)
     
     # Start Metrics
     if config["server"]["metrics"]["enabled"]:
@@ -55,6 +65,7 @@ async def main():
     supervisor.add_agent(validator)
     supervisor.add_agent(adv_validator)
     supervisor.add_agent(rotator)
+    supervisor.add_agent(admin)
 
     # Start REPL
     start_repl(store, supervisor.agents)

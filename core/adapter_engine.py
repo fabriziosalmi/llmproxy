@@ -18,14 +18,25 @@ class NetworkSniffer:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=self.headless)
             context = await browser.new_context()
+            # 1. Advanced Evasion: Canvas Fingerprint Spoofing
+            await context.add_init_script("""
+                Object.defineProperty(HTMLCanvasElement.prototype, 'toDataURL', {
+                    value: function() { return 'data:image/png;base64,spoofed_' + Math.random(); }
+                });
+            """)
+            
             page = await context.new_page()
 
             # Listen for all requests
             page.on("request", self._handle_request)
             
-            logger.info(f"Navigating to {url} and sniffing for {duration}s...")
+            logger.info(f"Navigating to {url} with evasion...")
             try:
                 await page.goto(url, wait_until="networkidle", timeout=30000)
+                
+                # 2. Advanced Evasion: Human-like Interactions
+                await self._apply_human_behavior(page)
+                
                 # Wait for potential user interaction or async loads
                 await asyncio.sleep(duration)
             except Exception as e:
@@ -34,6 +45,20 @@ class NetworkSniffer:
                 await browser.close()
         
         return self.intercepted_requests
+
+    async def _apply_human_behavior(self, page):
+        """Simulates non-linear mouse movements and scroll jitter to evade WAFs."""
+        import random
+        # Strategic Mouse Movement
+        for _ in range(random.randint(2, 5)):
+            x, y = random.randint(100, 800), random.randint(100, 600)
+            await page.mouse.move(x, y, steps=random.randint(10, 20))
+            await asyncio.sleep(random.uniform(0.1, 0.4))
+            
+        # Micro-Scroll Jitter
+        await page.evaluate("window.scrollBy(0, 150)")
+        await asyncio.sleep(0.3)
+        await page.evaluate("window.scrollBy(0, -75)")
 
     def _handle_request(self, request: Request):
         # We look for POST/PUT requests with JSON bodies
@@ -46,7 +71,8 @@ class NetworkSniffer:
                         "method": request.method,
                         "headers": request.headers,
                         "payload": payload,
-                        "is_xhr": request.resource_type in ["xhr", "fetch"]
+                        "is_xhr": request.resource_type in ["xhr", "fetch"],
+                        "timestamp": asyncio.get_event_loop().time()
                     })
                     logger.info(f"Intercepted potential LLM API: {request.url}")
             except Exception:

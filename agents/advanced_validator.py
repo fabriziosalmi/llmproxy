@@ -14,8 +14,8 @@ class AdvancedValidatorAgent(BaseAgent):
     async def run(self):
         while True:
             self.logger.info("Advanced Validation cycle started...")
-            endpoints = self.store.get_pool()
-            for endpoint in endpoints:
+            pool = await self.store.get_pool()
+            for endpoint in pool:
                 await self.execute_task(self.deep_validate, endpoint)
             await asyncio.sleep(600)
 
@@ -49,10 +49,11 @@ class AdvancedValidatorAgent(BaseAgent):
                         endpoint.last_verified = datetime.now()
                         
                         self.logger.info(f"Endpoint {endpoint.url}: TPS={tps:.2f}, Quality={quality_score}")
+                        await self.store.update_status(endpoint.id, endpoint.status, metadata=endpoint.metadata)
                     else:
                         endpoint.status = EndpointStatus.DISCOVERED # Downgrade if failing
+                        await self.store.update_status(endpoint.id, endpoint.status, metadata=endpoint.metadata)
         except Exception as e:
             self.logger.error(f"Deep validation failed for {endpoint.url}: {e}")
             endpoint.status = EndpointStatus.DISCOVERED
-        
-        self.store.add_endpoint(endpoint)
+            await self.store.update_status(endpoint.id, endpoint.status, metadata=endpoint.metadata)

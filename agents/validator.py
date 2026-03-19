@@ -35,16 +35,18 @@ class ValidatorAgent(BaseAgent):
                 async with session.post(str(endpoint.url), json=payload, timeout=10) as response:
                     latency = (datetime.now() - start_time).total_seconds() * 1000
                     if response.status == 200:
-                        endpoint.status = EndpointStatus.VERIFIED
-                        endpoint.latency_ms = latency
-                        endpoint.last_verified = datetime.now()
-                        endpoint.success_rate = (endpoint.success_rate + 1.0) / 2
+                        metadata = {
+                            "latency_ms": latency,
+                            "last_verified": datetime.now(),
+                            "success_rate": (endpoint.success_rate + 1.0) / 2 # Update success rate
+                        }
+                        await self.store.update_status(endpoint.id, EndpointStatus.VERIFIED, metadata=metadata)
                         self.logger.info(f"Endpoint {endpoint.url} VALIDATED. Latency: {latency:.2f}ms")
                     else:
                         self.logger.warning(f"Endpoint {endpoint.url} FAILED (status {response.status})")
-                        endpoint.status = EndpointStatus.IGNORED
+                        # If failed, update status to IGNORED
+                        await self.store.update_status(endpoint.id, EndpointStatus.IGNORED)
         except Exception as e:
             self.logger.error(f"Error validating {endpoint.url}: {e}")
-            endpoint.status = EndpointStatus.IGNORED
-            
-        self.store.add_endpoint(endpoint)
+            # If error, update status to IGNORED
+            await self.store.update_status(endpoint.id, EndpointStatus.IGNORED)

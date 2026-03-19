@@ -55,5 +55,5 @@ class ScannerAgent(BaseAgent):
                     status=EndpointStatus.FOUND,
                     metadata={"found_at": source_url}
                 )
-                self.store.add_endpoint(endpoint)
+                await self.store.add_endpoint(endpoint)
                 self.logger.info(f"Discovered potential endpoint: {endpoint.url}")

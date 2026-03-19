@@ -1,0 +1,71 @@
+[
+  {
+    "name": "Pollinations.ai (Text)",
+    "status": 200,
+    "latency": 2.58,
+    "success": true,
+    "answer_preview": "{'raw': 'Hello!'}",
+    "format": "custom"
+  },
+  {
+    "name": "DuckDuckGo AI Chat",
+    "status": "NO_VQD",
+    "success": false
+  },
+  {
+    "name": "DeepAI Text Generation",
+    "status": 401,
+    "latency": 0.78,
+    "success": false,
+    "answer_preview": "{'status': 'Please pass a valid Api-Key in a HTTP header called \"Api-Key\" '}",
+    "format": "custom"
+  },
+  {
+    "name": "TextSynth",
+    "status": 403,
+    "latency": 0.16,
+    "success": false,
+    "answer_preview": "{'raw': '{\"error\":\"Missing bearer header\"}\\n\\n'}",
+    "format": "custom"
+  },
+  {
+    "name": "Glhf.chat",
+    "status": 522,
+    "latency": 20.1,
+    "success": false,
+    "answer_preview": "{'raw': '<!DOCTYPE html>\\n<!--[if lt IE 7]> <html class=\"no-js ie6 oldie\" lang=\"en-US\"> <![endif]-->\\n<!--[if IE 7]>    <html class=\"no-js ie7 oldie\" ",
+    "format": "custom"
+  },
+  {
+    "name": "Chutes.ai",
+    "status": 404,
+    "latency": 0.24,
+    "success": false,
+    "answer_preview": "{'raw': '<!doctype html>\\n<html lang=\"en\">\\n\\t<head>\\n\\t\\t<meta charset=\"utf-8\" />\\n\\t\\t<link rel=\"icon\" href=\"../../../../favicon.png\" />\\n\\t\\t<meta ",
+    "format": "custom"
+  },
+  {
+    "name": "You.com Smart",
+    "status": 403,
+    "latency": 0.38,
+    "success": false,
+    "answer_preview": "[]",
+    "format": "custom"
+  },
+  {
+    "name": "Prodia (T2I)",
+    "status": 404,
+    "latency": 0.34,
+    "success": false,
+    "answer_preview": "{'raw': ''}",
+    "format": "custom"
+  },
+  {
+    "name": "Dezgo (T2I)",
+    "status": 401,
+    "latency": 0.42,
+    "success": false,
+    "answer_preview": "image_received",
+    "format": "custom"
+  }
+]

@@ -1,0 +1,70 @@
+[
+  {
+    "name": "Pollinations.ai (OpenAI)",
+    "status": 200,
+    "latency": 1.96,
+    "success": true,
+    "preview": "Hey there!",
+    "format": "openai",
+    "url": "https://text.pollinations.ai/openai"
+  },
+  {
+    "name": "Pollinations.ai (Simple)",
+    "status": 200,
+    "latency": 0.14,
+    "success": true,
+    "preview": "Hey there! How can I help you today?",
+    "format": "custom",
+    "url": "https://text.pollinations.ai/Say%20hello%20in%20one%20sentence"
+  },
+  {
+    "name": "DuckDuckGo AI",
+    "status": "NO_VQD",
+    "success": false
+  },
+  {
+    "name": "HuggingFace Inference (Free)",
+    "status": 401,
+    "latency": 0.07,
+    "success": false,
+    "preview": "{'raw': '<!DOCTYPE html>\\n<html class=\"\" lang=\"en\">\\n<head>\\n    <meta charset=\"utf-8\" />\\n    <meta\\n            name=\"viewport\"\\n            content",
+    "format": "custom",
+    "url": "https://router.huggingface.co/hf-inference/models/microsoft/DialoGPT-medium/v1/chat/completions"
+  },
+  {
+    "name": "HuggingFace Llama",
+    "status": 401,
+    "latency": 0.04,
+    "success": false,
+    "preview": "{'raw': '<!DOCTYPE html>\\n<html class=\"\" lang=\"en\">\\n<head>\\n    <meta charset=\"utf-8\" />\\n    <meta\\n            name=\"viewport\"\\n            content",
+    "format": "custom",
+    "url": "https://router.huggingface.co/hf-inference/models/meta-llama/Llama-3.2-1B-Instruct/v1/chat/completions"
+  },
+  {
+    "name": "Puter.js AI",
+    "status": 403,
+    "latency": 0.09,
+    "success": false,
+    "preview": "{'raw': 'Forbidden'}",
+    "format": "custom",
+    "url": "https://api.puter.com/drivers/call"
+  },
+  {
+    "name": "Blackbox AI",
+    "status": 200,
+    "latency": 0.14,
+    "success": true,
+    "preview": "{'raw_sse': 'data: {\"type\":\"start\"}\\n\\ndata: {\"type\":\"error\",\"errorText\":\"Authentication Error, No api key passed in.\"}\\n\\ndata: [DONE]\\n\\n'}",
+    "format": "custom",
+    "url": "https://www.blackbox.ai/api/chat"
+  },
+  {
+    "name": "DeepSeek Chat (Free)",
+    "status": 404,
+    "latency": 0.3,
+    "success": false,
+    "preview": "{'detail': 'Not Found'}",
+    "format": "custom",
+    "url": "https://chat.deepseek.com/api/v0/chat/completions"
+  }
+]

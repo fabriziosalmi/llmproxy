@@ -1,46 +1,39 @@
-import json
-import os
-from typing import List, Optional
-from models import LLMEndpoint, EndpointStatus
 import logging
+import os
+from typing import List, Optional, Dict, Any
+from models import LLMEndpoint, EndpointStatus
+from .sql_store import SQLiteStore
 
 logger = logging.getLogger(__name__)
 
 class EndpointStore:
-    def __init__(self, storage_path: str = "store/endpoints.json"):
-        self.storage_path = storage_path
-        self._endpoints: List[LLMEndpoint] = []
-        self._load()
+    def __init__(self, db_path: str = "endpoints.db"):
+        self.sql = SQLiteStore(db_path)
+        self.logger = logger
 
-    def _load(self):
-        if os.path.exists(self.storage_path):
-            try:
-                with open(self.storage_path, 'r') as f:
-                    data = json.load(f)
-                    self._endpoints = [LLMEndpoint(**e) for e in data]
-            except Exception as e:
-                logger.error(f"Failed to load store: {e}")
-                self._endpoints = []
+    async def init(self):
+        """Async initialization to create tables."""
+        await self.sql.init_db()
+        self.logger.info("EndpointStore (Async) initialized with SQLite backend.")
 
-    def _save(self):
-        try:
-            with open(self.storage_path, 'w') as f:
-                json.dump([e.dict() for e in self._endpoints], f, indent=2, default=str)
-        except Exception as e:
-            logger.error(f"Failed to save store: {e}")
+    async def add_endpoint(self, endpoint: LLMEndpoint):
+        await self.sql.add_endpoint(endpoint)
 
-    def add_endpoint(self, endpoint: LLMEndpoint):
-        # Update if existing, else append
-        for i, e in enumerate(self._endpoints):
-            if str(e.url) == str(endpoint.url):
-                self._endpoints[i] = endpoint
-                self._save()
-                return
-        self._endpoints.append(endpoint)
-        self._save()
+    async def update_status(self, endpoint_id: str, status: EndpointStatus, metadata: Dict = None):
+        await self.sql.update_status(endpoint_id, status, metadata)
 
-    def get_by_status(self, status: EndpointStatus) -> List[LLMEndpoint]:
-        return [e for e in self._endpoints if e.status == status]
+    async def get_pool(self) -> List[LLMEndpoint]:
+        return await self.sql.get_pool()
 
-    def get_pool(self) -> List[LLMEndpoint]:
-        return self.get_by_status(EndpointStatus.VERIFIED)
+    async def get_all(self) -> List[LLMEndpoint]:
+        return await self.sql.get_all()
+
+    async def remove_endpoint(self, endpoint_id: str):
+        await self.sql.remove_endpoint(endpoint_id)
+
+    # State persistence
+    async def set_state(self, key: str, value: Any):
+        await self.sql.set_state(key, value)
+
+    async def get_state(self, key: str, default: Any = None) -> Any:
+        return await self.sql.get_state(key, default)

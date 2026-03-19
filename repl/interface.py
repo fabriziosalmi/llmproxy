@@ -14,9 +14,13 @@ class LLMProxyREPL(cmd.Cmd):
 
     def do_status(self, arg):
         """Show the status of the system and endpoints."""
-        print(f"Verified Endpoints: {len(self.store.get_pool())}")
-        for e in self.store._endpoints:
-            print(f"- {e.url} [{e.status.name}] {e.latency_ms or 0:.2f}ms")
+        try:
+            pool = asyncio.run(self.store.get_pool())
+            print(f"Verified Endpoints: {len(pool)}")
+            for e in pool:
+                print(f"- {e.url} [{e.status.name}] {e.latency_ms or 0:.2f}ms")
+        except Exception as e:
+            print(f"Error fetching status: {e}")
 
     def do_agents(self, arg):
         """List active agents and their states."""

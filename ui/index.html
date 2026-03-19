@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLMPROXY — Unified Intelligence Ops</title>
+    <!-- Tailwind CSS for structure -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js for visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="h-screen flex overflow-hidden">
+
+    <!-- Collapsible Sidebar -->
+    <aside id="sidebar" class="sidebar h-full flex flex-col glass-sidebar z-50 transition-all duration-300 w-64 shrink-0">
+        <div class="px-6 py-8 flex items-center justify-between">
+            <div class="flex items-center gap-3 overflow-hidden" id="logo-container">
+                <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-sky-500 to-blue-600 flex items-center justify-center font-bold text-white shadow-lg shadow-sky-500/20 shrink-0">L</div>
+                <div class="sidebar-text truncate">
+                    <h1 class="text-xs font-black tracking-tight text-white uppercase italic">LLMPROXY</h1>
+                    <span id="app-version-badge" class="text-[8px] font-mono font-bold text-sky-400 bg-sky-400/5 px-2 py-0.5 rounded-full border border-sky-400/10 tracking-widest">...</span>
+                </div>
+            </div>
+            <button onclick="toggleSidebar()" class="p-1 hover:bg-white/5 rounded-lg text-slate-500 hover:text-white transition-all">
+                <svg id="toggle-icon-svg" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/></svg>
+            </button>
+        </div>
+
+        <nav class="flex-1 px-4 space-y-1.5 pt-4">
+            <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-item active w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                <span class="sidebar-text">Dashboard</span>
+            </button>
+            <button onclick="switchTab('registry')" id="nav-registry" class="nav-item w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-500 transition-all">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                <span class="sidebar-text">Service Registry</span>
+            </button>
+            <button onclick="switchTab('proxy')" id="nav-proxy" class="nav-item w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-500 transition-all">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                <span class="sidebar-text">Transparent Proxy</span>
+            </button>
+            <button onclick="switchTab('chat')" id="nav-chat" class="nav-item w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-500 transition-all">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+                <span class="sidebar-text">Neural Chat</span>
+            </button>
+            <button onclick="switchTab('settings')" id="nav-settings" class="nav-item w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-500 transition-all">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/></svg>
+                <span class="sidebar-text">Operations</span>
+            </button>
+        </nav>
+
+        <div class="mt-auto p-4 border-t border-white/5">
+            <div class="user-pill flex items-center gap-3 p-2.5 bg-white/5 rounded-2xl ring-1 ring-white/10 overflow-hidden">
+                <div class="w-7 h-7 rounded-full bg-indigo-500 flex items-center justify-center font-bold text-[10px] text-white shrink-0 shadow-lg shadow-indigo-500/20">A</div>
+                <div class="sidebar-text truncate">
+                    <p class="text-[10px] font-bold text-white leading-none">Admin Profile</p>
+                    <p class="text-[8px] text-emerald-400 font-bold uppercase mt-1 tracking-tighter">Verified SOTA</p>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Fluid Area -->
+    <main class="flex-1 flex flex-col min-w-0 relative bg-[#050608]">
+        
+        <!-- Premium Navigation Header -->
+        <header class="h-14 flex items-center justify-between px-8 border-b border-white/5 bg-black/40 backdrop-blur-3xl z-40">
+            <div id="view-title" class="text-xs font-semibold text-slate-300 capitalize tracking-tight flex items-center gap-4">
+                Dashboard
+                <div class="h-4 w-px bg-white/10"></div>
+                <span class="text-[10px] text-slate-500 font-mono">ID: 77a8-bf92-c011</span>
+            </div>
+            <div class="flex items-center gap-6">
+                <div class="flex flex-col items-end">
+                    <span class="text-[8px] text-slate-500 font-bold uppercase tracking-widest mb-0.5">Proxy Success</span>
+                    <span class="text-emerald-400 font-mono text-xs tabular-nums font-bold">100%</span>
+                </div>
+                <div class="flex flex-col items-end">
+                    <span class="text-[8px] text-slate-500 font-bold uppercase tracking-widest mb-0.5">Latency Index</span>
+                    <span class="text-sky-400 font-mono text-xs tabular-nums font-bold">0.42s</span>
+                </div>
+                <div class="h-8 w-px bg-white/10 mx-2"></div>
+                <div class="flex items-center gap-2">
+                    <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]"></div>
+                    <span class="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">System Pulse Active</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Dynamic Content Slot -->
+        <div id="content-slot" class="flex-1 overflow-auto p-8 relative">
+            
+            <!-- VIEW: Dashboard -->
+            <div id="view-dashboard" class="content-view space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div class="grid grid-cols-4 gap-6">
+                    <div class="glass p-5 rounded-3xl ring-1 ring-white/10 hover:ring-white/20 transition-all relative overflow-hidden group">
+                        <div class="absolute -right-4 -top-4 w-24 h-24 bg-sky-500/5 rounded-full blur-2xl group-hover:bg-sky-500/10 transition-all"></div>
+                        <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-3">Total Inferences</p>
+                        <h2 class="text-3xl font-bold tracking-tight text-white glow-text leading-none">12.4K</h2>
+                        <div class="mt-4 flex items-center gap-1.5">
+                            <span class="text-[10px] text-emerald-400 font-bold">+18.2%</span>
+                            <span class="text-[9px] text-slate-600 uppercase font-bold tracking-tighter">vs. last batch</span>
+                        </div>
+                    </div>
+                    <div class="glass p-5 rounded-3xl ring-1 ring-white/10 relative overflow-hidden group">
+                        <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-3">Active Adapters</p>
+                        <h2 class="text-3xl font-bold tracking-tight text-white glow-text leading-none">14</h2>
+                        <div class="mt-4 flex items-center gap-1.5">
+                            <span class="text-[10px] text-sky-400 font-bold">100% Bootstrap</span>
+                        </div>
+                    </div>
+                    <div class="glass p-5 rounded-3xl ring-1 ring-white/10 col-span-2 flex flex-col justify-between">
+                        <div class="flex items-center justify-between">
+                            <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Security Hardening Index</p>
+                            <span class="text-[10px] text-emerald-400 font-bold tracking-tighter uppercase px-2 py-0.5 bg-emerald-400/10 rounded-lg">High Shield</span>
+                        </div>
+                        <div class="flex items-end justify-between mt-4">
+                            <h2 class="text-2xl font-bold tracking-tight text-white tabular-nums leading-none">0.998 <span class="text-xs text-slate-500 font-medium">/ 1.0</span></h2>
+                            <div class="flex gap-1 mb-1">
+                                <div class="w-1.5 h-3 bg-emerald-500/20 rounded-full"></div>
+                                <div class="w-1.5 h-4 bg-emerald-500/40 rounded-full"></div>
+                                <div class="w-1.5 h-5 bg-emerald-500/60 rounded-full"></div>
+                                <div class="w-1.5 h-6 bg-emerald-500 rounded-full shadow-[0_0_8px_#10b981]"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass p-8 rounded-[2rem] ring-1 ring-white/5 bg-gradient-to-tr from-white/[0.02] to-transparent">
+                    <div class="flex justify-between items-center mb-8">
+                        <div>
+                            <h3 class="text-sm font-bold tracking-tight flex items-center gap-2">
+                                <svg class="w-4 h-4 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+                                Global Performance Analytics
+                            </h3>
+                            <p class="text-[10px] text-slate-500 mt-1 uppercase tracking-widest font-bold">Inference latency over 24H</p>
+                        </div>
+                    </div>
+                    <div class="h-64 w-full">
+                        <canvas id="mainChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: Registry -->
+            <div id="view-registry" class="content-view hidden space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-2xl font-bold tracking-tight text-white mb-1">Bootstrap Registry</h2>
+                        <p class="text-xs text-slate-500">Autonomous discovered and validated endpoints pool.</p>
+                    </div>
+                    <div class="flex items-center gap-4 px-6 py-3 bg-white/5 rounded-2xl border border-white/5">
+                        <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Priority Steering</span>
+                        <button id="priority-mode-btn" onclick="togglePriorityMode()" class="w-10 h-5 bg-slate-800 rounded-full flex items-center px-0.5 transition-all">
+                            <div class="w-4 h-4 bg-slate-500 rounded-full transition-all"></div>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="glass rounded-[2rem] overflow-hidden border border-white/5 ring-1 ring-white/10 shadow-2xl">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-white/5 border-b border-white/10">
+                                <th class="p-5 text-[9px] font-bold uppercase tracking-widest text-slate-500">Provider Target</th>
+                                <th class="p-5 text-[9px] font-bold uppercase tracking-widest text-slate-500 text-center">Neural Priority</th>
+                                <th class="p-5 text-[9px] font-bold uppercase tracking-widest text-slate-500">Architecture</th>
+                                <th class="p-5 text-[9px] font-bold uppercase tracking-widest text-slate-500">Rountrip (Avg)</th>
+                                <th class="p-5 text-[9px] font-bold uppercase tracking-widest text-slate-500">Health</th>
+                                <th class="p-5 text-[9px] font-bold uppercase tracking-widest text-slate-500 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="registry-table-body" class="divide-y divide-white/5">
+                            <!-- Populated in app.js -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- VIEW: Proxy Control -->
+            <div id="view-proxy" class="content-view hidden h-full flex flex-col space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div class="flex items-center justify-between glass p-8 rounded-[2rem] border border-white/10 ring-1 ring-white/5 bg-gradient-to-tr from-white/[0.03] to-transparent">
+                    <div class="flex flex-col gap-4">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h2 class="text-2xl font-bold tracking-tight text-white mb-1">Neural Flow Engine</h2>
+                                <p class="text-xs text-slate-500">Master toggle for transparent routing to remote verified endpoints.</p>
+                            </div>
+                            <div class="flex items-center gap-6">
+                                <div id="proxy-status-indicator" class="flex flex-col items-end">
+                                    <span class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-1">Current State</span>
+                                    <span class="text-emerald-400 font-mono text-xs font-black uppercase tracking-tighter shadow-sm shadow-emerald-500/10">ACTIVE</span>
+                                </div>
+                                <button id="proxy-toggle-btn" onclick="toggleProxyService()" class="w-16 h-8 bg-sky-500 rounded-full flex items-center px-1 transition-all shadow-lg shadow-sky-500/20">
+                                    <div class="w-6 h-6 bg-white rounded-full shadow-md ml-auto transition-all duration-300"></div>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-6 pt-4 border-t border-white/5">
+                            <div class="flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-lg border border-white/5">
+                                <span class="text-[8px] font-black text-slate-500 uppercase tracking-widest">Local Interface</span>
+                                <span id="service-endpoint" class="text-[10px] font-mono text-sky-400 font-bold">127.0.0.1:8000</span>
+                            </div>
+                            <div id="feature-toggles" class="flex gap-4">
+                                <!-- Features will be injected here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex-1 flex flex-col glass rounded-[2rem] border border-white/5 bg-black/60 relative overflow-hidden group shadow-2xl">
+                    <div class="absolute inset-x-0 top-0 h-10 bg-white/5 border-b border-white/5 flex items-center px-6 justify-between backdrop-blur-md z-10">
+                        <div class="flex gap-2">
+                            <div class="w-2 h-2 rounded-full bg-red-500/40"></div>
+                            <div class="w-2 h-2 rounded-full bg-amber-500/40"></div>
+                            <div class="w-2 h-2 rounded-full bg-emerald-500/40"></div>
+                        </div>
+                        <span class="text-[9px] text-slate-600 font-black uppercase tracking-[0.2em]">TRANSPARENT LOG STREAM</span>
+                        <button onclick="clearLogs()" class="text-[8px] text-slate-500 hover:text-white font-bold uppercase tracking-widest">Clear</button>
+                    </div>
+                    <div id="terminal-logs" class="flex-1 p-8 pt-14 font-mono text-[11px] leading-relaxed overflow-y-auto scrollbar-hide space-y-1">
+                        <div class="text-slate-500 italic opacity-50">Waiting for neural traffic link...</div>
+                    </div>
+                    <div class="absolute bottom-4 right-8 text-[9px] text-slate-700 font-mono pointer-events-none">TTY: /dev/prox0</div>
+                </div>
+            </div>
+
+            <!-- VIEW: Chat -->
+            <div id="view-chat" class="content-view hidden h-full flex flex-col space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div id="chat-scroller" class="flex-1 glass rounded-[2rem] p-8 overflow-y-auto space-y-8 border border-white/10 shadow-inner scrollbar-hide">
+                    <div class="flex gap-5 items-start">
+                        <div class="w-9 h-9 rounded-2xl bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400 font-bold text-xs shrink-0">P</div>
+                        <div class="p-5 bg-white/[0.03] border border-white/5 rounded-3xl rounded-tl-sm text-sm leading-relaxed max-w-[85%] text-slate-200">
+                            <span class="block text-[10px] font-black tracking-widest text-emerald-400 uppercase mb-2">Neural Link Established</span>
+                            Welcome Admin. The bootstrap pool is fully validated and ready for routing.
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="relative group">
+                    <div class="absolute -top-10 left-4 px-3 py-1 bg-white/5 border border-white/10 rounded-xl flex items-center gap-2 group-focus-within:border-sky-500/5 transition-all">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_4px_#10b981]"></span>
+                        <span id="active-model-token" class="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Auto-Routing: [Llama-3.3-70B]</span>
+                    </div>
+                    <textarea id="chat-input" rows="1" placeholder="Type instructions or data for proxying..." class="w-full bg-white/[0.03] border border-white/10 rounded-2xl pl-6 pr-20 py-5 text-sm focus:ring-1 focus:ring-sky-500/50 focus:border-sky-500 outline-none transition-all resize-none shadow-2xl"></textarea>
+                    <button onclick="sendUserMessage()" class="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-sky-500 hover:bg-sky-600 rounded-xl flex items-center justify-center transition-all shadow-lg shadow-sky-500/30 group-focus-within:scale-105">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- VIEW: Settings -->
+            <div id="view-settings" class="content-view hidden max-w-3xl space-y-10 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <h2 class="text-3xl font-bold tracking-tight">Ops Configuration</h2>
+                
+                <div class="space-y-4">
+                    <div class="glass p-6 rounded-3xl border border-white/5 flex items-center justify-between group hover:bg-white/[0.04] transition-all">
+                        <div class="flex gap-5 items-center">
+                            <div class="p-3 bg-sky-500/10 rounded-2xl text-sky-500"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg></div>
+                            <div>
+                                <h4 class="text-sm font-bold text-white mb-0.5">Complexity-Aware Load Balancing</h4>
+                                <p class="text-[11px] text-slate-500">Direct coding specific tasks to Groq Llama-3.3 endpoints.</p>
+                            </div>
+                        </div>
+                        <div class="w-11 h-6 bg-sky-500 rounded-full flex items-center px-1"><div class="w-4 h-4 bg-white rounded-full shadow-md ml-auto"></div></div>
+                    </div>
+
+                    <div class="glass p-6 rounded-3xl border border-white/5 flex items-center justify-between group hover:bg-white/[0.04] transition-all">
+                        <div class="flex gap-5 items-center">
+                            <div class="p-3 bg-indigo-500/10 rounded-2xl text-indigo-500"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg></div>
+                            <div>
+                                <h4 class="text-sm font-bold text-white mb-0.5">Sovereign Encryption Layer</h4>
+                                <p class="text-[11px] text-slate-500">Encrypt prompts before routing through public nodes.</p>
+                            </div>
+                        </div>
+                        <div class="w-11 h-6 bg-slate-800 rounded-full flex items-center px-1"><div class="w-4 h-4 bg-slate-400 rounded-full shadow-md"></div></div>
+                    </div>
+                </div>
+
+                <div class="glass p-8 rounded-3xl border border-white/5 space-y-6">
+                    <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Master Routing Key</p>
+                    <div class="flex gap-3">
+                        <input type="password" value="sk-proxy-premium-77a8bf92c011" disabled class="flex-1 bg-black/40 border border-white/5 rounded-2xl px-5 py-3 text-xs font-mono text-slate-400 outline-none">
+                        <button class="px-6 py-3 bg-white/5 hover:bg-white/10 rounded-2xl text-xs font-bold transition-all border border-white/5">Regenerate</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Master App Logic -->
+    <script src="app.js"></script>
+</body>
+</html>

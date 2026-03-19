@@ -23,25 +23,27 @@ class SafeLoopGuard:
 class LocalAssistant:
     """Interface for on-demand assistance via local LM Studio (localhost:1234)."""
     
-    def __init__(self, host: str = "http://localhost:1234", model: str = "smollm-360m-instruct-mlx"):
+    def __init__(self, host: str = "http://localhost:1234", default_model: str = "smollm-360m-instruct-mlx"):
         self.host = host
-        self.model = model
+        self.default_model = default_model
         self.guard = SafeLoopGuard()
 
-    async def consult(self, prompt: str, task_id: str = "default") -> Optional[str]:
-        """Consults the local LLM for assistance, subject to safety guards."""
+    async def consult(self, prompt: str, task_id: str = "default", model: Optional[str] = None) -> Optional[str]:
+        """Consults the local LLM, allowing dynamic model selection."""
         if not self.guard.is_safe(task_id):
             logger.warning(f"SafeLoopGuard: Blocked potential recursive loop for task {task_id}")
             return None
             
+        target_model = model or self.default_model
         self.guard.increment(task_id)
         try:
             async with aiohttp.ClientSession() as session:
                 payload = {
-                    "model": self.model,
+                    "model": target_model,
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": 0.7
                 }
+                logger.info(f"LocalAssistant: Consulting {target_model} for task {task_id}")
                 async with session.post(f"{self.host}/v1/chat/completions", json=payload, timeout=60) as response:
                     if response.status == 200:
                         data = await response.json()
@@ -52,5 +54,44 @@ class LocalAssistant:
             logger.error(f"LocalAssistant connection error: {e}")
         finally:
             self.guard.decrement(task_id)
+            
+        return None
+
+    async def consult_vision(self, prompt: str, image_path: str, model: Optional[str] = None) -> Optional[str]:
+        """Consults the local vision model with an image."""
+        import base64
+        import os
+        if not os.path.exists(image_path):
+            logger.error(f"Vision error: Image not found at {image_path}")
+            return None
+            
+        with open(image_path, "rb") as f:
+            base64_image = base64.b64encode(f.read()).decode('utf-8')
+            
+        target_model = model or self.default_model
+        payload = {
+            "model": target_model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_image}"}}
+                    ]
+                }
+            ],
+            "temperature": 0.0
+        }
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(f"{self.host}/v1/chat/completions", json=payload, timeout=90) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return data['choices'][0]['message']['content']
+                    else:
+                        logger.error(f"Vision model failed: {response.status}")
+        except Exception as e:
+            logger.error(f"Vision connection error: {e}")
             
         return None

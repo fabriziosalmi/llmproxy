@@ -1,0 +1,110 @@
+/* 
+ * Premium Unified styles - FABGPT #0.1
+ * focus: Glassmorphism, SF Pro Font, Smooth Motion
+ */
+
+ :root {
+    --apple-blue: #007aff;
+    --apple-green: #34c759;
+    --apple-red: #ff3b30;
+    --apple-gray: #8e8e93;
+    --bg-deep: #050608;
+}
+
+* {
+    box-sizing: border-box;
+    -webkit-font-smoothing: antialiased;
+    letter-spacing: -0.012em;
+}
+
+body {
+    background-color: var(--bg-deep);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+    color: #f5f5f7;
+    margin: 0;
+}
+
+/* Glassmorphism Classes */
+.glass {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+
+.glass-sidebar {
+    background: rgba(10, 10, 12, 0.4);
+    backdrop-filter: blur(40px) saturate(200%);
+    -webkit-backdrop-filter: blur(40px) saturate(200%);
+}
+
+/* Sidebar transition logic */
+.sidebar.collapsed {
+    width: 80px;
+}
+.sidebar.collapsed .sidebar-text {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-10px);
+}
+.sidebar.collapsed #logo-container {
+    padding-left: 0;
+}
+.sidebar-text {
+    transition: all 0.2s ease;
+}
+
+/* Navigation System */
+.nav-item {
+    color: var(--apple-gray);
+    position: relative;
+}
+.nav-item:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.05);
+}
+.nav-item.active {
+    background: rgba(0, 122, 255, 0.12);
+    color: var(--apple-blue);
+}
+.nav-item.active::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 25%;
+    height: 50%;
+    width: 2.5px;
+    background: var(--apple-blue);
+    border-radius: 0 4px 4px 0;
+    box-shadow: 0 0 12px var(--apple-blue);
+}
+
+/* Glow Typography */
+.glow-text {
+    text-shadow: 0 0 30px rgba(0, 122, 255, 0.15);
+}
+
+/* Scrollbar styling */
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-in {
+    animation: fadeIn 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Registry Row Glow */
+tr:hover .w-1.5 {
+    box-shadow: 0 0 10px currentColor;
+    transform: scale(1.2);
+}
+.w-1.5 { transition: all 0.3s ease; }
