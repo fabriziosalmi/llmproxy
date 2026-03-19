@@ -1,3 +1,4 @@
+import logging
 import os
 import aiohttp
 from typing import Optional
