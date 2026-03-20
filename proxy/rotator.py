@@ -114,15 +114,19 @@ class RotatorAgent(BaseAgent):
         self._setup_static()
 
     async def broadcast_event(self, event_type: str, data: Dict[str, Any]):
-        """Broadcasts a real-time event to the telemetry queue."""
-        event = {
-            "type": event_type,
-            "timestamp": datetime.now().isoformat(),
-            "data": data
-        }
-        if self.telemetry_queue.full():
-            self.telemetry_queue.get_nowait() # Drop oldest
-        await self.telemetry_queue.put(event)
+        """Broadcasts a real-time event to the telemetry queue (Shielded)."""
+        async def _put():
+            event = {
+                "type": event_type,
+                "timestamp": datetime.now().isoformat(),
+                "data": data
+            }
+            if self.telemetry_queue.full():
+                self.telemetry_queue.get_nowait() # Drop oldest
+            await self.telemetry_queue.put(event)
+        
+        # 11.2: Protect telemetry from client disconnection aborts
+        await asyncio.shield(_put())
 
     def _setup_static(self):
         # Serve the perfected cyber-dark UI
@@ -320,15 +324,20 @@ class RotatorAgent(BaseAgent):
             return StreamingResponse(log_generator(), media_type="text/event-stream")
 
     async def _add_log(self, message: str, level: str = "INFO", metadata: dict = None):
-        log_entry = {
-            "timestamp": time.strftime("%H:%M:%S"),
-            "level": level,
-            "message": message,
-            "metadata": metadata or {}
-        }
-        if self.log_queue.full():
-            await self.log_queue.get()
-        await self.log_queue.put(log_entry)
+        """Shielded logging to ensure IO completes even if client disconnects."""
+        async def _log():
+            log_entry = {
+                "timestamp": time.strftime("%H:%M:%S"),
+                "level": level,
+                "message": message,
+                "metadata": metadata or {}
+            }
+            if self.log_queue.full():
+                await self.log_queue.get()
+            await self.log_queue.put(log_entry)
+            
+        # 11.2: Protect log persistence from client disconnects
+        await asyncio.shield(_log())
 
     async def setup(self):
         """Pre-flight setup: DB initialization and State hydration."""
@@ -349,7 +358,16 @@ class RotatorAgent(BaseAgent):
             
         await self.setup()
         self.logger.info(f"Starting proxy server on port {port}...")
-        config = uvicorn.Config(self.app, host="0.0.0.0", port=port, log_level="info")
+        
+        # Phase 11.1: System Limits Tuning (TCP_NODELAY & UVLoop for raw performance)
+        config = uvicorn.Config(
+            self.app, 
+            host="0.0.0.0", 
+            port=port, 
+            log_level="info",
+            loop="uvloop",     # Automatically disables Nagle's TCP_NODELAY buffering
+            http="httptools"   # High-perf HTTP parsing
+        )
         server = uvicorn.Server(config)
         await server.serve()
 

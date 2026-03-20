@@ -116,6 +116,15 @@ start_proxy() {
         print_debug "DEBUG mode engaged. Tailing logs massively."
     fi
     
+    # Check for Jemalloc availability for massive memory optimization
+    if [ -f "/usr/lib/x86_64-linux-gnu/libjemalloc.so.2" ]; then
+        export LD_PRELOAD="/usr/lib/x86_64-linux-gnu/libjemalloc.so.2"
+        print_info "Jemalloc memory allocator loaded (Zero-Fragmentation mode)."
+    elif [ -f "/usr/local/lib/libjemalloc.dylib" ]; then
+        export DYLD_INSERT_LIBRARIES="/usr/local/lib/libjemalloc.dylib"
+        print_info "Jemalloc loaded via macOS DYLD_INSERT_LIBRARIES."
+    fi
+    
     # Run the raw server daemonized
     nohup python main.py > "$LOG_FILE" 2>&1 &
     new_pid=$!
