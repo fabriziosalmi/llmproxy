@@ -108,6 +108,57 @@ function initHUD() {
         palette.addEventListener('click', (e) => {
             if (e.target === palette) togglePalette();
         });
+
+        // 11.7: WASM-accelerated (simulated) High-Performance Indexer
+        const commands = [
+            { id: 'toggle-proxy', name: 'System: Toggle Proxy Gate', desc: 'Kill/Start all neural traffic' },
+            { id: 'clear-logs', name: 'Terminal: Flush Buffer', desc: 'Clear xterm.js WebGL cache' },
+            { id: 'view-registry', name: 'Nav: Service Registry', desc: 'Inspect live endpoints' },
+            { id: 'view-chat', name: 'Nav: Neural Chat', desc: 'Direct interaction mode' },
+            { id: 'zenith-hard-reset', name: 'Zenith: Hard Reset', desc: 'Clear all memory and restart' }
+        ];
+
+        const cmdList = document.getElementById('cmd-list');
+        input.addEventListener('input', () => {
+            const query = input.value.toLowerCase();
+            if(!cmdList) return;
+            cmdList.innerHTML = '';
+            
+            const results = commands.filter(c => 
+                c.name.toLowerCase().includes(query) || 
+                c.desc.toLowerCase().includes(query)
+            );
+
+            results.forEach(res => {
+                const item = document.createElement('div');
+                item.className = "flex items-center justify-between p-3 hover:bg-white/5 rounded-xl cursor-pointer transition-all border border-transparent hover:border-white/10 group";
+                item.innerHTML = `
+                    <div class="flex items-center gap-4">
+                        <div class="p-2 bg-sky-500/10 rounded-lg text-sky-400 group-hover:scale-110 transition-transform">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                        </div>
+                        <div>
+                            <p class="text-[11px] font-bold text-slate-100">${res.name}</p>
+                            <p class="text-[9px] text-slate-500 font-medium">${res.desc}</p>
+                        </div>
+                    </div>
+                    <div class="text-[9px] font-mono text-slate-700 bg-white/5 px-2 py-1 rounded">ENTER</div>
+                `;
+                item.onclick = () => {
+                    executeCommand(res.id);
+                    togglePalette();
+                };
+                cmdList.appendChild(item);
+            });
+        });
+    }
+
+    function executeCommand(id) {
+        if (id === 'toggle-proxy') document.getElementById('nav-proxy').click();
+        if (id === 'clear-logs') document.getElementById('clear-logs-btn').click();
+        if (id === 'view-registry') document.getElementById('nav-registry').click();
+        if (id === 'view-chat') document.getElementById('nav-chat').click();
+        console.info(`Executed HUD command: ${id}`);
     }
 
     // Telemetry Slide-over Drawer

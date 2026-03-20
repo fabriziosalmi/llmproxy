@@ -2,7 +2,13 @@ import ssl
 import logging
 import jwt
 import time
+import os
+import aiohttp
 from typing import Dict, Any, Optional
+
+# 11.5: Tailscale Unix Socket Paths
+TAILSCALE_SOCKET_LINUX = "/var/run/tailscale/tailscaled.sock"
+TAILSCALE_SOCKET_MACOS = "/Library/Tailscale/tailscaled.sock"
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +21,10 @@ class ZeroTrustManager:
         self.secret = self.config.get("identity_secret", "proxy-secret-123")
         self.cert_path = self.config.get("client_cert")
         self.key_path = self.config.get("client_key")
+        
+        # Tailscale Socket Configuration
+        self.ts_socket = TAILSCALE_SOCKET_MACOS if os.path.exists(TAILSCALE_SOCKET_MACOS) else TAILSCALE_SOCKET_LINUX
+        self._ts_session: Optional[aiohttp.ClientSession] = None
 
     def get_ssl_context(self) -> Optional[ssl.SSLContext]:
         """Returns an SSLContext for mTLS if configured."""
@@ -47,3 +57,34 @@ class ZeroTrustManager:
             "X-Proxy-Identity": token,
             "X-Zero-Trust": "true"
         }
+
+    async def verify_tailscale_identity(self, remote_ip: str) -> Optional[Dict[str, Any]]:
+        """
+        11.5: Queries Tailscale LocalAPI via Unix Socket to verify the machine/user associated with the IP.
+        This provides a zero-latency, spoof-proof identity check for the Federated Swarm.
+        """
+        if not os.path.exists(self.ts_socket):
+            return {"status": "unverified", "reason": "socket_not_found"}
+
+        try:
+            if not self._ts_session or self._ts_session.closed:
+                connector = aiohttp.UnixConnector(path=self.ts_socket)
+                self._ts_session = aiohttp.ClientSession(connector=connector)
+
+            # Query the LocalAPI for who is at this remote IP
+            async with self._ts_session.get(f"http://local-tailscale/localapi/v0/whois?addr={remote_ip}") as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    user = data.get("UserProfile", {}).get("LoginName", "unknown")
+                    node = data.get("Node", {}).get("Name", "unknown")
+                    logger.info(f"ZeroTrust: Verified Tailscale User {user} at Node {node}")
+                    return {
+                        "status": "verified",
+                        "user": user,
+                        "node": node,
+                        "caps": data.get("CapMap", {})
+                    }
+        except Exception as e:
+            logger.error(f"ZeroTrust: Tailscale Socket Error: {e}")
+        
+        return {"status": "unverified", "reason": "api_error"}

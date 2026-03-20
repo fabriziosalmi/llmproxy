@@ -168,6 +168,14 @@ class RotatorAgent(BaseAgent):
                 if not self.rbac.check_quota(token):
                     raise HTTPException(status_code=402, detail="Enterprise Quota Exceeded for this API Key.")
 
+                # 11.5: Tailscale Zero-Trust LocalAPI Verification
+                ts_id = await self.zt_manager.verify_tailscale_identity(request.client.host)
+                if ts_id["status"] == "verified":
+                    await self._add_log(f"ZT VERIFIED: {ts_id['user']} on {ts_id['node']}", level="SECURITY")
+                    # Optionally append to request state for later use
+                    request.state.user = ts_id['user']
+                    request.state.node = ts_id['node']
+
             if not self.proxy_enabled:
                 raise HTTPException(status_code=503, detail="Proxy service is currently STOPPED.")
             

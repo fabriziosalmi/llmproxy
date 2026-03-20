@@ -1,32 +1,50 @@
-# --- Stage 1: Builder ---
-FROM python:3.12-slim AS builder
+# 11.7: Distroless Dockerization (Zero-Bloat, Zero-Surface)
+# Stage 1: Build & Compile Native Extensions
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
+
+# Install build dependencies for C++/Rust
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    curl \
+    git \
+    libssl-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust for the PII engine (Phase 10)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-# --- Stage 2: Runtime ---
-FROM python:3.12-slim
+# Copy source and compile extensions
+COPY . .
+RUN python setup_cpp.py build_ext --inplace
+# For Rust, assuming maturin or similar is used:
+RUN cd ext_rust && maturin build --release --out ../dist && pip install ../dist/*.whl
+
+# Stage 2: Distroless Runtime
+FROM gcr.io/distroless/python3-debian11
 
 WORKDIR /app
 
-# Copy only installed packages from builder
-COPY --from=builder /install /usr/local
+# Copy only the necessary site-packages and compiled binaries
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /app /app
 
-# Copy source code
-COPY . .
+# Set Python path to find site-packages
+ENV PYTHONPATH=/usr/local/lib/python3.11/site-packages
 
-# Playwright browser install (for SOTA sniffer)
-RUN playwright install chromium --with-deps || true
+# Expose Proxy Port
+EXPOSE 8090
 
-# Create non-root user
-RUN useradd -m proxyuser
-USER proxyuser
+# Non-root user (Distroless default is non-root)
+USER nonroot
 
-EXPOSE 8080 9090
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=5s \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')" || exit 1
-
-CMD ["python", "main.py"]
+# Entrypoint: Direct Python execution of main.py
+ENTRYPOINT ["python", "main.py"]

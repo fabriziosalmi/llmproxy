@@ -12,6 +12,11 @@
     <link rel="stylesheet" href="style.css">
     <!-- Premium Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- 11.7: xterm.js for High-Perf WebGL Logging -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-webgl@0.16.0/lib/xterm-addon-webgl.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
     <style>
         .font-mono { font-family: 'Fira Code', monospace !important; }
     </style>
@@ -374,8 +379,8 @@
                             </button>
                         </div>
                     </div>
-                    <div id="terminal-logs" class="flex-1 p-8 pt-14 font-mono text-[11px] leading-relaxed overflow-y-auto scrollbar-hide space-y-1 text-emerald-400 brighten">
-                        <div class="text-emerald-500/50 italic">Waiting for neural traffic link...</div>
+                    <!-- 11.7: xterm.js Container -->
+                    <div id="terminal-container" class="flex-1 p-4 pt-14 bg-black/60 relative overflow-hidden">
                     </div>
                     <div class="absolute bottom-4 right-8 text-[9px] text-slate-700 font-mono pointer-events-none">TTY: /dev/prox0</div>
                 </div>

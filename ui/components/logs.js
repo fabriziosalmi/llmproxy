@@ -1,144 +1,120 @@
 /**
- * Logs Component
+ * Logs Component (Phase 11: Zenith xterm.js Edition)
  */
 import { store } from '../services/store.js';
 
-let isHovering = false;
-let missedCount = 0;
+let term;
+let fitAddon;
 
 export function initLogs() {
+    const container = document.getElementById('terminal-container');
+    if (!container) return;
+
+    // Remove any existing children
+    container.innerHTML = '';
+
+    // Initialize xterm.js
+    term = new Terminal({
+        theme: {
+            background: 'transparent',
+            foreground: '#10b981', // emerald-500
+            cursor: '#10b981',
+            black: '#000000',
+            red: '#f43f5e',
+            green: '#10b981',
+            yellow: '#fbbf24',
+            blue: '#38bdf8',
+            magenta: '#818cf8',
+            cyan: '#22d3ee',
+            white: '#e2e8f0',
+        },
+        fontFamily: "'Fira Code', monospace",
+        fontSize: 11,
+        lineHeight: 1.4,
+        letterSpacing: 0.5,
+        cursorBlink: true,
+        scrollback: 10000,
+        allowTransparency: true,
+    });
+
+    fitAddon = new FitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+
+    // Load WebGL Addon for zero-latency rendering
+    try {
+        const webglAddon = new WebglAddon.WebglAddon();
+        term.loadAddon(webglAddon);
+        console.info("xterm.js: WebGL Accelerated Rendering Enabled");
+    } catch (e) {
+        console.warn("xterm.js: WebGL failed, falling back to Canvas", e);
+    }
+
+    term.open(container);
+    fitAddon.fit();
+
+    // Handle Window Resize
+    window.addEventListener('resize', () => {
+        if (fitAddon) fitAddon.fit();
+    });
+
+    // Connect Log Stream
     const BASE_URL = window.location.origin;
     if (store.state.logSource) store.state.logSource.close();
     
     const logSource = new EventSource(`${BASE_URL}/api/v1/logs`);
     store.update({ logSource });
-    
-    const container = document.getElementById('terminal-logs');
-    if (container) {
-        container.addEventListener('mouseenter', () => { isHovering = true; });
-        container.addEventListener('mouseleave', () => { 
-            isHovering = false; 
-            missedCount = 0;
-            updatePausedBadge();
-            container.scrollTop = container.scrollHeight;
-        });
-    }
 
-    const filterInput = document.getElementById('log-pipe-filter');
-    if (filterInput) {
-        filterInput.addEventListener('input', () => {
-            const pipes = filterInput.value.split('|').map(s => s.trim().toLowerCase()).filter(s => s);
-            const logs = document.querySelectorAll('.log-entry');
-            logs.forEach(log => {
-                const text = log.innerText.toLowerCase();
-                const matches = pipes.every(p => text.includes(p.replace(/grep['" ]+/g, '').replace(/['"]/g, '')));
-                log.style.display = (pipes.length === 0 || matches) ? 'flex' : 'none';
-            });
-            container.scrollTop = container.scrollHeight;
-        });
-    }
-
-    const clearBtn = document.getElementById('clear-logs-btn');
-    if (clearBtn) clearBtn.addEventListener('click', clearLogs);
+    term.writeln('\x1b[32m[SYSTEM]\x1b[0m \x1b[3mWaiting for neural traffic link...\x1b[0m');
 
     logSource.onmessage = (event) => {
         try {
             const entry = JSON.parse(event.data);
-            appendLog(entry);
+            appendLogToTerm(entry);
         } catch (e) {
             console.error('Failed to parse log entry:', e);
         }
     };
-}
 
-function updatePausedBadge() {
-    const badge = document.getElementById('log-paused-badge');
-    const count = document.getElementById('log-missed-count');
-    if (!badge || !count) return;
-    
-    if (isHovering && missedCount > 0) {
-        badge.classList.remove('hidden', 'opacity-0');
-        count.innerText = missedCount;
-    } else {
-        badge.classList.add('opacity-0');
-        setTimeout(() => badge.classList.add('hidden'), 200);
-    }
-}
-
-function syntaxHighlight(msg) {
-    if (typeof msg !== 'string') return msg;
-    // Highlight JSON-like structures
-    if (msg.includes('{') || msg.includes('[')) {
-        return msg.replace(/"(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?/g, function (match) {
-            let cls = 'text-amber-400';
-            if (/^"/.test(match)) {
-                if (/:$/.test(match)) {
-                    cls = 'text-sky-400 font-bold'; // key
-                } else {
-                    cls = 'text-emerald-300'; // string
-                }
-            } else if (/true|false/.test(match)) {
-                cls = 'text-purple-400 font-bold'; // boolean
-            } else if (/null/.test(match)) {
-                cls = 'text-slate-500 italic'; // null
-            } else {
-                cls = 'text-orange-400'; // number
+    const clearBtn = document.getElementById('clear-logs-btn');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            if (term) {
+                term.clear();
+                term.writeln('\x1b[33m[SYSTEM] Terminal buffer cleared.\x1b[0m');
             }
-            return '<span class="' + cls + '">' + match + '</span>';
         });
     }
-    // Highlighting generic path/identifiers
-    return msg.replace(/(['"])(.*?)\1/g, '<span class="text-emerald-300">$1$2$1</span>');
 }
 
-function appendLog(log) {
-    const container = document.getElementById('terminal-logs');
-    if (!container) return;
-    
-    if (container.children.length === 1 && container.children[0].classList.contains('italic')) {
-        container.innerHTML = '';
-    }
-    
-    const div = document.createElement('div');
-    div.className = "log-entry flex gap-4 animate-in fade-in slide-in-from-left-1 group p-1.5 -mx-1.5 rounded hover:bg-white/5 transition-colors cursor-pointer";
-    div.onclick = () => console.log('Log details:', log); // Interactive detail preparation
-    
-    const levelColor = log.level === 'PROXY' ? 'text-sky-400 font-black' : 
-                      log.level === 'ERROR' ? 'text-red-400' : 
-                      log.level === 'SYSTEM' ? 'text-amber-400' : 'text-slate-500';
-                      
-    const highlightedMsg = syntaxHighlight(log.message || '');
-    
-    div.innerHTML = `
-        <span class="text-slate-600 shrink-0 select-none">${log.timestamp || new Date().toISOString().split('T')[1].slice(0,-1)}</span>
-        <span class="w-12 tracking-widest text-[8px] uppercase font-black ${levelColor} shrink-0 select-none">${log.level || 'INFO'}</span>
-        <span class="text-slate-300 break-all font-medium leading-relaxed">${highlightedMsg}</span>
-    `;
-    
-    // Filter check
+function appendLogToTerm(log) {
+    if (!term) return;
+
+    // Check filters
     const filterInput = document.getElementById('log-pipe-filter');
     if (filterInput && filterInput.value.trim() !== '') {
         const pipes = filterInput.value.split('|').map(s => s.trim().toLowerCase()).filter(s => s);
-        const text = div.innerText.toLowerCase();
+        const text = (log.message || "").toLowerCase();
         const matches = pipes.every(p => text.includes(p.replace(/grep['" ]+/g, '').replace(/['"]/g, '')));
-        if (!matches) div.style.display = 'none';
+        if (!matches) return;
     }
 
-    container.appendChild(div);
-    
-    if (isHovering) {
-        missedCount++;
-        updatePausedBadge();
-    } else {
-        container.scrollTop = container.scrollHeight;
-    }
-    
-    if (container.children.length > 200) {
-        container.removeChild(container.firstChild); // Increase buffer size
-    }
+    const timestamp = `\x1b[90m[${log.timestamp}]\x1b[0m`;
+    const levelColor = {
+        'INFO': '\x1b[34m',    // Blue
+        'WARNING': '\x1b[33m', // Yellow
+        'ERROR': '\x1b[31m',   // Red
+        'CRITICAL': '\x1b[31;1m', // Bold Red
+        'SYSTEM': '\x1b[35m',  // Magenta
+        'PROXY': '\x1b[32m',   // Green
+        'SECURITY': '\x1b[33;1m' // Bold Yellow (PII/Auth)
+    }[log.level] || '\x1b[37m';
+
+    const level = `${levelColor}${log.level}\x1b[0m`;
+    const message = log.message;
+
+    term.writeln(`${timestamp} ${level} ${message}`);
 }
 
 export function clearLogs() {
-    const container = document.getElementById('terminal-logs');
-    if (container) container.innerHTML = '<div class="text-slate-500 italic opacity-50 p-2">Log stream cleared.</div>';
+    if (term) term.clear();
 }
