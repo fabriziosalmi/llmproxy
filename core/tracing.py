@@ -6,15 +6,21 @@ Supports Sentry integration for exception tracking.
 """
 
 import logging
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.sdk.resources import Resource
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+try:
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+    from opentelemetry.sdk.resources import Resource
+    _OTEL_AVAILABLE = True
+except ImportError:
+    _OTEL_AVAILABLE = False
+    logger.info("OpenTelemetry not installed — tracing disabled")
 
 
 class TraceManager:
@@ -30,6 +36,10 @@ class TraceManager:
         sentry_dsn: Optional[str] = None,
     ):
         """Initializes OpenTelemetry tracing with optional Sentry."""
+        if not _OTEL_AVAILABLE:
+            logger.warning("OpenTelemetry not available — skipping tracing init")
+            return
+
         resource = Resource.create({"service.name": service_name})
         provider = TracerProvider(resource=resource)
 
@@ -94,6 +104,8 @@ class TraceManager:
 
     @classmethod
     def get_tracer(cls):
+        if not _OTEL_AVAILABLE:
+            return None
         if cls._tracer is None:
             cls._tracer = trace.get_tracer("llmproxy-fallback")
         return cls._tracer
@@ -101,6 +113,8 @@ class TraceManager:
     @classmethod
     def instrument_app(cls, app):
         """Instruments a FastAPI app."""
+        if not _OTEL_AVAILABLE:
+            return
         FastAPIInstrumentor.instrument_app(app)
         logger.info("FastAPI application instrumented with OpenTelemetry")
 
@@ -117,4 +131,8 @@ class TraceManager:
 
 def start_span(name: str):
     """Context manager decorator for spans."""
-    return TraceManager.get_tracer().start_as_current_span(name)
+    tracer = TraceManager.get_tracer()
+    if tracer is None:
+        import contextlib
+        return contextlib.nullcontext()
+    return tracer.start_as_current_span(name)
