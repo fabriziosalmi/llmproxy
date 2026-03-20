@@ -152,8 +152,33 @@ observability:
     service_name: "llmproxy"
     otlp_endpoint: null # e.g. "http://localhost:4317"
     console_exporter: true
+  sentry:
+    dsn_env: "SENTRY_DSN"  # Loaded from Infisical/env
+  export:
+    enabled: false
+    output_dir: "exports"
+    scrub_pii: true
+    compress_on_rotate: true
 
 budget:
   monthly_limit: 1000.0
   soft_limit: 800.0
   fallback_to_local_on_limit: true
+
+# 7.6: Litestream — SQLite WAL Replication to S3
+# Install: curl -fsSL https://github.com/benbjohnson/litestream/releases/latest -o litestream
+# Config file: /etc/litestream.yml
+# Example litestream.yml:
+#   dbs:
+#     - path: /data/endpoints.db
+#       replicas:
+#         - type: s3
+#           bucket: llmproxy-backups
+#           path: sqlite/endpoints
+#           region: eu-west-1
+#           access-key-id: ${AWS_ACCESS_KEY_ID}
+#           secret-access-key: ${AWS_SECRET_ACCESS_KEY}
+#           retention: 720h  # 30 days
+#           sync-interval: 10s
+# Run: litestream replicate -config /etc/litestream.yml
+# Restore: litestream restore -o /data/endpoints.db s3://llmproxy-backups/sqlite/endpoints

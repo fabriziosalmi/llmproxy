@@ -26,6 +26,10 @@ infisical-python-sdk>=3.0.0
 # Security & Identity
 python-multipart>=0.0.9
 
+# Export & Observability
+aiofiles>=24.1.0
+sentry-sdk[fastapi]>=2.0.0
+
 # Optional: Local LLM (LM Studio not required if bootstrap endpoints available)
 # mlx>=0.22.0
 # mlx-lm>=0.22.0

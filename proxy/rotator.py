@@ -20,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from core.base_agent import BaseAgent
 from store.store import EndpointStore
 from models import LLMEndpoint, EndpointStatus
-from core.metrics import MetricsTracker
+from core.metrics import MetricsTracker, get_metrics_response
 from core.tracing import TraceManager, start_span
 from core.vllm_engine import VLLMEngine
 from core.rate_limiter import DynamicRateLimiter
@@ -242,7 +242,12 @@ class RotatorAgent(BaseAgent):
                 "session_active": self._session is not None and not self._session.closed
             }
 
-
+        # 7.2: Prometheus /metrics endpoint
+        from fastapi.responses import Response
+        @self.app.get("/metrics")
+        async def metrics():
+            body, content_type = get_metrics_response()
+            return Response(content=body, media_type=content_type)
 
         @self.app.post("/api/v1/proxy/toggle")
         async def toggle_proxy_service(request: Request):
