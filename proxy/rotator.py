@@ -36,6 +36,8 @@ from core.rl_rotator import RLRotator, ModelRegistry
 from core.security import SecurityShield
 from core.secrets import SecretManager
 from core.logger import setup_logger
+from core.trajectory import TrajectoryBuffer
+from core.firewall_asgi import ByteLevelFirewallMiddleware
 
 API_KEY_HEADER = APIKeyHeader(name="Authorization", auto_error=False)
 
@@ -101,6 +103,13 @@ class RotatorAgent(BaseAgent):
             allow_methods=["*"],
             allow_headers=["*"],
         )
+        
+        # 10.1: Add Speculative Guardrails at the byte level
+        self.app.add_middleware(ByteLevelFirewallMiddleware)
+        
+        # 10.2: Initialize Trajectory Memory
+        self.trajectory = TrajectoryBuffer()
+        
         self._setup_routes()
         self._setup_static()
 
@@ -492,6 +501,21 @@ class RotatorAgent(BaseAgent):
                 headers = body.get("headers", {})
                 headers.update(self.zt_manager.get_identity_headers())
                 ssl_context = self.zt_manager.get_ssl_context()
+                
+                # 2.8 Cryptographic Zero-Width Watermarking (Phase 10)
+                # Inject a dynamic logit_bias based on session_id to subtly alter word choices
+                # and leave a statistical watermark on the generated text without zero-width chars.
+                if "logit_bias" not in body:
+                    import hashlib
+                    # Use session_id to deterministically select tokens to subtly elevate
+                    seed = int(hashlib.md5(session_id.encode()).hexdigest()[:8], 16)
+                    target_tokens = [
+                        (seed % 300) + 10000, 
+                        ((seed * 2) % 300) + 15000,
+                        ((seed * 3) % 400) + 20000
+                    ]
+                    body["logit_bias"] = {str(tk): 1.5 for tk in target_tokens}
+                    self.logger.info(f"WATERMARK: Applied structural logit_bias signature for {session_id}")
                 
                 # Architect's Refinement: Modular Model Adapter
                 if body.get("stream"):

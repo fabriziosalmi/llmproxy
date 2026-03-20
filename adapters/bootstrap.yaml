@@ -2,7 +2,7 @@
 # These are validated, working endpoint configurations for the LLM Proxy.
 
 adapters:
-  # ─── Pollinations.ai (GET) — CONFIRMED ✅ ───
+  # ─── Pollinations.ai (GET) — CONFIRMED  ───
   pollinations_get:
     name: "Pollinations.ai (GET)"
     url: "https://text.pollinations.ai/"
@@ -18,7 +18,7 @@ adapters:
     validated: true
     validated_at: "2026-03-19T11:00:00Z"
 
-  # ─── Pollinations.ai (POST/OpenAI) — CONFIRMED ✅ ───
+  # ─── Pollinations.ai (POST/OpenAI) — CONFIRMED  ───
   pollinations_openai:
     name: "Pollinations.ai (POST)"
     url: "https://text.pollinations.ai/"
@@ -35,7 +35,7 @@ adapters:
     validated: true
     validated_at: "2026-03-19T11:00:00Z"
 
-  # ─── DuckDuckGo AI Chat — CONFIRMED ✅ ───
+  # ─── DuckDuckGo AI Chat — CONFIRMED  ───
   duckduckgo_ai:
     name: "DuckDuckGo AI Chat"
     url: "https://duck.ai/duckchat/v1/chat"
@@ -53,7 +53,7 @@ adapters:
     validated: true
     validated_at: "2026-03-19T11:00:00Z"
 
-  # ─── Groq (Llama-3.3-70B) — CONFIRMED ✅ ───
+  # ─── Groq (Llama-3.3-70B) — CONFIRMED  ───
   groq_llama70b:
     name: "Groq (Llama-3.3-70B)"
     url: "https://api.groq.com/openai/v1/chat/completions"
@@ -76,7 +76,7 @@ adapters:
     validated: true
     validated_at: "2026-03-19T11:24:00Z"
 
-  # ─── Z.ai (GLM-5) — CONFIRMED via Browser ✅ ───
+  # ─── Z.ai (GLM-5) — CONFIRMED via Browser  ───
   z_ai_glm5:
     name: "Z.ai (GLM-5)"
     url: "https://chat.z.ai/api/v2/chat/completions"
@@ -94,7 +94,7 @@ adapters:
     validated: true
     validated_at: "2026-03-19T11:23:00Z"
 
-  # ─── Infercom.ai — CONFIRMED ✅ ───
+  # ─── Infercom.ai — CONFIRMED  ───
   infercom_ai:
     name: "Infercom.ai (EU-Sovereign)"
     url: "https://api.infercom.ai/v1/chat/completions"
@@ -116,7 +116,7 @@ adapters:
     validated: true
     validated_at: "2026-03-19T11:40:00Z"
 
-  # ─── OpenRouter — KEY VALIDATED (Wait for quota) ✅ ───
+  # ─── OpenRouter — KEY VALIDATED (Wait for quota)  ───
   openrouter:
     name: "OpenRouter"
     url: "https://openrouter.ai/api/v1/chat/completions"

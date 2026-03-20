@@ -12,7 +12,7 @@ async def test_endpoint(name: str, url: str, method: str, headers: dict, payload
                          response_parser=None, timeout: int = 30):
     """Tests a single endpoint and records the result."""
     print(f"\n{'='*60}")
-    print(f"🔍 Testing: {name}")
+    print(f" Testing: {name}")
     print(f"   URL: {url}")
     
     start = time.time()
@@ -50,7 +50,7 @@ async def test_endpoint(name: str, url: str, method: str, headers: dict, payload
                     "format": "openai-compat" if "choices" in str(data) else "custom"
                 }
                 
-                icon = "✅" if success else "❌"
+                icon = "" if success else ""
                 print(f"   {icon} Status: {status} | Latency: {duration}s")
                 print(f"   Response: {answer[:100]}...")
                 RESULTS.append(result)
@@ -58,16 +58,16 @@ async def test_endpoint(name: str, url: str, method: str, headers: dict, payload
                 
     except asyncio.TimeoutError:
         duration = round(time.time() - start, 2)
-        print(f"   ⏱️ TIMEOUT after {duration}s")
+        print(f"   ️ TIMEOUT after {duration}s")
         RESULTS.append({"name": name, "status": "TIMEOUT", "latency": duration, "success": False})
     except Exception as e:
         duration = round(time.time() - start, 2)
-        print(f"   💥 ERROR: {e}")
+        print(f"    ERROR: {e}")
         RESULTS.append({"name": name, "status": "ERROR", "latency": duration, "success": False, "error": str(e)})
 
 
 async def main():
-    print("🚀 Bootstrap Endpoint Validator — Tier 1 Blitz")
+    print(" Bootstrap Endpoint Validator — Tier 1 Blitz")
     print("="*60)
     
     # ── 1. Pollinations.ai (Free, No Login, Has API) ──
@@ -108,10 +108,10 @@ async def main():
                         response_parser=lambda d: d.get("message", str(d)[:200])
                     )
                 else:
-                    print("\n❌ DuckDuckGo: Could not get VQD token")
+                    print("\n DuckDuckGo: Could not get VQD token")
                     RESULTS.append({"name": "DuckDuckGo AI Chat", "status": "NO_VQD", "success": False})
     except Exception as e:
-        print(f"\n❌ DuckDuckGo: {e}")
+        print(f"\n DuckDuckGo: {e}")
         RESULTS.append({"name": "DuckDuckGo AI Chat", "status": "ERROR", "success": False, "error": str(e)})
 
     # ── 3. DeepAI (Free, No Login, Has API) ──
@@ -197,24 +197,24 @@ async def main():
     # SUMMARY
     # ══════════════════════════════════════════
     print("\n\n" + "="*60)
-    print("📊 VALIDATION SUMMARY")
+    print(" VALIDATION SUMMARY")
     print("="*60)
     
     passed = [r for r in RESULTS if r.get("success")]
     failed = [r for r in RESULTS if not r.get("success")]
     
-    print(f"\n✅ PASSED: {len(passed)}/{len(RESULTS)}")
+    print(f"\n PASSED: {len(passed)}/{len(RESULTS)}")
     for r in passed:
-        print(f"   ✅ {r['name']} — {r.get('latency', '?')}s — {r.get('format', 'unknown')}")
+        print(f"    {r['name']} — {r.get('latency', '?')}s — {r.get('format', 'unknown')}")
     
-    print(f"\n❌ FAILED: {len(failed)}/{len(RESULTS)}")
+    print(f"\n FAILED: {len(failed)}/{len(RESULTS)}")
     for r in failed:
-        print(f"   ❌ {r['name']} — {r.get('status', '?')} — {r.get('error', '')[:80]}")
+        print(f"    {r['name']} — {r.get('status', '?')} — {r.get('error', '')[:80]}")
     
     # Save results
     with open("bootstrap_results.json", "w") as f:
         json.dump(RESULTS, f, indent=2, default=str)
-    print(f"\n💾 Results saved to bootstrap_results.json")
+    print(f"\n Results saved to bootstrap_results.json")
 
 if __name__ == "__main__":
     asyncio.run(main())

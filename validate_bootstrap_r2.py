@@ -8,7 +8,7 @@ import time
 RESULTS = []
 
 async def test(name, url, method, headers, payload, parser=None, timeout=30):
-    print(f"\n{'='*60}\n🔍 {name}\n   {url}")
+    print(f"\n{'='*60}\n {name}\n   {url}")
     start = time.time()
     try:
         async with aiohttp.ClientSession() as s:
@@ -34,21 +34,21 @@ async def test(name, url, method, headers, payload, parser=None, timeout=30):
                     except: ans = str(data)[:200]
                 
                 ok = r.status == 200 and len(ans) > 3
-                icon = "✅" if ok else "❌"
+                icon = "" if ok else ""
                 print(f"   {icon} {r.status} | {dt}s | {ans[:120]}")
                 RESULTS.append({"name": name, "status": r.status, "latency": dt, 
                                "success": ok, "preview": ans[:150],
                                "format": "openai" if "choices" in str(data) else "custom",
                                "url": url})
     except asyncio.TimeoutError:
-        print(f"   ⏱️ TIMEOUT")
+        print(f"   ️ TIMEOUT")
         RESULTS.append({"name": name, "status": "TIMEOUT", "success": False})
     except Exception as e:
-        print(f"   💥 {e}")
+        print(f"    {e}")
         RESULTS.append({"name": name, "status": "ERROR", "success": False, "error": str(e)[:200]})
 
 async def main():
-    print("🚀 Bootstrap Validator — Round 2 (Corrected)")
+    print(" Bootstrap Validator — Round 2 (Corrected)")
     print("="*60)
     
     OPENAI_BODY = {"model": "openai", "messages": [{"role": "user", "content": "Say hello in one sentence."}], "max_tokens": 60}
@@ -71,7 +71,7 @@ async def main():
                          "Accept": "*/*",
                          "Referer": "https://duckduckgo.com/"}) as r:
                 vqd = r.headers.get("x-vqd-4", "")
-                print(f"\n   DuckDuckGo VQD: {'✅ got token' if vqd else '❌ no token'} (status {r.status})")
+                print(f"\n   DuckDuckGo VQD: {' got token' if vqd else ' no token'} (status {r.status})")
                 if vqd:
                     await test("DuckDuckGo AI Chat", "https://duckduckgo.com/duckchat/v1/chat",
                         "POST",
@@ -124,24 +124,24 @@ async def main():
 
     # ══════ SUMMARY ══════
     print("\n\n" + "="*60)
-    print("📊 ROUND 2 SUMMARY")
+    print(" ROUND 2 SUMMARY")
     print("="*60)
     
     passed = [r for r in RESULTS if r.get("success")]
     failed = [r for r in RESULTS if not r.get("success")]
     
-    print(f"\n✅ WORKING ({len(passed)}):")
+    print(f"\n WORKING ({len(passed)}):")
     for r in passed:
-        print(f"   ✅ {r['name']} — {r.get('latency','?')}s — Format: {r.get('format','?')}")
+        print(f"    {r['name']} — {r.get('latency','?')}s — Format: {r.get('format','?')}")
         print(f"      URL: {r.get('url','')}")
     
-    print(f"\n❌ FAILED ({len(failed)}):")
+    print(f"\n FAILED ({len(failed)}):")
     for r in failed:
-        print(f"   ❌ {r['name']} — {r.get('status','?')}")
+        print(f"    {r['name']} — {r.get('status','?')}")
     
     with open("bootstrap_results_r2.json", "w") as f:
         json.dump(RESULTS, f, indent=2, default=str)
-    print(f"\n💾 Saved to bootstrap_results_r2.json")
+    print(f"\n Saved to bootstrap_results_r2.json")
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -8,7 +8,7 @@ import time
 RESULTS = []
 
 async def test(name, url, method, headers, payload, parser=None, timeout=30):
-    print(f"\n{'='*60}\n🔍 {name}\n   {url}")
+    print(f"\n{'='*60}\n {name}\n   {url}")
     start = time.time()
     try:
         async with aiohttp.ClientSession() as s:
@@ -23,18 +23,18 @@ async def test(name, url, method, headers, payload, parser=None, timeout=30):
                 try: ans = data["choices"][0]["message"]["content"][:200]
                 except: pass
                 ok = r.status == 200 and len(str(ans)) > 3
-                icon = "✅" if ok else "❌"
+                icon = "" if ok else ""
                 print(f"   {icon} {r.status} | {dt}s")
                 print(f"   {str(ans)[:150]}")
                 RESULTS.append({"name": name, "status": r.status, "latency": dt, "success": ok,
                                "preview": str(ans)[:150], "url": url})
     except Exception as e:
-        print(f"   💥 {e}")
+        print(f"    {e}")
         RESULTS.append({"name": name, "status": "ERROR", "success": False, "error": str(e)[:200]})
 
 async def test_duckduckgo():
     """Test DuckDuckGo AI via proper session with cookies."""
-    print(f"\n{'='*60}\n🔍 DuckDuckGo AI (Full Session)")
+    print(f"\n{'='*60}\n DuckDuckGo AI (Full Session)")
     start = time.time()
     try:
         async with aiohttp.ClientSession() as s:
@@ -57,7 +57,7 @@ async def test_duckduckgo():
             }
             async with s.get("https://duckduckgo.com/duckchat/v1/status", headers=vqd_headers) as r:
                 vqd = r.headers.get("x-vqd-4", "")
-                print(f"   VQD: {'✅ ' + vqd[:20] + '...' if vqd else '❌ no token'} (status {r.status})")
+                print(f"   VQD: {' ' + vqd[:20] + '...' if vqd else ' no token'} (status {r.status})")
             
             if vqd:
                 # Step 3: Chat
@@ -84,7 +84,7 @@ async def test_duckduckgo():
                             except: pass
                     answer = "".join(answer_parts)
                     ok = r.status == 200 and len(answer) > 3
-                    icon = "✅" if ok else "❌"
+                    icon = "" if ok else ""
                     print(f"   {icon} {r.status} | {dt}s")
                     print(f"   Response: {answer[:150]}")
                     RESULTS.append({"name": "DuckDuckGo AI Chat", "status": r.status, "latency": dt,
@@ -92,11 +92,11 @@ async def test_duckduckgo():
             else:
                 RESULTS.append({"name": "DuckDuckGo AI Chat", "status": "NO_VQD", "success": False})
     except Exception as e:
-        print(f"   💥 {e}")
+        print(f"    {e}")
         RESULTS.append({"name": "DuckDuckGo AI Chat", "status": "ERROR", "success": False, "error": str(e)[:200]})
 
 async def main():
-    print("🚀 Bootstrap Validator — Round 3")
+    print(" Bootstrap Validator — Round 3")
     print("="*60)
     H = {"Content-Type": "application/json"}
 
@@ -150,14 +150,14 @@ async def main():
 
     # ══════ SUMMARY ══════
     print("\n\n" + "="*60)
-    print("📊 ROUND 3 SUMMARY")
+    print(" ROUND 3 SUMMARY")
     print("="*60)
     passed = [r for r in RESULTS if r.get("success")]
     failed = [r for r in RESULTS if not r.get("success")]
-    print(f"\n✅ WORKING ({len(passed)}):")
-    for r in passed: print(f"   ✅ {r['name']} — {r.get('latency','?')}s")
-    print(f"\n❌ FAILED ({len(failed)}):")
-    for r in failed: print(f"   ❌ {r['name']} — {r.get('status','?')}")
+    print(f"\n WORKING ({len(passed)}):")
+    for r in passed: print(f"    {r['name']} — {r.get('latency','?')}s")
+    print(f"\n FAILED ({len(failed)}):")
+    for r in failed: print(f"    {r['name']} — {r.get('status','?')}")
     
     with open("bootstrap_results_r3.json", "w") as f:
         json.dump(RESULTS, f, indent=2, default=str)
