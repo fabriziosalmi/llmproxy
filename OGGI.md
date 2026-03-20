@@ -87,7 +87,7 @@ Dockerfile esiste ma non c'e pipeline ne compose.
 | B. Wiring metrics/tracing | Sentry, Prometheus counters, circuit state | ~25 min | ✅ DONE |
 | C. UI Login Flow | OAuth redirect, callback, session, guard | ~35 min | ✅ DONE |
 | D. Test Suite | 7 test file, 46 test — 100% pass | ~45 min | ✅ DONE |
-| E. CI/CD & Docker Compose | GitHub Actions, compose, .env.example | ~20 min | ⬜ TODO |
+| E. CI/CD & Docker Compose | GitHub Actions, compose, .env.example | ~20 min | ✅ DONE |
 
 ### Ordine di esecuzione consigliato:
 1. **A + B** insieme (wiring) — senza questo i moduli sono dead code
