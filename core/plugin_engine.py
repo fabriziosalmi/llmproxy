@@ -60,35 +60,50 @@ class PluginManager:
     async def _load_plugin(self, p_info: Dict[str, Any]):
         name = p_info["name"]
         hook = PluginHook(p_info["hook"])
-        entrypoint = p_info["entrypoint"] # e.g. "default.pii_masking:analyze"
-        
-        module_path, func_name = entrypoint.split(":")
-        file_path = os.path.join(self.plugins_dir, f"{module_path.replace('.', '/')}.py")
-        
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"Plugin file not found: {file_path}")
+        entrypoint = p_info["entrypoint"]
+        p_type = p_info.get("type", "python")
 
-        spec = importlib.util.spec_from_file_location(name, file_path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        if p_type == "python":
+            module_path, func_name = entrypoint.split(":")
+            file_path = os.path.join(self.plugins_dir, f"{module_path.replace('.', '/')}.py")
+            
+            if not os.path.exists(file_path):
+                raise FileNotFoundError(f"Plugin file not found: {file_path}")
+
+            spec = importlib.util.spec_from_file_location(name, file_path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            
+            func = getattr(module, func_name)
+            self.rings[hook].append({"type": "python", "func": func, "name": name})
         
-        func = getattr(module, func_name)
-        self.rings[hook].append(func)
-        self.logger.info(f"Plugin Loaded: {name} (Hook: {hook.value}, Priority: {p_info.get('priority')})")
+        elif p_type == "wasm":
+            file_path = os.path.join(self.plugins_dir, f"{entrypoint.replace('.', '/')}.wasm")
+            self.rings[hook].append({"type": "wasm", "path": file_path, "name": name})
+            self.logger.info(f"Plugin Prepared (WASM): {name}")
+
+        self.logger.info(f"Plugin Loaded: {name} (Hook: {hook.value})")
 
     async def execute_ring(self, hook: PluginHook, context: PluginContext):
         """Executes all plugins in a specific ring sequentially."""
-        for plugin_func in self.rings[hook]:
+        for p in self.rings[hook]:
             if context.stop_chain:
                 break
             try:
-                # Plugins can be async or sync
-                if asyncio.iscoroutinefunction(plugin_func):
-                    await plugin_func(context)
-                else:
-                    plugin_func(context)
+                if p["type"] == "python":
+                    func = p["func"]
+                    if asyncio.iscoroutinefunction(func):
+                        await func(context)
+                    else:
+                        func(context)
+                
+                elif p["type"] == "wasm":
+                    # Placeholder for Extism execution
+                    # self.logger.info(f"Executing WASM Plugin: {p['name']}")
+                    pass
+
             except Exception as e:
-                self.logger.error(f"Error executing plugin in {hook.value}: {e}")
+                self.logger.error(f"Error executing plugin {p.get('name')} in {hook.value}: {e}")
                 context.error = str(e)
                 # Ingress/Routing errors might be fatal
                 if hook in [PluginHook.INGRESS, PluginHook.ROUTING]:

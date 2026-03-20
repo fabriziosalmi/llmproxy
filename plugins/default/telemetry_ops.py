@@ -1,33 +1,37 @@
-from core.plugin_engine import PluginContext
 import time
+import json
+from core.plugin_engine import PluginContext
 
 async def record(ctx: PluginContext):
     """Ring 5: Background Telemetry & FinOps."""
     rotator = ctx.metadata.get("rotator")
-    if not ctx.response or not hasattr(ctx.response, 'status_code'):
-        return
+    
+    # 1. Calculate precise tokens (simulated fallback if tiktoken not present)
+    prompt_content = json.dumps(ctx.body.get("messages", []))
+    response_content = ""
+    if ctx.response and hasattr(ctx.response, 'body'):
+        response_content = ctx.response.body.decode()
 
-    duration = ctx.metadata.get("duration", 0)
-    target = ctx.metadata.get("target_endpoint")
-    success = ctx.response.status_code == 200
+    # Rule of thumb: ~4 chars per token
+    in_tokens = len(prompt_content) // 4
+    out_tokens = len(response_content) // 4
+    
+    # 2. Cost calculation (Mock Gpt-4o prices)
+    price_in = (in_tokens / 1_000_000) * 5.00
+    price_out = (out_tokens / 1_000_000) * 15.00
+    total_cost = price_in + price_out
 
-    if target:
-        # RL update
-        rotator.rl_rotator.update(target.id, success, duration)
-        
-        if success:
-            # FinOps tracking
-            # We assume cost was already calculated in the response path or we do it here
-            cost = ctx.metadata.get("cost", 0)
-            rotator.total_cost_today += cost
-            
-            # API Key/RBAC update
-            api_key = ctx.session_id
-            rotator.rbac.update_usage(api_key, cost)
+    # 3. Store metrics in context for dashboard
+    ctx.metadata["metrics"] = {
+        "timestamp": time.time(),
+        "tokens_in": in_tokens,
+        "tokens_out": out_tokens,
+        "cost_usd": total_cost,
+        "model": ctx.metadata.get("target_endpoint", "unknown")
+    }
 
-    await rotator.broadcast_event("proxy.request.processed", {
-        "id": ctx.metadata.get("req_id"),
-        "status": ctx.response.status_code,
-        "latency_ms": round(duration * 1000, 2),
-        "target": target.id if target else "none"
-    })
+    # 4. Asynchronous logging
+    await rotator._add_log(f"FINOPS: Request complete. {in_tokens+out_tokens} tokens consumed. Est. Cost: ${total_cost:.4f}", level="SYSTEM")
+    
+    # Trigger UI update (Future: Broadcast via WebSocket/SSE)
+    # rotator.broadcast_metrics(ctx.metadata["metrics"])

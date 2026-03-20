@@ -34,3 +34,21 @@ plugins:
     priority: 100
     enabled: true
     entrypoint: "default.telemetry_ops:record"
+
+  - name: "Aider Context Minifier"
+    hook: "pre_flight"
+    priority: 15
+    enabled: true
+    entrypoint: "default.context_minifier:compress"
+
+  - name: "Speculative Kill-Switch"
+    hook: "post_flight"
+    priority: 70
+    enabled: true
+    entrypoint: "default.kill_switch:analyze"
+
+  - name: "JSON Auto-Healer"
+    hook: "post_flight"
+    priority: 90
+    enabled: true
+    entrypoint: "default.json_healer:repair"
