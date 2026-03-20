@@ -126,18 +126,8 @@ async function sendUserMessage() {
     const text = input.value.trim();
     if (!text) return;
     
-    const triggerWord = text.toLowerCase().match(/(hack|ignore|bypass|system prompt|sk-)/);
-    
     input.value = '';
     appendMessage('user', text);
-    
-    // Simulate Guardrail Intervention
-    if (triggerWord) {
-        setTimeout(() => {
-            appendMessage('guardrail', `Analyzing payload stream for cognitive anomalies... Threat signature detected matching rule [CWE-89]. Segmenting context window: "${text.substring(0, 40)}..."`);
-        }, 400);
-        return;
-    }
     
     // 5.2: A/B/C Compare Mode — fire parallel requests
     if (compareActive) {
@@ -161,7 +151,6 @@ async function sendUserMessage() {
                     if (streamEl) streamEl.innerHTML = '<span class="text-rose-400">Connection failed</span>';
                 });
         });
-        appendMessage('user', text);
         return;
     }
 

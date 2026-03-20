@@ -29,7 +29,7 @@ export function initLogs() {
             cyan: '#22d3ee',
             white: '#e2e8f0',
         },
-        fontFamily: "'Fira Code', monospace",
+        fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
         fontSize: 11,
         lineHeight: 1.4,
         letterSpacing: 0.5,

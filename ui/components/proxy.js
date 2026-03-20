@@ -60,4 +60,31 @@ export function initProxy() {
             store.update({ proxyEnabled: res.enabled });
         });
     }
+
+    // Priority Steering toggle
+    const prioBtn = document.getElementById('priority-mode-btn');
+    if (prioBtn) {
+        prioBtn.addEventListener('click', async () => {
+            const nextState = !store.state.priorityMode;
+            try {
+                const res = await api.togglePriorityMode(nextState);
+                store.update({ priorityMode: res.enabled });
+                // Visual feedback
+                const dot = prioBtn.querySelector('div');
+                if (dot) {
+                    if (nextState) {
+                        prioBtn.classList.replace('bg-slate-800', 'bg-sky-500');
+                        dot.classList.replace('bg-slate-500', 'bg-white');
+                        dot.style.transform = 'translateX(12px)';
+                    } else {
+                        prioBtn.classList.replace('bg-sky-500', 'bg-slate-800');
+                        dot.classList.replace('bg-white', 'bg-slate-500');
+                        dot.style.transform = 'translateX(0)';
+                    }
+                }
+            } catch (e) {
+                console.warn('Priority toggle failed:', e);
+            }
+        });
+    }
 }

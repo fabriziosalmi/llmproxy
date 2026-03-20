@@ -98,15 +98,15 @@
             </button>
             <button  id="nav-proxy" class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-white hover:bg-white/[0.02] transition-all">
                 <svg class="w-4 h-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-                <span class="sidebar-text">Transparent Proxy</span>
+                <span class="sidebar-text">Proxy</span>
             </button>
             <button  id="nav-chat" class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-white hover:bg-white/[0.02] transition-all">
                 <svg class="w-4 h-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
-                <span class="sidebar-text">Neural Chat</span>
+                <span class="sidebar-text">Chat</span>
             </button>
             <button  id="nav-settings" class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-white hover:bg-white/[0.02] transition-all">
                 <svg class="w-4 h-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37-2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/></svg>
-                <span class="sidebar-text">Operations</span>
+                <span class="sidebar-text">Settings</span>
             </button>
         </nav>
 
@@ -342,77 +342,43 @@
                 </div>
             </div>
 
-            <!-- VIEW: Proxy Control -->
-            <div id="view-proxy" class="content-view hidden h-full flex flex-col space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                <div class="flex items-center justify-between glass p-8 rounded-[2rem] border border-white/10 ring-1 ring-white/5 bg-gradient-to-tr from-white/[0.03] to-transparent">
-                    <div class="flex flex-col gap-4">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <h2 class="text-2xl font-bold tracking-tight text-white mb-1">Neural Flow Engine</h2>
-                                <p class="text-xs text-slate-500">Master toggle for transparent routing to remote verified endpoints.</p>
-                            </div>
-                            <div class="flex items-center gap-6">
-                                <div id="proxy-status-indicator" class="flex flex-col items-end">
-                                    <span class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-1">Current State</span>
-                                    <span class="text-emerald-400 font-mono text-xs font-black uppercase tracking-tighter shadow-sm shadow-emerald-500/10">ACTIVE</span>
-                                </div>
-                                <button id="proxy-toggle-btn"  class="w-12 h-6 bg-sky-500 rounded-full flex items-center px-1 transition-all shadow-lg shadow-sky-500/20 outline-none focus:ring-2 focus:ring-slate-400/50">
-                                    <div class="w-4 h-4 bg-white rounded-full shadow-md transition-all duration-300"></div>
-                                </button>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-6 pt-4 border-t border-white/5">
-                            <div class="flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-lg border border-white/5">
-                                <span class="text-[8px] font-black text-slate-500 uppercase tracking-widest">Local Interface</span>
-                                <span id="service-endpoint" class="text-[10px] font-mono text-sky-400 font-bold">127.0.0.1:8000</span>
-                    <!-- Plugin Marketplace Section -->
-                    <div id="plugins-view" class="content-view space-y-6 hidden">
-                        <div class="flex items-center justify-between mb-2">
-                            <div>
-                                <h2 class="text-xl font-bold text-white flex items-center gap-3">
-                                    <div class="p-2 bg-orange-500/20 rounded-xl border border-orange-500/30">
-                                        <svg class="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 011-1h1a2 2 0 100-4H7a1 1 0 01-1-1V7a1 1 0 011-1h3a1 1 0 001-1V4z"/></svg>
-                                    </div>
-                                    Neural Plugin Hub
-                                </h2>
-                                <p class="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
-                                    <span class="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></span>
-                                    5 Execution Rings active • Hot-Swap enabled
-                                </p>
-                            </div>
-                            <div class="flex gap-3">
-                                <button id="reload-plugins" class="flex items-center gap-2 px-4 py-2 bg-white/[0.03] border border-white/10 hover:bg-white/10 hover:border-white/20 rounded-xl text-xs font-semibold text-slate-300 transition-all duration-200">
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                                    HOT-SWAP KERNEL
-                                </button>
-                                <button class="flex items-center gap-2 px-4 py-2 bg-orange-500/20 border border-orange-500/30 hover:bg-orange-500/30 rounded-xl text-xs font-semibold text-orange-400 transition-all duration-200">
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-                                    INSTALL MODULE
-                                </button>
-                            </div>
-                        </div>
 
-                        <!-- Marketplace Grid -->
-                        <div id="plugin-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-20">
-                            <!-- Plugins will be injected here -->
+            <!-- VIEW: Proxy Control -->
+            <div id="view-proxy" class="content-view hidden space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div class="glass p-8 rounded-[2rem] border border-white/10 ring-1 ring-white/5 bg-gradient-to-tr from-white/[0.03] to-transparent">
+                    <div class="flex items-center justify-between mb-6">
+                        <div>
+                            <h2 class="text-2xl font-bold tracking-tight text-white mb-1">Neural Flow Engine</h2>
+                            <p class="text-xs text-slate-500">Master toggle for transparent routing to remote verified endpoints.</p>
+                        </div>
+                        <div class="flex items-center gap-6">
+                            <div id="proxy-status-indicator" class="flex flex-col items-end">
+                                <span class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-1">Current State</span>
+                                <span class="text-emerald-400 font-mono text-xs font-black uppercase tracking-tighter">ACTIVE</span>
+                            </div>
+                            <button id="proxy-toggle-btn" class="w-12 h-6 bg-sky-500 rounded-full flex items-center px-1 transition-all shadow-lg shadow-sky-500/20 outline-none focus:ring-2 focus:ring-slate-400/50">
+                                <div class="w-4 h-4 bg-white rounded-full shadow-md transition-all duration-300"></div>
+                            </button>
                         </div>
                     </div>
-
+                    <div class="flex items-center gap-6 pt-4 border-t border-white/5">
+                        <div class="flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-lg border border-white/5">
+                            <span class="text-[8px] font-black text-slate-500 uppercase tracking-widest">Local Interface</span>
+                            <span id="service-endpoint" class="text-[10px] font-mono text-sky-400 font-bold">127.0.0.1:8000</span>
                         </div>
-                            <div id="feature-toggles" class="flex gap-4">
-                                <!-- Features will be injected here -->
-                            </div>
+                        <div id="feature-toggles" class="flex gap-4 flex-wrap">
+                            <!-- Features injected by proxy.js -->
                         </div>
                     </div>
                 </div>
 
-                <!-- Topology & Token Flow Micro-viz -->
-                <div class="grid grid-cols-3 gap-6">
-                    <div class="col-span-2 glass p-6 rounded-[2rem] border border-white/5 flex flex-col justify-center">
+                <!-- Topology & Token Flow -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-2 glass p-6 rounded-[2rem] border border-white/5 flex flex-col justify-center">
                         <h3 class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">Neural Topology Map</h3>
                         <div class="flex items-center justify-between text-xs font-mono">
                             <div class="flex flex-col items-center gap-2">
-                                <div class="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center shadow-lg shadow-black group-hover:bg-slate-700 transition-colors">
+                                <div class="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center shadow-lg shadow-black">
                                     <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
                                 </div>
                                 <span class="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Client</span>
@@ -442,13 +408,12 @@
                             </div>
                             <div class="flex flex-col items-center gap-2">
                                 <div class="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center shadow-lg shadow-black z-10">
-                                    <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                                    <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
                                 </div>
                                 <span class="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Upstream</span>
                             </div>
                         </div>
                     </div>
-                    
                     <div class="glass p-6 rounded-[2rem] border border-white/5 flex flex-col justify-center gap-4">
                         <h3 class="text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">Token Flow EQ</h3>
                         <div class="flex items-end justify-center gap-1.5 h-12" id="token-eq">
@@ -465,14 +430,15 @@
                     </div>
                 </div>
 
-                <div class="flex-1 flex flex-col glass rounded-[2rem] border border-white/5 bg-black/60 relative overflow-hidden group shadow-2xl">
+                <!-- Terminal / Live Logs -->
+                <div class="flex-1 flex flex-col glass rounded-[2rem] border border-white/5 bg-black/60 relative overflow-hidden group shadow-2xl min-h-[300px]">
                     <div class="absolute inset-x-0 top-0 h-10 bg-white/5 border-b border-white/5 flex items-center px-6 justify-between backdrop-blur-md z-10">
                         <div class="flex items-center gap-2 text-[9px] text-emerald-400 font-bold uppercase tracking-widest border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 rounded">
                             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]"></span> RX/TX LIVE
                         </div>
                         <div class="flex-1 max-w-sm mx-4 flex items-center relative">
                             <svg class="w-3.5 h-3.5 text-slate-500 absolute left-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
-                            <input type="text" id="log-pipe-filter" placeholder="grep 'route' | grep 'error'..." class="w-full bg-transparent border border-white/10 rounded border-b border-white/5 pl-9 pr-3 py-1.5 text-[10px] text-emerald-400 font-mono outline-none focus:border-emerald-500/40 focus:bg-white/[0.02] transition-all placeholder-slate-700">
+                            <input type="text" id="log-pipe-filter" placeholder="grep 'route' | grep 'error'..." class="w-full bg-transparent border border-white/10 rounded pl-9 pr-3 py-1.5 text-[10px] text-emerald-400 font-mono outline-none focus:border-emerald-500/40 focus:bg-white/[0.02] transition-all placeholder-slate-700">
                         </div>
                         <div class="flex items-center gap-4">
                             <span id="log-paused-badge" class="hidden text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded bg-amber-500/20 text-amber-500 border border-amber-500/30 transition-all opacity-0">+<span id="log-missed-count">0</span> hidden</span>
@@ -481,12 +447,38 @@
                             </button>
                         </div>
                     </div>
-                    <!-- 11.7: xterm.js Container -->
-                    <div id="terminal-container" class="flex-1 p-4 pt-14 bg-black/60 relative overflow-hidden">
-                    </div>
+                    <div id="terminal-container" class="flex-1 p-4 pt-14 bg-black/60 relative overflow-hidden"></div>
                     <div class="absolute bottom-4 right-8 text-[9px] text-slate-700 font-mono pointer-events-none">TTY: /dev/prox0</div>
                 </div>
             </div>
+
+            <!-- VIEW: Plugins -->
+            <div id="view-plugins" class="content-view hidden space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div class="flex items-center justify-between mb-2">
+                    <div>
+                        <h2 class="text-xl font-bold text-white flex items-center gap-3">
+                            <div class="p-2 bg-orange-500/20 rounded-xl border border-orange-500/30">
+                                <svg class="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 011-1h1a2 2 0 100-4H7a1 1 0 01-1-1V7a1 1 0 011-1h3a1 1 0 001-1V4z"/></svg>
+                            </div>
+                            Neural Plugin Hub
+                        </h2>
+                        <p class="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
+                            <span class="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></span>
+                            5 Execution Rings active
+                        </p>
+                    </div>
+                    <div class="flex gap-3">
+                        <button id="reload-plugins" class="flex items-center gap-2 px-4 py-2 bg-white/[0.03] border border-white/10 hover:bg-white/10 hover:border-white/20 rounded-xl text-xs font-semibold text-slate-300 transition-all duration-200">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                            HOT-SWAP KERNEL
+                        </button>
+                    </div>
+                </div>
+                <div id="plugin-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-20">
+                    <!-- Plugins injected by plugins.js -->
+                </div>
+            </div>
+
 
             <!-- VIEW: Chat -->
             <div id="view-chat" class="content-view hidden h-full flex flex-col space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">

@@ -78,6 +78,19 @@ export const api = {
         return await response.json();
     },
 
+    async fetchPlugins() {
+        const response = await fetch(`${BASE_URL}/api/v1/plugins`);
+        return await response.json();
+    },
+
+    async togglePlugin(name, enabled) {
+        return await fetch(`${BASE_URL}/api/v1/plugins/toggle`, {
+            method: 'POST',
+            body: JSON.stringify({ name, enabled }),
+            headers: { 'Content-Type': 'application/json' }
+        });
+    },
+
     async sendChatMessage(text, model = 'auto') {
         return await fetch(`${BASE_URL}/v1/chat/completions`, {
             method: 'POST',

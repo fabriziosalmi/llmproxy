@@ -4,13 +4,20 @@
 import { store } from '../services/store.js';
 import { api } from '../services/api.js';
 
+const FEATURE_DESCRIPTIONS = {
+    language_guard: 'Detects anomalous charsets and control characters in LLM responses.',
+    injection_guard: 'Blocks prompt injection patterns using regex threat scoring.',
+    link_sanitizer: 'Strips blocked domains and suspicious URLs from prompts and responses.',
+};
+
 export function renderSettings() {
     const { features } = store.state;
     const container = document.querySelector('#view-settings .space-y-4');
     if (!container) return;
-    
+
     container.innerHTML = '';
     Object.entries(features).forEach(([name, enabled]) => {
+        const desc = FEATURE_DESCRIPTIONS[name] || `Controls the ${name.replace(/_/g, ' ')} security module.`;
         const item = document.createElement('div');
         item.className = "glass p-6 rounded-3xl border border-white/5 flex items-center justify-between group hover:bg-white/[0.04] transition-all";
         item.innerHTML = `
@@ -22,7 +29,7 @@ export function renderSettings() {
                 </div>
                 <div>
                     <h4 class="text-sm font-bold text-white mb-0.5 uppercase tracking-tight">${name.replace(/_/g, ' ')}</h4>
-                    <p class="text-[10px] text-slate-500">Autonomous neural hardening and adaptive routing management.</p>
+                    <p class="text-[10px] text-slate-500">${desc}</p>
                 </div>
             </div>
             <button class="toggle-feature w-11 h-6 ${enabled ? 'bg-sky-500' : 'bg-slate-800'} rounded-full flex items-center px-1 transition-all">

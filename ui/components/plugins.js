@@ -6,11 +6,7 @@ import { api } from '../services/api.js';
 // Global toggle handler (defined once, not per render)
 window.togglePlugin = async (name, enabled) => {
     try {
-        await fetch('/api/v1/plugins/toggle', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, enabled })
-        });
+        await api.togglePlugin(name, enabled);
     } catch (e) {
         console.warn('Plugin toggle failed:', e);
     }
@@ -44,8 +40,7 @@ export async function renderPlugins() {
     if (!grid) return;
 
     try {
-        const response = await fetch('/api/v1/plugins');
-        const data = await response.json();
+        const data = await api.fetchPlugins();
         const plugins = data.plugins || [];
 
         grid.innerHTML = plugins.map(p => `
