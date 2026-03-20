@@ -1,12 +1,18 @@
 import asyncio
+import os
 import aiohttp
 import json
 
 async def test_proxy():
+    api_key = os.environ.get("LLM_PROXY_TEST_KEY", "")
+    if not api_key:
+        print("Set LLM_PROXY_TEST_KEY env var before running smoke tests.")
+        return
+
     url = "http://localhost:8080/v1/chat/completions"
     headers = {
         "Content-Type": "application/json",
-        "Authorization": "Bearer sk-proxy-master-key-123"
+        "Authorization": f"Bearer {api_key}"
     }
 
     # 1. Test Light Prompt (Semantic Routing)

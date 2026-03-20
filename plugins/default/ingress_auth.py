@@ -9,8 +9,12 @@ async def verify(ctx: PluginContext):
     if rotator.config["server"]["auth"]["enabled"]:
         api_key = request.headers.get("Authorization")
         valid_keys = rotator._get_api_keys()
-        token = api_key.replace("Bearer ", "").strip() if api_key else "default"
-        
+        if not api_key:
+            ctx.error = "Unauthorized: Missing API key"
+            ctx.stop_chain = True
+            return
+        token = api_key.replace("Bearer ", "").strip()
+
         if not token or token not in valid_keys:
             ctx.error = "Unauthorized"
             ctx.stop_chain = True
@@ -25,7 +29,8 @@ async def verify(ctx: PluginContext):
         ctx.session_id = token
 
     # Tailscale ZT Verification
-    ts_id = await rotator.zt_manager.verify_tailscale_identity(request.client.host)
+    client_host = request.client.host if request.client else "0.0.0.0"
+    ts_id = await rotator.zt_manager.verify_tailscale_identity(client_host)
     if ts_id["status"] == "verified":
         ctx.metadata["zt_user"] = ts_id['user']
         ctx.metadata["zt_node"] = ts_id['node']

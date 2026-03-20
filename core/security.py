@@ -13,7 +13,8 @@ class SecurityShield:
         self.config = config.get("security", {})
         self.enabled = self.config.get("enabled", True)
         self.assistant = assistant
-        self.pii_vault = {} # Vault for de-masking
+        self.pii_vault = {}
+        self.session_memory: Dict[str, List[float]] = {}
         
         # Phase 10: Load Native Compilations
         try:
@@ -66,8 +67,10 @@ class SecurityShield:
                             logger.critical(f"SEMANTIC SHIFT: ONNX Model detected anomalous semantic trajectory! Prob: {shift_prob:.2f}")
                             kill_event.set()
                             return
+                except ImportError:
+                    pass  # Native extensions not available — skip C++/ONNX checks
                 except Exception as e:
-                    pass # Fail open on native extension crashes
+                    logger.error(f"Native extension error during speculative analysis: {e}")
                 
                 # 2. After a certain length, run an AI sanity check on the prefix
                 if len(current_response) > 500 and self.assistant:
@@ -132,15 +135,21 @@ class SecurityShield:
             logger.error(f"AI Guard Error: {e}")
             return True # Fallback to true if AI fails
         
+    _MAX_TRACKED_SESSIONS = 10_000
+
     def check_session_trajectory(self, session_id: str, current_prompt: str) -> Optional[str]:
         """Analyzes the 'threat trajectory' of a session to detect multi-turn jailbreaks."""
         if not self.enabled: return None
-        
+
         # 1. Calculate score for current prompt
         score, _ = self._calculate_threat_score(current_prompt)
-        
-        # 2. Update memory
+
+        # 2. Update memory (with bounded growth)
         if session_id not in self.session_memory:
+            if len(self.session_memory) >= self._MAX_TRACKED_SESSIONS:
+                # Evict oldest session (FIFO)
+                oldest = next(iter(self.session_memory))
+                del self.session_memory[oldest]
             self.session_memory[session_id] = []
         
         self.session_memory[session_id].append(score)

@@ -3,16 +3,18 @@ import logging
 import random
 from typing import List, Dict, Any, Optional
 
+from core.infisical import get_secret
+
 logger = logging.getLogger(__name__)
 
 class FederationManager:
     """Manages peer-to-peer connectivity between LLMProxy instances."""
-    
+
     def __init__(self, config: Dict[str, Any]):
         self.config = config.get("federation", {})
         self.enabled = self.config.get("enabled", False)
-        self.peers = self.config.get("peers", []) # List of peer URLs
-        self.trust_secret = self.config.get("secret", "federation-secret-456")
+        self.peers = self.config.get("peers", [])
+        self.trust_secret = get_secret("LLM_PROXY_FEDERATION_SECRET", required=self.enabled)
 
     async def discover_peers(self) -> List[str]:
         """Simulates Tailscale-based peer discovery for the Swarm fallback."""
@@ -32,7 +34,7 @@ class FederationManager:
             try:
                 async with session.get(f"{peer_url}/health", timeout=2) as resp:
                     return resp.status == 200
-            except:
+            except Exception:
                 return False
 
     async def forward_to_peer(self, peer_url: str, body: Dict[str, Any], identity_headers: Dict[str, str]) -> Optional[Dict[str, Any]]:

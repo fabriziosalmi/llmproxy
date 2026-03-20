@@ -83,7 +83,7 @@ export const api = {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json', 
-                'Authorization': `Bearer ${localStorage.getItem('proxy_key') || 'sk-proxy-master-key-123'}` 
+                'Authorization': `Bearer ${localStorage.getItem('proxy_key') || ''}`
             },
             body: JSON.stringify({ 
                 model: 'auto', 

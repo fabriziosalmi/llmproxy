@@ -20,6 +20,9 @@ beautifulsoup4>=4.12.0
 # Monitoring
 prometheus-client>=0.22.0
 
+# Secret Management
+infisical-python-sdk>=3.0.0
+
 # Security
 # (built-in: unicodedata, re)
 

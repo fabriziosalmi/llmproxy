@@ -98,11 +98,12 @@ class RotatorAgent(BaseAgent):
         self.telemetry_queue = asyncio.Queue(maxsize=1000)
         self.app = FastAPI(title="LLMPROXY")
         TraceManager.instrument_app(self.app)
+        cors_origins = self.config.get("server", {}).get("cors_origins", ["*"])
         self.app.add_middleware(
             CORSMiddleware,
-            allow_origins=["*"],
-            allow_methods=["*"],
-            allow_headers=["*"],
+            allow_origins=cors_origins,
+            allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+            allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
         )
         
         # 10.1: Add Speculative Guardrails at the byte level
@@ -162,7 +163,9 @@ class RotatorAgent(BaseAgent):
         async def chat_completions(request: Request, api_key: str = Depends(API_KEY_HEADER)):
             if self.config["server"]["auth"]["enabled"]:
                 valid_keys = self._get_api_keys()
-                token = api_key.replace("Bearer ", "").strip() if api_key else "default"
+                if not api_key:
+                    raise HTTPException(status_code=401, detail="Unauthorized: Missing API key")
+                token = api_key.replace("Bearer ", "").strip()
                 if not token or token not in valid_keys:
                     raise HTTPException(status_code=401, detail="Unauthorized: Invalid or missing API key")
                 
@@ -171,7 +174,8 @@ class RotatorAgent(BaseAgent):
                     raise HTTPException(status_code=402, detail="Enterprise Quota Exceeded for this API Key.")
 
                 # 11.5: Tailscale Zero-Trust LocalAPI Verification
-                ts_id = await self.zt_manager.verify_tailscale_identity(request.client.host)
+                client_host = request.client.host if request.client else "0.0.0.0"
+                ts_id = await self.zt_manager.verify_tailscale_identity(client_host)
                 if ts_id["status"] == "verified":
                     await self._add_log(f"ZT VERIFIED: {ts_id['user']} on {ts_id['node']}", level="SECURITY")
                     # Optionally append to request state for later use
@@ -360,9 +364,13 @@ class RotatorAgent(BaseAgent):
             with open(self.plugin_manager.manifest_path, 'w') as f:
                 yaml.dump(manifest, f)
             
-            await self.plugin_manager.hot_swap() # 13. Hot-Swap the engine
-            await self._add_log(f"PLUGINS: {plugin_name} {'ENABLED' if enabled else 'DISABLED'} (Hot-Swap complete)")
-            return {"status": "ok"}
+        @self.app.post("/api/v1/panic")
+        async def emergency_panic():
+            """15.9 Emergency Kill-Switch: Drop all traffic and disable proxy."""
+            self.config["server"]["proxy_enabled"] = False
+            # In a real scenario, we might close all active uvicorn connections
+            await self._add_log("EMERGENCY: Panic Kill-Switch activated. ALL NEURAL TRAFFIC DROPPED.", level="CRITICAL")
+            return {"status": "HALTED"}
 
     async def _add_log(self, message: str, level: str = "INFO", metadata: dict = None):
         """Shielded logging to ensure IO completes even if client disconnects."""

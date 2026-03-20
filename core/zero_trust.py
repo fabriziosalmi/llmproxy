@@ -6,6 +6,8 @@ import os
 import aiohttp
 from typing import Dict, Any, Optional
 
+from core.infisical import get_secret
+
 # 11.5: Tailscale Unix Socket Paths
 TAILSCALE_SOCKET_LINUX = "/var/run/tailscale/tailscaled.sock"
 TAILSCALE_SOCKET_MACOS = "/Library/Tailscale/tailscaled.sock"
@@ -14,11 +16,11 @@ logger = logging.getLogger(__name__)
 
 class ZeroTrustManager:
     """Manages mTLS and Identity headers for Zero-Trust upstream communication."""
-    
+
     def __init__(self, config: Dict[str, Any]):
         self.config = config.get("security", {}).get("zero_trust", {})
         self.enabled = self.config.get("enabled", False)
-        self.secret = self.config.get("identity_secret", "proxy-secret-123")
+        self.secret = get_secret("LLM_PROXY_IDENTITY_SECRET", required=self.enabled)
         self.cert_path = self.config.get("client_cert")
         self.key_path = self.config.get("client_key")
         

@@ -52,11 +52,9 @@ rotation:
 endpoints:
   openai:
     base_url: "https://api.openai.com/v1"
-    keys:
-      - "sk-proj-xxxxxxxxxxxxxxxxxxxxxxxx"
-      - "sk-proj-yyyyyyyyyyyyyyyyyyyyyyyy"
-    organization_ids:
-      - "org-123"
+    # Keys loaded from Infisical or env: OPENAI_API_KEYS (comma-separated)
+    keys_env: "OPENAI_API_KEYS"
+    organization_ids_env: "OPENAI_ORG_IDS"
     proxy_chain: "high_anonymity"
     rate_limit:
       rpm: 3500
@@ -64,8 +62,8 @@ endpoints:
 
   anthropic:
     base_url: "https://api.anthropic.com/v1"
-    keys:
-      - "sk-ant-xxxxxxxxxxxxxxxxxxxxxxxx"
+    # Keys loaded from Infisical or env: ANTHROPIC_API_KEYS
+    keys_env: "ANTHROPIC_API_KEYS"
     proxy_chain: "residential_rotation"
     rate_limit:
       rpm: 1000
@@ -103,14 +101,15 @@ tls_forging:
 upstream_proxies:
   residential_rotation:
     type: "socks5"
-    url: "socks5://user:pass@geo.proxy-provider.com:12345"
+    # URL loaded from env: PROXY_RESIDENTIAL_URL (e.g. socks5://user:pass@host:port)
+    url_env: "PROXY_RESIDENTIAL_URL"
     rotate_per_request: true
-  
+
   high_anonymity:
     type: "http"
-    url: "http://proxy-cluster.local:8081"
+    url_env: "PROXY_HIGH_ANON_URL"
     tls:
-      insecure_skip_verify: true
+      insecure_skip_verify: false
 
 # Monitoring and Logging
 logging:
