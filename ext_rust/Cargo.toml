@@ -8,5 +8,5 @@ name = "pii_redactor"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.20.0", features = ["extension-module"] }
+pyo3 = { version = "0.24.1", features = ["extension-module"] }
 regex = "1.10.3"
