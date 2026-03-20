@@ -1,6 +1,11 @@
 import hashlib
-import redis.asyncio as redis
 import logging
+
+try:
+    import redis.asyncio as redis
+    _REDIS_AVAILABLE = True
+except ImportError:
+    _REDIS_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -10,11 +15,17 @@ class TrajectoryBuffer:
     Avoids SQL lookups entirely by storing O(1) semantic hashes directly in memory.
     """
     def __init__(self, redis_url="redis://localhost:6379/0"):
-        self.client = redis.from_url(redis_url, decode_responses=True)
         self.MAX_TURNS = 5
         self._connected = False
+        if _REDIS_AVAILABLE:
+            self.client = redis.from_url(redis_url, decode_responses=True)
+        else:
+            self.client = None
+            logger.info("Redis not installed — trajectory buffer running in-memory (no crescent attack detection)")
     
     async def connect(self):
+        if not self.client:
+            return
         try:
             await self.client.ping()
             self._connected = True
