@@ -160,6 +160,25 @@ observability:
     scrub_pii: true
     compress_on_rotate: true
 
+# Session 8: ChatOps & Webhook Dispatcher
+webhooks:
+  enabled: false
+  endpoints:
+    - name: slack-ops
+      target: slack
+      url_env: "SLACK_WEBHOOK_URL"
+      events: ["circuit_open", "budget_threshold", "panic_activated", "endpoint_down"]
+    - name: discord-alerts
+      target: discord
+      url_env: "DISCORD_WEBHOOK_URL"
+      events: ["*"]
+
+chatops:
+  telegram:
+    enabled: false
+    token_env: "TELEGRAM_BOT_TOKEN"  # Loaded from Infisical/env
+    chat_id: null  # Target chat/group ID
+
 budget:
   monthly_limit: 1000.0
   soft_limit: 800.0
