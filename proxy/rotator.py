@@ -40,6 +40,9 @@ from core.trajectory import TrajectoryBuffer
 from core.firewall_asgi import ByteLevelFirewallMiddleware
 from core.plugin_engine import PluginManager, PluginHook, PluginContext
 from core.identity import IdentityManager, IdentityContext
+from core.webhooks import WebhookDispatcher, EventType
+from core.export import DatasetExporter
+from core.chatops import TelegramBot
 
 API_KEY_HEADER = APIKeyHeader(name="Authorization", auto_error=False)
 
@@ -58,7 +61,7 @@ class RotatorAgent(BaseAgent):
         self.limiter = DynamicRateLimiter()
         self.router = SemanticRouter(assistant=assistant)
         self.rl_rotator = RLRotator()
-        self.circuit_manager = CircuitManager()
+        self.circuit_manager = CircuitManager(on_state_change=self._on_circuit_state_change)
         
         # Initialize Semantic Cache
         cache_config = self.config.get("caching", {})
@@ -88,7 +91,21 @@ class RotatorAgent(BaseAgent):
 
         # Session 6: Initialize Identity Manager (SSO/OIDC)
         self.identity = IdentityManager(self.config)
-        
+
+        # Session A: Wire WebhookDispatcher (Slack/Teams/Discord alerts)
+        self.webhooks = WebhookDispatcher(self.config)
+
+        # Session A: Wire DatasetExporter (JSONL training data)
+        export_cfg = self.config.get("observability", {}).get("export", {})
+        self.exporter = DatasetExporter(
+            output_dir=export_cfg.get("output_dir", "exports"),
+            scrub=export_cfg.get("scrub_pii", True),
+            compress_on_rotate=export_cfg.get("compress_on_rotate", True),
+        ) if export_cfg.get("enabled") else None
+
+        # Session A: Wire TelegramBot (ChatOps + HITL)
+        self.chatbot = TelegramBot(self.config)
+
         self.total_cost_today = 0.0 # Persistent state would be better, but this is a start
         
         self.security = SecurityShield(self.config, assistant=assistant)
@@ -163,14 +180,32 @@ class RotatorAgent(BaseAgent):
             )
         return self._session
 
+    def _on_circuit_state_change(self, endpoint: str, old_state: str, new_state: str):
+        """Session A+B: Callback when circuit breaker changes state."""
+        MetricsTracker.set_circuit_state(endpoint, new_state == "open")
+        if new_state == "open":
+            asyncio.create_task(self.webhooks.dispatch(
+                EventType.CIRCUIT_OPEN, {"endpoint": endpoint, "from": old_state, "to": new_state}
+            ))
+            asyncio.create_task(self.chatbot.notify_ops(
+                f"⚡ *Circuit OPEN* for `{endpoint}` — requests blocked until recovery"
+            ))
+        elif old_state == "open" and new_state == "closed":
+            asyncio.create_task(self.webhooks.dispatch(
+                EventType.ENDPOINT_RECOVERED, {"endpoint": endpoint}
+            ))
+
     def _setup_routes(self):
         @self.app.post("/v1/chat/completions")
         async def chat_completions(request: Request, api_key: str = Depends(API_KEY_HEADER)):
             if self.config["server"]["auth"]["enabled"]:
                 if not api_key:
+                    MetricsTracker.track_auth_failure("missing_key")
+                    asyncio.create_task(self.webhooks.dispatch(EventType.AUTH_FAILURE, {"reason": "missing_key", "ip": request.client.host if request.client else "unknown"}))
                     raise HTTPException(status_code=401, detail="Unauthorized: Missing API key")
                 token = api_key.replace("Bearer ", "").strip()
                 if not token:
+                    MetricsTracker.track_auth_failure("empty_token")
                     raise HTTPException(status_code=401, detail="Unauthorized: Empty token")
 
                 identity: IdentityContext | None = None
@@ -184,6 +219,8 @@ class RotatorAgent(BaseAgent):
                             # Try external OIDC provider JWT
                             identity = await self.identity.verify_token(token)
                     except ValueError as e:
+                        MetricsTracker.track_auth_failure("jwt_invalid")
+                        asyncio.create_task(self.webhooks.dispatch(EventType.AUTH_FAILURE, {"reason": "jwt_invalid", "error": str(e)}))
                         raise HTTPException(status_code=401, detail=f"Identity: {e}")
 
                 if identity and identity.verified:
@@ -204,10 +241,13 @@ class RotatorAgent(BaseAgent):
                     # Fallback to API key auth
                     valid_keys = self._get_api_keys()
                     if token not in valid_keys:
+                        MetricsTracker.track_auth_failure("invalid_key")
+                        asyncio.create_task(self.webhooks.dispatch(EventType.AUTH_FAILURE, {"reason": "invalid_api_key", "ip": request.client.host if request.client else "unknown"}))
                         raise HTTPException(status_code=401, detail="Unauthorized: Invalid API key or JWT")
 
                     # RBAC Quota Check (API key mode)
                     if not self.rbac.check_quota(token):
+                        asyncio.create_task(self.webhooks.dispatch(EventType.BUDGET_THRESHOLD, {"reason": "quota_exceeded", "key_prefix": token[:8] + "..."}))
                         raise HTTPException(status_code=402, detail="Enterprise Quota Exceeded for this API Key.")
 
                 # 11.5: Tailscale Zero-Trust LocalAPI Verification
@@ -224,13 +264,31 @@ class RotatorAgent(BaseAgent):
             start_time = time.time()
             try:
                 session_id = token if 'token' in locals() else "anonymous"
+                body = await request.json()
                 response = await self.proxy_request(request, session_id=session_id)
                 duration = time.time() - start_time
                 MetricsTracker.track_request("POST", "/v1/chat/completions", response.status_code, duration)
+                # Session A: Record to dataset exporter
+                if self.exporter:
+                    asyncio.create_task(self.exporter.record({
+                        "messages": body.get("messages", []),
+                        "model": body.get("model", "auto"),
+                        "latency_ms": round(duration * 1000, 1),
+                        "status": response.status_code,
+                    }))
+                # Session B: Track budget
+                self.total_cost_today += duration * 0.001  # Rough proxy cost
+                budget_cfg = self.config.get("budget", {})
+                MetricsTracker.set_budget(self.total_cost_today, budget_cfg.get("monthly_limit", 1000.0))
+                if self.total_cost_today >= budget_cfg.get("soft_limit", 800.0):
+                    asyncio.create_task(self.webhooks.dispatch(EventType.BUDGET_THRESHOLD, {"consumed": self.total_cost_today, "limit": budget_cfg.get("monthly_limit", 1000.0)}))
                 return response
             except Exception as e:
                 duration = time.time() - start_time
                 MetricsTracker.track_request("POST", "/v1/chat/completions", 500, duration)
+                # Session B: Track errors
+                TraceManager.capture_exception(e)
+                asyncio.create_task(self.chatbot.track_error())
                 raise e
 
         @self.app.get("/health")
@@ -527,8 +585,11 @@ class RotatorAgent(BaseAgent):
         async def emergency_panic():
             """15.9 Emergency Kill-Switch: Drop all traffic and disable proxy."""
             self.config["server"]["proxy_enabled"] = False
-            # In a real scenario, we might close all active uvicorn connections
+            self.proxy_enabled = False
             await self._add_log("EMERGENCY: Panic Kill-Switch activated. ALL NEURAL TRAFFIC DROPPED.", level="CRITICAL")
+            # Session A: Notify all channels
+            await self.webhooks.dispatch(EventType.PANIC_ACTIVATED, {"action": "kill_switch", "timestamp": time.strftime("%H:%M:%S")})
+            await self.chatbot.notify_ops("🚨 *PANIC KILL-SWITCH ACTIVATED* — All traffic dropped")
             return {"status": "HALTED"}
 
     async def _add_log(self, message: str, level: str = "INFO", metadata: dict = None):
@@ -596,6 +657,9 @@ class RotatorAgent(BaseAgent):
             # RING 1: INGRESS (Auth, ZT, Rate Limit)
             await self.plugin_manager.execute_ring(PluginHook.INGRESS, ctx)
             if ctx.stop_chain:
+                # Session A+B: Track injection blocks
+                MetricsTracker.track_injection_blocked()
+                asyncio.create_task(self.webhooks.dispatch(EventType.INJECTION_BLOCKED, {"reason": ctx.error or "Ingress Blocked", "session": session_id[:8]}))
                 raise HTTPException(status_code=401 if not ctx.error else 403, detail=ctx.error or "Ingress Blocked")
 
             # RING 2: PRE-FLIGHT (PII, Context, Cache)
@@ -642,6 +706,8 @@ class RotatorAgent(BaseAgent):
             raise he
         except Exception as e:
             self.logger.error(f"Neural Kernel Panic: {e}")
+            TraceManager.capture_exception(e)
+            asyncio.create_task(self.chatbot.track_error())
             return await self._handle_vllm_fallback(ctx.body.get("messages", [{}])[-1].get("content", ""))
 
     async def _run_shadow_test(self, body: Dict[str, Any], production_content: str):

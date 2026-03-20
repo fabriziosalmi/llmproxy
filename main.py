@@ -46,12 +46,18 @@ async def main():
     store = StorageFactory.get_repository("config.yaml")
     await store.init()
 
-    # Initialize Tracing
+    # Initialize Tracing (Session B: wire Sentry DSN)
     obs_config = config.get("observability", {}).get("tracing", {})
     if obs_config.get("enabled"):
+        sentry_dsn = None
+        sentry_cfg = config.get("observability", {}).get("sentry", {})
+        dsn_env = sentry_cfg.get("dsn_env")
+        if dsn_env:
+            sentry_dsn = os.environ.get(dsn_env)
         TraceManager.initialize(
             service_name=obs_config.get("service_name", "llmproxy"),
-            otlp_endpoint=obs_config.get("otlp_endpoint")
+            otlp_endpoint=obs_config.get("otlp_endpoint"),
+            sentry_dsn=sentry_dsn,
         )
     
     # Initialize supervisor
@@ -78,6 +84,10 @@ async def main():
     # Start background agents
     asyncio.create_task(healer.start())
     asyncio.create_task(distiller.start())
+
+    # Session A: Start TelegramBot polling (if configured)
+    if config.get("chatops", {}).get("telegram", {}).get("enabled"):
+        asyncio.create_task(rotator.chatbot.start_polling())
     
     # Start Metrics
     if config["server"]["metrics"]["enabled"]:

@@ -4,15 +4,18 @@ Professional high-performance aggregator, intelligent load balancer, and autonom
 
 ## Table of Contents
 1. [Architecture Overview](#architecture-overview)
-2. [Deep-Dive: Core Components](#deep-dive-core-components)
-3. [API Registry & Endpoints](#api-registry--endpoints)
+2. [Core Components](#core-components)
+3. [API Reference](#api-reference)
 4. [Autonomous Agent Swarm](#autonomous-agent-swarm)
-5. [Hardened Security & Governance](#hardened-security--governance)
-6. [Plugin Engine & Extensibility](#plugin-engine--extensibility)
-7. [Semantic Caching & Optimization](#semantic-caching--optimization)
-8. [Frontend & Oversight HUD](#frontend--oversight-hud)
-9. [Configuration & Deployment](#configuration--deployment)
-10. [Advanced Features & Roadmaps](#advanced-features--roadmaps)
+5. [Security & Identity](#security--identity)
+6. [Plugin Engine](#plugin-engine)
+7. [Semantic Caching](#semantic-caching)
+8. [Observability & Export](#observability--export)
+9. [ChatOps & Webhooks](#chatops--webhooks)
+10. [Frontend HUD](#frontend-hud)
+11. [Configuration](#configuration)
+12. [Installation & Deployment](#installation--deployment)
+13. [Advanced Features](#advanced-features)
 
 ---
 
@@ -21,45 +24,93 @@ Professional high-performance aggregator, intelligent load balancer, and autonom
 LLMProxy is engineered as a multi-tier, distributed system. It separates high-speed request processing (Edge Tier) from background autonomous operations (Agentic Tier), ensuring that system intelligence does not introduce latency into the critical path of inference.
 
 ### System Tiers
-- **Edge Tier (L7)**: ASGI-based request pipeline, OIDC authentication, and Byte-Level Firewall.
+- **Edge Tier (L7)**: ASGI-based request pipeline, OIDC/JWT authentication, Byte-Level Firewall, and Ring-based plugin pipeline.
 - **Agentic Tier (L2/L3)**: Supervisor-managed swarm for discovery, validation, and self-healing.
-- **Persistence Tier**: Multi-modal storage (SQL for metadata, Vector/ChromaDB for semantic patterns).
+- **Persistence Tier**: Multi-modal storage (SQLite for metadata/RBAC, ChromaDB for semantic patterns).
+
+### Tech Stack
+| Layer | Technology |
+|-------|-----------|
+| Backend | Python 3.12+, FastAPI, uvicorn, aiohttp |
+| Frontend | Vanilla JS (ES Modules), Tailwind CSS, Chart.js, xterm.js |
+| Database | SQLite (aiosqlite) + ChromaDB (vector search) |
+| Observability | OpenTelemetry, Prometheus, Sentry |
+| Security | PyJWT, OIDC/JWKS, mTLS, Tailscale Zero-Trust |
+| Secrets | Infisical SDK + env fallback |
 
 ---
 
-## Deep-Dive: Core Components
+## Core Components
 
 ### 1. Agent Supervisor
-The heart of LLMProxy's background operations. It manages a DAG (Directed Acyclic Graph) of agents, ensuring they are restarted on failure with exponential backoff and localized circuit breaking.
+The heart of LLMProxy's background operations. Manages a DAG (Directed Acyclic Graph) of agents with exponential backoff restart and localized circuit breaking.
 
 ### 2. SOTA Interface Agent (10x Discovery)
-Unlike traditional scrapers, this agent uses **Playwright** to:
-- **Sniff Network Traffic**: Intercepts actual fetch/XHR calls to discover hidden API endpoints.
-- **Genetic Evasion**: Simulates non-linear mouse movements and micro-scroll jitter to bypass advanced WAFs.
-- **Pattern Prediction**: Uses `PatternMemory` (Vector Search) to predict the correct API adapter for a new site based on structural similarity to known sites.
+Playwright-based autonomous discovery:
+- **Network Traffic Sniffing**: Intercepts fetch/XHR calls to discover hidden API endpoints.
+- **Genetic Evasion**: Non-linear mouse movements and micro-scroll jitter to bypass WAFs.
+- **Pattern Prediction**: Vector search (`PatternMemory`) predicts the correct API adapter based on structural similarity.
 
 ### 3. Unified Adapter Engine
-Translates standard OpenAI-compatible requests into proprietary provider formats (Anthropic, HuggingFace, Local LLMs) in real-time, handling prompt templating and multi-modal payload mapping.
+Translates OpenAI-compatible requests into proprietary provider formats (Anthropic, HuggingFace, Local LLMs) in real-time, handling prompt templating and multi-modal payload mapping.
+
+### 4. Semantic Router & RL Rotator
+- **Complexity-Aware Routing**: Analyzes prompt complexity to route to the optimal model.
+- **Reinforcement Learning**: `RLRotator` learns from latency/cost/quality signals to optimize endpoint selection over time.
+
+### 5. Circuit Breaker & Federation
+- **Per-endpoint circuit breakers** with configurable thresholds.
+- **Federated Mesh**: Peer-to-peer request offloading between LLMProxy instances via Tailscale, with trust secret validation.
 
 ---
 
-## API Registry & Endpoints
+## API Reference
 
-### 1. Model Proxy Interface (Port 8090)
-| Endpoint | Method | Context | Description |
-|----------|--------|---------|-------------|
-| `/v1/chat/completions` | `POST` | OpenAI Compatibility | Unified entry point for chat inference. |
-| `/v1/embeddings` | `POST` | Vector Operations | Generates embeddings using the optimal local/remote model. |
-| `/health` | `GET` | System Vitality | Returns Liveness and Readiness probes. |
-| `/metrics` | `GET` | Observability | Prometheus-formatted export of R/W latencies and error rates. |
-
-### 2. Administrative & Control API (Port 8081)
+### Model Proxy (Port 8090)
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/v1/registry` | `GET` | Retrieves the full state of the model pool (Verified vs. Discovered). |
-| `/api/v1/registry/{id}/toggle` | `POST` | Instant administrative kill-switch for a specific provider node. |
-| `/api/v1/proxy/circuit-breaker` | `GET` | Current status of all internal service circuit breakers. |
-| `/api/v1/telemetry/stream` | `GET` | Real-time SSE stream of system security and routing events. |
+| `/v1/chat/completions` | `POST` | Unified inference endpoint (OpenAI-compatible). Supports model selection, JWT/API key auth. |
+| `/health` | `GET` | Liveness/readiness probe with pool stats. |
+| `/metrics` | `GET` | Prometheus metrics: req/s, errors, latency P50/P95/P99, budget, TTFT, circuit state. |
+
+### Registry & Control
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/registry` | `GET` | Full model pool state (Live/Discovered/Offline). |
+| `/api/v1/registry/{id}/toggle` | `POST` | Toggle endpoint on/off. |
+| `/api/v1/registry/{id}/priority` | `POST` | Set endpoint routing priority. |
+| `/api/v1/registry/{id}` | `DELETE` | Remove an endpoint. |
+| `/api/v1/proxy/toggle` | `POST` | Enable/disable the proxy. |
+| `/api/v1/proxy/status` | `GET` | Proxy enabled state + priority mode. |
+| `/api/v1/proxy/priority/toggle` | `POST` | Toggle priority steering mode. |
+
+### Identity & SSO
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/identity/me` | `GET` | Current user identity, roles, and permissions (from JWT or API key). |
+| `/api/v1/identity/exchange` | `POST` | Exchange external OIDC JWT for internal proxy session token. |
+
+### Plugins
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/plugins` | `GET` | List all plugins with marketplace metadata (version, author, ui_schema). |
+| `/api/v1/plugins/install` | `POST` | Install a plugin (AST-scanned, then hot-swapped). |
+| `/api/v1/plugins/{name}` | `DELETE` | Uninstall a plugin. |
+| `/api/v1/plugins/toggle` | `POST` | Enable/disable a plugin. |
+| `/api/v1/plugins/hot-swap` | `POST` | Zero-downtime RCU reload with health check. |
+| `/api/v1/plugins/rollback` | `POST` | Rollback to previous plugin state. |
+
+### System
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/features` | `GET` | Feature flags (language_guard, injection_guard, link_sanitizer). |
+| `/api/v1/features/toggle` | `POST` | Toggle a security feature. |
+| `/api/v1/telemetry/stream` | `GET` | Real-time SSE stream of system events. |
+| `/api/v1/logs` | `GET` | SSE log stream for terminal. |
+| `/api/v1/panic` | `POST` | Emergency kill-switch — halts all traffic. |
+| `/api/v1/version` | `GET` | Current version. |
+| `/api/v1/service-info` | `GET` | Host, port, URL. |
+| `/api/v1/network/info` | `GET` | Network and Tailscale status. |
 
 ---
 
@@ -73,63 +124,224 @@ The swarm utilizes a Finite State Machine (FSM) for predictable transitions and 
 | **Scanner** | `agents/scanner.py` | BFS traversal of web targets to identify potential LLM resources. |
 | **Validator** | `agents/validator.py` | Ground-truth verification of model logic and alignment. |
 | **Self-Healer** | `agents/self_healer.py` | Auto-remediation of registry drift and service degradation. |
-| **Distiller** | `agents/distiller.py` | High-fidelity dataset extraction for SLM (Small Language Model) fine-tuning. |
+| **Distiller** | `agents/distiller.py` | High-fidelity dataset extraction for SLM fine-tuning. |
 
 ---
 
-## Hardened Security & Governance
+## Security & Identity
 
 ### Byte-Level Firewall (Speculative Guardrails)
-A zero-latency ASGI middleware that scans the raw byte stream of incoming/outgoing traffic.
-- **Pattern Matching**: Detects malicious signatures (`ignore previous instructions`, `bypass guardrails`) in raw UTF-8.
-- **Instant Termination**: Force-closes the socket mid-stream if a violation is detected, preventing remote cost incurrence.
+Zero-latency ASGI middleware scanning raw byte streams:
+- **Pattern matching** for injection signatures (`ignore previous instructions`, `bypass guardrails`).
+- **Instant termination**: Force-closes socket mid-stream on violation, preventing remote cost incurrence.
+- **Fail-closed**: Returns `False` on any error — never permits traffic when in doubt.
 
-### Zero-Trust (ZT) & Identity
-- **OIDC Integration**: Support for Google, Microsoft, and Apple identity providers.
-- **RBAC Enforcement**: Fine-grained Role-Based Access Control for models, tools, and admin APIs.
-- **mTLS Pipeline**: Cryptographic verification for all upstream model provider connections.
+### Identity & SSO (`core/identity.py`)
+Stateless multi-provider OIDC/JWT verification:
+- **Providers**: Google, Microsoft, Apple — auto-configured via well-known OIDC discovery.
+- **JWKS caching**: Keys cached with 1hr TTL, auto-refresh on rotation.
+- **Auth flow**: External OIDC JWT → verify via JWKS → exchange for internal proxy JWT → attach `IdentityContext` to request.
+- **Fallback chain**: JWT → API key → Tailscale identity (via LocalAPI socket).
+- **No user database**: Identity is derived entirely from cryptographic token claims.
 
----
+### RBAC (`core/rbac.py`)
+Four built-in roles with granular permissions:
 
-## Plugin Engine & Extensibility
+| Role | Key Permissions |
+|------|----------------|
+| `admin` | Full access: proxy, registry, chat, logs, plugins, users, budget. |
+| `operator` | Proxy toggle, registry write, plugins manage, features toggle. |
+| `user` | Proxy use, registry read, chat, logs read. |
+| `viewer` | Registry read, logs read only. |
 
-LLMProxy features a "Ring-Based" plugin architecture (`core/plugin_engine.py`) for processing requests across 5 specialized rings:
+- JWT claims → role mapping via `config.yaml` (`role_mappings`).
+- Roles persisted in SQLite `user_roles` table.
+- Budget quota enforcement per API key.
 
-1. **Ring 1: Ingress**: Authentication, Zero-Trust, and Global Rate Limiting.
-2. **Ring 2: Pre-Flight**: PII Masking, Prompt Mutation, and AST security scanning.
-3. **Ring 3: Routing**: Semantic Caching lookups and Dynamic Model Selection.
-4. **Ring 4: Post-Flight**: JSON Healing, Response Sanitization, and Watermarking.
-5. **Ring 5: Background**: FinOps tracking, Telemetry export, and Shadow Traffic logging.
-
-*Supports hot-swapping plugins at runtime via the `manifest.yaml` configuration.*
-
----
-
-## Semantic Caching & Optimization
-
-### 1. 1-Bit Vector Quantization
-To achieve ultra-low latency, the `SemanticCache` binarizes embeddings into 1-bit vectors. This renders Cosine Similarity mathematically equivalent to **XOR Hamming Distance**, allowing for CPU-level hardware acceleration of similarity lookups.
-
-### 2. Deterministic Bloom Filter
-A front-end Bloom Filter (`bloom.bin`) prevents expensive vector DB lookups for "guaranteed misses," ensuring O(1) latency for unique, never-before-seen queries.
-
----
-
-## Frontend & Oversight HUD
-
-The Dashboard is a tailored React-based HUD (`frontend/`) for high-stakes operational monitoring.
-
-### Key HUD Views
-- **System Executive Dashboard**: Global view of node health, uptime, and throughput.
-- **Model Registry HUD**: Real-time visualization of the autonomous discovery process.
-- **Live Trace Stream**: Integrated terminal capturing SSE telemetry (blue for requests, red for security violations).
-- **Control Center**: Dynamic configuration of Guardrails, Virtual Keys, and Plugin states.
+### Zero-Trust & mTLS
+- **Tailscale LocalAPI**: Verifies machine/user identity via Unix socket (`whois` API).
+- **mTLS Pipeline**: Client certificate verification for upstream provider connections.
+- **URL injection prevention**: All user-supplied IPs/URLs are escaped via `urllib.parse.quote()`.
 
 ---
 
-## Configuration & Deployment
+## Plugin Engine
 
-### Advanced `config.yaml`
+Ring-based architecture (`core/plugin_engine.py`) with 5 processing stages:
+
+| Ring | Stage | Purpose |
+|------|-------|---------|
+| 1 | **Ingress** | Auth, Zero-Trust, Global Rate Limiting |
+| 2 | **Pre-Flight** | PII Masking, Prompt Mutation, AST Security Scan |
+| 3 | **Routing** | Semantic Cache Lookup, Dynamic Model Selection |
+| 4 | **Post-Flight** | JSON Healing, Response Sanitization, Watermarking |
+| 5 | **Background** | FinOps Tracking, Telemetry Export, Shadow Traffic |
+
+### Security Scanning
+All Python plugins are **AST-scanned** before loading:
+- Blocks: `os`, `subprocess`, `socket`, `ctypes`, `sys` imports.
+- Blocks: `exec()`, `eval()`, `__import__()`, `.system()`, `.popen()` calls.
+- Raises `PluginSecurityError` on violation — plugin is never loaded.
+
+### Zero-Downtime Hot-Swap (RCU)
+1. Snapshot current ring state (rollback target).
+2. Load new plugin configuration into fresh rings.
+3. Health check: run dummy context through all rings.
+4. Atomic swap: replace active rings reference.
+5. Auto-rollback on any failure.
+
+### WASM Support
+Optional Extism-based sandbox for Rust/Go plugins:
+- WASI enabled, JSON I/O protocol.
+- Graceful fallback if Extism not installed.
+- Memory-isolated execution.
+
+### Marketplace API
+Install, uninstall, toggle, hot-swap, and rollback plugins via REST API. Plugin manifests support `ui_schema` for dynamic UI rendering, versioning, and author metadata.
+
+---
+
+## Semantic Caching
+
+### 1-Bit Vector Quantization
+The `SemanticCache` binarizes embeddings into 1-bit vectors, rendering Cosine Similarity mathematically equivalent to **XOR Hamming Distance** for CPU-level hardware acceleration.
+
+### Deterministic Bloom Filter
+Front-end Bloom Filter (`bloom.bin`) prevents expensive vector DB lookups for guaranteed misses — O(1) latency for unique queries.
+
+---
+
+## Observability & Export
+
+### Prometheus Metrics (`/metrics`)
+| Metric | Type | Description |
+|--------|------|-------------|
+| `llm_proxy_requests_total` | Counter | Total requests by method, endpoint, status. |
+| `llm_proxy_request_errors_total` | Counter | Failed requests (4xx/5xx) by error class. |
+| `llm_proxy_request_latency_seconds` | Histogram | Latency with P50/P95/P99 buckets (10ms → 60s). |
+| `llm_proxy_streaming_ttft_seconds` | Histogram | Time To First Token for streaming responses. |
+| `llm_proxy_token_usage_total` | Counter | Token usage by endpoint and role (prompt/completion). |
+| `llm_proxy_cost_total` | Counter | Estimated cost in USD by endpoint and model. |
+| `llm_proxy_budget_consumed_usd` | Gauge | Current month budget consumption. |
+| `llm_proxy_circuit_open` | Gauge | Circuit breaker state per endpoint. |
+| `llm_proxy_injection_blocked_total` | Counter | Injection attempts blocked. |
+| `llm_proxy_auth_failures_total` | Counter | Authentication failures by reason. |
+
+### OpenTelemetry
+- **Traces**: Distributed tracing via OTLP with optional console exporter.
+- **Resource tags**: `service.name` for multi-instance identification.
+- **FastAPI auto-instrumentation**: All routes traced automatically.
+
+### Sentry Integration
+- Exception tracking with FastAPI + aiohttp integrations.
+- PII filtering (`send_default_pii=False`).
+- Event sampling (10% transactions, 5% profiles).
+- HTTPException events dropped to reduce noise.
+
+### Dataset Export (`core/export.py`)
+- **Async JSONL writer** with daily file rotation.
+- **PII scrubbing**: Emails, IPs, API keys, JWTs automatically redacted.
+- **Gzip compression** on rotation.
+- **Optional Parquet conversion** via pyarrow with zstd compression.
+
+### SQLite Replication
+Litestream configuration documented in `config.yaml` for WAL-mode SQLite → S3 continuous replication (10s sync interval, 30-day retention).
+
+---
+
+## ChatOps & Webhooks
+
+### Webhook Dispatcher (`core/webhooks.py`)
+Generic HTTP POST dispatcher with platform-specific formatters:
+- **Slack**: Block Kit (`mrkdwn` sections).
+- **Microsoft Teams**: MessageCard with theme colors.
+- **Discord**: Embeds with severity-colored sidebars.
+- **Generic**: JSON payload with event metadata.
+
+7 event types: `circuit_open`, `budget_threshold`, `injection_blocked`, `endpoint_down`, `endpoint_recovered`, `auth_failure`, `panic_activated`.
+
+30-second debounce prevents webhook flooding for identical events.
+
+### Telegram Bot (`core/chatops.py`)
+Async long-polling bot (no webhook server required):
+
+| Command | Description |
+|---------|-------------|
+| `/status` | Proxy status and pool health. |
+| `/budget` | Budget consumption overview. |
+| `/approve <id>` | Approve a pending HITL request. |
+| `/reject <id>` | Reject a pending HITL request. |
+
+### Human-in-the-Loop (HITL)
+For "soft-violation" requests:
+1. SecurityShield flags the request.
+2. Request enters hold queue (5-minute timeout).
+3. Telegram notification sent to ops channel.
+4. Operator replies `/approve` or `/reject`.
+5. Request continues or is rejected.
+
+### Auto-Ticketing
+Debounced error rate alerting: >50 errors/hour triggers a summary notification with 10-minute cooldown.
+
+---
+
+## Frontend HUD
+
+Vanilla JS single-page application (`ui/`) with ES Modules, Tailwind CSS CDN, and a glassmorphism dark theme.
+
+### Design System
+- **Dual-Typeface**: Inter (UI) + JetBrains Mono (data/mono).
+- **Glassmorphism**: `backdrop-filter: blur(20px) saturate(180%)` on all panels.
+- **Grain overlay**: SVG noise at 2.8% opacity, mix-blend-mode overlay.
+- **Sub-pixel glow**: Hover-activated box-shadow on cards and topology nodes.
+- **Mobile responsive**: Sidebar overlay, adaptive grid (2→3→5 columns), touch-friendly.
+
+### Views
+
+**Dashboard**
+- 5 KPI cards with unique sparklines (uptrend/plateau/descending).
+- Main chart with gradient fill, X-axis baseline, P99 SLA threshold line.
+- Latency color logic with live delta badges.
+
+**Registry**
+- Drag-and-drop priority reordering (HTML5 Drag API).
+- Inline priority editing with transparent input.
+- Health heatmap per endpoint (10-sample history).
+- Right-click context menu: Toggle, Copy ID, View Latency, Set Priority, Delete.
+- Click provider name → slide-over detail panel (400px) with Chart.js latency graph, health bars, and action buttons.
+
+**Neural Chat**
+- Model dropdown selector: Router Auto, GPT-4o, Claude Sonnet 4, Llama 3.3 70B, Gemini 2.5 Pro, DeepSeek R1.
+- A/B/C Compare mode: 3-column parallel streaming from different models.
+- User/bot bubble differentiation with TTFT/token/cost telemetry on hover.
+- Injection guard visualization with redaction animation.
+- Token-aware live cost counter.
+
+**Transparent Proxy**
+- Unified system toggles with smooth animations.
+- xterm.js terminal with WebGL acceleration, Fira Code font.
+- Live diff rendering (GitHub-style red/green with ANSI backgrounds).
+- Native JSON pretty-print with syntax highlighting (keys, strings, numbers, booleans, null).
+- Intelligent autoscroll with "+N hidden" badge.
+- Topology map with animated particle flow.
+
+**Operations**
+- Password visibility toggle.
+- Regenerate key with double-click confirmation.
+- Emergency kill-switch with confirm dialog.
+
+### Interactions
+- **Command Palette**: `Cmd+K` with fuzzy search.
+- **Skeleton shimmer loaders** on view transitions.
+- **Copy 1-click** with "COPIED!" feedback.
+- **Network heartbeat**: 5s ping, LIVE/OFFLINE indicator.
+- **Token Flow equalizer** with animated bars.
+
+---
+
+## Configuration
+
+### `config.yaml` Structure
 ```yaml
 server:
   host: 0.0.0.0
@@ -137,37 +349,123 @@ server:
   tls: { enabled: true, min_version: "1.2" }
   auth: { enabled: true, api_keys_env: "LLM_PROXY_API_KEYS" }
 
+identity:
+  enabled: false
+  providers:
+    - name: google
+      client_id_env: "OIDC_GOOGLE_CLIENT_ID"
+    - name: microsoft
+      client_id_env: "OIDC_MICROSOFT_CLIENT_ID"
+  role_mappings: {}
+  session_ttl: 3600
+
 rotation:
-  strategy: "round_robin" # options: weighted, least_used, random
+  strategy: "round_robin"  # weighted, least_used, random
   failover: { enabled: true, max_retries: 3 }
 
-plugins:
-  manifest: "/plugins/manifest.yaml"
-  hot_swap: true
+webhooks:
+  enabled: false
+  endpoints:
+    - name: slack-ops
+      target: slack
+      url_env: "SLACK_WEBHOOK_URL"
+      events: ["circuit_open", "budget_threshold", "panic_activated"]
+
+chatops:
+  telegram:
+    enabled: false
+    token_env: "TELEGRAM_BOT_TOKEN"
+
+observability:
+  tracing: { enabled: true, service_name: "llmproxy" }
+  sentry: { dsn_env: "SENTRY_DSN" }
+  export: { enabled: false, output_dir: "exports", scrub_pii: true }
+
+budget:
+  monthly_limit: 1000.0
+  soft_limit: 800.0
+  fallback_to_local_on_limit: true
 ```
 
-### Installation
+### Secrets Management
+All sensitive values are loaded via **Infisical SDK** with environment variable fallback:
+- `LLM_PROXY_API_KEYS` — Comma-separated API keys.
+- `LLM_PROXY_MASTER_KEY` — Encryption master key (for at-rest secrets).
+- `LLM_PROXY_IDENTITY_SECRET` — Internal JWT signing key.
+- `LLM_PROXY_FEDERATION_SECRET` — Federation trust secret.
+- `OIDC_*_CLIENT_ID` — Per-provider OIDC client IDs.
+- `SENTRY_DSN` — Sentry error tracking DSN.
+- `TELEGRAM_BOT_TOKEN` — Telegram ChatOps bot token.
+- `SLACK_WEBHOOK_URL` / `DISCORD_WEBHOOK_URL` — Webhook URLs.
+
+---
+
+## Installation & Deployment
+
 ```bash
-# Core installation
+# Clone
 git clone https://github.com/fabriziosalmi/llmproxy
+cd llmproxy
+
+# Install dependencies
 pip install -r requirements.txt
 
-# Playwright setup for SOTA Explorer
+# Playwright setup (for SOTA Explorer agent)
 playwright install chromium
 
-# Execution
+# Run
 python main.py
+
+# UI available at http://localhost:8090/ui
+# API available at http://localhost:8090/v1/chat/completions
+# Metrics at http://localhost:8090/metrics
+```
+
+### Optional Dependencies
+```bash
+# Parquet export
+pip install pyarrow
+
+# Sentry integration
+pip install sentry-sdk[fastapi]
+
+# WASM plugin support
+pip install extism
+```
+
+### SQLite Replication (Litestream)
+```bash
+# Install Litestream
+curl -fsSL https://github.com/benbjohnson/litestream/releases/latest -o litestream
+
+# Replicate to S3
+litestream replicate -config /etc/litestream.yml
+
+# Restore from S3
+litestream restore -o /data/endpoints.db s3://llmproxy-backups/sqlite/endpoints
 ```
 
 ---
 
-## Advanced Features & Roadmaps
+## Advanced Features
 
 ### Federated Mesh (Tailscale)
-Leverages Tailscale mesh networks to discover and shard requests across idle GPU neighbors, creating a private, federated "AI Supercluster" without exposing endpoints to the public internet.
+Leverages Tailscale mesh networks to discover and shard requests across idle GPU neighbors, creating a private, federated "AI Supercluster" without exposing endpoints to the public internet. Federation trust is verified via shared secret + Tailscale LocalAPI identity.
 
 ### MCP (Model Context Protocol) Hub
-A unified execution environment for MCP tools, allowing any connected model (OpenAI, Anthropic, Local) to leverage a shared pool of local tools (PostgreSQL, Filesystem, Search) via a standardized protocol.
+Unified execution environment for MCP tools, allowing any connected model to leverage a shared pool of local tools (PostgreSQL, Filesystem, Search) via a standardized protocol.
 
 ### Visibility & Cloaking
-Automatic User-Agent rotation and proxy-chaining to ensure that upstream providers cannot easily fingerprint the proxy's infrastructure.
+Automatic User-Agent rotation and proxy-chaining to prevent upstream providers from fingerprinting the proxy infrastructure. Supports uTLS JA3 fingerprint forging (Chrome/Safari/Firefox profiles).
+
+### Local LLM Fallback
+Automatic failover to local models (via LM Studio / Ollama) when:
+- All remote endpoints are down (circuit breakers open).
+- Budget limit reached (`fallback_to_local_on_limit: true`).
+- Pool success rate falls below threshold.
+
+---
+
+## License
+
+See [LICENSE](LICENSE) for details.
