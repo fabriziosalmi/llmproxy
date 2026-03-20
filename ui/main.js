@@ -166,11 +166,15 @@ function initHUD() {
     }
 
     function executeCommand(id) {
-        if (id === 'toggle-proxy') document.getElementById('nav-proxy').click();
-        if (id === 'clear-logs') document.getElementById('clear-logs-btn').click();
-        if (id === 'view-registry') document.getElementById('nav-registry').click();
-        if (id === 'view-chat') document.getElementById('nav-chat').click();
-        if (id === 'view-plugins') document.getElementById('nav-plugins').click();
+        const targets = {
+            'toggle-proxy': 'nav-proxy',
+            'clear-logs': 'clear-logs-btn',
+            'view-registry': 'nav-registry',
+            'view-chat': 'nav-chat',
+            'view-plugins': 'nav-plugins',
+        };
+        const el = document.getElementById(targets[id]);
+        if (el) el.click();
         console.info(`Executed HUD command: ${id}`);
     }
 
@@ -222,12 +226,18 @@ function initHUD() {
     if (panicBtn) {
         panicBtn.addEventListener('click', async () => {
             if (confirm("EMERGENCY: Drop all traffic and halt proxy?")) {
-                const res = await fetch('/api/v1/panic', { method: 'POST' });
-                const data = await res.json();
-                if (data.status === 'HALTED') {
-                    document.body.classList.add('panic-halt');
-                    showSection('proxy-view');
-                    alert("SYSTEM HALTED: Neural Proxy Disabled.");
+                try {
+                    const res = await fetch('/api/v1/panic', { method: 'POST' });
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    const data = await res.json();
+                    if (data.status === 'HALTED') {
+                        document.body.classList.add('panic-halt');
+                        showSection('proxy-view');
+                        alert("SYSTEM HALTED: Neural Proxy Disabled.");
+                    }
+                } catch (e) {
+                    console.error('Panic endpoint failed:', e);
+                    alert("Panic request failed — check backend connectivity.");
                 }
             }
         });

@@ -15,6 +15,15 @@ class FederationManager:
         self.enabled = self.config.get("enabled", False)
         self.peers = self.config.get("peers", [])
         self.trust_secret = get_secret("LLM_PROXY_FEDERATION_SECRET", required=self.enabled)
+        self._session: Optional[aiohttp.ClientSession] = None
+
+    async def _get_session(self) -> aiohttp.ClientSession:
+        """Returns a shared aiohttp session (singleton)."""
+        if self._session is None or self._session.closed:
+            self._session = aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=30)
+            )
+        return self._session
 
     async def discover_peers(self) -> List[str]:
         """Simulates Tailscale-based peer discovery for the Swarm fallback."""
@@ -30,12 +39,12 @@ class FederationManager:
 
     async def _check_health(self, peer_url: str) -> bool:
         """Checks if a peer is alive and accepting federation requests."""
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.get(f"{peer_url}/health", timeout=2) as resp:
-                    return resp.status == 200
-            except Exception:
-                return False
+        try:
+            session = await self._get_session()
+            async with session.get(f"{peer_url}/health", timeout=aiohttp.ClientTimeout(total=2)) as resp:
+                return resp.status == 200
+        except Exception:
+            return False
 
     async def forward_to_peer(self, peer_url: str, body: Dict[str, Any], identity_headers: Dict[str, str]) -> Optional[Dict[str, Any]]:
         """Forwards a request to a peer proxy with federation security."""
@@ -43,23 +52,22 @@ class FederationManager:
             logger.error("Federation forward aborted: disabled or missing secret")
             return None
         logger.warning(f"Federation Swarm: Offloading request to peer {peer_url}")
-        
-        async with aiohttp.ClientSession() as session:
-            try:
-                headers = identity_headers.copy()
-                if self.trust_secret:
-                    headers["X-Federation-Secret"] = self.trust_secret
-                headers["X-Swarm-Node"] = "origin-proxy-alpha"
-                
-                async with session.post(
-                    f"{peer_url}/v1/chat/completions",
-                    json=body,
-                    headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=45)
-                ) as response:
-                    if response.status == 200:
-                        return await response.json()
-                    return None
-            except Exception as e:
-                logger.error(f"Federation Swarm: Peer {peer_url} failed: {e}")
+
+        try:
+            session = await self._get_session()
+            headers = identity_headers.copy()
+            headers["X-Federation-Secret"] = self.trust_secret
+            headers["X-Swarm-Node"] = "origin-proxy-alpha"
+
+            async with session.post(
+                f"{peer_url}/v1/chat/completions",
+                json=body,
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=45)
+            ) as response:
+                if response.status == 200:
+                    return await response.json()
                 return None
+        except Exception as e:
+            logger.error(f"Federation Swarm: Peer {peer_url} failed: {e}")
+            return None

@@ -65,6 +65,7 @@ export function initChat() {
 async function sendUserMessage() {
     const input = document.getElementById('chat-input');
     const scroller = document.getElementById('chat-scroller');
+    if (!input || !scroller) return;
     const text = input.value.trim();
     if (!text) return;
     
@@ -86,22 +87,25 @@ async function sendUserMessage() {
     
     try {
         const response = await api.sendChatMessage(text);
-        const data = await response.json();
-        scroller.removeChild(thinkingDiv);
-        
-        if (response.status === 200) {
-            appendMessage('bot', data.choices[0].message.content);
-        } else {
-            appendMessage('error', data.detail || 'Access Denied');
+        if (!response.ok) {
+            if (thinkingDiv.parentNode) scroller.removeChild(thinkingDiv);
+            const errData = await response.json().catch(() => ({}));
+            appendMessage('error', errData.detail || `Error ${response.status}`);
+            return;
         }
+        const data = await response.json();
+        if (thinkingDiv.parentNode) scroller.removeChild(thinkingDiv);
+        const content = data?.choices?.[0]?.message?.content;
+        appendMessage('bot', content || '(empty response)');
     } catch (e) {
-        scroller.removeChild(thinkingDiv);
+        if (thinkingDiv?.parentNode) scroller.removeChild(thinkingDiv);
         appendMessage('error', 'Connection failed');
     }
 }
 
 function appendMessage(type, text) {
     const scroller = document.getElementById('chat-scroller');
+    if (!scroller) return null;
     const div = document.createElement('div');
     
     if (type === 'user') {

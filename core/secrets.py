@@ -1,5 +1,6 @@
 import os
 import base64
+import logging
 import secrets as stdlib_secrets
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
@@ -7,6 +8,8 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from typing import Optional
 
 from core.infisical import get_secret
+
+logger = logging.getLogger(__name__)
 
 
 class SecretManager:
@@ -30,8 +33,11 @@ class SecretManager:
                 salt = f.read()
         else:
             salt = stdlib_secrets.token_bytes(32)
-            with open(salt_path, "wb") as f:
-                f.write(salt)
+            fd = os.open(salt_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            try:
+                os.write(fd, salt)
+            finally:
+                os.close(fd)
 
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
@@ -57,8 +63,9 @@ class SecretManager:
             return ""
         try:
             return cls._get_fernet().decrypt(encrypted_secret.encode()).decode()
-        except Exception:
+        except Exception as e:
             # Migration phase: value may not be encrypted yet
+            logger.warning(f"Decryption failed for key (migration fallback): {type(e).__name__}")
             return encrypted_secret
 
     @classmethod

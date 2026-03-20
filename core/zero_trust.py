@@ -3,7 +3,9 @@ import logging
 import jwt
 import time
 import os
+import re
 import aiohttp
+from urllib.parse import quote
 from typing import Dict, Any, Optional
 
 from core.infisical import get_secret
@@ -74,7 +76,9 @@ class ZeroTrustManager:
                 self._ts_session = aiohttp.ClientSession(connector=connector)
 
             # Query the LocalAPI for who is at this remote IP
-            async with self._ts_session.get(f"http://local-tailscale/localapi/v0/whois?addr={remote_ip}") as resp:
+            # Validate IP format before interpolating into URL
+            safe_ip = quote(remote_ip, safe='.:[]')
+            async with self._ts_session.get(f"http://local-tailscale/localapi/v0/whois?addr={safe_ip}") as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     user = data.get("UserProfile", {}).get("LoginName", "unknown")

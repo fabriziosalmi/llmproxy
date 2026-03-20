@@ -7,52 +7,59 @@ Falls back to environment variables only in development mode.
 
 import os
 import logging
+import threading
 from typing import Optional, Dict
 
 logger = logging.getLogger(__name__)
 
-# Lazy-loaded SDK client
+# Lazy-loaded SDK client (thread-safe)
 _client = None
 _secrets_cache: Dict[str, str] = {}
+_lock = threading.Lock()
 
 
 def _get_client():
-    """Initialize the Infisical SDK client (singleton)."""
+    """Initialize the Infisical SDK client (singleton, thread-safe)."""
     global _client
     if _client is not None:
         return _client
 
-    try:
-        from infisical_sdk import InfisicalSDKClient
-    except ImportError:
-        logger.warning(
-            "infisical-python-sdk not installed. "
-            "Install with: pip install infisical-python-sdk"
-        )
-        return None
+    with _lock:
+        # Double-check after acquiring lock
+        if _client is not None:
+            return _client
 
-    site_url = os.environ.get("INFISICAL_SITE_URL", "https://app.infisical.com")
-    client_id = os.environ.get("INFISICAL_CLIENT_ID")
-    client_secret = os.environ.get("INFISICAL_CLIENT_SECRET")
+        try:
+            from infisical_sdk import InfisicalSDKClient
+        except ImportError:
+            logger.warning(
+                "infisical-python-sdk not installed. "
+                "Install with: pip install infisical-python-sdk"
+            )
+            return None
 
-    if not client_id or not client_secret:
-        logger.warning(
-            "INFISICAL_CLIENT_ID and INFISICAL_CLIENT_SECRET not set. "
-            "Falling back to environment variables."
-        )
-        return None
+        site_url = os.environ.get("INFISICAL_SITE_URL", "https://app.infisical.com")
+        client_id = os.environ.get("INFISICAL_CLIENT_ID")
+        client_secret = os.environ.get("INFISICAL_CLIENT_SECRET")
 
-    try:
-        _client = InfisicalSDKClient(host=site_url)
-        _client.auth.universal_auth.login(
-            client_id=client_id,
-            client_secret=client_secret,
-        )
-        logger.info("Infisical client authenticated successfully.")
-        return _client
-    except Exception as e:
-        logger.error(f"Infisical authentication failed: {e}")
-        return None
+        if not client_id or not client_secret:
+            logger.warning(
+                "INFISICAL_CLIENT_ID and INFISICAL_CLIENT_SECRET not set. "
+                "Falling back to environment variables."
+            )
+            return None
+
+        try:
+            _client = InfisicalSDKClient(host=site_url)
+            _client.auth.universal_auth.login(
+                client_id=client_id,
+                client_secret=client_secret,
+            )
+            logger.info("Infisical client authenticated successfully.")
+            return _client
+        except Exception as e:
+            logger.error(f"Infisical authentication failed: {e}")
+            return None
 
 
 def get_secret(
@@ -81,9 +88,10 @@ def get_secret(
     Raises:
         RuntimeError: If required=True and the secret cannot be resolved.
     """
-    # Check cache first
-    if key in _secrets_cache:
-        return _secrets_cache[key]
+    # Check cache first (thread-safe read)
+    with _lock:
+        if key in _secrets_cache:
+            return _secrets_cache[key]
 
     value = None
 
@@ -121,9 +129,10 @@ def get_secret(
             )
         value = default
 
-    # Cache resolved value
+    # Cache resolved value (thread-safe write)
     if value is not None:
-        _secrets_cache[key] = value
+        with _lock:
+            _secrets_cache[key] = value
 
     return value
 

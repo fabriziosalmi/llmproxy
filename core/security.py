@@ -132,8 +132,8 @@ class SecurityShield:
             judgment = await self.assistant.generate(check_prompt)
             return "SAFE" in judgment.upper()
         except Exception as e:
-            logger.error(f"AI Guard Error: {e}")
-            return True # Fallback to true if AI fails
+            logger.error(f"AI Guard Error (fail-closed): {e}")
+            return False  # Fail-closed: block on error rather than silently allow
         
     _MAX_TRACKED_SESSIONS = 10_000
 
