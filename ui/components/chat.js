@@ -15,7 +15,40 @@ export function initChat() {
         }
     });
 
-    document.querySelector('.relative.group button').addEventListener('click', sendUserMessage);
+    document.querySelector('#nav-chat').addEventListener('click', () => {
+        setTimeout(() => input.focus(), 100);
+    });
+
+    // 20. Regenerate Key (Double Click Protection)
+    const regenBtn = document.getElementById('regenerate-key-btn');
+    if (regenBtn) {
+        let clickCount = 0;
+        regenBtn.addEventListener('click', () => {
+            clickCount++;
+            if (clickCount === 1) {
+                regenBtn.innerText = "CONFIRM?";
+                regenBtn.classList.add('bg-rose-500/40', 'text-white');
+                setTimeout(() => {
+                    clickCount = 0;
+                    regenBtn.innerText = "REGENERATE";
+                    regenBtn.classList.remove('bg-rose-500/40', 'text-white');
+                }, 3000);
+            } else if (clickCount === 2) {
+                regenBtn.innerText = "REGENERATING...";
+                regenBtn.disabled = true;
+                setTimeout(() => {
+                    document.getElementById('ops-master-key').value = `sk-proxy-${Math.random().toString(36).substring(2, 12)}`;
+                    regenBtn.innerText = "SUCCESS";
+                    setTimeout(() => {
+                        regenBtn.innerText = "REGENERATE";
+                        regenBtn.disabled = false;
+                        regenBtn.classList.remove('bg-rose-500/40', 'text-white');
+                        clickCount = 0;
+                    }, 2000);
+                }, 1000);
+            }
+        });
+    }
 }
 
 async function sendUserMessage() {
@@ -61,10 +94,10 @@ function appendMessage(type, text) {
     const div = document.createElement('div');
     
     if (type === 'user') {
-        div.className = 'flex justify-end gap-4 animate-in fade-in slide-in-from-right-2';
+        div.className = 'flex justify-end gap-4 animate-in fade-in slide-in-from-right-2 self-end';
         div.innerHTML = `
             <div class="flex flex-col items-end gap-1.5 group">
-                <div class="p-5 bg-slate-800 border border-slate-700/50 rounded-3xl rounded-tr-sm text-sm leading-relaxed max-w-xl text-sky-100 shadow-[0_8px_30px_rgba(0,0,0,0.5)]">${text}</div>
+                <div class="p-5 bg-sky-500/10 border border-sky-500/30 rounded-3xl rounded-tr-sm text-sm leading-relaxed max-w-xl text-sky-100 shadow-[0_8px_30px_rgba(14,165,233,0.1)] font-medium">${text}</div>
                 <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity mr-2 bg-white/[0.02] px-2 py-0.5 rounded-lg border border-white/5">
                     <button class="p-1 hover:bg-white/10 rounded-lg transition-colors outline-none"><svg class="w-3.5 h-3.5 text-slate-500 hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg></button>
                     <span class="text-[9px] font-mono text-slate-400 font-bold uppercase tracking-widest cursor-default">Variant 1/3 (GPT-4)</span>

@@ -60,10 +60,10 @@
         </nav>
 
         <div class="mt-auto flex flex-col">
-            <button id="sidebar-toggle-btn" class="w-full flex justify-center py-3 border-t border-white/5 text-slate-500 hover:text-white transition-all bg-black/20 hover:bg-black/40">
-                <svg id="toggle-icon-svg" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/></svg>
-            </button>
-            <div class="p-3 border-t border-white/5 bg-black/40">
+            <div class="p-3 border-t border-white/5 bg-black/40 relative">
+                <button id="sidebar-toggle-btn" class="absolute -right-3 top-[-14px] w-6 h-6 rounded-full bg-[#1c1c1e] border border-white/10 flex items-center justify-center text-slate-500 hover:text-white transition-all shadow-xl z-50">
+                    <svg id="toggle-icon-svg" class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/></svg>
+                </button>
                 <button class="w-full flex items-center gap-3 p-1.5 rounded hover:bg-white/5 transition-colors group">
                     <div class="w-6 h-6 rounded bg-indigo-500 flex items-center justify-center font-medium text-[10px] text-white shrink-0">A</div>
                     <div class="sidebar-text text-left flex-1 truncate">
@@ -82,7 +82,7 @@
         <header class="h-12 flex items-center justify-between px-6 border-b border-white/5 bg-black/40 backdrop-blur-3xl z-40">
             <div id="view-title" class="text-[13px] font-medium text-slate-200 capitalize flex items-center gap-3">
                 Dashboard
-                <div class="h-3 w-px bg-white/10"></div>
+                <span class="text-slate-600 font-light select-none">›</span>
                 <span class="text-[10px] text-slate-500 font-mono tracking-wider">ID: 77a8-bf92-c010</span>
             </div>
             
@@ -105,8 +105,8 @@
         </header>
 
         <!-- Global Event Ticker -->
-        <div class="h-7 w-full bg-white/[0.01] border-b border-white/5 overflow-hidden flex items-center px-6 relative shrink-0">
-            <div class="absolute left-6 z-10 bg-gradient-to-r from-[#050608] via-[#050608]/80 to-transparent w-16 h-full"></div>
+        <div class="h-8 w-full bg-[#0c0c0e]/90 backdrop-blur-md border-b border-white/[0.03] overflow-hidden flex items-center px-6 relative shrink-0">
+            <div class="absolute left-6 z-10 bg-gradient-to-r from-[#0c0c0e] via-[#0c0c0e]/80 to-transparent w-16 h-full"></div>
             <div id="event-ticker" class="whitespace-nowrap flex gap-12 text-[10px] font-mono text-slate-500 w-full animate-marquee">
                 <span class="text-rose-400 flex items-center gap-1.5"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg> [14:02:11] Prompt Injection blocked on 10.0.0.4</span>
                 <span class="text-emerald-400 flex items-center gap-1.5"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> [14:02:15] Route shifted to Groq Llama-3.3</span>
@@ -315,31 +315,31 @@
                                 </div>
                                 <span class="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Client</span>
                             </div>
-                            <div class="flex-1 flex items-center justify-center px-4 relative">
-                                <div class="w-full h-px bg-gradient-to-r from-transparent via-sky-500/50 to-transparent"></div>
-                                <div class="absolute w-1.5 h-1.5 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8] animate-[ping_1.5s_linear_infinite]"></div>
+                            <div class="flex-1 flex items-center justify-center relative">
+                                <div class="w-full h-[1.5px] bg-[#0ea5e9]/30"></div>
+                                <div class="absolute w-2 h-2 rounded-full bg-sky-400 shadow-[0_0_12px_#38bdf8] animate-[ping_1.5s_linear_infinite]"></div>
                             </div>
                             <div class="flex flex-col items-center gap-2">
-                                <div class="w-12 h-12 rounded-2xl bg-sky-500/10 border border-sky-500/30 flex items-center justify-center shadow-xl shadow-sky-500/10">
+                                <div class="w-12 h-12 rounded-2xl bg-sky-500/10 border border-sky-500/30 flex items-center justify-center shadow-xl shadow-sky-500/10 z-10">
                                     <svg class="w-6 h-6 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
                                 </div>
                                 <span class="text-[9px] text-sky-400 font-bold uppercase tracking-widest">LLM Proxy</span>
                             </div>
-                            <div class="flex-1 flex items-center justify-center px-4 relative">
-                                <div class="w-full h-px bg-gradient-to-r from-transparent via-emerald-500/50 to-transparent"></div>
-                                <div class="absolute w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399] animate-[ping_1s_linear_infinite]"></div>
+                            <div class="flex-1 flex items-center justify-center relative">
+                                <div class="w-full h-[1.5px] bg-[#10b981]/30"></div>
+                                <div class="absolute w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_12px_#34d399] animate-[ping_1s_linear_infinite]"></div>
                             </div>
                             <div class="flex flex-col items-center gap-2">
-                                <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center shadow-lg shadow-emerald-500/10">
+                                <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center shadow-lg shadow-emerald-500/10 z-10">
                                     <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
                                 </div>
                                 <span class="text-[9px] text-emerald-500 font-bold uppercase tracking-widest">Guardrail</span>
                             </div>
-                            <div class="flex-1 flex items-center justify-center px-4 relative">
-                                <div class="w-full border-t border-dashed border-slate-500/50"></div>
+                            <div class="flex-1 flex items-center justify-center relative">
+                                <div class="w-full border-t-[1.5px] border-dashed border-slate-700"></div>
                             </div>
                             <div class="flex flex-col items-center gap-2">
-                                <div class="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center shadow-lg shadow-black">
+                                <div class="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center shadow-lg shadow-black z-10">
                                     <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
                                 </div>
                                 <span class="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Upstream</span>
@@ -370,7 +370,7 @@
                         </div>
                         <div class="flex-1 max-w-sm mx-4 flex items-center relative">
                             <svg class="w-3.5 h-3.5 text-slate-500 absolute left-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
-                            <input type="text" id="log-pipe-filter" placeholder="grep 'route' | grep 'error'..." class="w-full bg-black/40 border border-white/10 rounded border-b border-white/5 pl-9 pr-3 py-1.5 text-[10px] text-emerald-400 font-mono outline-none focus:border-emerald-500/40 focus:bg-black/60 transition-all placeholder-slate-600">
+                            <input type="text" id="log-pipe-filter" placeholder="grep 'route' | grep 'error'..." class="w-full bg-transparent border border-white/10 rounded border-b border-white/5 pl-9 pr-3 py-1.5 text-[10px] text-emerald-400 font-mono outline-none focus:border-emerald-500/40 focus:bg-white/[0.02] transition-all placeholder-slate-700">
                         </div>
                         <div class="flex items-center gap-4">
                             <span id="log-paused-badge" class="hidden text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded bg-amber-500/20 text-amber-500 border border-amber-500/30 transition-all opacity-0">+<span id="log-missed-count">0</span> hidden</span>
@@ -400,9 +400,9 @@
                 
                 <div class="relative bg-white/[0.02] border border-white/10 rounded-[1.25rem] flex flex-col focus-within:border-sky-500/50 focus-within:bg-white/[0.04] transition-all shadow-2xl p-2 gap-2">
                     <div class="flex items-center justify-between px-3 pt-2">
-                        <div class="flex items-center gap-2 bg-sky-500/10 px-2 py-0.5 rounded-md border border-sky-500/20">
+                        <div class="flex items-center gap-2 bg-sky-500/10 px-2.5 py-1 rounded-full border border-sky-500/20 shadow-[0_0_10px_rgba(14,165,233,0.1)]">
                             <span class="w-1.5 h-1.5 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]"></span>
-                            <span id="active-model-token" class="text-[9px] font-bold text-sky-400 uppercase tracking-widest">Router: [Llama-3.3-70B]</span>
+                            <span id="active-model-token" class="text-[9px] font-black text-sky-400 uppercase tracking-widest cursor-pointer hover:text-white transition-colors">Router: Llama-3.3-70B</span>
                         </div>
                         <span class="text-[10px] text-slate-500 font-mono font-medium" id="token-counter">0 / 4096 tokens</span>
                     </div>
@@ -436,7 +436,7 @@
                             <div class="p-3 bg-indigo-500/10 rounded-2xl text-indigo-500"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg></div>
                             <div>
                                 <h4 class="text-sm font-bold text-white mb-0.5">Sovereign Encryption Layer</h4>
-                                <p class="text-[11px] text-slate-500">Encrypt prompts before routing through public nodes.</p>
+                                <p class="text-[11px] text-slate-500">Sanitizes sensitive patterns and enforces PII constraints via Rust/WASM.</p>
                             </div>
                         </div>
                         <div class="w-11 h-6 bg-slate-800 rounded-full flex items-center px-1"><div class="w-4 h-4 bg-slate-400 rounded-full shadow-md"></div></div>
@@ -448,16 +448,17 @@
                     <div class="flex gap-3">
                         <div class="relative flex-1">
                             <input type="password" id="ops-master-key" value="sk-proxy-premium-77a8bf92c011" readonly class="w-full bg-black/40 border border-white/5 rounded-2xl pl-5 pr-20 py-3 text-xs font-mono text-slate-400 outline-none focus:border-white/10 transition-colors">
-                            <div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                            <div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
                                 <button onclick="const el=document.getElementById('ops-master-key'); el.type=el.type==='password'?'text':'password'" class="p-1.5 text-slate-500 hover:text-white rounded-lg hover:bg-white/5 transition-all outline-none" title="Toggle visibility">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                                 </button>
+                                <div class="w-px h-3 bg-white/10 mx-1"></div>
                                 <button onclick="navigator.clipboard.writeText(document.getElementById('ops-master-key').value)" class="p-1.5 text-slate-500 hover:text-white rounded-lg hover:bg-white/5 transition-all outline-none" title="Copy to clipboard">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
                                 </button>
                             </div>
                         </div>
-                        <button class="px-6 py-3 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-2xl text-[10px] font-bold uppercase tracking-widest transition-all ring-1 ring-inset ring-rose-500/20 outline-none focus:ring-rose-500/50">Regenerate</button>
+                        <button id="regenerate-key-btn" class="px-6 py-3 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-2xl text-[10px] font-bold uppercase tracking-widest transition-all ring-1 ring-inset ring-rose-500/20 outline-none focus:ring-rose-500/50">Regenerate</button>
                     </div>
                 </div>
             </div>

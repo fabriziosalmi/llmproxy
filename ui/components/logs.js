@@ -17,11 +17,11 @@ export function initLogs() {
     term = new Terminal({
         theme: {
             background: 'transparent',
-            foreground: '#10b981', // emerald-500
-            cursor: '#10b981',
+            foreground: '#34d399', // 13. Brighter Emerald (emerald-400)
+            cursor: '#34d399',
             black: '#000000',
             red: '#f43f5e',
-            green: '#10b981',
+            green: '#34d399',
             yellow: '#fbbf24',
             blue: '#38bdf8',
             magenta: '#818cf8',
@@ -64,7 +64,7 @@ export function initLogs() {
     const logSource = new EventSource(`${BASE_URL}/api/v1/logs`);
     store.update({ logSource });
 
-    term.writeln('\x1b[32m[SYSTEM]\x1b[0m \x1b[3mWaiting for neural traffic link...\x1b[0m');
+    term.writeln('\x1b[32m[SYSTEM]\x1b[0m Waiting for neural traffic link...'); // 13. No italic
 
     logSource.onmessage = (event) => {
         try {

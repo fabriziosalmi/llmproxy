@@ -171,5 +171,47 @@ body.cinema-mode main {
     background: #000;
 }
 
+/* 12. Unified System Toggles */
+.system-toggle {
+    width: 28px;
+    height: 16px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 99px;
+    position: relative;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.system-toggle.active {
+    background: #007aff;
+}
+.system-toggle::after {
+    content: '';
+    position: absolute;
+    left: 2px;
+    top: 2px;
+    width: 12px;
+    height: 12px;
+    background: white;
+    border-radius: 50%;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.system-toggle.active::after {
+    left: 14px;
+}
+
+/* 4. Telemetry Vertical Alignment */
+#btn-telemetry > div {
+    display: flex;
+    align-items: center;
+    line-height: 1;
+}
+#btn-telemetry svg {
+    margin-right: 2px;
+}
+#btn-telemetry span {
+    display: inline-block;
+    vertical-align: middle;
+}
+
 
 
