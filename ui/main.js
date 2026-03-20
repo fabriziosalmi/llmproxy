@@ -5,7 +5,7 @@ import { store } from './services/store.js';
 import { api } from './services/api.js';
 import { renderSidebar, initSidebar } from './components/sidebar.js';
 import { renderContent, initNavigation } from './components/content.js';
-import { renderRegistry } from './components/registry.js';
+import { renderRegistry, fetchRegistry, initRegistry } from './components/registry.js';
 import { renderProxy, initProxy } from './components/proxy.js';
 import { renderDashboard } from './components/dashboard.js';
 import { initChat } from './components/chat.js';
@@ -40,6 +40,7 @@ async function init() {
         { name: 'sidebar', fn: initSidebar },
         { name: 'navigation', fn: initNavigation },
         { name: 'dashboard', fn: renderDashboard },
+        { name: 'registry', fn: initRegistry },
         { name: 'proxy', fn: initProxy },
         { name: 'chat', fn: initChat },
         { name: 'logs', fn: initLogs },
@@ -73,11 +74,8 @@ async function init() {
         console.warn("Backend unavailable — running in offline mode.", err);
     }
 
-    // Initial data load for tables (non-blocking)
-    try { renderRegistry(); } catch (e) {}
-
     // Background refresh
-    setInterval(() => { try { renderRegistry(); } catch(e) {} }, 30000);
+    setInterval(() => { try { fetchRegistry(); } catch(e) {} }, 30000);
 
     console.info("LLMPROXY Modular UI Environment: READY");
 }
@@ -239,8 +237,9 @@ function initHUD() {
     setInterval(async () => {
         const statusDot = document.getElementById('status-dot');
         const statusText = document.getElementById('status-text');
+        if (!statusDot || !statusText) return;
         try {
-            const res = await fetch('/api/v1/status');
+            const res = await fetch('/api/v1/proxy/status');
             if (!res.ok) throw new Error();
             statusDot.className = "w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.4)] animate-pulse";
             statusText.innerText = "Live";

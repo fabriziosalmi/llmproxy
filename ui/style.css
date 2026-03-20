@@ -161,6 +161,12 @@ tr:hover .w-1\.5 {
 }
 .w-1\.5 { transition: all 0.3s ease; }
 
+/* 2.10: Drag-and-drop reorder */
+tr[draggable="true"] { cursor: default; }
+tr[draggable="true"] .drag-handle { opacity: 0; transition: opacity 0.15s; }
+tr[draggable="true"]:hover .drag-handle { opacity: 1; }
+tr.drag-over { border-top: 2px solid rgba(14, 165, 233, 0.5) !important; }
+
 /* Hide native number spinners */
 input[type=number]::-webkit-inner-spin-button,
 input[type=number]::-webkit-outer-spin-button {

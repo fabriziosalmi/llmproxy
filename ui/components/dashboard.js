@@ -5,12 +5,51 @@ import { store } from '../services/store.js';
 
 let chartInstance = null;
 
+// 2.4: Threshold line plugin
+const thresholdPlugin = {
+    id: 'thresholdLine',
+    afterDraw(chart) {
+        const { ctx, chartArea, scales } = chart;
+        const yVal = scales.y.getPixelForValue(500);
+        if (yVal < chartArea.top || yVal > chartArea.bottom) return;
+
+        ctx.save();
+        ctx.setLineDash([6, 4]);
+        ctx.strokeStyle = 'rgba(244, 63, 94, 0.4)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(chartArea.left, yVal);
+        ctx.lineTo(chartArea.right, yVal);
+        ctx.stroke();
+
+        ctx.setLineDash([]);
+        ctx.font = '9px JetBrains Mono, monospace';
+        ctx.fillStyle = 'rgba(244, 63, 94, 0.5)';
+        ctx.textAlign = 'right';
+        ctx.fillText('P99 SLA 500ms', chartArea.right - 4, yVal - 5);
+        ctx.restore();
+    }
+};
+
 export function renderDashboard() {
     const ctx = document.getElementById('mainChart');
-    if (!ctx || chartInstance) return; // Only init once for now
-    
-    chartInstance = new Chart(ctx.getContext('2d'), {
+    if (!ctx || chartInstance) return;
+    // Defer until canvas is actually visible in DOM
+    if (!ctx.offsetWidth) {
+        requestAnimationFrame(renderDashboard);
+        return;
+    }
+
+    // 2.3: Gradient fill
+    const context2d = ctx.getContext('2d');
+    const gradient = context2d.createLinearGradient(0, 0, 0, 400);
+    gradient.addColorStop(0, 'rgba(244, 63, 94, 0.15)');
+    gradient.addColorStop(0.6, 'rgba(244, 63, 94, 0.03)');
+    gradient.addColorStop(1, 'rgba(244, 63, 94, 0)');
+
+    chartInstance = new Chart(ctx, {
         type: 'line',
+        plugins: [thresholdPlugin],
         data: {
             labels: Array.from({length: 24}, (_, i) => `${i}h`),
             datasets: [{
@@ -19,43 +58,72 @@ export function renderDashboard() {
                 borderColor: '#f43f5e',
                 borderWidth: 2,
                 fill: true,
-                backgroundColor: 'rgba(244, 63, 94, 0.05)',
+                backgroundColor: gradient,
                 pointRadius: 0,
+                pointHoverRadius: 4,
+                pointHoverBackgroundColor: '#f43f5e',
+                pointHoverBorderColor: '#fff',
+                pointHoverBorderWidth: 2,
                 tension: 0.4
             }]
         },
-        options: { 
-            responsive: true, 
-            maintainAspectRatio: false, 
-            plugins: { 
-                legend: { display: false },
-                // 15.11 Cost Threshold Marker (Implementation via simple plugin if needed, or just a grid line)
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                intersect: false,
+                mode: 'index'
             },
-            scales: { 
-                x: { 
-                    grid: { display: false }, 
-                    ticks: { color: '#64748b', font: { size: 10, family: 'monospace' } } 
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: 'rgba(0,0,0,0.85)',
+                    borderColor: 'rgba(255,255,255,0.1)',
+                    borderWidth: 1,
+                    titleFont: { family: 'JetBrains Mono, monospace', size: 10 },
+                    bodyFont: { family: 'JetBrains Mono, monospace', size: 11 },
+                    padding: 10,
+                    cornerRadius: 8,
+                    displayColors: false,
+                    callbacks: {
+                        label: (item) => `${item.parsed.y}ms`
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    border: { display: true, color: 'rgba(255,255,255,0.08)' },
+                    ticks: {
+                        color: '#475569',
+                        font: { size: 9, family: 'JetBrains Mono, monospace' },
+                        maxRotation: 0
+                    }
                 },
-                y: { 
-                    grid: { color: 'rgba(255,255,255,0.05)', borderDash: [2, 4] }, 
-                    ticks: { color: '#64748b', font: { size: 10, family: 'monospace' } },
-                    // Solid Threshold Line at 500ms
+                y: {
+                    grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+                    border: { display: false },
+                    ticks: {
+                        color: '#475569',
+                        font: { size: 9, family: 'JetBrains Mono, monospace' },
+                        padding: 12
+                    },
+                    suggestedMin: 350,
                     suggestedMax: 600
-                } 
+                }
             }
         }
     });
 
     initSparklines();
-    updateLatencyColor();
-    initTopologyFlow(); // 15.5 Animated Topology
+    initTopologyFlow();
 }
 
 function initTopologyFlow() {
     const connectors = document.querySelectorAll('.flex-1.flex.items-center.justify-center.relative div.w-full');
     connectors.forEach((conn, idx) => {
         const particle = document.createElement('div');
-        particle.className = `absolute w-1 h-1 rounded-full bg-white shadow-[0_0_8px_#fff] opacity-80`;
+        particle.className = 'absolute w-1 h-1 rounded-full bg-white shadow-[0_0_8px_#fff] opacity-80';
         particle.style.left = '0%';
         conn.parentElement.appendChild(particle);
 
@@ -65,34 +133,23 @@ function initTopologyFlow() {
             { left: '20%', opacity: 1 },
             { left: '80%', opacity: 1 },
             { left: '100%', opacity: 0 }
-        ], {
-            duration: duration,
-            iterations: Infinity,
-            easing: 'linear'
-        });
+        ], { duration, iterations: Infinity, easing: 'linear' });
     });
 }
 
-function updateLatencyColor() {
-    // 6. DECLINE in latency is GOOD (Green)
-    const latencyIndicator = document.querySelector('div.glass:nth-child(3) span.text-rose-400');
-    if (latencyIndicator && latencyIndicator.innerText.includes('DECLINE')) {
-        latencyIndicator.classList.remove('text-rose-400');
-        latencyIndicator.classList.add('text-emerald-400');
-    }
-}
-
+// 2.1: Unique sparklines per card (different seed per index)
 function initSparklines() {
-    // 5. Unique Sparklines logic
+    const patterns = [
+        [0.2, 0.5, 0.3, 0.8, 0.6, 1.0],   // Inferences — uptrend
+        [0.7, 0.7, 0.3, 0.3, 0.5, 0.5],    // Active Adapters — plateau
+        [0.8, 0.6, 0.5, 0.4, 0.3, 0.35],   // FinOps — descending (spend)
+    ];
+
     document.querySelectorAll('polyline').forEach((el, idx) => {
         const h = 20;
         const w = 100;
-        const seed = idx * 10;
-        const pts = [];
-        for(let i=0; i<=5; i++){
-            const y = (Math.sin((i + seed) * 0.5) + 1) * (h * 0.4) + (h * 0.1);
-            pts.push(`${i*(w/5)},${y}`);
-        }
+        const base = patterns[idx % patterns.length];
+        const pts = base.map((v, i) => `${i * (w / (base.length - 1))},${h - v * h * 0.8}`);
         el.setAttribute('points', pts.join(' '));
     });
 
@@ -100,13 +157,13 @@ function initSparklines() {
         document.querySelectorAll('polyline').forEach((el, idx) => {
             const h = 20;
             const w = 100;
-            const seed = Date.now() / 1000 + idx;
-            let pts = [];
-            for(let i=0; i<=5; i++){
-                const y = (Math.sin((i * 1.5) + seed) + 1) * (h * 0.4) + (h * 0.1);
-                pts.push(`${i*(w/5)},${y}`);
-            }
-            el.style.transition = 'all 1s ease-in-out';
+            const t = Date.now() / 1000;
+            const base = patterns[idx % patterns.length];
+            const pts = base.map((v, i) => {
+                const jitter = Math.sin(t * 1.2 + i * 2 + idx * 7) * 0.12;
+                const y = h - (v + jitter) * h * 0.8;
+                return `${i * (w / (base.length - 1))},${Math.max(1, Math.min(h - 1, y))}`;
+            });
             el.setAttribute('points', pts.join(' '));
         });
     }, 2000);
