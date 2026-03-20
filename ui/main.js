@@ -5,13 +5,13 @@ import { store } from './services/store.js';
 import { api } from './services/api.js';
 import { renderSidebar, initSidebar } from './components/sidebar.js';
 import { renderContent, initNavigation } from './components/content.js';
-import { renderRegistry, fetchRegistry, initRegistry } from './components/registry.js';
+import { renderRegistry } from './components/registry.js';
 import { renderProxy, initProxy } from './components/proxy.js';
-import { renderDashboard, initDashboard } from './components/dashboard.js';
+import { renderDashboard } from './components/dashboard.js';
 import { initChat } from './components/chat.js';
 import { renderSettings } from './components/settings.js';
 import { initLogs } from './components/logs.js';
-import { initPlugins } from './components/plugins.js'; // NEW: Import initPlugins
+import { initPlugins } from './components/plugins.js';
 
 // Global state listener for UI updates
 store.subscribe((state) => {
@@ -35,71 +35,51 @@ function showSection(sectionId) {
 }
 
 async function init() {
-    // Initial fetch of critical system state
+    // Initialize UI components first — must work even without backend
+    const initWrappers = [
+        { name: 'sidebar', fn: initSidebar },
+        { name: 'navigation', fn: initNavigation },
+        { name: 'dashboard', fn: renderDashboard },
+        { name: 'proxy', fn: initProxy },
+        { name: 'chat', fn: initChat },
+        { name: 'logs', fn: initLogs },
+        { name: 'plugins', fn: initPlugins },
+    ];
+
+    initWrappers.forEach(w => {
+        try {
+            w.fn();
+        } catch (e) {
+            console.warn(`UI Component [${w.name}] failed to initialize:`, e);
+        }
+    });
+
+    // Init HUD global features (Cmd+K, Drawer, Cinema Mode)
+    initHUD();
+
+    // Fetch critical system state from backend
     try {
-        const [status, features, network, version] = await Promise.all([
+        const [status, features] = await Promise.all([
             api.fetchProxyStatus(),
             api.fetchFeatures(),
-            api.fetchNetworkInfo(),
-            api.fetchVersion()
         ]);
 
-        store.update({ 
+        store.update({
             proxyEnabled: status.enabled,
             priorityMode: status.priority_mode || false,
             features: features
         });
-
-        // Component initialization
-        initDashboard(); // NEW: Initialize Dashboard
-        initRegistry(); // NEW: Initialize Registry
-        initChat();
-        initLogs();
-        initPlugins(); // NEW: Initialize Plugins
-
-        // Navigation setup
-        const sections = ['dashboard-view', 'registry-view', 'chat-view', 'proxy-view', 'plugins-view'];
-        const navItems = ['nav-dashboard', 'nav-registry', 'nav-chat', 'nav-proxy', 'nav-plugins'];
-
-        navItems.forEach((id, index) => {
-            const el = document.getElementById(id);
-            if (el) {
-                el.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    showSection(sections[index]);
-                });
-            }
-        });
-
-        // Initialize UI components and listeners with individual protection
-        const initWrappers = [
-            { name: 'sidebar', fn: initSidebar },
-            { name: 'navigation', fn: initNavigation },
-            { name: 'proxy', fn: initProxy },
-            { name: 'chat', fn: initChat },
-            { name: 'logs', fn: initLogs }
-        ];
-
-        initWrappers.forEach(w => {
-            try {
-                w.fn();
-            } catch (e) {
-                console.warn(`UI Component [${w.name}] failed to initialize:`, e);
-            }
-        });
-        
-        // Initial data load for tables
-        fetchRegistry();
-        
-        // Init HUD global features (Cmd+K, Drawer)
-        initHUD();
-        
-        // Set intervals for background refresh
-        setInterval(fetchRegistry, 30000);
-        
-        console.info("LLMPROXY Modular UI Environment: READY");
     } catch (err) {
+        console.warn("Backend unavailable — running in offline mode.", err);
     }
+
+    // Initial data load for tables (non-blocking)
+    try { renderRegistry(); } catch (e) {}
+
+    // Background refresh
+    setInterval(() => { try { renderRegistry(); } catch(e) {} }, 30000);
+
+    console.info("LLMPROXY Modular UI Environment: READY");
 }
 
 function initHUD() {
@@ -222,6 +202,55 @@ function initHUD() {
             document.body.classList.toggle('cinema-mode');
         }
     });
+
+    // 15.15 Copy-to-id (One-Click)
+    document.addEventListener('click', (e) => {
+        const copyEl = e.target.closest('.copyable');
+        if (copyEl) {
+            const text = copyEl.innerText.replace('ID: ', '').trim();
+            navigator.clipboard.writeText(text);
+            const originalText = copyEl.innerText;
+            copyEl.innerText = "COPIED!";
+            copyEl.classList.add('text-emerald-400');
+            setTimeout(() => {
+                copyEl.innerText = originalText;
+                copyEl.classList.remove('text-emerald-400');
+            }, 1000);
+        }
+    });
+
+    // 15.9 Panic Kill-Switch Handler
+    const panicBtn = document.getElementById('panic-btn');
+    if (panicBtn) {
+        panicBtn.addEventListener('click', async () => {
+            if (confirm("EMERGENCY: Drop all traffic and halt proxy?")) {
+                const res = await fetch('/api/v1/panic', { method: 'POST' });
+                const data = await res.json();
+                if (data.status === 'HALTED') {
+                    document.body.classList.add('panic-halt');
+                    showSection('proxy-view');
+                    alert("SYSTEM HALTED: Neural Proxy Disabled.");
+                }
+            }
+        });
+    }
+
+    // 15.18 Network Status Heartbeat
+    setInterval(async () => {
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+        try {
+            const res = await fetch('/api/v1/status');
+            if (!res.ok) throw new Error();
+            statusDot.className = "w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.4)] animate-pulse";
+            statusText.innerText = "Live";
+            statusText.className = "text-[9px] font-black text-emerald-400 uppercase tracking-widest";
+        } catch (e) {
+            statusDot.className = "w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]";
+            statusText.innerText = "Offline";
+            statusText.className = "text-[9px] font-black text-rose-500 uppercase tracking-widest";
+        }
+    }, 5000);
 
     // UX Feature 24: Audio/Haptics Physics
     let audioCtx = null;

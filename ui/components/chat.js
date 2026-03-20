@@ -15,6 +15,17 @@ export function initChat() {
         }
     });
 
+    // 15.17 Token-Aware Telemetry (Live Cost)
+    input.addEventListener('input', () => {
+        const text = input.value;
+        const tokens = Math.ceil(text.length / 4); // Rule of thumb
+        const cost = (tokens / 1_000_000) * 15.00; // Mock price (output-heavy)
+        const counter = document.getElementById('token-counter');
+        if (counter) {
+            counter.innerHTML = `${tokens} tokens <span class="text-emerald-500/80">~ $${cost.toFixed(6)}</span>`;
+        }
+    });
+
     document.querySelector('#nav-chat').addEventListener('click', () => {
         setTimeout(() => input.focus(), 100);
     });

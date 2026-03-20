@@ -103,16 +103,48 @@ function appendLogToTerm(log) {
         'INFO': '\x1b[34m',    // Blue
         'WARNING': '\x1b[33m', // Yellow
         'ERROR': '\x1b[31m',   // Red
-        'CRITICAL': '\x1b[31;1m', // Bold Red
+        'CRITICAL': '\x1b[91;1m', // High Intensity Red
         'SYSTEM': '\x1b[35m',  // Magenta
         'PROXY': '\x1b[32m',   // Green
-        'SECURITY': '\x1b[33;1m' // Bold Yellow (PII/Auth)
+        'SECURITY': '\x1b[33;1m' // Bold Yellow
     }[log.level] || '\x1b[37m';
 
     const level = `${levelColor}${log.level}\x1b[0m`;
-    const message = log.message;
+    let message = log.message;
 
+    // 15.19 JSON Syntax Highlighting (Regex-based for xterm.js)
+    if (message.includes('{') && message.includes('}')) {
+        message = message.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+            let cls = '\x1b[32m'; // Key/String (Green)
+            if (/^"/.test(match)) {
+                if (/:$/.test(match)) {
+                    cls = '\x1b[36m'; // Key (Cyan)
+                }
+            } else if (/true|false/.test(match)) {
+                cls = '\x1b[33m'; // Boolean (Yellow)
+            } else if (/null/.test(match)) {
+                cls = '\x1b[90m'; // Null (Gray)
+            } else {
+                cls = '\x1b[31m'; // Number (Red)
+            }
+            return cls + match + '\x1b[0m';
+        });
+    }
+
+    // 15.16 Intelligent Autoscroll (Freeze if user scrolled up)
+    const isAtBottom = term.buffer.active.viewportY >= term.buffer.active.baseY;
+    
     term.writeln(`${timestamp} ${level} ${message}`);
+    
+    if (isAtBottom) {
+        term.scrollToBottom();
+        document.getElementById('log-paused-badge').classList.add('hidden', 'opacity-0');
+    } else {
+        const badge = document.getElementById('log-paused-badge');
+        badge.classList.remove('hidden', 'opacity-0');
+        const count = document.getElementById('log-missed-count');
+        count.innerText = parseInt(count.innerText) + 1;
+    }
 }
 
 export function clearLogs() {

@@ -1,14 +1,17 @@
-/* 
- * Premium Unified styles - FABGPT #0.1
- * focus: Glassmorphism, SF Pro Font, Smooth Motion
+/*
+ * LLMPROXY — Design System v2
+ * Dual-Typeface: Inter (UI) + JetBrains Mono (data)
+ * Glassmorphism + Grain + Sub-pixel Glow
  */
 
- :root {
+:root {
     --apple-blue: #007aff;
     --apple-green: #34c759;
     --apple-red: #ff3b30;
     --apple-gray: #8e8e93;
     --bg-deep: #050608;
+    --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
 }
 
 * {
@@ -19,12 +22,21 @@
 
 body {
     background-color: var(--bg-deep);
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+    font-family: var(--font-ui);
     color: #f5f5f7;
     margin: 0;
 }
 
-/* 60fps Micro-interactions (FAANG Feature #25) */
+/* 1.6: Monospace for all technical content */
+.font-mono,
+code, pre,
+[data-mono],
+.tracking-wider,
+input[type="number"] {
+    font-family: var(--font-mono) !important;
+}
+
+/* 60fps Micro-interactions */
 button, .cursor-pointer, input[type="text"], input[type="password"], input[type="number"], a {
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
@@ -32,7 +44,7 @@ button:active, .cursor-pointer:active {
     transform: scale(0.95);
 }
 
-/* Glassmorphism Classes */
+/* ─── Glassmorphism ─── */
 .glass {
     background: rgba(255, 255, 255, 0.03);
     backdrop-filter: blur(20px) saturate(180%);
@@ -45,7 +57,7 @@ button:active, .cursor-pointer:active {
     -webkit-backdrop-filter: blur(40px) saturate(200%);
 }
 
-/* Sidebar transition logic */
+/* ─── Sidebar ─── */
 .sidebar.collapsed {
     width: 80px;
 }
@@ -57,11 +69,15 @@ button:active, .cursor-pointer:active {
 .sidebar.collapsed #logo-container {
     padding-left: 0;
 }
+/* 1.3: Collapsed state hides toggle into logo area */
+.sidebar.collapsed .sidebar-bottom {
+    justify-content: center;
+}
 .sidebar-text {
     transition: all 0.2s ease;
 }
 
-/* Navigation System */
+/* ─── Navigation ─── */
 .nav-item {
     color: var(--apple-gray);
     position: relative;
@@ -86,12 +102,40 @@ button:active, .cursor-pointer:active {
     box-shadow: 0 0 12px var(--apple-blue);
 }
 
-/* Glow Typography */
+/* ─── Typography ─── */
 .glow-text {
     text-shadow: 0 0 30px rgba(0, 122, 255, 0.15);
 }
 
-/* Scrollbar styling */
+/* ─── 1.5: Custom Scrollbars — visible only on hover/scroll ─── */
+::-webkit-scrollbar {
+    width: 3px;
+    height: 3px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 10px;
+    transition: background 0.3s;
+}
+*:hover::-webkit-scrollbar-thumb,
+*:active::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.08);
+}
+*:hover::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+/* Firefox */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+}
+*:hover {
+    scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+}
+
 .scrollbar-hide::-webkit-scrollbar {
     display: none;
 }
@@ -100,7 +144,7 @@ button:active, .cursor-pointer:active {
     scrollbar-width: none;
 }
 
-/* Animations */
+/* ─── Animations ─── */
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
@@ -117,12 +161,12 @@ tr:hover .w-1\.5 {
 }
 .w-1\.5 { transition: all 0.3s ease; }
 
-/* Hide native number spinners for custom UI (Stepper fix) */
-input[type=number]::-webkit-inner-spin-button, 
-input[type=number]::-webkit-outer-spin-button { 
-  appearance: none;
-  -webkit-appearance: none; 
-  margin: 0; 
+/* Hide native number spinners */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+    appearance: none;
+    -webkit-appearance: none;
+    margin: 0;
 }
 input[type=number] {
     appearance: textfield;
@@ -138,13 +182,19 @@ input[type=number] {
     transform-origin: bottom;
 }
 
-/* Event Ticker Marquee */
+/* ─── 1.1: Event Ticker — dedicated row ─── */
+.event-ticker {
+    background: rgba(15, 15, 18, 0.85);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(12px);
+}
+
 @keyframes marquee {
     0% { transform: translateX(20%); }
     100% { transform: translateX(-100%); }
 }
 .animate-marquee {
-    animation: marquee 20s linear infinite;
+    animation: marquee 30s linear infinite;
 }
 .animate-marquee:hover {
     animation-play-state: paused;
@@ -159,9 +209,9 @@ input[type=number] {
 }
 
 /* Cinema Mode */
-body.cinema-mode aside, 
+body.cinema-mode aside,
 body.cinema-mode header,
-body.cinema-mode #event-ticker {
+body.cinema-mode .event-ticker {
     transform: translateY(-20px);
     opacity: 0;
     pointer-events: none;
@@ -171,7 +221,7 @@ body.cinema-mode main {
     background: #000;
 }
 
-/* 12. Unified System Toggles */
+/* ─── 12: Unified System Toggles ─── */
 .system-toggle {
     width: 28px;
     height: 16px;
@@ -199,19 +249,61 @@ body.cinema-mode main {
     left: 14px;
 }
 
-/* 4. Telemetry Vertical Alignment */
-#btn-telemetry > div {
-    display: flex;
+/* ─── 1.7: Noise/Grain Overlay — military monitor effect ─── */
+.nebula-grain {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.028;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ─── 1.8: Sub-pixel Glow Borders ─── */
+.glow-card {
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: 0 0 20px -10px rgba(14, 165, 233, 0.05);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.glow-card:hover {
+    border-color: rgba(14, 165, 233, 0.25);
+    box-shadow:
+        0 0 30px -5px rgba(14, 165, 233, 0.12),
+        0 0 60px -15px rgba(14, 165, 233, 0.06);
+}
+
+/* Active node / card glow (topology, active endpoints) */
+.glow-active {
+    box-shadow:
+        0 0 0 1px rgba(14, 165, 233, 0.15),
+        0 0 20px -4px rgba(14, 165, 233, 0.2),
+        0 0 40px -8px rgba(14, 165, 233, 0.08);
+}
+
+/* Topology node glow */
+.topo-node {
+    box-shadow:
+        0 0 0 1px rgba(14, 165, 233, 0.2),
+        0 0 15px -2px rgba(14, 165, 233, 0.15);
+    transition: all 0.3s ease;
+}
+.topo-node:hover {
+    box-shadow:
+        0 0 0 1px rgba(14, 165, 233, 0.4),
+        0 0 25px -2px rgba(14, 165, 233, 0.25);
+    transform: scale(1.05);
+}
+
+/* ─── 1.2: Breadcrumb divider ─── */
+.breadcrumb-sep {
+    display: inline-flex;
     align-items: center;
-    line-height: 1;
+    color: rgba(255, 255, 255, 0.12);
+    font-size: 10px;
+    margin: 0 2px;
+    user-select: none;
 }
-#btn-telemetry svg {
-    margin-right: 2px;
-}
-#btn-telemetry span {
-    display: inline-block;
-    vertical-align: middle;
-}
-
-
-

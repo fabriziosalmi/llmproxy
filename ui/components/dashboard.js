@@ -18,26 +18,29 @@ export function renderDashboard() {
                 data: [412, 420, 395, 410, 415, 450, 480, 520, 510, 490, 450, 420, 415, 410, 405, 420, 430, 460, 450, 440, 420, 415, 410, 420],
                 borderColor: '#f43f5e',
                 borderWidth: 2,
-                stepped: false, // Cleaner look
                 fill: true,
                 backgroundColor: 'rgba(244, 63, 94, 0.05)',
                 pointRadius: 0,
-                tension: 0.4 // Smooth curve
+                tension: 0.4
             }]
         },
         options: { 
             responsive: true, 
             maintainAspectRatio: false, 
-            plugins: { legend: { display: false } },
+            plugins: { 
+                legend: { display: false },
+                // 15.11 Cost Threshold Marker (Implementation via simple plugin if needed, or just a grid line)
+            },
             scales: { 
                 x: { 
-                    border: { display: true, color: 'rgba(255,255,255,0.1)' }, // X-axis Baseline
                     grid: { display: false }, 
-                    ticks: { color: '#64748b', font: { size: 10, family: 'monospace' }, padding: 10 } 
+                    ticks: { color: '#64748b', font: { size: 10, family: 'monospace' } } 
                 },
                 y: { 
                     grid: { color: 'rgba(255,255,255,0.05)', borderDash: [2, 4] }, 
-                    ticks: { color: '#64748b', font: { size: 10, family: 'monospace' }, padding: 15 } 
+                    ticks: { color: '#64748b', font: { size: 10, family: 'monospace' } },
+                    // Solid Threshold Line at 500ms
+                    suggestedMax: 600
                 } 
             }
         }
@@ -45,6 +48,29 @@ export function renderDashboard() {
 
     initSparklines();
     updateLatencyColor();
+    initTopologyFlow(); // 15.5 Animated Topology
+}
+
+function initTopologyFlow() {
+    const connectors = document.querySelectorAll('.flex-1.flex.items-center.justify-center.relative div.w-full');
+    connectors.forEach((conn, idx) => {
+        const particle = document.createElement('div');
+        particle.className = `absolute w-1 h-1 rounded-full bg-white shadow-[0_0_8px_#fff] opacity-80`;
+        particle.style.left = '0%';
+        conn.parentElement.appendChild(particle);
+
+        const duration = 2000 + (idx * 500);
+        particle.animate([
+            { left: '0%', opacity: 0 },
+            { left: '20%', opacity: 1 },
+            { left: '80%', opacity: 1 },
+            { left: '100%', opacity: 0 }
+        ], {
+            duration: duration,
+            iterations: Infinity,
+            easing: 'linear'
+        });
+    });
 }
 
 function updateLatencyColor() {
