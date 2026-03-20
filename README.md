@@ -258,11 +258,16 @@ All Python plugins are **AST-scanned** before loading:
 6. Atomic swap: replace active rings reference.
 7. Auto-rollback on any failure.
 
-### WASM Support
-Optional Extism-based sandbox for Rust/Go plugins:
-- WASI enabled, JSON I/O protocol.
-- Graceful fallback if Extism not installed.
-- Memory-isolated execution.
+### WASM Plugin Support (`core/wasm_runner.py`)
+Execute Rust/Go/C plugins compiled to WebAssembly via Extism SDK:
+- **Memory-safe sandboxing**: WASM plugins run in an isolated VM — crashes cannot affect the Python process.
+- **Non-blocking execution**: All WASM calls run via `asyncio.to_thread()`, releasing the GIL and keeping the event loop free.
+- **JSON I/O protocol**: Input (`body`, `metadata`, `session_id`, `config`) → Output (`action`, `body`, `status_code`, `message`). Aligned with `PluginResponse` contracts.
+- **Legacy compat**: Maps WASM actions (`ALLOW`/`BLOCK`/`MODIFIED`) to standard actions (`passthrough`/`block`/`modify`).
+- **Graceful fallback**: If Extism is not installed, WASM plugins are skipped silently (no crash).
+- **Same guarantees**: Timeout enforcement, per-plugin metrics, and fail_policy apply to WASM plugins identically to Python plugins.
+
+See [`plugins/wasm/README.md`](plugins/wasm/README.md) for a complete Rust plugin development guide (Cargo.toml, lib.rs template, build instructions).
 
 ### Marketplace API
 Install, uninstall, toggle, hot-swap, and rollback plugins via REST API. Plugin manifests support `ui_schema` for dynamic UI rendering, versioning, author metadata, and per-plugin `config` blocks.
@@ -470,7 +475,7 @@ All sensitive values are loaded via **Infisical SDK** with environment variable 
 
 ## Testing
 
-65 tests across 8 modules, all passing on `pytest` + `pytest-asyncio`.
+93 tests across 9 modules, all passing on `pytest` + `pytest-asyncio`.
 
 ```bash
 # Run full suite
@@ -489,7 +494,8 @@ python -m pytest tests/test_marketplace_plugins.py -v
 | `test_export.py` | 8 | PII scrub (email/IP/key/bearer), nested redaction, file rotation |
 | `test_plugin_engine.py` | 8 | AST scan (safe/forbidden: os/subprocess/exec/eval), allowed modules |
 | `test_metrics.py` | 5 | Counter increment, error class, injection blocked, budget, circuit |
-| `test_marketplace_plugins.py` | 17 | Loop Breaker (7), Budget Guard (5), Engine dual-mode (5) |
+| `test_marketplace_plugins.py` | 30 | Loop Breaker (7), Budget Guard (5), Engine dual-mode (5), Fail policy (2), AST blocking (5), Validation (4), DI State (2) |
+| `test_wasm_runner.py` | 15 | JSON protocol, legacy action mapping, error handling, engine integration |
 
 ---
 
@@ -544,7 +550,7 @@ The `docker-compose.yml` includes:
 
 **`.github/workflows/ci.yml`** — Runs on every push/PR:
 - **Lint**: ruff check (Python code quality).
-- **Test**: pytest with 65+ tests across 8 modules.
+- **Test**: pytest with 93 tests across 9 modules.
 - **Syntax**: AST parse of all Python files.
 
 **`.github/workflows/docker.yml`** — Runs on version tags (`v*`):
