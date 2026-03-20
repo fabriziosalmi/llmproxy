@@ -452,12 +452,16 @@ class RotatorAgent(BaseAgent):
             
         @self.app.get("/api/v1/plugins")
         async def get_plugins():
-            """13. List all installed plugins and their configuration."""
-            if not os.path.exists(self.plugin_manager.manifest_path):
+            """9.4: List all plugins with marketplace metadata."""
+            plugins = self.plugin_manager.list_plugins()
+            if not plugins:
+                # Fallback to manifest file
+                if os.path.exists(self.plugin_manager.manifest_path):
+                    with open(self.plugin_manager.manifest_path, 'r') as f:
+                        manifest = yaml.safe_load(f) or {}
+                    return manifest
                 return {"plugins": []}
-            with open(self.plugin_manager.manifest_path, 'r') as f:
-                manifest = yaml.safe_load(f) or {}
-            return manifest
+            return {"plugins": plugins}
 
         @self.app.post("/api/v1/plugins/toggle")
         async def toggle_plugin(request: Request):
@@ -465,17 +469,59 @@ class RotatorAgent(BaseAgent):
             data = await request.json()
             plugin_name = data.get("name")
             enabled = data.get("enabled")
-            
+
             with open(self.plugin_manager.manifest_path, 'r') as f:
                 manifest = yaml.safe_load(f) or {}
-            
+
             for p in manifest.get("plugins", []):
                 if p["name"] == plugin_name:
                     p["enabled"] = enabled
                     break
-            
+
             with open(self.plugin_manager.manifest_path, 'w') as f:
                 yaml.dump(manifest, f)
+
+            # Hot-swap to apply changes
+            await self.plugin_manager.hot_swap()
+            return {"name": plugin_name, "enabled": enabled}
+
+        @self.app.post("/api/v1/plugins/install")
+        async def install_plugin(request: Request):
+            """9.4: Install a plugin from marketplace entry."""
+            data = await request.json()
+            required = {"name", "hook", "entrypoint"}
+            if not required.issubset(data.keys()):
+                raise HTTPException(status_code=400, detail=f"Missing fields: {required - data.keys()}")
+            try:
+                await self.plugin_manager.install_plugin(data)
+                await self._add_log(f"PLUGIN: Installed '{data['name']}' on {data['hook']}")
+                return {"status": "installed", "name": data["name"]}
+            except Exception as e:
+                raise HTTPException(status_code=422, detail=str(e))
+
+        @self.app.delete("/api/v1/plugins/{plugin_name}")
+        async def uninstall_plugin(plugin_name: str):
+            """9.4: Uninstall a plugin by name."""
+            removed = await self.plugin_manager.uninstall_plugin(plugin_name)
+            if not removed:
+                raise HTTPException(status_code=404, detail=f"Plugin '{plugin_name}' not found")
+            await self._add_log(f"PLUGIN: Uninstalled '{plugin_name}'", level="WARNING")
+            return {"status": "uninstalled", "name": plugin_name}
+
+        @self.app.post("/api/v1/plugins/hot-swap")
+        async def hot_swap_plugins():
+            """9.3/9.6: Trigger zero-downtime RCU hot-swap with health check."""
+            try:
+                await self.plugin_manager.hot_swap()
+                return {"status": "success", "message": "Plugin DAG reloaded"}
+            except Exception as e:
+                return {"status": "rolled_back", "error": str(e)}
+
+        @self.app.post("/api/v1/plugins/rollback")
+        async def rollback_plugins():
+            """9.3: Rollback to previous plugin configuration."""
+            await self.plugin_manager.rollback()
+            return {"status": "rolled_back"}
             
         @self.app.post("/api/v1/panic")
         async def emergency_panic():
