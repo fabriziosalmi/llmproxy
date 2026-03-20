@@ -85,7 +85,7 @@ Dockerfile esiste ma non c'e pipeline ne compose.
 |----------|-------|-------|-------|
 | A. Wiring moduli orfani | WebhookDispatcher, DatasetExporter, TelegramBot | ~40 min | ✅ DONE |
 | B. Wiring metrics/tracing | Sentry, Prometheus counters, circuit state | ~25 min | ✅ DONE |
-| C. UI Login Flow | OAuth redirect, callback, session, guard | ~35 min | ⬜ TODO |
+| C. UI Login Flow | OAuth redirect, callback, session, guard | ~35 min | ✅ DONE |
 | D. Test Suite | 7 test file per moduli critici | ~45 min | ⬜ TODO |
 | E. CI/CD & Docker Compose | GitHub Actions, compose, .env.example | ~20 min | ⬜ TODO |
 

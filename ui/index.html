@@ -25,6 +25,44 @@
     <!-- 15.1 Grain Overlay -->
     <div class="nebula-grain"></div>
 
+    <!-- Session C: Login Overlay (shown when identity/SSO is enabled and user not authenticated) -->
+    <div id="login-overlay" class="hidden fixed inset-0 z-[100] bg-[#050506]/98 backdrop-blur-2xl flex items-center justify-center">
+        <div class="w-full max-w-sm mx-4">
+            <!-- Logo -->
+            <div class="flex items-center justify-center gap-3 mb-8">
+                <div class="w-10 h-10 rounded-xl bg-sky-500/10 flex items-center justify-center border border-sky-500/20">
+                    <svg class="w-6 h-6 text-sky-500 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-sm font-black tracking-widest text-white uppercase italic leading-none">LLMPROXY</h1>
+                    <p class="text-[9px] text-slate-500 font-medium tracking-wider mt-0.5">Unified Intelligence Ops</p>
+                </div>
+            </div>
+            <!-- Card -->
+            <div class="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-6 backdrop-blur-xl">
+                <h2 class="text-center text-sm font-bold text-white mb-1">Sign in to continue</h2>
+                <p class="text-center text-[10px] text-slate-500 mb-6">Authenticate with your organization account</p>
+                <!-- Error message -->
+                <div id="login-error" class="hidden mb-4 px-3 py-2 bg-rose-500/10 border border-rose-500/20 rounded-lg text-[10px] text-rose-400 font-medium text-center"></div>
+                <!-- Provider buttons container -->
+                <div id="login-providers" class="space-y-3">
+                    <!-- Populated by auth.js -->
+                </div>
+                <!-- API key fallback -->
+                <div class="mt-6 pt-4 border-t border-white/[0.06]">
+                    <p class="text-[9px] text-slate-600 text-center mb-3">Or use an API key</p>
+                    <div class="flex gap-2">
+                        <input id="login-api-key" type="password" placeholder="sk-..." class="flex-1 bg-white/[0.03] border border-white/[0.08] rounded-lg px-3 py-2 text-[11px] text-white font-mono placeholder:text-slate-700 focus:outline-none focus:border-sky-500/30">
+                        <button id="login-api-key-btn" class="px-4 py-2 bg-sky-500/10 border border-sky-500/20 rounded-lg text-[10px] font-bold text-sky-400 hover:bg-sky-500/20 transition-all">Go</button>
+                    </div>
+                </div>
+            </div>
+            <p class="text-center text-[8px] text-slate-700 mt-4">Protected by Zero-Trust Identity Layer</p>
+        </div>
+    </div>
+
     <!-- Collapsible Sidebar -->
     <!-- ... (rest of sidebar) ... -->
     <!-- Mobile sidebar overlay backdrop -->
@@ -105,6 +143,15 @@
                 <div class="hidden md:flex items-center gap-1.5 px-2 py-1 bg-white/[0.03] border border-white/10 rounded-lg text-[9px] font-bold text-slate-500">
                     <span class="opacity-50">CMD</span>
                     <span class="w-2.5 h-2.5 flex items-center justify-center bg-white/5 rounded">K</span>
+                </div>
+
+                <!-- Session C: User display (shown when authenticated via SSO) -->
+                <div class="hidden items-center gap-2" id="user-section">
+                    <div id="user-avatar" class="hidden w-6 h-6 rounded-full bg-sky-500/20 border border-sky-500/30 flex items-center justify-center text-[9px] font-black text-sky-400"></div>
+                    <span id="user-display-name" class="hidden text-[10px] font-semibold text-slate-300 max-w-[100px] truncate"></span>
+                    <button id="logout-btn" class="hidden text-[9px] font-bold text-slate-600 hover:text-rose-400 transition-colors px-1.5 py-0.5 rounded" title="Sign out">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                    </button>
                 </div>
 
                 <button id="btn-telemetry" class="inline-flex items-center bg-white/[0.02] border border-white/5 rounded-full px-2 sm:px-3.5 py-1 gap-2 sm:gap-3 shadow-inner hover:bg-white/5 focus:ring-1 focus:ring-white/20 transition-all outline-none cursor-pointer">

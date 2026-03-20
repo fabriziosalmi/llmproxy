@@ -12,6 +12,7 @@ import { initChat } from './components/chat.js';
 import { renderSettings } from './components/settings.js';
 import { initLogs } from './components/logs.js';
 import { initPlugins } from './components/plugins.js';
+import { auth } from './services/auth.js';
 
 // Global state listener for UI updates
 store.subscribe((state) => {
@@ -35,6 +36,58 @@ function showSection(sectionId) {
 }
 
 async function init() {
+    // Session C: Initialize auth — check if SSO is required
+    const authenticated = await auth.init();
+
+    // Handle fallback from oauth-callback.html (direct navigation, no popup opener)
+    const pendingToken = sessionStorage.getItem('_oauth_id_token');
+    if (pendingToken) {
+        sessionStorage.removeItem('_oauth_id_token');
+        try {
+            const res = await fetch(`${window.location.origin}/api/v1/identity/exchange`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: pendingToken }),
+            });
+            if (res.ok) {
+                const data = await res.json();
+                localStorage.setItem('proxy_key', data.token);
+                localStorage.setItem('proxy_user', JSON.stringify(data.identity));
+                window.location.reload();
+                return;
+            }
+        } catch { /* ignore */ }
+    }
+
+    // Wire logout button
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', () => auth.logout());
+    }
+
+    // Wire API key login button
+    const apiKeyBtn = document.getElementById('login-api-key-btn');
+    const apiKeyInput = document.getElementById('login-api-key');
+    if (apiKeyBtn && apiKeyInput) {
+        const doApiKeyLogin = () => {
+            const key = apiKeyInput.value.trim();
+            if (key) {
+                localStorage.setItem('proxy_key', key);
+                const overlay = document.getElementById('login-overlay');
+                if (overlay) overlay.classList.add('hidden');
+            }
+        };
+        apiKeyBtn.addEventListener('click', doApiKeyLogin);
+        apiKeyInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doApiKeyLogin(); });
+    }
+
+    // Show user section if authenticated
+    if (auth.isEnabled() && auth.getUser()) {
+        const section = document.getElementById('user-section');
+        if (section) section.classList.remove('hidden');
+        if (section) section.classList.add('flex');
+    }
+
     // Initialize UI components first — must work even without backend
     const initWrappers = [
         { name: 'sidebar', fn: initSidebar },

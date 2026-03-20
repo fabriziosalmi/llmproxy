@@ -430,6 +430,20 @@ class RotatorAgent(BaseAgent):
 
         # ── Session 6: Identity & SSO Routes ──
 
+        @self.app.get("/api/v1/identity/config")
+        async def get_identity_config():
+            """Returns public SSO config for the UI (client_ids are public)."""
+            if not self.identity.enabled:
+                return {"enabled": False, "providers": []}
+            providers = []
+            for name, p in self.identity.providers.items():
+                providers.append({
+                    "name": p.name,
+                    "client_id": p.client_id,
+                    "issuer": p.issuer,
+                })
+            return {"enabled": True, "providers": providers}
+
         @self.app.get("/api/v1/identity/me")
         async def get_identity(request: Request, api_key: str = Depends(API_KEY_HEADER)):
             """Returns the current user's identity context (from JWT or API key)."""
