@@ -111,6 +111,36 @@
 
 ---
 
+## SESSIONE M: Security Pivot — Thesis Focus + Dead Code Purge + SOC UI ✅
+**Priorità: CRITICA | Commit: pending**
+
+**Thesis**: "LLM proxy with the best security plugin system" — tutto il resto è cut.
+
+**Backend purge (~1,500 righe rimosse):**
+- [x] **M.1** Cancellato `agents/` (7 file, 557 righe): scanner, validator, supervisor, self-healer, SOTA
+- [x] **M.2** Cancellato 17 moduli core: semantic_cache, semantic_router, rl_rotator, load_predictor, vllm_engine, local_assistant, supervisor, capabilities, adapter_engine, fsm, schema_mapper, pattern_memory, micro_prompts, db_models, chatops, logger, retry
+- [x] **M.3** Cancellato `repl/` (2 file, 132 righe), `frontend/` (React morto)
+- [x] **M.4** Riscritto `main.py` (122→65 righe): solo security gateway bootstrap
+- [x] **M.5** Riscritto `proxy/rotator.py` (~400→230 righe): rimosso VLLMEngine, SemanticRouter, SemanticCache, RLRotator, LoadPredictor, TelegramBot, shadow test. Clean security orchestrator.
+- [x] **M.6** Presidio NLP PII detection (opt-in, regex fallback) + 17 test
+- [x] **M.7** Token bucket rate limiter ASGI middleware + 8 test
+- [x] **M.8** OpenAPI contract tests (20 test)
+- [x] **M.9** App factory pattern: `create_app(agent) -> FastAPI`
+
+**UI rewrite — Security Operations Center:**
+- [x] **M.10** `ui/index.html`: SOC layout, rose theme, sidebar con Security/Operations grouping, Kill Switch
+- [x] **M.11** `ui/components/threats.js`: KPI cards (requests/blocked/PII/pass rate), Chart.js timeline, SSE event feed
+- [x] **M.12** `ui/components/guards.js`: Security guard toggles con descrizioni, proxy master toggle
+- [x] **M.13** `ui/components/plugins.js`: ring color coding per security pipeline
+- [x] **M.14** `ui/components/settings.js`: Identity & Access, Rate Limiting, System Info
+- [x] **M.15** `ui/components/registry.js`: clean endpoint table con toggle/delete
+- [x] **M.16** `ui/main.js`: rewired per nuovi componenti, HUD commands aggiornati
+- [x] **M.17** Cancellati `dashboard.js`, `chat.js`, `proxy.js` (views morte)
+
+**158 test — 100% pass. ~1,500 righe di dead code eliminate. UI → Security SOC.**
+
+---
+
 ## SESSIONE J: Migrazioni Future (Non Bloccanti) — BACKLOG
 **Priorità: BASSA**
 
@@ -134,6 +164,7 @@
 | I. Wiring + Dead Code | SecurityShield cleanup, PluginState DI, inspect() wired | ✅ DONE |
 | K. UI/UX Surgical Cleanup | HTML nesting, view IDs, sidebar labels, API centralization | ✅ DONE |
 | L. God Object + Budget + E2E | Route split, SQLite persistence, 33 E2E tests, bug fixes | ✅ DONE |
-| J. Backlog | Watcher, migration, OpenObserve, UI, sanitize_response | 🔲 BACKLOG |
+| M. Security Pivot | Thesis focus, 1500 righe cut, SOC UI, Presidio, rate limiter | ✅ DONE |
+| J. Backlog | Watcher, migration, OpenObserve, sanitize_response | 🔲 BACKLOG |
 
-**127 test totali — 100% pass. rotator.py dimezzato. Budget persistente. Zero dead code.**
+**158 test totali — 100% pass. Thesis: LLM Security Gateway. UI: SOC dashboard.**

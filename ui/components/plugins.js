@@ -1,79 +1,68 @@
 /**
- * Plugins Component
+ * Plugins View — Security plugin pipeline management.
  */
 import { api } from '../services/api.js';
 
-// Global toggle handler (defined once, not per render)
-window.togglePlugin = async (name, enabled) => {
-    try {
-        await api.togglePlugin(name, enabled);
-    } catch (e) {
-        console.warn('Plugin toggle failed:', e);
-    }
+const RING_COLORS = {
+    ingress: 'rose',
+    pre_flight: 'amber',
+    routing: 'sky',
+    post_flight: 'violet',
+    background: 'teal',
 };
 
 export async function initPlugins() {
-    await renderPlugins().catch(() => {});
+    await renderPluginList().catch(() => {});
 
-    const btn = document.getElementById('reload-plugins');
-    if (!btn) return;
-    btn.addEventListener('click', async () => {
-        const originalText = btn.innerHTML;
-        btn.innerHTML = '<svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> SWAPPING...';
-        btn.disabled = true;
-
-        try {
-            await renderPlugins();
-            setTimeout(() => {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-            }, 1000);
-        } catch (e) {
-            btn.innerHTML = 'ERROR';
-            btn.classList.add('text-rose-400');
-        }
-    });
+    const btn = document.getElementById('reload-plugins-btn');
+    if (btn) {
+        btn.addEventListener('click', async () => {
+            btn.textContent = 'Reloading...';
+            btn.disabled = true;
+            try {
+                await fetch(`${window.location.origin}/api/v1/plugins/hot-swap`, { method: 'POST' });
+                await renderPluginList();
+            } catch (e) {
+                console.error('Plugin reload failed:', e);
+            }
+            btn.textContent = 'Reload';
+            btn.disabled = false;
+        });
+    }
 }
 
-export async function renderPlugins() {
-    const grid = document.getElementById('plugin-grid');
+async function renderPluginList() {
+    const grid = document.getElementById('plugins-grid');
     if (!grid) return;
 
     try {
         const data = await api.fetchPlugins();
-        const plugins = data.plugins || [];
+        const plugins = data.plugins || data || [];
+        grid.innerHTML = '';
 
-        grid.innerHTML = plugins.map(p => `
-            <div class="group relative bg-[#131316] border border-white/[0.05] hover:border-orange-500/30 rounded-2xl p-5 transition-all duration-300 shadow-xl overflow-hidden">
-                <!-- Background Glow -->
-                <div class="absolute -right-10 -top-10 w-32 h-32 bg-orange-500/5 rounded-full blur-3xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                
-                <div class="flex items-start justify-between mb-4 relative">
-                    <div class="w-10 h-10 rounded-xl bg-white/[0.03] border border-white/10 flex items-center justify-center text-orange-400">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/>
-                        </svg>
+        plugins.forEach(p => {
+            const ring = (p.hook || 'unknown').toLowerCase();
+            const color = RING_COLORS[ring] || 'slate';
+            const enabled = p.enabled !== false;
+
+            const card = document.createElement('div');
+            card.className = `bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4 transition-all ${enabled ? '' : 'opacity-50'}`;
+            card.innerHTML = `
+                <div class="flex items-start justify-between mb-2">
+                    <div>
+                        <h3 class="text-[11px] font-bold text-white">${p.name || 'Unknown'}</h3>
+                        <span class="text-[8px] font-mono text-${color}-400 bg-${color}-500/10 px-1.5 py-0.5 rounded mt-1 inline-block">${ring.toUpperCase()}</span>
                     </div>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" class="sr-only peer" ${p.enabled ? 'checked' : ''} onchange="window.togglePlugin('${p.name}', this.checked)">
-                        <div class="w-9 h-5 bg-white/5 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-400 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-600 peer-checked:after:bg-white border border-white/10"></div>
-                    </label>
-                </div>
-
-                <div class="relative">
-                    <h3 class="text-sm font-bold text-white mb-1">${p.name}</h3>
-                    <p class="text-[10px] text-slate-500 font-mono mb-4 uppercase tracking-widest">${p.entrypoint}</p>
-                    
-                    <div class="flex flex-wrap gap-2">
-                        <span class="px-2 py-0.5 rounded-md bg-white/[0.03] border border-white/5 text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Ring: ${p.hook}</span>
-                        <span class="px-2 py-0.5 rounded-md bg-white/[0.03] border border-white/5 text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Priority: ${p.priority}</span>
-                        <span class="px-2 py-0.5 rounded-md bg-orange-500/10 border border-orange-500/20 text-[9px] font-bold text-orange-400 uppercase tracking-tighter">Python v3</span>
+                    <div class="flex items-center gap-1.5">
+                        ${p.version ? `<span class="text-[8px] font-mono text-slate-500">${p.version}</span>` : ''}
+                        <div class="w-2 h-2 rounded-full ${enabled ? 'bg-emerald-400' : 'bg-slate-600'}"></div>
                     </div>
                 </div>
-            </div>
-        `).join('');
-
-    } catch (e) {
-        grid.innerHTML = '<div class="col-span-full text-center py-10 text-slate-500">Failed to load neural modules.</div>';
+                <p class="text-[9px] text-slate-500 font-mono truncate">${p.entrypoint || ''}</p>
+            `;
+            grid.appendChild(card);
+        });
+    } catch {
+        grid.innerHTML = '<p class="text-[10px] text-slate-500 italic col-span-2">Failed to load plugins.</p>';
     }
 }

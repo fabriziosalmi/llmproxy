@@ -6,10 +6,9 @@ import { api } from './services/api.js';
 import { renderSidebar, initSidebar } from './components/sidebar.js';
 import { renderContent, initNavigation } from './components/content.js';
 import { renderRegistry, fetchRegistry, initRegistry } from './components/registry.js';
-import { renderProxy, initProxy } from './components/proxy.js';
-import { renderDashboard } from './components/dashboard.js';
-import { initChat } from './components/chat.js';
-import { renderSettings } from './components/settings.js';
+import { initThreats, renderThreats } from './components/threats.js';
+import { initGuards, renderGuards } from './components/guards.js';
+import { renderSettings, initSettings } from './components/settings.js';
 import { initLogs } from './components/logs.js';
 import { initPlugins } from './components/plugins.js';
 import { auth } from './services/auth.js';
@@ -19,8 +18,8 @@ store.subscribe((state) => {
     renderSidebar();
     renderContent();
     renderRegistry();
-    renderProxy();
-    renderDashboard();
+    renderGuards();
+    renderThreats();
     renderSettings();
 });
 
@@ -92,10 +91,10 @@ async function init() {
     const initWrappers = [
         { name: 'sidebar', fn: initSidebar },
         { name: 'navigation', fn: initNavigation },
-        { name: 'dashboard', fn: renderDashboard },
+        { name: 'threats', fn: initThreats },
+        { name: 'guards', fn: initGuards },
         { name: 'registry', fn: initRegistry },
-        { name: 'proxy', fn: initProxy },
-        { name: 'chat', fn: initChat },
+        { name: 'settings', fn: initSettings },
         { name: 'logs', fn: initLogs },
         { name: 'plugins', fn: initPlugins },
     ];
@@ -175,12 +174,14 @@ function initHUD() {
 
         // 11.7: WASM-accelerated (simulated) High-Performance Indexer
         const commands = [
-            { id: 'toggle-proxy', name: 'System: Toggle Proxy Gate', desc: 'Kill/Start all neural traffic' },
-            { id: 'clear-logs', name: 'Terminal: Flush Buffer', desc: 'Clear xterm.js WebGL cache' },
-            { id: 'view-registry', name: 'Nav: Service Registry', desc: 'Inspect live endpoints' },
-            { id: 'view-chat', name: 'Nav: Neural Chat', desc: 'Direct interaction mode' },
-            { id: 'view-plugins', name: 'Nav: Plugin Hub', desc: 'Manage Neural OS modules' },
-            { id: 'zenith-hard-reset', name: 'Zenith: Hard Reset', desc: 'Clear all memory and restart' }
+            { id: 'view-threats', name: 'Nav: Threat Dashboard', desc: 'Security KPIs and event feed' },
+            { id: 'view-guards', name: 'Nav: Security Guards', desc: 'Toggle injection/PII/link guards' },
+            { id: 'view-plugins', name: 'Nav: Plugin Pipeline', desc: 'Ring-based security plugins' },
+            { id: 'view-endpoints', name: 'Nav: Endpoints', desc: 'LLM endpoint registry' },
+            { id: 'view-logs', name: 'Nav: Audit Log', desc: 'Security audit trail' },
+            { id: 'view-settings', name: 'Nav: Settings', desc: 'Identity, rate limits, system info' },
+            { id: 'toggle-proxy', name: 'System: Kill Switch', desc: 'Emergency halt all traffic' },
+            { id: 'clear-logs', name: 'Terminal: Clear Buffer', desc: 'Clear audit log terminal' },
         ];
 
         const cmdList = document.getElementById('cmd-list');
@@ -220,35 +221,18 @@ function initHUD() {
 
     function executeCommand(id) {
         const targets = {
-            'toggle-proxy': 'nav-proxy',
+            'toggle-proxy': 'panic-btn',
             'clear-logs': 'clear-logs-btn',
-            'view-registry': 'nav-registry',
-            'view-chat': 'nav-chat',
+            'view-threats': 'nav-threats',
+            'view-guards': 'nav-guards',
             'view-plugins': 'nav-plugins',
+            'view-endpoints': 'nav-endpoints',
+            'view-logs': 'nav-logs',
+            'view-settings': 'nav-settings',
         };
         const el = document.getElementById(targets[id]);
         if (el) el.click();
         console.info(`Executed HUD command: ${id}`);
-    }
-
-    // Telemetry Slide-over Drawer
-    const drawer = document.getElementById('telemetry-drawer');
-    const btn = document.getElementById('btn-telemetry');
-    const closeBtn = document.getElementById('close-telemetry-btn');
-    
-    if (drawer && btn && closeBtn) {
-        const toggleDrawer = () => {
-            if (drawer.classList.contains('translate-x-full')) {
-                drawer.classList.remove('translate-x-full');
-                drawer.classList.add('translate-x-0');
-            } else {
-                drawer.classList.remove('translate-x-0');
-                drawer.classList.add('translate-x-full');
-            }
-        };
-
-        btn.addEventListener('click', toggleDrawer);
-        closeBtn.addEventListener('click', toggleDrawer);
     }
 
     // UX Feature 21: Cinema Mode (Focus UI)

@@ -8,7 +8,7 @@ let fitAddon;
 let resizeListenerAttached = false;
 
 export function initLogs() {
-    const container = document.getElementById('terminal-container');
+    const container = document.getElementById('log-terminal');
     if (!container) return;
 
     // Remove any existing children
@@ -94,7 +94,7 @@ function appendLogToTerm(log) {
     if (!term) return;
 
     // Check filters
-    const filterInput = document.getElementById('log-pipe-filter');
+    const filterInput = document.getElementById('log-filter');
     if (filterInput && filterInput.value.trim() !== '') {
         const pipes = filterInput.value.split('|').map(s => s.trim().toLowerCase()).filter(s => s);
         const text = (log.message || "").toLowerCase();

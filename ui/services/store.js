@@ -1,16 +1,23 @@
 /**
- * LLMPROXY — Global State Management
+ * LLMProxy Security Gateway — Global State
  */
 
 export const store = {
     state: {
         isCollapsed: false,
-        currentTab: 'dashboard',
+        currentTab: 'threats',
         registry: [],
         proxyEnabled: true,
         priorityMode: false,
         features: {},
-        logSource: null
+        logSource: null,
+        // Security metrics
+        securityStats: {
+            requests: 0,
+            blocked: 0,
+            piiMasked: 0,
+            passRate: '100%',
+        },
     },
 
     listeners: [],

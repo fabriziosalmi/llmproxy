@@ -1,33 +1,30 @@
-# LLMProxy — Universal AI Gateway & Autonomous Agentic Mesh
+# LLMProxy — LLM Security Gateway
 
-Professional high-performance aggregator, intelligent load balancer, and autonomous discovery engine for Large Language Models. LLMProxy provides a unified, hardened interface for pluralistic AI environments with advanced security, zero-latency observability, and self-healing agent swarms.
+Security-first proxy for Large Language Models. LLMProxy provides a ring-based plugin pipeline, WASM-sandboxed plugin execution, NLP-powered PII detection, and a real-time Security Operations Center UI. The thesis: the LLM proxy with the best security plugin system.
 
 ## Table of Contents
 1. [Architecture Overview](#architecture-overview)
-2. [Core Components](#core-components)
-3. [API Reference](#api-reference)
-4. [Autonomous Agent Swarm](#autonomous-agent-swarm)
+2. [Security Pipeline](#security-pipeline)
+3. [Plugin Engine](#plugin-engine)
+4. [API Reference](#api-reference)
 5. [Security & Identity](#security--identity)
-6. [Plugin Engine](#plugin-engine)
-7. [Semantic Caching](#semantic-caching)
-8. [Observability & Export](#observability--export)
-9. [ChatOps & Webhooks](#chatops--webhooks)
-10. [Frontend HUD](#frontend-hud)
-11. [Configuration](#configuration)
-12. [Testing](#testing)
-13. [Installation & Deployment](#installation--deployment)
-14. [Advanced Features](#advanced-features)
+6. [Observability & Export](#observability--export)
+7. [Frontend SOC](#frontend-soc)
+8. [Configuration](#configuration)
+9. [Testing](#testing)
+10. [Installation & Deployment](#installation--deployment)
 
 ---
 
 ## Architecture Overview
 
-LLMProxy is engineered as a multi-tier, distributed system. It separates high-speed request processing (Edge Tier) from background autonomous operations (Agentic Tier), ensuring that system intelligence does not introduce latency into the critical path of inference.
+LLMProxy is a security-focused LLM proxy with a layered defense pipeline:
 
-### System Tiers
-- **Edge Tier (L7)**: ASGI-based request pipeline, OIDC/JWT authentication, Byte-Level Firewall, and Ring-based plugin pipeline.
-- **Agentic Tier (L2/L3)**: Supervisor-managed swarm for discovery, validation, and self-healing.
-- **Persistence Tier**: Multi-modal storage (SQLite for metadata/RBAC/budget, ChromaDB for semantic patterns).
+1. **ASGI Firewall** — Byte-level L7 request filtering
+2. **SecurityShield** — Injection scoring, PII masking (Presidio NLP + regex fallback), trajectory detection
+3. **Ring Plugin Pipeline** — 5-ring plugin engine (INGRESS → PRE_FLIGHT → ROUTING → POST_FLIGHT → BACKGROUND)
+4. **WASM Sandbox** — Extism-based sandboxed plugin execution for untrusted code
+5. **Rate Limiter** — Per-IP/per-key token bucket ASGI middleware
 
 ### Route Architecture
 The `RotatorAgent` orchestrates 6 route modules under `proxy/routes/`, each a factory function (`create_router(agent) -> APIRouter`):
@@ -52,30 +49,6 @@ Heavy dependencies (OpenTelemetry, Sentry) are lazily imported inside route hand
 | Observability | OpenTelemetry, Prometheus, Sentry |
 | Security | PyJWT, OIDC/JWKS, mTLS, Tailscale Zero-Trust |
 | Secrets | Infisical SDK + env fallback |
-
----
-
-## Core Components
-
-### 1. Agent Supervisor
-The heart of LLMProxy's background operations. Manages a DAG (Directed Acyclic Graph) of agents with exponential backoff restart and localized circuit breaking.
-
-### 2. SOTA Interface Agent (10x Discovery)
-Playwright-based autonomous discovery:
-- **Network Traffic Sniffing**: Intercepts fetch/XHR calls to discover hidden API endpoints.
-- **Genetic Evasion**: Non-linear mouse movements and micro-scroll jitter to bypass WAFs.
-- **Pattern Prediction**: Vector search (`PatternMemory`) predicts the correct API adapter based on structural similarity.
-
-### 3. Unified Adapter Engine
-Translates OpenAI-compatible requests into proprietary provider formats (Anthropic, HuggingFace, Local LLMs) in real-time, handling prompt templating and multi-modal payload mapping.
-
-### 4. Semantic Router & RL Rotator
-- **Complexity-Aware Routing**: Analyzes prompt complexity to route to the optimal model.
-- **Reinforcement Learning**: `RLRotator` learns from latency/cost/quality signals to optimize endpoint selection over time.
-
-### 5. Circuit Breaker & Federation
-- **Per-endpoint circuit breakers** with configurable thresholds.
-- **Federated Mesh**: Peer-to-peer request offloading between LLMProxy instances via Tailscale, with trust secret validation.
 
 ---
 
@@ -130,20 +103,6 @@ Translates OpenAI-compatible requests into proprietary provider formats (Anthrop
 
 ---
 
-## Autonomous Agent Swarm
-
-The swarm utilizes a Finite State Machine (FSM) for predictable transitions and robust error handling.
-
-| Agent | Module | Primary Intelligence |
-|-------|--------|----------------------|
-| **SOTA Interface** | `agents/sota_interface_agent.py` | Playwright-based API synthesis and WAF evasion. |
-| **Scanner** | `agents/scanner.py` | BFS traversal of web targets to identify potential LLM resources. |
-| **Validator** | `agents/validator.py` | Ground-truth verification of model logic and alignment. |
-| **Self-Healer** | `agents/self_healer.py` | Auto-remediation of registry drift and service degradation. |
-| **Distiller** | `agents/distiller.py` | High-fidelity dataset extraction for SLM fine-tuning. |
-
----
-
 ## Security & Identity
 
 ### Byte-Level Firewall (`core/firewall_asgi.py`)
@@ -156,7 +115,7 @@ ASGI middleware scanning request body bytes for injection patterns:
 Deep inspection layer wired pre-INGRESS in the request chain:
 - **Multi-turn trajectory detection**: Tracks prompt score history per session, detects escalating jailbreak attempts via sliding window analysis.
 - **Injection scoring**: Regex-based threat scoring with configurable threshold.
-- **PII detection & masking**: Regex-based detection of emails, phone numbers, SSNs. `mask_pii()` replaces PII with vault tokens; `demask_pii()` restores originals.
+- **PII detection & masking**: Dual-mode — Presidio NLP (opt-in, 18 entity types) with regex fallback (email, phone, SSN, credit card, IBAN). `mask_pii()` replaces PII with vault tokens; `demask_pii()` restores originals.
 - **Wired in `RotatorAgent.proxy_request()`**: Runs before the plugin INGRESS ring — blocked requests return 403 with diagnostic message.
 
 ### Identity & SSO (`core/identity.py`)
@@ -294,15 +253,6 @@ Install, uninstall, toggle, hot-swap, and rollback plugins via REST API. Plugin 
 
 ---
 
-## Semantic Caching
-
-ChromaDB-backed semantic similarity cache (`core/semantic_cache.py`):
-- **Embedding-based lookup**: Queries are embedded and matched against cached responses via cosine similarity.
-- **Configurable threshold**: Only returns cached response if similarity exceeds threshold (default 0.95).
-- **Optional**: Enabled via `config.yaml` caching section.
-
----
-
 ## Observability & Export
 
 ### Prometheus Metrics (`/metrics`)
@@ -340,101 +290,33 @@ ChromaDB-backed semantic similarity cache (`core/semantic_cache.py`):
 ### SQLite Replication (Planned)
 Litestream-based WAL-mode SQLite → S3 continuous replication is planned but not yet configured.
 
----
-
-## ChatOps & Webhooks
-
-### Webhook Dispatcher (`core/webhooks.py`)
-Generic HTTP POST dispatcher with platform-specific formatters:
-- **Slack**: Block Kit (`mrkdwn` sections).
-- **Microsoft Teams**: MessageCard with theme colors.
-- **Discord**: Embeds with severity-colored sidebars.
-- **Generic**: JSON payload with event metadata.
-
-7 event types: `circuit_open`, `budget_threshold`, `injection_blocked`, `endpoint_down`, `endpoint_recovered`, `auth_failure`, `panic_activated`.
-
-30-second debounce prevents webhook flooding for identical events.
-
-### Telegram Bot (`core/chatops.py`)
-Async long-polling bot (no webhook server required):
-
-| Command | Description |
-|---------|-------------|
-| `/status` | Proxy status and pool health. |
-| `/budget` | Budget consumption overview. |
-| `/approve <id>` | Approve a pending HITL request. |
-| `/reject <id>` | Reject a pending HITL request. |
-
-### Human-in-the-Loop (HITL)
-For "soft-violation" requests:
-1. SecurityShield flags the request.
-2. Request enters hold queue (5-minute timeout).
-3. Telegram notification sent to ops channel.
-4. Operator replies `/approve` or `/reject`.
-5. Request continues or is rejected.
-
-### Error Tracking
-The Telegram bot tracks errors via `track_error()` and can notify ops channels. Threshold-based auto-alerting is planned.
+### Webhooks (`core/webhooks.py`)
+- **Slack** (Block Kit), **Teams** (MessageCard), **Discord** (Embeds), **Generic** (JSON).
+- 7 event types: `circuit_open`, `budget_threshold`, `injection_blocked`, `endpoint_down`, `endpoint_recovered`, `auth_failure`, `panic_activated`.
+- 30-second debounce prevents flooding.
 
 ---
 
-## Frontend HUD
+## Frontend SOC
 
-Vanilla JS single-page application (`ui/`) with ES Modules, Tailwind CSS CDN, and a glassmorphism dark theme.
-
-### Design System
-- **Dual-Typeface**: Inter (UI) + JetBrains Mono (data/mono).
-- **Glassmorphism**: `backdrop-filter: blur(20px) saturate(180%)` on all panels.
-- **Grain overlay**: SVG noise at 2.8% opacity, mix-blend-mode overlay.
-- **Sub-pixel glow**: Hover-activated box-shadow on cards and topology nodes.
-- **Mobile responsive**: Sidebar overlay, adaptive grid (2→3→5 columns), touch-friendly.
+Security Operations Center UI — vanilla JS SPA (`ui/`) with Tailwind CSS, Chart.js, xterm.js.
 
 ### Views
 
-**Dashboard**
-- 5 KPI cards with unique sparklines (uptrend/plateau/descending).
-- Main chart with gradient fill, X-axis baseline, P99 SLA threshold line.
-- Latency color logic with live delta badges.
-
-**Registry**
-- Drag-and-drop priority reordering (HTML5 Drag API).
-- Inline priority editing with transparent input.
-- Health heatmap per endpoint (10-sample history).
-- Right-click context menu: Toggle, Copy ID, View Latency, Set Priority, Delete.
-- Click provider name → slide-over detail panel (400px) with Chart.js latency graph, health bars, and action buttons.
-
-**Chat**
-- Model dropdown selector: Router Auto, GPT-4o, Claude Sonnet 4, Llama 3.3 70B, Gemini 2.5 Pro, DeepSeek R1.
-- A/B/C Compare mode: 3-column parallel streaming from different models.
-- User/bot bubble differentiation with TTFT/token/cost telemetry on hover.
-- Token-aware live cost counter.
-
-**Proxy**
-- Unified system toggles with smooth animations.
-- Priority steering toggle with visual feedback.
-- xterm.js terminal with WebGL acceleration, JetBrains Mono font.
-- Live diff rendering (GitHub-style red/green with ANSI backgrounds).
-- Native JSON pretty-print with syntax highlighting (keys, strings, numbers, booleans, null).
-- Intelligent autoscroll with "+N hidden" badge.
-- Topology map with animated particle flow.
-- Feature toggles (language_guard, injection_guard, link_sanitizer) with per-feature descriptions.
-
-**Plugins**
-- Grid view of all loaded plugins with enable/disable toggles.
-- Ring, priority, and entrypoint metadata per plugin card.
-- Reload button with hot-swap animation.
-
-**Settings**
-- Password visibility toggle.
-- Regenerate key with double-click confirmation.
-- Emergency kill-switch with confirm dialog.
+| View | Description |
+|------|-------------|
+| **Threats** | KPI cards (requests/blocked/PII masked/pass rate), Chart.js threat timeline, SSE security event feed |
+| **Guards** | Master proxy toggle, per-guard enable/disable (Injection, Language, Link Sanitizer) with descriptions |
+| **Plugins** | Ring-based security plugin pipeline grid, hot-swap reload |
+| **Endpoints** | LLM endpoint registry table with toggle/delete actions |
+| **Audit Log** | xterm.js terminal with WebGL rendering, JSON syntax highlighting, security event filtering |
+| **Settings** | Identity & Access, rate limiting config, system info |
 
 ### Interactions
-- **Command Palette**: `Cmd+K` with fuzzy search.
-- **Skeleton shimmer loaders** on view transitions.
-- **Copy 1-click** with "COPIED!" feedback.
-- **Network heartbeat**: 5s ping, LIVE/OFFLINE indicator.
-- **Token Flow equalizer** with animated bars.
+- **Command Palette**: `Cmd+K` with fuzzy search across all views.
+- **Kill Switch**: Emergency halt button in sidebar footer.
+- **Network heartbeat**: 5s ping, LIVE/OFFLINE status indicator.
+- **Cinema Mode**: Press `F` for distraction-free view.
 
 ---
 
@@ -470,10 +352,9 @@ webhooks:
       url_env: "SLACK_WEBHOOK_URL"
       events: ["circuit_open", "budget_threshold", "panic_activated"]
 
-chatops:
-  telegram:
-    enabled: false
-    token_env: "TELEGRAM_BOT_TOKEN"
+rate_limiting:
+  enabled: true
+  requests_per_minute: 60
 
 observability:
   tracing: { enabled: true, service_name: "llmproxy" }
@@ -507,10 +388,10 @@ All sensitive values are loaded via **Infisical SDK** with environment variable 
 
 ## Testing
 
-127 tests across 10 modules, all passing on `pytest` + `pytest-asyncio`. The suite includes unit tests for every subsystem and full HTTP-level E2E integration tests against the real route handlers.
+158 tests across 13 modules, all passing. Unit tests for every subsystem + HTTP-level E2E integration tests.
 
 ```bash
-# Run full suite (127 tests)
+# Run full suite (158 tests)
 python -m pytest tests/ -v --ignore=tests/test_store.py --ignore=tests/integrated_test.py
 
 # Run a specific module
@@ -529,8 +410,10 @@ python -m pytest tests/test_e2e.py -v
 | `test_plugin_engine.py` | 8 | AST scan (safe/forbidden: os/subprocess/exec/eval), allowed modules |
 | `test_identity.py` | 7 | OIDC verify, proxy JWT gen/verify/expire, role mapping |
 | `test_rbac.py` | 7 | Admin/user/viewer permissions, multi-role, quota, user CRUD |
+| `test_pii_detection.py` | 17 | Presidio NLP + regex PII detection, masking, vault, demasking |
+| `test_rate_limiter.py` | 8 | Token bucket, per-key isolation, auto-eviction |
+| `test_openapi_contracts.py` | 20 | OpenAPI schema validation, route presence, response shapes |
 | `test_webhooks.py` | 6 | Slack/Teams/Discord/Generic format, severity mapping |
-| `test_chatops.py` | 5 | Telegram polling, HITL approve/reject/timeout, error tracking |
 | `test_metrics.py` | 5 | Counter increment, error class, injection blocked, budget, circuit |
 
 ### E2E Test Architecture
@@ -548,9 +431,6 @@ cd llmproxy
 
 # Install dependencies
 pip install -r requirements.txt
-
-# Playwright setup (for SOTA Explorer agent)
-playwright install chromium
 
 # Copy env template and configure
 cp .env.example .env
@@ -598,6 +478,9 @@ The `docker-compose.yml` includes:
 
 ### Optional Dependencies
 ```bash
+# NLP-powered PII detection (Presidio)
+pip install presidio-analyzer presidio-anonymizer
+
 # Parquet export
 pip install pyarrow
 
@@ -608,22 +491,6 @@ pip install sentry-sdk[fastapi]
 pip install extism
 ```
 
-
----
-
-## Advanced Features
-
-### Federated Mesh (Tailscale)
-Leverages Tailscale mesh networks to discover and shard requests across idle GPU neighbors, creating a private, federated "AI Supercluster" without exposing endpoints to the public internet. Federation trust is verified via shared secret + Tailscale LocalAPI identity.
-
-### MCP (Model Context Protocol) Hub
-Tool registry for MCP-compatible tools. Currently a scaffolding module (`core/mcp_hub.py`) — planned for full tool execution in a future release.
-
-### Local LLM Fallback
-Automatic failover to local models (via LM Studio / Ollama) when:
-- All remote endpoints are down (circuit breakers open).
-- Budget limit reached (`fallback_to_local_on_limit: true`).
-- Pool success rate falls below threshold.
 
 ---
 
