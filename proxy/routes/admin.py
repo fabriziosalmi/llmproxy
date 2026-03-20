@@ -142,6 +142,45 @@ def create_router(agent) -> APIRouter:
             for role, perms in agent.rbac.permissions.items()
         }
 
+    @router.get("/api/v1/metrics/latency")
+    async def get_latency_metrics():
+        """Per-ring and per-plugin latency percentiles (P50/P95/P99)."""
+        plugin_stats = agent.plugin_manager.get_plugin_stats()
+        ring_latency = agent.plugin_manager.get_ring_latency()
+
+        # Also extract TTFT from Prometheus if available
+        from core.metrics import STREAMING_TTFT
+        ttft_samples = []
+        # Collect from ring traces
+        for trace in agent.plugin_manager._ring_traces:
+            if "ttft_ms" in trace:
+                ttft_samples.append(trace["ttft_ms"])
+
+        ttft_percentiles = agent.plugin_manager._percentiles(ttft_samples) if ttft_samples else {"p50": 0, "p95": 0, "p99": 0}
+
+        return {
+            "rings": ring_latency,
+            "plugins": {
+                name: {
+                    "avg_ms": s.get("avg_latency_ms", 0),
+                    "percentiles": s.get("latency_percentiles", {}),
+                    "invocations": s.get("invocations", 0),
+                }
+                for name, s in plugin_stats.items()
+            },
+            "ttft": {
+                "samples": len(ttft_samples),
+                **ttft_percentiles,
+            },
+        }
+
+    @router.get("/api/v1/metrics/ring-timeline")
+    async def get_ring_timeline():
+        """Recent request traces with per-ring execution breakdown."""
+        limit = 20
+        traces = agent.plugin_manager.get_ring_traces(limit)
+        return {"traces": traces, "count": len(traces)}
+
     @router.post("/api/v1/panic")
     async def emergency_panic():
         from core.webhooks import EventType

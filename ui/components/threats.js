@@ -12,7 +12,9 @@ export function initThreats() {
     initChart();
     initEventFeed();
     refreshMetrics();
+    refreshLatencyData();
     setInterval(refreshMetrics, 10000);
+    setInterval(refreshLatencyData, 10000);
 }
 
 async function refreshMetrics() {
@@ -174,6 +176,144 @@ function renderFirewallStats(guardsStatus) {
             </div>
         ` : ''}
     `;
+}
+
+const RING_COLORS = {
+    ingress: { bar: 'bg-rose-500/60', text: 'text-rose-400', label: 'INGRESS' },
+    pre_flight: { bar: 'bg-amber-500/60', text: 'text-amber-400', label: 'PRE-FLIGHT' },
+    routing: { bar: 'bg-sky-500/60', text: 'text-sky-400', label: 'ROUTING' },
+    post_flight: { bar: 'bg-violet-500/60', text: 'text-violet-400', label: 'POST-FLIGHT' },
+    background: { bar: 'bg-teal-500/60', text: 'text-teal-400', label: 'BACKGROUND' },
+};
+
+async function refreshLatencyData() {
+    try {
+        const [latency, timeline] = await Promise.all([
+            api.fetchLatencyMetrics().catch(() => null),
+            api.fetchRingTimeline().catch(() => null),
+        ]);
+        if (latency) {
+            renderRingLatencyBars(latency);
+            renderTTFT(latency.ttft);
+        }
+        if (timeline) renderRingTimeline(timeline.traces || []);
+    } catch {}
+}
+
+function renderRingLatencyBars(latency) {
+    const container = document.getElementById('ring-latency-bars');
+    if (!container) return;
+
+    const rings = latency.rings || {};
+    const ringNames = Object.keys(RING_COLORS);
+    const maxP99 = Math.max(1, ...ringNames.map(r => (rings[r]?.p99 || 0)));
+
+    if (ringNames.every(r => !rings[r]?.count)) {
+        container.innerHTML = `<p class="text-[9px] text-slate-600 font-mono">Collecting samples...</p>`;
+        return;
+    }
+
+    container.innerHTML = ringNames.map(ring => {
+        const r = rings[ring] || { p50: 0, p95: 0, p99: 0, count: 0 };
+        const rc = RING_COLORS[ring];
+        const barWidth = maxP99 > 0 ? Math.max(2, (r.p99 / maxP99) * 100) : 0;
+        return `
+            <div class="mb-2">
+                <div class="flex items-center justify-between mb-0.5">
+                    <span class="text-[8px] font-bold ${rc.text} uppercase tracking-wider">${rc.label}</span>
+                    <div class="flex items-center gap-3">
+                        <span class="text-[8px] font-mono text-slate-500">P50 <span class="text-white">${r.p50.toFixed(1)}ms</span></span>
+                        <span class="text-[8px] font-mono text-slate-500">P95 <span class="text-amber-400">${r.p95.toFixed(1)}ms</span></span>
+                        <span class="text-[8px] font-mono text-slate-500">P99 <span class="text-rose-400">${r.p99.toFixed(1)}ms</span></span>
+                        <span class="text-[7px] font-mono text-slate-600">${r.count}x</span>
+                    </div>
+                </div>
+                <div class="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                    <div class="h-full ${rc.bar} rounded-full transition-all" style="width: ${barWidth}%"></div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderTTFT(ttft) {
+    const container = document.getElementById('ttft-metrics');
+    if (!container) return;
+
+    if (!ttft || ttft.samples === 0) {
+        container.innerHTML = `<p class="text-[9px] text-slate-600 font-mono">No streaming data yet</p>`;
+        return;
+    }
+
+    const color = ttft.p95 > 1000 ? 'rose' : ttft.p95 > 500 ? 'amber' : 'emerald';
+    container.innerHTML = `
+        <div class="flex items-center gap-6 mb-3">
+            <div>
+                <span class="text-2xl font-black font-mono text-white">${ttft.p50.toFixed(0)}</span>
+                <span class="text-[10px] text-slate-500 ml-1">ms P50</span>
+            </div>
+            <div>
+                <span class="text-lg font-black font-mono text-${color}-400">${ttft.p95.toFixed(0)}</span>
+                <span class="text-[10px] text-slate-500 ml-1">ms P95</span>
+            </div>
+            <div>
+                <span class="text-lg font-black font-mono text-rose-400">${ttft.p99.toFixed(0)}</span>
+                <span class="text-[10px] text-slate-500 ml-1">ms P99</span>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <span class="text-[8px] font-mono text-slate-600">${ttft.samples} stream samples</span>
+            <div class="flex-1 h-1 bg-white/5 rounded-full overflow-hidden">
+                <div class="h-full bg-${color}-500/40 rounded-full" style="width: ${Math.min(100, (ttft.p50 / 2000) * 100)}%"></div>
+            </div>
+            <span class="text-[8px] font-mono text-slate-600">2s target</span>
+        </div>
+    `;
+}
+
+function renderRingTimeline(traces) {
+    const container = document.getElementById('ring-timeline');
+    if (!container) return;
+
+    if (!traces.length) {
+        container.innerHTML = `<p class="text-[9px] text-slate-600 font-mono">No request traces yet</p>`;
+        return;
+    }
+
+    container.innerHTML = traces.map(trace => {
+        const rings = trace.rings || {};
+        const total = trace.total_ms || 0;
+        const upstream = trace.upstream_ms || 0;
+        const ringNames = ['ingress', 'pre_flight', 'routing', 'post_flight', 'background'];
+        const maxMs = Math.max(1, total || Object.values(rings).reduce((s, r) => s + (r.duration_ms || 0), 0) + upstream);
+
+        const segments = ringNames.map(ring => {
+            const r = rings[ring];
+            if (!r) return '';
+            const rc = RING_COLORS[ring];
+            const width = Math.max(1, (r.duration_ms / maxMs) * 100);
+            const plugins = (r.plugins || []).map(p => `${p.name}: ${p.ms}ms`).join(', ');
+            return `<div class="${rc.bar} h-full rounded-sm" style="width: ${width}%" title="${rc.label}: ${r.duration_ms}ms\n${plugins}"></div>`;
+        }).join('');
+
+        const upstreamWidth = upstream > 0 ? Math.max(1, (upstream / maxMs) * 100) : 0;
+        const upstreamSeg = upstreamWidth > 0 ? `<div class="bg-emerald-500/60 h-full rounded-sm" style="width: ${upstreamWidth}%" title="Upstream: ${upstream}ms"></div>` : '';
+
+        const ts = trace.timestamp ? new Date(trace.timestamp * 1000).toLocaleTimeString() : '--';
+        const ttftBadge = trace.ttft_ms ? `<span class="text-[7px] font-mono text-sky-400 bg-sky-500/10 px-1 py-0.5 rounded">TTFT ${trace.ttft_ms}ms</span>` : '';
+
+        return `
+            <div class="flex items-center gap-3 group">
+                <span class="text-[8px] font-mono text-slate-600 w-16 shrink-0">${ts}</span>
+                <span class="text-[7px] font-mono text-slate-500 w-12 shrink-0">${trace.req_id || '--'}</span>
+                <div class="flex-1 h-3 bg-white/[0.03] rounded-full overflow-hidden flex">
+                    ${segments}${upstreamSeg}
+                </div>
+                <span class="text-[8px] font-mono text-white w-16 text-right shrink-0">${total.toFixed(0)}ms</span>
+                ${ttftBadge}
+            </div>
+        `;
+    }).join('');
 }
 
 function extractMetric(text, name) {

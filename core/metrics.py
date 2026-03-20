@@ -58,6 +58,14 @@ STREAMING_TTFT = Histogram(
     buckets=(0.01, 0.025, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0),
 )
 
+# ─── Ring execution metrics ───
+RING_LATENCY = Histogram(
+    'llm_proxy_ring_latency_seconds',
+    'Per-ring execution latency',
+    ['ring'],
+    buckets=(0.0005, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0),
+)
+
 # ─── Security metrics ───
 INJECTION_BLOCKED = Counter('llm_proxy_injection_blocked_total', 'Injection attempts blocked')
 AUTH_FAILURES = Counter('llm_proxy_auth_failures_total', 'Authentication failures', ['reason'])
@@ -112,6 +120,10 @@ class MetricsTracker:
     @staticmethod
     def track_auth_failure(reason: str):
         AUTH_FAILURES.labels(reason=reason).inc()
+
+    @staticmethod
+    def track_ring_latency(ring: str, duration: float):
+        RING_LATENCY.labels(ring=ring).observe(duration)
 
     @staticmethod
     def set_circuit_state(endpoint: str, is_open: bool):

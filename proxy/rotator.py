@@ -250,7 +250,9 @@ class RotatorAgent(BaseAgent):
                 raise HTTPException(status_code=403, detail=security_error)
 
             # RING 1: INGRESS (Auth, ZT, Rate Limit)
+            r1_start = time.perf_counter()
             await self.plugin_manager.execute_ring(PluginHook.INGRESS, ctx)
+            MetricsTracker.track_ring_latency("ingress", time.perf_counter() - r1_start)
             if ctx.stop_chain:
                 MetricsTracker.track_injection_blocked()
                 asyncio.create_task(self.webhooks.dispatch(
@@ -259,12 +261,16 @@ class RotatorAgent(BaseAgent):
                 raise HTTPException(status_code=403, detail=ctx.error or "Ingress Blocked")
 
             # RING 2: PRE-FLIGHT (PII masking, budget guard, loop breaker)
+            r2_start = time.perf_counter()
             await self.plugin_manager.execute_ring(PluginHook.PRE_FLIGHT, ctx)
+            MetricsTracker.track_ring_latency("pre_flight", time.perf_counter() - r2_start)
             if ctx.stop_chain:
                 return ctx.response
 
             # RING 3: ROUTING
+            r3_start = time.perf_counter()
             await self.plugin_manager.execute_ring(PluginHook.ROUTING, ctx)
+            MetricsTracker.track_ring_latency("routing", time.perf_counter() - r3_start)
             if ctx.stop_chain:
                 raise HTTPException(status_code=503, detail=ctx.error or "No Routing Target")
 
@@ -276,9 +282,20 @@ class RotatorAgent(BaseAgent):
             start_req = time.time()
             session = await self._get_session()
 
+            endpoint_id = getattr(target, 'id', str(target.url)) if target else 'unknown'
+
             if ctx.body.get("stream"):
+                ttft_start = time.perf_counter()
+                first_chunk_seen = False
+
                 async def stream_generator():
+                    nonlocal first_chunk_seen
                     async for chunk in self.model_adapter.stream(str(target.url), ctx.body, headers, session):
+                        if not first_chunk_seen:
+                            first_chunk_seen = True
+                            ttft = time.perf_counter() - ttft_start
+                            MetricsTracker.track_ttft(endpoint_id, ttft)
+                            ctx.metadata["ttft_ms"] = round(ttft * 1000, 2)
                         yield chunk
                 ctx.response = StreamingResponse(stream_generator(), media_type="text/event-stream")
             else:
@@ -287,12 +304,29 @@ class RotatorAgent(BaseAgent):
             ctx.metadata["duration"] = time.time() - start_req
 
             # RING 4: POST-FLIGHT (response sanitization, watermarking)
+            r4_start = time.perf_counter()
             await self.plugin_manager.execute_ring(PluginHook.POST_FLIGHT, ctx)
+            MetricsTracker.track_ring_latency("post_flight", time.perf_counter() - r4_start)
             if ctx.stop_chain:
                 return JSONResponse(content={"error": ctx.error}, status_code=403)
 
             # RING 5: BACKGROUND (telemetry, export)
-            asyncio.create_task(self.plugin_manager.execute_ring(PluginHook.BACKGROUND, ctx))
+            async def _bg_ring():
+                r5_start = time.perf_counter()
+                await self.plugin_manager.execute_ring(PluginHook.BACKGROUND, ctx)
+                MetricsTracker.track_ring_latency("background", time.perf_counter() - r5_start)
+            asyncio.create_task(_bg_ring())
+
+            # Store total pipeline latency in trace
+            total_ms = (time.time() - start_total) * 1000
+            req_id = ctx.metadata.get("req_id", "unknown")
+            for trace in reversed(self.plugin_manager._ring_traces):
+                if trace.get("req_id") == req_id:
+                    trace["total_ms"] = round(total_ms, 2)
+                    trace["upstream_ms"] = round(ctx.metadata.get("duration", 0) * 1000, 2)
+                    if "ttft_ms" in ctx.metadata:
+                        trace["ttft_ms"] = ctx.metadata["ttft_ms"]
+                    break
 
             return ctx.response
 

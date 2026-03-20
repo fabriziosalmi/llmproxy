@@ -167,6 +167,12 @@ class PluginManager:
         self._plugin_meta: Dict[str, Dict[str, Any]] = {}  # name → metadata for marketplace
         self._plugin_instances: Dict[str, BasePlugin] = {}  # name → BasePlugin instances
         self._plugin_stats: Dict[str, Dict[str, Any]] = {}  # name → per-plugin metrics
+        # Per-plugin latency histogram (rolling window for P50/P95/P99)
+        self._latency_window: Dict[str, list] = {}  # name → last N latency samples
+        self._latency_window_size = 500
+        # Per-ring timing for last N requests (circular buffer for timeline)
+        self._ring_traces: list = []  # [{req_id, timestamp, rings: {hook: {start, end, plugins: [{name, ms}]}}}]
+        self._ring_traces_max = 100
 
     def _init_stats(self, name: str):
         """Initialize per-plugin stats tracker."""
@@ -178,15 +184,31 @@ class PluginManager:
                 "timeouts": 0,
                 "total_latency_ms": 0.0,
             }
+        if name not in self._latency_window:
+            self._latency_window[name] = []
+
+    @staticmethod
+    def _percentiles(samples: list) -> Dict[str, float]:
+        """Compute P50/P95/P99 from a list of latency samples."""
+        if not samples:
+            return {"p50": 0, "p95": 0, "p99": 0}
+        s = sorted(samples)
+        n = len(s)
+        return {
+            "p50": round(s[int(n * 0.50)], 2),
+            "p95": round(s[min(int(n * 0.95), n - 1)], 2),
+            "p99": round(s[min(int(n * 0.99), n - 1)], 2),
+        }
 
     def get_plugin_stats(self, name: str = None) -> Any:
-        """Get per-plugin metrics. If name is None, return all."""
+        """Get per-plugin metrics with P50/P95/P99 latency. If name is None, return all."""
         if name:
             stats = self._plugin_stats.get(name, {})
             inv = stats.get("invocations", 0)
             return {
                 **stats,
                 "avg_latency_ms": round(stats["total_latency_ms"] / inv, 2) if inv > 0 else 0,
+                "latency_percentiles": self._percentiles(self._latency_window.get(name, [])),
             }
         # All plugins
         result = {}
@@ -195,8 +217,28 @@ class PluginManager:
             result[pname] = {
                 **stats,
                 "avg_latency_ms": round(stats["total_latency_ms"] / inv, 2) if inv > 0 else 0,
+                "latency_percentiles": self._percentiles(self._latency_window.get(pname, [])),
             }
         return result
+
+    def get_ring_traces(self, limit: int = 20) -> list:
+        """Get recent ring execution traces for timeline visualization."""
+        return list(reversed(self._ring_traces[-limit:]))
+
+    def get_ring_latency(self) -> Dict[str, Any]:
+        """Aggregate ring-level latency percentiles from recent traces."""
+        ring_samples: Dict[str, list] = {h.value: [] for h in PluginHook}
+        for trace in self._ring_traces:
+            for ring_name, ring_data in trace.get("rings", {}).items():
+                if ring_name in ring_samples:
+                    ring_samples[ring_name].append(ring_data["duration_ms"])
+        return {
+            ring: {
+                "count": len(samples),
+                **self._percentiles(samples),
+            }
+            for ring, samples in ring_samples.items()
+        }
 
     async def load_plugins(self):
         """Discovers and loads plugins based on manifest.yaml."""
@@ -347,6 +389,9 @@ class PluginManager:
         Fail policy (open/closed) is per-plugin configurable (Principle 1).
         PluginResponse is validated (Principle 3).
         """
+        ring_start = time.perf_counter()
+        ring_plugin_timings = []
+
         for p in self.rings[hook]:
             if context.stop_chain:
                 break
@@ -455,9 +500,36 @@ class PluginManager:
                     context.stop_chain = True
             finally:
                 elapsed_ms = (time.perf_counter() - t0) * 1000
+                ring_plugin_timings.append({"name": name, "ms": round(elapsed_ms, 2)})
                 if stats:
                     stats["invocations"] += 1
                     stats["total_latency_ms"] += elapsed_ms
+                # Rolling latency window for percentile calculation
+                window = self._latency_window.get(name)
+                if window is not None:
+                    window.append(elapsed_ms)
+                    if len(window) > self._latency_window_size:
+                        del window[:len(window) - self._latency_window_size]
+
+        # Record ring timing for request trace
+        ring_elapsed_ms = (time.perf_counter() - ring_start) * 1000
+        req_id = context.metadata.get("req_id", "unknown")
+        if req_id != "unknown":
+            # Find or create trace entry for this request
+            trace = None
+            for t in reversed(self._ring_traces):
+                if t["req_id"] == req_id:
+                    trace = t
+                    break
+            if trace is None:
+                trace = {"req_id": req_id, "timestamp": time.time(), "rings": {}}
+                self._ring_traces.append(trace)
+                if len(self._ring_traces) > self._ring_traces_max:
+                    del self._ring_traces[0]
+            trace["rings"][hook.value] = {
+                "duration_ms": round(ring_elapsed_ms, 2),
+                "plugins": ring_plugin_timings,
+            }
 
     async def _execute_wasm(self, plugin: Dict[str, Any], context: PluginContext):
         """

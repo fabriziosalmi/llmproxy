@@ -193,6 +193,39 @@
                     </div>
                 </div>
 
+                <!-- Latency Percentiles (P50/P95/P99) -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+                    <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-5">
+                        <div class="flex items-center justify-between mb-3">
+                            <h2 class="text-xs font-bold text-white">Ring Latency</h2>
+                            <span class="text-[8px] font-mono text-slate-600">P50 / P95 / P99</span>
+                        </div>
+                        <div id="ring-latency-bars">
+                            <p class="text-[9px] text-slate-600 font-mono">Collecting samples...</p>
+                        </div>
+                    </div>
+                    <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-5">
+                        <div class="flex items-center justify-between mb-3">
+                            <h2 class="text-xs font-bold text-white">TTFT — Time to First Token</h2>
+                            <span class="text-[8px] font-mono text-slate-600">Streaming</span>
+                        </div>
+                        <div id="ttft-metrics">
+                            <p class="text-[9px] text-slate-600 font-mono">No streaming data yet</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ring Execution Timeline -->
+                <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-xs font-bold text-white">Ring Execution Timeline</h2>
+                        <span class="text-[9px] font-mono text-slate-500">Last 20 requests</span>
+                    </div>
+                    <div id="ring-timeline" class="space-y-2 max-h-72 overflow-y-auto">
+                        <p class="text-[9px] text-slate-600 font-mono">No request traces yet</p>
+                    </div>
+                </div>
+
                 <!-- Threat Timeline Chart -->
                 <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-6">
                     <div class="flex items-center justify-between mb-4">
@@ -299,8 +332,59 @@
             <div id="view-plugins" class="content-view hidden">
                 <div class="flex items-center justify-between mb-4">
                     <h2 class="text-xs font-bold text-white">Security Plugin Pipeline</h2>
-                    <button id="reload-plugins-btn" class="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[10px] font-bold text-slate-400 transition-colors">Reload</button>
+                    <div class="flex items-center gap-2">
+                        <button id="rollback-plugins-btn" class="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 rounded-lg text-[10px] font-bold text-amber-400 transition-colors">Rollback</button>
+                        <button id="install-plugin-toggle-btn" class="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg text-[10px] font-bold text-emerald-400 transition-colors">+ Install</button>
+                        <button id="reload-plugins-btn" class="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[10px] font-bold text-slate-400 transition-colors">Reload</button>
+                    </div>
                 </div>
+
+                <!-- Plugin Install Form (collapsed by default) -->
+                <div id="plugin-install-form" class="hidden bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-emerald-500/20 p-5 mb-4">
+                    <h3 class="text-[11px] font-bold text-white mb-3">Install Plugin</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                        <div>
+                            <label class="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Name *</label>
+                            <input id="install-name" type="text" placeholder="my_plugin" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50">
+                        </div>
+                        <div>
+                            <label class="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Hook (Ring) *</label>
+                            <select id="install-hook" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50 bg-[#0a0a0c]">
+                                <option value="ingress">ingress (Ring 1)</option>
+                                <option value="pre_flight">pre_flight (Ring 2)</option>
+                                <option value="routing">routing (Ring 3)</option>
+                                <option value="post_flight">post_flight (Ring 4)</option>
+                                <option value="background">background (Ring 5)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Entrypoint *</label>
+                            <input id="install-entrypoint" type="text" placeholder="marketplace/my_plugin:MyPlugin" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50">
+                        </div>
+                        <div>
+                            <label class="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Timeout (ms)</label>
+                            <input id="install-timeout" type="number" value="500" min="10" max="5000" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                        <div>
+                            <label class="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Fail Policy</label>
+                            <select id="install-fail-policy" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50 bg-[#0a0a0c]">
+                                <option value="open">open (fail-open)</option>
+                                <option value="closed">closed (fail-closed)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Description</label>
+                            <input id="install-description" type="text" placeholder="What does this plugin do?" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50">
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-end gap-2">
+                        <button id="install-cancel-btn" class="px-3 py-1.5 text-[10px] font-bold text-slate-500 hover:text-white transition-colors">Cancel</button>
+                        <button id="install-submit-btn" class="px-4 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 rounded-lg text-[10px] font-bold text-emerald-400 transition-colors">Install & Hot-Swap</button>
+                    </div>
+                </div>
+
                 <div id="plugins-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <!-- Populated by plugins.js -->
                 </div>

@@ -14,6 +14,7 @@ const RING_COLORS = {
 export async function initPlugins() {
     await renderPluginList().catch(() => {});
 
+    // Reload button
     const btn = document.getElementById('reload-plugins-btn');
     if (btn) {
         btn.addEventListener('click', async () => {
@@ -27,6 +28,84 @@ export async function initPlugins() {
             }
             btn.textContent = 'Reload';
             btn.disabled = false;
+        });
+    }
+
+    // Rollback button
+    const rollbackBtn = document.getElementById('rollback-plugins-btn');
+    if (rollbackBtn) {
+        rollbackBtn.addEventListener('click', async () => {
+            if (!confirm('Rollback to previous plugin configuration?')) return;
+            rollbackBtn.textContent = 'Rolling back...';
+            rollbackBtn.disabled = true;
+            try {
+                await api.rollbackPlugins();
+                await renderPluginList();
+            } catch (e) {
+                console.error('Rollback failed:', e);
+            }
+            rollbackBtn.textContent = 'Rollback';
+            rollbackBtn.disabled = false;
+        });
+    }
+
+    // Install form toggle
+    const installToggle = document.getElementById('install-plugin-toggle-btn');
+    const installForm = document.getElementById('plugin-install-form');
+    if (installToggle && installForm) {
+        installToggle.addEventListener('click', () => {
+            installForm.classList.toggle('hidden');
+        });
+    }
+
+    // Install cancel
+    const cancelBtn = document.getElementById('install-cancel-btn');
+    if (cancelBtn && installForm) {
+        cancelBtn.addEventListener('click', () => installForm.classList.add('hidden'));
+    }
+
+    // Install submit
+    const submitBtn = document.getElementById('install-submit-btn');
+    if (submitBtn) {
+        submitBtn.addEventListener('click', async () => {
+            const name = document.getElementById('install-name')?.value?.trim();
+            const hook = document.getElementById('install-hook')?.value;
+            const entrypoint = document.getElementById('install-entrypoint')?.value?.trim();
+            const timeout = parseInt(document.getElementById('install-timeout')?.value || '500');
+            const failPolicy = document.getElementById('install-fail-policy')?.value || 'open';
+            const description = document.getElementById('install-description')?.value?.trim() || '';
+
+            if (!name || !hook || !entrypoint) {
+                alert('Name, Hook, and Entrypoint are required.');
+                return;
+            }
+
+            submitBtn.textContent = 'Installing...';
+            submitBtn.disabled = true;
+            try {
+                const result = await api.installPlugin({
+                    name, hook, entrypoint,
+                    type: 'python',
+                    timeout_ms: timeout,
+                    fail_policy: failPolicy,
+                    description,
+                    enabled: true,
+                });
+                if (result.status === 'installed') {
+                    installForm.classList.add('hidden');
+                    // Clear form
+                    document.getElementById('install-name').value = '';
+                    document.getElementById('install-entrypoint').value = '';
+                    document.getElementById('install-description').value = '';
+                    await renderPluginList();
+                } else {
+                    alert(`Install failed: ${result.detail || JSON.stringify(result)}`);
+                }
+            } catch (e) {
+                alert(`Install error: ${e.message}`);
+            }
+            submitBtn.textContent = 'Install & Hot-Swap';
+            submitBtn.disabled = false;
         });
     }
 }
@@ -55,6 +134,9 @@ async function renderPluginList() {
             const avgLat = s.avg_latency_ms || 0;
             const hasStats = inv > 0;
             const errRate = inv > 0 ? ((errs / inv) * 100).toFixed(1) : '0.0';
+
+            const pct = s.latency_percentiles || {};
+            const hasPercentiles = pct.p50 > 0 || pct.p95 > 0 || pct.p99 > 0;
 
             const card = document.createElement('div');
             card.className = `bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4 transition-all ${enabled ? '' : 'opacity-50'}`;
@@ -89,12 +171,46 @@ async function renderPluginList() {
                     </div>
                     <div class="text-center">
                         <p class="text-[10px] font-bold font-mono ${avgLat > 100 ? 'text-amber-400' : 'text-slate-600'}">${avgLat.toFixed(1)}</p>
-                        <p class="text-[7px] text-slate-600 uppercase">ms</p>
+                        <p class="text-[7px] text-slate-600 uppercase">ms avg</p>
                     </div>
                 </div>
+                ${hasPercentiles ? `
+                    <div class="mt-2 pt-2 border-t border-white/[0.04]">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[7px] text-slate-600 uppercase font-bold">Latency</span>
+                            <div class="flex items-center gap-2">
+                                <span class="text-[7px] font-mono text-slate-500">P50 <span class="text-white">${pct.p50.toFixed(1)}</span></span>
+                                <span class="text-[7px] font-mono text-slate-500">P95 <span class="text-amber-400">${pct.p95.toFixed(1)}</span></span>
+                                <span class="text-[7px] font-mono text-slate-500">P99 <span class="text-rose-400">${pct.p99.toFixed(1)}</span></span>
+                            </div>
+                        </div>
+                    </div>
+                ` : ''}
                 ${renderConfigFields(p)}
+                <div class="mt-2 pt-2 border-t border-white/[0.04] flex items-center justify-end gap-2">
+                    <button data-action="toggle-plugin" data-name="${p.name}" class="text-[8px] text-slate-500 hover:text-amber-400 px-2 py-0.5 rounded hover:bg-white/5 transition-colors">${enabled ? 'Disable' : 'Enable'}</button>
+                    <button data-action="uninstall-plugin" data-name="${p.name}" class="text-[8px] text-slate-500 hover:text-rose-400 px-2 py-0.5 rounded hover:bg-white/5 transition-colors">Uninstall</button>
+                </div>
             `;
             grid.appendChild(card);
+        });
+        // Wire toggle/uninstall buttons
+        grid.querySelectorAll('button[data-action]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const action = btn.dataset.action;
+                const name = btn.dataset.name;
+                if (action === 'toggle-plugin') {
+                    const plugin = plugins.find(p => p.name === name);
+                    if (plugin) {
+                        await api.togglePlugin(name, plugin.enabled === false);
+                        await renderPluginList();
+                    }
+                } else if (action === 'uninstall-plugin') {
+                    if (!confirm(`Uninstall plugin "${name}"? This will hot-swap.`)) return;
+                    await api.uninstallPlugin(name);
+                    await renderPluginList();
+                }
+            });
         });
     } catch {
         grid.innerHTML = `

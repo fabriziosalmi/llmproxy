@@ -138,6 +138,35 @@ export const api = {
         return await response.json();
     },
 
+    async fetchLatencyMetrics() {
+        const response = await fetch(`${BASE_URL}/api/v1/metrics/latency`);
+        return await response.json();
+    },
+
+    async fetchRingTimeline() {
+        const response = await fetch(`${BASE_URL}/api/v1/metrics/ring-timeline`);
+        return await response.json();
+    },
+
+    async installPlugin(data) {
+        const response = await fetch(`${BASE_URL}/api/v1/plugins/install`, {
+            method: 'POST',
+            body: JSON.stringify(data),
+            headers: { 'Content-Type': 'application/json' }
+        });
+        return await response.json();
+    },
+
+    async uninstallPlugin(name) {
+        const response = await fetch(`${BASE_URL}/api/v1/plugins/${name}`, { method: 'DELETE' });
+        return await response.json();
+    },
+
+    async rollbackPlugins() {
+        const response = await fetch(`${BASE_URL}/api/v1/plugins/rollback`, { method: 'POST' });
+        return await response.json();
+    },
+
     async sendChatMessage(text, model = 'auto') {
         return await fetch(`${BASE_URL}/v1/chat/completions`, {
             method: 'POST',
