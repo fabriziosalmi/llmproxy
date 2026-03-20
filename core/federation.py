@@ -39,12 +39,16 @@ class FederationManager:
 
     async def forward_to_peer(self, peer_url: str, body: Dict[str, Any], identity_headers: Dict[str, str]) -> Optional[Dict[str, Any]]:
         """Forwards a request to a peer proxy with federation security."""
+        if not self.enabled or not self.trust_secret:
+            logger.error("Federation forward aborted: disabled or missing secret")
+            return None
         logger.warning(f"Federation Swarm: Offloading request to peer {peer_url}")
         
         async with aiohttp.ClientSession() as session:
             try:
                 headers = identity_headers.copy()
-                headers["X-Federation-Secret"] = self.trust_secret
+                if self.trust_secret:
+                    headers["X-Federation-Secret"] = self.trust_secret
                 headers["X-Swarm-Node"] = "origin-proxy-alpha"
                 
                 async with session.post(

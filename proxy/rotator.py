@@ -48,6 +48,7 @@ from .adapters.openai import OpenAIAdapter
 class RotatorAgent(BaseAgent):
     def __init__(self, store: BaseRepository, assistant=None, config_path: str = "config.yaml"):
         super().__init__("rotator")
+        self._session: Optional[aiohttp.ClientSession] = None
         self.store = store
         self.config_path = config_path
         self.model_adapter = OpenAIAdapter() # Default adapter (Architect's Refinement)

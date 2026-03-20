@@ -5,6 +5,7 @@ import { store } from '../services/store.js';
 
 let term;
 let fitAddon;
+let resizeListenerAttached = false;
 
 export function initLogs() {
     const container = document.getElementById('terminal-container');
@@ -52,10 +53,13 @@ export function initLogs() {
     term.open(container);
     fitAddon.fit();
 
-    // Handle Window Resize
-    window.addEventListener('resize', () => {
-        if (fitAddon) fitAddon.fit();
-    });
+    // Handle Window Resize (attach once only)
+    if (!resizeListenerAttached) {
+        window.addEventListener('resize', () => {
+            if (fitAddon) fitAddon.fit();
+        });
+        resizeListenerAttached = true;
+    }
 
     // Connect Log Stream
     const BASE_URL = window.location.origin;
@@ -138,12 +142,13 @@ function appendLogToTerm(log) {
     
     if (isAtBottom) {
         term.scrollToBottom();
-        document.getElementById('log-paused-badge').classList.add('hidden', 'opacity-0');
+        const badge = document.getElementById('log-paused-badge');
+        if (badge) badge.classList.add('hidden', 'opacity-0');
     } else {
         const badge = document.getElementById('log-paused-badge');
-        badge.classList.remove('hidden', 'opacity-0');
+        if (badge) badge.classList.remove('hidden', 'opacity-0');
         const count = document.getElementById('log-missed-count');
-        count.innerText = parseInt(count.innerText) + 1;
+        if (count) count.innerText = parseInt(count.innerText || '0') + 1;
     }
 }
 
