@@ -2,7 +2,6 @@ import asyncio
 import logging
 from store.store import EndpointStore
 from agents.scanner import ScannerAgent
-from agents.crawler import CrawlerAgent
 from agents.sota_interface_agent import SOTAInterfaceAgent
 from agents.validator import ValidatorAgent
 from agents.advanced_validator import AdvancedValidatorAgent
@@ -71,7 +70,6 @@ async def main():
     
     # Initialize agents
     scanner = ScannerAgent(store)
-    crawler = CrawlerAgent()
     interface = SOTAInterfaceAgent(store, local_llm)
     validator = ValidatorAgent(store)
     adv_validator = AdvancedValidatorAgent(store)
@@ -96,7 +94,6 @@ async def main():
 
     # Register agents with supervisor
     supervisor.add_agent(scanner)
-    supervisor.add_agent(crawler)
     supervisor.add_agent(interface)
     supervisor.add_agent(validator)
     supervisor.add_agent(adv_validator)

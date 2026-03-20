@@ -6,6 +6,19 @@ from typing import Dict, List, Any, Optional
 
 logger = logging.getLogger(__name__)
 
+# Presidio opt-in: NLP-based PII detection when available, regex fallback otherwise
+try:
+    from presidio_analyzer import AnalyzerEngine, RecognizerResult
+    from presidio_anonymizer import AnonymizerEngine
+    from presidio_anonymizer.entities import OperatorConfig
+    _PRESIDIO_AVAILABLE = True
+    _presidio_analyzer = AnalyzerEngine()
+    _presidio_anonymizer = AnonymizerEngine()
+    logger.info("Presidio NLP engine loaded — enhanced PII detection active")
+except ImportError:
+    _PRESIDIO_AVAILABLE = False
+    logger.info("Presidio not installed — using regex PII detection (pip install presidio-analyzer presidio-anonymizer)")
+
 class SecurityShield:
     """Orchestrates security checks for incoming LLM requests (injection, PII, trajectory analysis)."""
     
@@ -52,33 +65,68 @@ class SecurityShield:
             
             await asyncio.sleep(0.05) # Hyper-fast polling
 
+    # Regex patterns used when Presidio is not available
+    _REGEX_PII_PATTERNS = [
+        (r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', 'EMAIL'),
+        (r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b', 'PHONE'),
+        (r'\b\d{3}-\d{2}-\d{4}\b', 'SSN'),
+        (r'\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b', 'CREDIT_CARD'),
+        (r'\b[A-Z]{2}\d{2}[\s]?[\dA-Z]{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{0,2}\b', 'IBAN'),
+    ]
+
+    # Presidio entity types to detect
+    _PRESIDIO_ENTITIES = [
+        "EMAIL_ADDRESS", "PHONE_NUMBER", "US_SSN", "CREDIT_CARD",
+        "PERSON", "LOCATION", "IBAN_CODE", "IP_ADDRESS",
+        "US_DRIVER_LICENSE", "US_PASSPORT", "DATE_TIME",
+    ]
+
     def _check_pii_leak(self, text: str) -> bool:
-        """Checks for common PII patterns in text using regex."""
-        import re as _re
-        # Simple PII patterns: emails, phone numbers, SSN-like
-        pii_patterns = [
-            r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',  # Email
-            r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b',  # Phone
-            r'\b\d{3}-\d{2}-\d{4}\b',  # SSN
-        ]
-        for pattern in pii_patterns:
-            if _re.search(pattern, text):
+        """Checks for PII in text. Uses Presidio NLP when available, regex fallback otherwise."""
+        if _PRESIDIO_AVAILABLE:
+            results = _presidio_analyzer.analyze(
+                text=text, language="en", entities=self._PRESIDIO_ENTITIES, score_threshold=0.7
+            )
+            return len(results) > 0
+
+        for pattern, _ in self._REGEX_PII_PATTERNS:
+            if re.search(pattern, text):
                 return True
         return False
 
     def mask_pii(self, text: str) -> str:
-        """Masks PII patterns with tokens and stores originals in vault for later demasking."""
-        if not self.enabled: return text
+        """Masks PII with vault tokens. Uses Presidio NLP when available, regex fallback otherwise."""
+        if not self.enabled:
+            return text
 
-        import re as _re
+        if _PRESIDIO_AVAILABLE:
+            return self._mask_pii_presidio(text)
+        return self._mask_pii_regex(text)
+
+    def _mask_pii_presidio(self, text: str) -> str:
+        """NLP-based PII masking via Presidio — detects names, addresses, IBANs, etc."""
+        results = _presidio_analyzer.analyze(
+            text=text, language="en", entities=self._PRESIDIO_ENTITIES, score_threshold=0.7
+        )
+        if not results:
+            return text
+
+        # Sort by start position descending to replace from end (preserves offsets)
+        results.sort(key=lambda r: r.start, reverse=True)
         masked = text
-        pii_patterns = [
-            (r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', 'EMAIL'),
-            (r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b', 'PHONE'),
-            (r'\b\d{3}-\d{2}-\d{4}\b', 'SSN'),
-        ]
-        for pattern, label in pii_patterns:
-            for match in _re.finditer(pattern, masked):
+        for result in results:
+            original = text[result.start:result.end]
+            label = result.entity_type.replace("_ADDRESS", "").replace("US_", "")
+            token = f"[PII_{label}_{uuid.uuid4().hex[:8]}]"
+            self.pii_vault[token] = original
+            masked = masked[:result.start] + token + masked[result.end:]
+        return masked
+
+    def _mask_pii_regex(self, text: str) -> str:
+        """Regex-based PII masking — fast fallback when Presidio is not installed."""
+        masked = text
+        for pattern, label in self._REGEX_PII_PATTERNS:
+            for match in re.finditer(pattern, masked):
                 original = match.group()
                 token = f"[PII_{label}_{uuid.uuid4().hex[:8]}]"
                 self.pii_vault[token] = original

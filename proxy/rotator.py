@@ -21,13 +21,10 @@ from models import EndpointStatus
 from core.metrics import MetricsTracker
 from core.tracing import TraceManager
 from core.vllm_engine import VLLMEngine
-from core.rate_limiter import DynamicRateLimiter
 from core.semantic_router import SemanticRouter
 from core.semantic_cache import SemanticCache
-from core.mcp_hub import MCPHub
 from core.load_predictor import LoadPredictor
 from core.zero_trust import ZeroTrustManager
-from core.federation import FederationManager
 from core.rbac import RBACManager
 from core.circuit_breaker import CircuitManager
 from core.rl_rotator import RLRotator
@@ -44,6 +41,47 @@ from core.chatops import TelegramBot
 from store.base import BaseRepository
 from .adapters.openai import OpenAIAdapter
 
+
+def create_app(agent) -> FastAPI:
+    """App factory: builds the FastAPI application with middleware and routes.
+
+    Separates app construction from agent lifecycle so the app can be
+    tested or reconstructed independently.
+    """
+    from core.rate_limiter import RateLimitMiddleware
+
+    app = FastAPI(title="LLMPROXY")
+    TraceManager.instrument_app(app)
+
+    cors_origins = agent.config.get("server", {}).get("cors_origins", ["*"])
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+    )
+    app.add_middleware(ByteLevelFirewallMiddleware)
+    app.add_middleware(RateLimitMiddleware, config=agent.config)
+
+    from .routes import (
+        admin_router, registry_router, identity_router,
+        plugins_router, telemetry_router, chat_router,
+    )
+    app.include_router(chat_router(agent))
+    app.include_router(admin_router(agent))
+    app.include_router(registry_router(agent))
+    app.include_router(identity_router(agent))
+    app.include_router(plugins_router(agent))
+    app.include_router(telemetry_router(agent))
+
+    # Serve frontend
+    ui_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ui")
+    if os.path.exists(ui_path):
+        app.mount("/ui", StaticFiles(directory=ui_path, html=True), name="ui")
+
+    return app
+
+
 class RotatorAgent(BaseAgent):
     def __init__(self, store: BaseRepository, assistant=None, config_path: str = "config.yaml"):
         super().__init__("rotator")
@@ -53,11 +91,10 @@ class RotatorAgent(BaseAgent):
         self.model_adapter = OpenAIAdapter() # Default adapter (Architect's Refinement)
         self.config = self._load_config()
         self.vllm = VLLMEngine(model_path=self.config.get("server", {}).get("vllm", {}).get("model_path"))
-        self.limiter = DynamicRateLimiter()
         self.router = SemanticRouter(assistant=assistant)
         self.rl_rotator = RLRotator()
         self.circuit_manager = CircuitManager(on_state_change=self._on_circuit_state_change)
-        
+
         # Initialize Semantic Cache
         cache_config = self.config.get("caching", {})
         if cache_config.get("enabled"):
@@ -68,18 +105,12 @@ class RotatorAgent(BaseAgent):
             )
         else:
             self.semantic_cache = None
-            
-        # Initialize MCP Hub
-        self.mcp_hub = MCPHub()
-        
+
         # Initialize Load Predictor
         self.predictor = LoadPredictor()
-        
+
         # Initialize Zero Trust Manager
         self.zt_manager = ZeroTrustManager(self.config)
-        
-        # Initialize Federation Manager
-        self.federation = FederationManager(self.config)
         
         # Initialize RBAC Manager
         self.rbac = RBACManager()
@@ -114,20 +145,7 @@ class RotatorAgent(BaseAgent):
         }
         self.log_queue = asyncio.Queue(maxsize=100)
         self.telemetry_queue = asyncio.Queue(maxsize=1000)
-        self.app = FastAPI(title="LLMPROXY")
-        TraceManager.instrument_app(self.app)
-        cors_origins = self.config.get("server", {}).get("cors_origins", ["*"])
-        self.app.add_middleware(
-            CORSMiddleware,
-            allow_origins=cors_origins,
-            allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
-            allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
-        )
-        
-        # 10.1: Add Speculative Guardrails at the byte level
-        self.app.add_middleware(ByteLevelFirewallMiddleware)
-        
-        # 10.2: Initialize Trajectory Memory
+
         self.plugin_manager = PluginManager()
         self.trajectory = TrajectoryBuffer()
 
@@ -139,9 +157,8 @@ class RotatorAgent(BaseAgent):
             config=self.config.get("plugins", {}),
             extra={"store": self.store},
         )
-        
-        self._setup_routes()
-        self._setup_static()
+
+        self.app = create_app(self)
 
     async def broadcast_event(self, event_type: str, data: Dict[str, Any]):
         """Broadcasts a real-time event to the telemetry queue (Shielded)."""
@@ -157,13 +174,6 @@ class RotatorAgent(BaseAgent):
         
         # 11.2: Protect telemetry from client disconnection aborts
         await asyncio.shield(_put())
-
-    def _setup_static(self):
-        # Serve the perfected cyber-dark UI
-        ui_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ui")
-        if os.path.exists(ui_path):
-            self.app.mount("/ui", StaticFiles(directory=ui_path, html=True), name="ui")
-            self.logger.info(f"UI mounted at /ui from {ui_path}")
 
     def _load_config(self):
         if os.path.exists(self.config_path):
@@ -199,19 +209,6 @@ class RotatorAgent(BaseAgent):
             asyncio.create_task(self.webhooks.dispatch(
                 EventType.ENDPOINT_RECOVERED, {"endpoint": endpoint}
             ))
-
-    def _setup_routes(self):
-        """J.6 Refactor: Include sub-routers instead of defining 27 routes inline."""
-        from .routes import (
-            admin_router, registry_router, identity_router,
-            plugins_router, telemetry_router, chat_router,
-        )
-        self.app.include_router(chat_router(self))
-        self.app.include_router(admin_router(self))
-        self.app.include_router(registry_router(self))
-        self.app.include_router(identity_router(self))
-        self.app.include_router(plugins_router(self))
-        self.app.include_router(telemetry_router(self))
 
     async def _add_log(self, message: str, level: str = "INFO", metadata: dict = None):
         """Shielded logging to ensure IO completes even if client disconnects."""
