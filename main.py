@@ -70,7 +70,8 @@ async def main():
     validator = ValidatorAgent(store)
     adv_validator = AdvancedValidatorAgent(store)
     rotator = RotatorAgent(store, assistant=local_llm)
-    admin = AdminAgent(store)
+    admin_port = config.get("server", {}).get("admin", {}).get("port", 8081)
+    admin = AdminAgent(store, port=admin_port)
     healer = SelfHealerAgent(store, local_llm)
     distiller = DistillerAgent(store)
     

@@ -15,7 +15,7 @@ export function renderProxy() {
     if (btn && dot && indicator) {
         if (proxyEnabled) {
             btn.classList.replace('bg-slate-700', 'bg-sky-500');
-            dot.style.transform = 'translateX(32px)';
+            dot.style.transform = 'translateX(24px)';
             const statusLabel = indicator.querySelector('span:last-child');
             if (statusLabel) {
                 statusLabel.className = "text-emerald-400 font-mono text-xs font-black uppercase tracking-tighter";
@@ -38,9 +38,11 @@ export function renderProxy() {
         container.innerHTML = '';
         Object.entries(features).forEach(([name, enabled]) => {
             const fBtn = document.createElement('button');
-            fBtn.className = `flex items-center gap-2 px-3 py-1 rounded-full border text-[8px] font-black uppercase tracking-widest transition-all ${enabled ? 'bg-sky-500/10 border-sky-500/30 text-sky-400 font-bold' : 'bg-white/5 border-white/10 text-slate-600'}`;
+            fBtn.className = `flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[9px] font-bold uppercase tracking-widest transition-all shadow-sm ${enabled ? 'bg-sky-500/10 border-sky-500/30 text-sky-400' : 'bg-white/5 border-white/10 text-slate-500 hover:bg-white/10 hover:text-slate-300'}`;
             fBtn.innerHTML = `
-                <div class="w-1.5 h-1.5 rounded-full ${enabled ? 'bg-sky-400 animate-pulse' : 'bg-slate-700'}"></div>
+                <div class="w-5 h-2.5 rounded-full flex items-center px-[2px] transition-all ${enabled ? 'bg-sky-500' : 'bg-slate-700 shadow-inner'}">
+                    <div class="w-1.5 h-1.5 bg-white rounded-full transition-all shadow-sm ${enabled ? 'transform translate-x-2.5' : ''}"></div>
+                </div>
                 ${name.replace(/_/g, ' ')}
             `;
             fBtn.onclick = () => api.toggleFeature(name, !enabled).then(f => store.update({ features: { ...features, [name]: f.enabled } }));

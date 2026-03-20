@@ -10,144 +10,214 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Custom Styles -->
     <link rel="stylesheet" href="style.css">
+    <!-- Premium Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        .font-mono { font-family: 'Fira Code', monospace !important; }
+    </style>
 </head>
-<body class="h-screen flex overflow-hidden">
+<body class="h-screen flex overflow-hidden selection:bg-sky-500/30">
 
     <!-- Collapsible Sidebar -->
     <aside id="sidebar" class="sidebar h-full flex flex-col glass-sidebar z-50 transition-all duration-300 w-64 shrink-0">
-        <div class="px-6 py-8 flex items-center justify-between">
+        <div class="px-5 py-6 flex items-center justify-between">
             <div class="flex items-center gap-3 overflow-hidden" id="logo-container">
-                <div class="w-8 h-8 rounded-xl bg-sky-500/10 flex items-center justify-center shrink-0 border border-sky-500/20">
-                    <svg class="w-5 h-5 text-sky-500 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="w-7 h-7 rounded-lg bg-sky-500/10 flex items-center justify-center shrink-0 border border-sky-500/20">
+                    <svg class="w-4 h-4 text-sky-500 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/>
                     </svg>
                 </div>
                 <div class="sidebar-text truncate">
-                    <h1 class="text-xs font-black tracking-widest text-white uppercase italic">LLMPROXY</h1>
-                    <span id="app-version-badge" class="text-[8px] font-mono font-bold text-sky-400 bg-sky-400/5 px-2 py-0.5 rounded-full border border-sky-400/10 tracking-widest">v0.1.0</span>
+                    <h1 class="text-xs font-black tracking-widest text-white uppercase italic leading-none">LLMPROXY</h1>
                 </div>
             </div>
-            <button id="sidebar-toggle-btn" class="p-1 hover:bg-white/5 rounded-lg text-slate-500 hover:text-white transition-all">
-                <svg id="toggle-icon-svg" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/></svg>
-            </button>
-        </div>
-
-        <nav class="flex-1 px-4 space-y-1.5 pt-4">
-            <button  id="nav-dashboard" class="nav-item active w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+        </div>        <nav class="flex-1 px-3 space-y-0.5 pt-2">
+            <button  id="nav-dashboard" class="nav-item active w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all">
+                <svg class="w-4 h-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
                 <span class="sidebar-text">Dashboard</span>
             </button>
-            <button  id="nav-registry" class="nav-item w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-500 transition-all">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+            <button  id="nav-registry" class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-white hover:bg-white/[0.02] transition-all">
+                <svg class="w-4 h-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
                 <span class="sidebar-text">Service Registry</span>
             </button>
-            <button  id="nav-proxy" class="nav-item w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-500 transition-all">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+            <button  id="nav-proxy" class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-white hover:bg-white/[0.02] transition-all">
+                <svg class="w-4 h-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
                 <span class="sidebar-text">Transparent Proxy</span>
             </button>
-            <button  id="nav-chat" class="nav-item w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-500 transition-all">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+            <button  id="nav-chat" class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-white hover:bg-white/[0.02] transition-all">
+                <svg class="w-4 h-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
                 <span class="sidebar-text">Neural Chat</span>
             </button>
-            <button  id="nav-settings" class="nav-item w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-500 transition-all">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/></svg>
+            <button  id="nav-settings" class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-white hover:bg-white/[0.02] transition-all">
+                <svg class="w-4 h-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37-2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/></svg>
                 <span class="sidebar-text">Operations</span>
             </button>
         </nav>
 
-        <div class="mt-auto p-4 border-t border-white/5">
-            <div class="user-pill flex items-center gap-3 p-2.5 bg-white/5 rounded-2xl ring-1 ring-white/10 overflow-hidden">
-                <div class="w-7 h-7 rounded-full bg-indigo-500 flex items-center justify-center font-bold text-[10px] text-white shrink-0 shadow-lg shadow-indigo-500/20">A</div>
-                <div class="sidebar-text truncate">
-                    <p class="text-[10px] font-bold text-white leading-none">Admin Profile</p>
-                    <p class="text-[8px] text-emerald-400 font-bold uppercase mt-1 tracking-tighter">Verified SOTA</p>
-                </div>
+        <div class="mt-auto flex flex-col">
+            <button id="sidebar-toggle-btn" class="w-full flex justify-center py-3 border-t border-white/5 text-slate-500 hover:text-white transition-all bg-black/20 hover:bg-black/40">
+                <svg id="toggle-icon-svg" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/></svg>
+            </button>
+            <div class="p-3 border-t border-white/5 bg-black/40">
+                <button class="w-full flex items-center gap-3 p-1.5 rounded hover:bg-white/5 transition-colors group">
+                    <div class="w-6 h-6 rounded bg-indigo-500 flex items-center justify-center font-medium text-[10px] text-white shrink-0">A</div>
+                    <div class="sidebar-text text-left flex-1 truncate">
+                        <p class="text-[11px] font-medium text-slate-200 group-hover:text-white transition-colors">Admin</p>
+                    </div>
+                </button>
             </div>
         </div>
     </aside>
+>
 
     <!-- Main Fluid Area -->
     <main class="flex-1 flex flex-col min-w-0 relative bg-[#050608]">
         
         <!-- Premium Navigation Header -->
-        <header class="h-14 flex items-center justify-between px-8 border-b border-white/5 bg-black/40 backdrop-blur-3xl z-40">
-            <div id="view-title" class="text-xs font-semibold text-slate-300 capitalize tracking-tight flex items-center gap-4">
+        <header class="h-12 flex items-center justify-between px-6 border-b border-white/5 bg-black/40 backdrop-blur-3xl z-40">
+            <div id="view-title" class="text-[13px] font-medium text-slate-200 capitalize flex items-center gap-3">
                 Dashboard
-                <div class="h-4 w-px bg-white/10"></div>
-                <span class="text-[10px] text-slate-500 font-mono">ID: 77a8-bf92-c011</span>
+                <div class="h-3 w-px bg-white/10"></div>
+                <span class="text-[10px] text-slate-500 font-mono tracking-wider">ID: 77a8-bf92-c010</span>
             </div>
-            <div class="flex items-center gap-6">
-                <div class="flex flex-col items-end">
-                    <span class="text-[8px] text-slate-500 font-bold uppercase tracking-widest mb-0.5">Proxy Success</span>
-                    <span class="text-emerald-400 font-mono text-xs tabular-nums font-bold">100%</span>
+            
+            <button id="btn-telemetry" class="flex items-center bg-white/[0.02] border border-white/5 rounded-full px-4 py-1.5 gap-5 shadow-inner hover:bg-white/5 focus:ring-1 focus:ring-white/20 transition-all outline-none cursor-pointer">
+                <div class="flex items-center gap-1.5" title="Proxy Success Rate">
+                    <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                    <span class="text-emerald-400 font-mono text-[11px] font-bold">100%</span>
                 </div>
-                <div class="flex flex-col items-end">
-                    <span class="text-[8px] text-slate-500 font-bold uppercase tracking-widest mb-0.5">Latency Index</span>
-                    <span class="text-sky-400 font-mono text-xs tabular-nums font-bold">0.42s</span>
+                <div class="h-3 w-px bg-white/10"></div>
+                <div class="flex items-center gap-1.5" title="Average Latency">
+                    <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <span class="text-sky-400 font-mono text-[11px] font-bold">0.42s</span>
                 </div>
-                <div class="h-8 w-px bg-white/10 mx-2"></div>
-                <div class="flex items-center gap-2">
-                    <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]"></div>
-                    <span class="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">System Pulse Active</span>
+                <div class="h-3 w-px bg-white/10"></div>
+                <div class="flex items-center gap-1.5" title="System Connection Active">
+                    <div id="network-pulse" class="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981] transition-transform"></div>
+                    <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                 </div>
-            </div>
+            </button>
         </header>
 
+        <!-- Global Event Ticker -->
+        <div class="h-7 w-full bg-white/[0.01] border-b border-white/5 overflow-hidden flex items-center px-6 relative shrink-0">
+            <div class="absolute left-6 z-10 bg-gradient-to-r from-[#050608] via-[#050608]/80 to-transparent w-16 h-full"></div>
+            <div id="event-ticker" class="whitespace-nowrap flex gap-12 text-[10px] font-mono text-slate-500 w-full animate-marquee">
+                <span class="text-rose-400 flex items-center gap-1.5"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg> [14:02:11] Prompt Injection blocked on 10.0.0.4</span>
+                <span class="text-emerald-400 flex items-center gap-1.5"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> [14:02:15] Route shifted to Groq Llama-3.3</span>
+                <span class="text-sky-400 flex items-center gap-1.5"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg> [14:02:16] Semantic Cache HIT (98%)</span>
+                <span class="text-emerald-400 flex items-center gap-1.5"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/></svg> [14:02:18] Client connected 192.168.1.5</span>
+                
+                <!-- Loop -->
+                <span class="text-rose-400 flex items-center gap-1.5"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg> [14:02:11] Prompt Injection blocked on 10.0.0.4</span>
+                <span class="text-emerald-400 flex items-center gap-1.5"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> [14:02:15] Route shifted to Groq Llama-3.3</span>
+                <span class="text-sky-400 flex items-center gap-1.5"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg> [14:02:16] Semantic Cache HIT (98%)</span>
+                <span class="text-emerald-400 flex items-center gap-1.5"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/></svg> [14:02:18] Client connected 192.168.1.5</span>
+            </div>
+            <div class="absolute right-0 z-10 bg-gradient-to-l from-[#050608] to-transparent w-16 h-full"></div>
+        </div>
+
         <!-- Dynamic Content Slot -->
-        <div id="content-slot" class="flex-1 overflow-auto p-8 relative">
+        <div id="content-slot" class="flex-1 overflow-auto p-6 relative">
             
             <!-- VIEW: Dashboard -->
-            <div id="view-dashboard" class="content-view space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                <div class="grid grid-cols-4 gap-6">
-                    <div class="glass p-5 rounded-3xl ring-1 ring-white/10 hover:ring-white/20 transition-all relative overflow-hidden group">
-                        <div class="absolute -right-4 -top-4 w-24 h-24 bg-sky-500/5 rounded-full blur-2xl group-hover:bg-sky-500/10 transition-all"></div>
-                        <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-3">Total Inferences</p>
-                        <h2 class="text-3xl font-bold tracking-tight text-white glow-text leading-none">12.4K</h2>
-                        <div class="mt-4 flex items-center gap-1.5">
-                            <span class="text-[10px] text-emerald-400 font-bold">+18.2%</span>
-                            <span class="text-[9px] text-slate-600 uppercase font-bold tracking-tighter">vs. last batch</span>
-                        </div>
-                    </div>
-                    <div class="glass p-5 rounded-3xl ring-1 ring-white/10 relative overflow-hidden group">
-                        <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-3">Active Adapters</p>
-                        <h2 class="text-3xl font-bold tracking-tight text-white glow-text leading-none">14</h2>
-                        <div class="mt-4 flex items-center gap-1.5">
-                            <span class="text-[10px] text-sky-400 font-bold">100% Bootstrap</span>
-                        </div>
-                    </div>
-                    <div class="glass p-5 rounded-3xl ring-1 ring-white/10 col-span-2 flex flex-col justify-between">
+            <div id="view-dashboard" class="content-view space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div class="grid grid-cols-5 gap-4">
+                    <div class="glass p-4 rounded-2xl ring-1 ring-white/10 hover:ring-white/20 transition-all relative overflow-hidden flex flex-col justify-between h-32">
                         <div class="flex items-center justify-between">
-                            <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Security Hardening Index</p>
-                            <span class="text-[10px] text-emerald-400 font-bold tracking-tighter uppercase px-2 py-0.5 bg-emerald-400/10 rounded-lg">High Shield</span>
+                            <p class="text-[9px] text-slate-400 font-medium uppercase tracking-widest">Inferences</p>
+                            <!-- Mini Sparkline placeholder -->
+                            <svg class="w-12 h-4 text-emerald-400/50" viewBox="0 0 100 20" preserveAspectRatio="none">
+                                <polyline fill="none" stroke="currentColor" stroke-width="2" points="0,20 20,10 40,15 60,5 80,10 100,0"/>
+                            </svg>
                         </div>
-                        <div class="flex items-end justify-between mt-4">
-                            <h2 class="text-2xl font-bold tracking-tight text-white tabular-nums leading-none">0.998 <span class="text-xs text-slate-500 font-medium">/ 1.0</span></h2>
-                            <div class="flex gap-1 mb-1">
-                                <div class="w-1.5 h-3 bg-emerald-500/20 rounded-full"></div>
-                                <div class="w-1.5 h-4 bg-emerald-500/40 rounded-full"></div>
-                                <div class="w-1.5 h-5 bg-emerald-500/60 rounded-full"></div>
-                                <div class="w-1.5 h-6 bg-emerald-500 rounded-full shadow-[0_0_8px_#10b981]"></div>
+                        <div>
+                            <h2 class="text-3xl font-bold tracking-tight text-white leading-none">12.4K</h2>
+                            <div class="mt-1 flex items-center gap-1.5">
+                                <span class="text-[10px] text-emerald-400 font-medium">+18.2%</span>
+                                <span class="text-[9px] text-slate-500 uppercase font-medium">vs last hr</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="glass p-4 rounded-2xl ring-1 ring-white/10 relative overflow-hidden flex flex-col justify-between h-32">
+                        <div class="flex items-center justify-between">
+                            <p class="text-[9px] text-slate-400 font-medium uppercase tracking-widest">Active Adapters</p>
+                            <svg class="w-12 h-4 text-sky-400/50" viewBox="0 0 100 20" preserveAspectRatio="none">
+                                <polyline fill="none" stroke="currentColor" stroke-width="2" points="0,15 30,15 40,5 60,5 70,10 100,10"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h2 class="text-3xl font-bold tracking-tight text-white leading-none">14</h2>
+                            <div class="mt-1 flex items-center gap-1.5">
+                                <span class="text-[10px] text-sky-400 font-medium">100% Bootstrap</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="glass p-4 rounded-2xl ring-1 ring-white/10 relative overflow-hidden flex flex-col justify-between h-32">
+                        <div class="flex items-center justify-between">
+                            <p class="text-[9px] text-slate-400 font-medium uppercase tracking-widest">Avg Latency</p>
+                            <div class="w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_8px_#f43f5e]"></div>
+                        </div>
+                        <div>
+                            <h2 class="text-3xl font-bold tracking-tight text-white leading-none">420<span class="text-sm text-slate-500 font-normal">ms</span></h2>
+                            <div class="mt-1 flex items-center gap-1.5">
+                                <span class="text-[10px] text-rose-400 font-medium">+12.5%</span>
+                                <span class="text-[9px] text-slate-500 uppercase font-medium">decline</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="glass p-4 rounded-2xl ring-1 ring-white/10 relative overflow-hidden flex flex-col justify-between h-32">
+                        <div class="flex items-center justify-between">
+                            <p class="text-[9px] text-slate-400 font-medium uppercase tracking-widest">Hardening</p>
+                            <span class="text-[9px] text-emerald-400 font-medium tracking-tighter uppercase px-1.5 py-0.5 bg-emerald-400/10 rounded">Max Shield</span>
+                        </div>
+                        <div>
+                            <div class="flex items-end justify-between">
+                                <h2 class="text-3xl font-bold tracking-tight text-white leading-none">0.99<span class="text-sm text-slate-500 font-normal"></span></h2>
+                                <div class="flex gap-1 mb-1">
+                                    <div class="w-1.5 h-2 bg-emerald-500/40 rounded-sm"></div>
+                                    <div class="w-1.5 h-3 bg-emerald-500/60 rounded-sm"></div>
+                                    <div class="w-1.5 h-4 bg-emerald-500 shadow-[0_0_8px_#10b981] rounded-sm"></div>
+                                </div>
+                            </div>
+                            <div class="mt-1 flex items-center gap-1.5">
+                                <span class="text-[10px] text-emerald-400 font-medium">Optimal</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- FinOps Burn Rate Card -->
+                    <div class="glass p-4 rounded-2xl ring-1 ring-white/10 relative overflow-hidden flex flex-col justify-between h-32">
+                        <div class="flex items-center justify-between">
+                            <p class="text-[9px] text-slate-400 font-medium uppercase tracking-widest">FinOps Burn</p>
+                            <svg class="w-12 h-4 text-rose-400/50" viewBox="0 0 100 20" preserveAspectRatio="none">
+                                <polyline fill="none" stroke="currentColor" stroke-width="2" points="0,20 20,20 40,15 60,10 80,10 100,2"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h2 class="text-3xl font-bold tracking-tight text-white leading-none">$0.04<span class="text-sm text-slate-500 font-normal">/hr</span></h2>
+                            <div class="mt-1 flex items-center gap-1.5">
+                                <span class="text-[10px] text-rose-400 font-medium tracking-tighter shadow-sm w-full block">Forecast: $1.20/d</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="glass p-8 rounded-[2rem] ring-1 ring-white/5 bg-gradient-to-tr from-white/[0.02] to-transparent">
-                    <div class="flex justify-between items-center mb-8">
+                <div class="glass p-6 rounded-2xl ring-1 ring-white/5 bg-gradient-to-tr from-white/[0.02] to-transparent">
+                    <div class="flex justify-between items-center mb-6">
                         <div>
-                            <h3 class="text-sm font-bold tracking-tight flex items-center gap-2">
-                                <svg class="w-4 h-4 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
-                                Global Performance Analytics
-                            </h3>
-                            <p class="text-[10px] text-slate-500 mt-1 uppercase tracking-widest font-bold">Inference latency over 24H</p>
+                            <h3 class="text-sm font-bold tracking-tight text-slate-200">Global Routing Latency</h3>
+                            <p class="text-[10px] text-slate-500 mt-0.5 uppercase tracking-widest font-medium">Step-resolution metrics (24H)</p>
                         </div>
                     </div>
-                    <div class="h-64 w-full">
+                    <div class="h-56 w-full relative">
                         <canvas id="mainChart"></canvas>
                     </div>
                 </div>
             </div>
-
             <!-- VIEW: Registry -->
             <div id="view-registry" class="content-view hidden space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
                 <div class="flex items-center justify-between">
@@ -157,8 +227,8 @@
                     </div>
                     <div class="flex items-center gap-4 px-6 py-3 bg-white/5 rounded-2xl border border-white/5">
                         <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Priority Steering</span>
-                        <button id="priority-mode-btn"  class="w-10 h-5 bg-slate-800 rounded-full flex items-center px-0.5 transition-all">
-                            <div class="w-4 h-4 bg-slate-500 rounded-full transition-all"></div>
+                        <button id="priority-mode-btn"  class="w-7 h-3.5 bg-slate-800 rounded-full flex items-center px-0.5 transition-all outline-none focus:ring-2 focus:ring-sky-500/40">
+                            <div class="w-2.5 h-2.5 bg-slate-500 rounded-full transition-all shadow-sm"></div>
                         </button>
                     </div>
                 </div>
@@ -176,7 +246,23 @@
                             </tr>
                         </thead>
                         <tbody id="registry-table-body" class="divide-y divide-white/5">
-                            <!-- Populated in app.js -->
+                            <!-- Skeleton Loader -->
+                            <tr class="animate-pulse">
+                                <td class="p-5"><div class="h-4 bg-white/5 rounded w-24"></div></td>
+                                <td class="p-5"><div class="h-6 bg-white/5 rounded mx-auto w-10"></div></td>
+                                <td class="p-5"><div class="h-4 bg-white/5 rounded w-16"></div></td>
+                                <td class="p-5"><div class="h-4 bg-white/5 rounded w-12"></div></td>
+                                <td class="p-5"><div class="h-5 bg-white/5 rounded w-16"></div></td>
+                                <td class="p-5 overflow-hidden flex justify-end gap-2"><div class="h-8 w-8 bg-white/5 rounded"></div><div class="h-8 w-8 bg-white/5 rounded"></div></td>
+                            </tr>
+                            <tr class="animate-pulse opacity-70">
+                                <td class="p-5"><div class="h-4 bg-white/5 rounded w-32"></div></td>
+                                <td class="p-5"><div class="h-6 bg-white/5 rounded mx-auto w-10"></div></td>
+                                <td class="p-5"><div class="h-4 bg-white/5 rounded w-20"></div></td>
+                                <td class="p-5"><div class="h-4 bg-white/5 rounded w-10"></div></td>
+                                <td class="p-5"><div class="h-5 bg-white/5 rounded w-16"></div></td>
+                                <td class="p-5 overflow-hidden flex justify-end gap-2"><div class="h-8 w-8 bg-white/5 rounded"></div><div class="h-8 w-8 bg-white/5 rounded"></div></td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
@@ -196,8 +282,8 @@
                                     <span class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-1">Current State</span>
                                     <span class="text-emerald-400 font-mono text-xs font-black uppercase tracking-tighter shadow-sm shadow-emerald-500/10">ACTIVE</span>
                                 </div>
-                                <button id="proxy-toggle-btn"  class="w-16 h-8 bg-sky-500 rounded-full flex items-center px-1 transition-all shadow-lg shadow-sky-500/20">
-                                    <div class="w-6 h-6 bg-white rounded-full shadow-md transition-all duration-300"></div>
+                                <button id="proxy-toggle-btn"  class="w-12 h-6 bg-sky-500 rounded-full flex items-center px-1 transition-all shadow-lg shadow-sky-500/20 outline-none focus:ring-2 focus:ring-slate-400/50">
+                                    <div class="w-4 h-4 bg-white rounded-full shadow-md transition-all duration-300"></div>
                                 </button>
                             </div>
                         </div>
@@ -213,18 +299,81 @@
                     </div>
                 </div>
 
+                <!-- Topology & Token Flow Micro-viz -->
+                <div class="grid grid-cols-3 gap-6">
+                    <div class="col-span-2 glass p-6 rounded-[2rem] border border-white/5 flex flex-col justify-center">
+                        <h3 class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">Neural Topology Map</h3>
+                        <div class="flex items-center justify-between text-xs font-mono">
+                            <div class="flex flex-col items-center gap-2">
+                                <div class="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center shadow-lg shadow-black group-hover:bg-slate-700 transition-colors">
+                                    <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                                </div>
+                                <span class="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Client</span>
+                            </div>
+                            <div class="flex-1 flex items-center justify-center px-4 relative">
+                                <div class="w-full h-px bg-gradient-to-r from-transparent via-sky-500/50 to-transparent"></div>
+                                <div class="absolute w-1.5 h-1.5 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8] animate-[ping_1.5s_linear_infinite]"></div>
+                            </div>
+                            <div class="flex flex-col items-center gap-2">
+                                <div class="w-12 h-12 rounded-2xl bg-sky-500/10 border border-sky-500/30 flex items-center justify-center shadow-xl shadow-sky-500/10">
+                                    <svg class="w-6 h-6 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                                </div>
+                                <span class="text-[9px] text-sky-400 font-bold uppercase tracking-widest">LLM Proxy</span>
+                            </div>
+                            <div class="flex-1 flex items-center justify-center px-4 relative">
+                                <div class="w-full h-px bg-gradient-to-r from-transparent via-emerald-500/50 to-transparent"></div>
+                                <div class="absolute w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399] animate-[ping_1s_linear_infinite]"></div>
+                            </div>
+                            <div class="flex flex-col items-center gap-2">
+                                <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center shadow-lg shadow-emerald-500/10">
+                                    <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                                </div>
+                                <span class="text-[9px] text-emerald-500 font-bold uppercase tracking-widest">Guardrail</span>
+                            </div>
+                            <div class="flex-1 flex items-center justify-center px-4 relative">
+                                <div class="w-full border-t border-dashed border-slate-500/50"></div>
+                            </div>
+                            <div class="flex flex-col items-center gap-2">
+                                <div class="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center shadow-lg shadow-black">
+                                    <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                                </div>
+                                <span class="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Upstream</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="glass p-6 rounded-[2rem] border border-white/5 flex flex-col justify-center gap-4">
+                        <h3 class="text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">Token Flow EQ</h3>
+                        <div class="flex items-end justify-center gap-1.5 h-12" id="token-eq">
+                            <div class="w-2.5 bg-emerald-500/80 rounded-t-[1px]" style="height: 30%; animation: eq 0.6s ease-in-out infinite alternate;"></div>
+                            <div class="w-2.5 bg-emerald-500/80 rounded-t-[1px]" style="height: 60%; animation: eq 0.4s ease-in-out infinite alternate-reverse;"></div>
+                            <div class="w-2.5 bg-sky-500/80 rounded-t-[1px]" style="height: 80%; animation: eq 0.5s ease-in-out infinite alternate;"></div>
+                            <div class="w-2.5 bg-sky-500/80 rounded-t-[1px]" style="height: 40%; animation: eq 0.7s ease-in-out infinite alternate-reverse;"></div>
+                            <div class="w-2.5 bg-emerald-500/80 rounded-t-[1px]" style="height: 90%; animation: eq 0.35s ease-in-out infinite alternate;"></div>
+                            <div class="w-2.5 bg-emerald-500/80 rounded-t-[1px]" style="height: 50%; animation: eq 0.65s ease-in-out infinite alternate-reverse;"></div>
+                            <div class="w-2.5 bg-sky-500/80 rounded-t-[1px]" style="height: 70%; animation: eq 0.5s ease-in-out infinite alternate;"></div>
+                            <div class="w-2.5 bg-sky-500/80 rounded-t-[1px]" style="height: 20%; animation: eq 0.45s ease-in-out infinite alternate-reverse;"></div>
+                        </div>
+                        <div class="text-center font-mono text-[10px] text-slate-400"><span class="text-emerald-400 font-bold">142</span> In / <span class="text-sky-400 font-bold">894</span> Out <span class="text-[8px] tracking-widest uppercase">tok/s</span></div>
+                    </div>
+                </div>
+
                 <div class="flex-1 flex flex-col glass rounded-[2rem] border border-white/5 bg-black/60 relative overflow-hidden group shadow-2xl">
                     <div class="absolute inset-x-0 top-0 h-10 bg-white/5 border-b border-white/5 flex items-center px-6 justify-between backdrop-blur-md z-10">
-                        <div class="flex gap-2">
-                            <div class="w-2 h-2 rounded-full bg-red-500/40"></div>
-                            <div class="w-2 h-2 rounded-full bg-amber-500/40"></div>
-                            <div class="w-2 h-2 rounded-full bg-emerald-500/40"></div>
+                        <div class="flex items-center gap-2 text-[9px] text-emerald-400 font-bold uppercase tracking-widest border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 rounded">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]"></span> RX/TX LIVE
                         </div>
-                        <span class="text-[9px] text-slate-600 font-black uppercase tracking-[0.2em]">TRANSPARENT LOG STREAM</span>
-                        <button  class="text-[8px] text-slate-500 hover:text-white font-bold uppercase tracking-widest">Clear</button>
+                        <div class="flex-1 max-w-sm mx-4 flex items-center relative">
+                            <svg class="w-3.5 h-3.5 text-slate-500 absolute left-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
+                            <input type="text" id="log-pipe-filter" placeholder="grep 'route' | grep 'error'..." class="w-full bg-black/40 border border-white/10 rounded border-b border-white/5 pl-9 pr-3 py-1.5 text-[10px] text-emerald-400 font-mono outline-none focus:border-emerald-500/40 focus:bg-black/60 transition-all placeholder-slate-600">
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <span id="log-paused-badge" class="hidden text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded bg-amber-500/20 text-amber-500 border border-amber-500/30 transition-all opacity-0">+<span id="log-missed-count">0</span> hidden</span>
+                            <button id="clear-logs-btn" class="text-[8px] text-slate-500 hover:text-white font-bold uppercase tracking-widest transition-colors outline-none cursor-pointer">Clear</button>
+                        </div>
                     </div>
-                    <div id="terminal-logs" class="flex-1 p-8 pt-14 font-mono text-[11px] leading-relaxed overflow-y-auto scrollbar-hide space-y-1">
-                        <div class="text-slate-500 italic opacity-50">Waiting for neural traffic link...</div>
+                    <div id="terminal-logs" class="flex-1 p-8 pt-14 font-mono text-[11px] leading-relaxed overflow-y-auto scrollbar-hide space-y-1 text-emerald-400 brighten">
+                        <div class="text-emerald-500/50 italic">Waiting for neural traffic link...</div>
                     </div>
                     <div class="absolute bottom-4 right-8 text-[9px] text-slate-700 font-mono pointer-events-none">TTY: /dev/prox0</div>
                 </div>
@@ -234,23 +383,28 @@
             <div id="view-chat" class="content-view hidden h-full flex flex-col space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
                 <div id="chat-scroller" class="flex-1 glass rounded-[2rem] p-8 overflow-y-auto space-y-8 border border-white/10 shadow-inner scrollbar-hide">
                     <div class="flex gap-5 items-start">
-                        <div class="w-9 h-9 rounded-2xl bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400 font-bold text-xs shrink-0">P</div>
-                        <div class="p-5 bg-white/[0.03] border border-white/5 rounded-3xl rounded-tl-sm text-sm leading-relaxed max-w-[85%] text-slate-200">
+                        <div class="w-9 h-9 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-xs shrink-0">P</div>
+                        <div class="p-5 bg-white/[0.03] border border-white/20 rounded-3xl rounded-tl-sm text-sm leading-relaxed max-w-xl text-slate-200">
                             <span class="block text-[10px] font-black tracking-widest text-emerald-400 uppercase mb-2">Neural Link Established</span>
                             Welcome Admin. The bootstrap pool is fully validated and ready for routing.
                         </div>
                     </div>
                 </div>
                 
-                <div class="relative group">
-                    <div class="absolute -top-10 left-4 px-3 py-1 bg-white/5 border border-white/10 rounded-xl flex items-center gap-2 group-focus-within:border-sky-500/5 transition-all">
-                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_4px_#10b981]"></span>
-                        <span id="active-model-token" class="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Auto-Routing: [Llama-3.3-70B]</span>
+                <div class="relative bg-white/[0.02] border border-white/10 rounded-[1.25rem] flex flex-col focus-within:border-sky-500/50 focus-within:bg-white/[0.04] transition-all shadow-2xl p-2 gap-2">
+                    <div class="flex items-center justify-between px-3 pt-2">
+                        <div class="flex items-center gap-2 bg-sky-500/10 px-2 py-0.5 rounded-md border border-sky-500/20">
+                            <span class="w-1.5 h-1.5 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]"></span>
+                            <span id="active-model-token" class="text-[9px] font-bold text-sky-400 uppercase tracking-widest">Router: [Llama-3.3-70B]</span>
+                        </div>
+                        <span class="text-[10px] text-slate-500 font-mono font-medium" id="token-counter">0 / 4096 tokens</span>
                     </div>
-                    <textarea id="chat-input" rows="1" placeholder="Type instructions or data for proxying..." class="w-full bg-white/[0.03] border border-white/10 rounded-2xl pl-6 pr-20 py-5 text-sm focus:ring-1 focus:ring-sky-500/50 focus:border-sky-500 outline-none transition-all resize-none shadow-2xl"></textarea>
-                    <button  class="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-sky-500 hover:bg-sky-600 rounded-xl flex items-center justify-center transition-all shadow-lg shadow-sky-500/30 group-focus-within:scale-105">
-                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
-                    </button>
+                    <div class="flex items-end gap-2 relative">
+                        <textarea id="chat-input" rows="1" placeholder="Type instructions or data for proxying..." class="w-full bg-transparent border-none pl-4 pr-16 py-3 text-sm text-slate-200 outline-none resize-none placeholder:text-slate-600 min-h-[44px] max-h-[200px]"></textarea>
+                        <button  class="absolute right-2 bottom-1.5 w-10 h-10 bg-sky-500/20 hover:bg-sky-500 text-sky-400 hover:text-white rounded-xl flex items-center justify-center transition-all shadow-lg focus:ring-2 focus:ring-sky-400 outline-none">
+                            <svg class="w-4 h-4 translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -285,14 +439,92 @@
                 <div class="glass p-8 rounded-3xl border border-white/5 space-y-6">
                     <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Master Routing Key</p>
                     <div class="flex gap-3">
-                        <input type="password" value="sk-proxy-premium-77a8bf92c011" disabled class="flex-1 bg-black/40 border border-white/5 rounded-2xl px-5 py-3 text-xs font-mono text-slate-400 outline-none">
-                        <button class="px-6 py-3 bg-white/5 hover:bg-white/10 rounded-2xl text-xs font-bold transition-all border border-white/5">Regenerate</button>
+                        <div class="relative flex-1">
+                            <input type="password" id="ops-master-key" value="sk-proxy-premium-77a8bf92c011" readonly class="w-full bg-black/40 border border-white/5 rounded-2xl pl-5 pr-20 py-3 text-xs font-mono text-slate-400 outline-none focus:border-white/10 transition-colors">
+                            <div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                                <button onclick="const el=document.getElementById('ops-master-key'); el.type=el.type==='password'?'text':'password'" class="p-1.5 text-slate-500 hover:text-white rounded-lg hover:bg-white/5 transition-all outline-none" title="Toggle visibility">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                </button>
+                                <button onclick="navigator.clipboard.writeText(document.getElementById('ops-master-key').value)" class="p-1.5 text-slate-500 hover:text-white rounded-lg hover:bg-white/5 transition-all outline-none" title="Copy to clipboard">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                                </button>
+                            </div>
+                        </div>
+                        <button class="px-6 py-3 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-2xl text-[10px] font-bold uppercase tracking-widest transition-all ring-1 ring-inset ring-rose-500/20 outline-none focus:ring-rose-500/50">Regenerate</button>
                     </div>
                 </div>
             </div>
 
         </div>
     </main>
+
+    <!-- Slide-over Drawer -->
+    <div id="telemetry-drawer" class="fixed inset-y-0 right-0 w-80 bg-[#0a0a0c]/95 backdrop-blur-3xl border-l border-white/10 z-[60] transform translate-x-full transition-transform duration-300 shadow-2xl flex flex-col">
+        <div class="p-6 border-b border-white/5 flex items-center justify-between">
+            <h3 class="text-xs font-bold uppercase tracking-widest text-slate-300">System Telemetry</h3>
+            <button id="close-telemetry-btn" class="p-2 text-slate-500 hover:text-white rounded-lg hover:bg-white/5 outline-none transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div class="p-6 space-y-6 flex-1 overflow-y-auto scrollbar-hide">
+            <div>
+                <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-3">Host Resources</p>
+                <div class="space-y-4">
+                    <div>
+                        <div class="flex justify-between text-[10px] font-mono mb-1"><span class="text-slate-400">CPU Usage</span><span class="text-emerald-400">12%</span></div>
+                        <div class="w-full h-1 bg-white/5 rounded-full"><div class="h-1 bg-emerald-500/80 rounded-full" style="width: 12%"></div></div>
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-[10px] font-mono mb-1"><span class="text-slate-400">RAM (Async)</span><span class="text-sky-400">1.4 GB</span></div>
+                        <div class="w-full h-1 bg-white/5 rounded-full"><div class="h-1 bg-sky-500/80 rounded-full" style="width: 45%"></div></div>
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-[10px] font-mono mb-1"><span class="text-slate-400">SQLite I/O</span><span class="text-rose-400">84%</span></div>
+                        <div class="w-full h-1 bg-white/5 rounded-full"><div class="h-1 bg-rose-500/80 rounded-full" style="width: 84%"></div></div>
+                    </div>
+                </div>
+            </div>
+            <div class="pt-6 border-t border-white/5">
+                <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-3">Daemon Status</p>
+                <div class="flex flex-col gap-2">
+                    <div class="flex items-center justify-between text-[10px] font-mono bg-white/[0.02] p-2 rounded border border-white/5">
+                        <span class="text-slate-400">Supervisor</span><span class="text-emerald-400 uppercase">Running</span>
+                    </div>
+                    <div class="flex items-center justify-between text-[10px] font-mono bg-white/[0.02] p-2 rounded border border-white/5">
+                        <span class="text-slate-400">Self-Healer</span><span class="text-amber-400 uppercase animate-pulse">Diagnosing</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Command Palette (Cmd+K) -->
+    <div id="cmd-palette-overlay" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] hidden items-start justify-center pt-[15vh]">
+        <div class="w-full max-w-xl bg-black/90 border border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.9)] rounded-2xl overflow-hidden transform scale-95 opacity-0 transition-all duration-200" id="cmd-palette-box">
+            <div class="flex items-center px-4 border-b border-white/5 relative">
+                <svg class="w-4 h-4 text-slate-500 absolute left-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                <input type="text" id="cmd-input" class="w-full bg-transparent border-none pl-8 pr-12 py-4 text-sm text-white placeholder-slate-600 outline-none" placeholder="Type a command or search logs...">
+                <span class="text-[9px] text-slate-600 font-mono font-bold border border-white/10 px-1.5 py-0.5 rounded absolute right-4">ESC</span>
+            </div>
+            <div class="p-2 max-h-72 overflow-y-auto">
+                <div class="px-3 py-2 text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Quick Actions</div>
+                <button class="w-full text-left flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-sky-500/10 hover:text-sky-400 text-slate-300 transition-colors group outline-none focus:bg-sky-500/10 focus:text-sky-400">
+                    <span class="text-xs font-medium flex items-center gap-2">
+                        <svg class="w-3.5 h-3.5 text-slate-500 group-hover:text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                        Purge Semantic Cache
+                    </span>
+                    <span class="text-[9px] font-mono text-slate-600 group-hover:text-sky-500/50">⌘+Shift+C</span>
+                </button>
+                <button class="w-full text-left flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-sky-500/10 hover:text-sky-400 text-slate-300 transition-colors group outline-none focus:bg-sky-500/10 focus:text-sky-400">
+                    <span class="text-xs font-medium flex items-center gap-2">
+                        <svg class="w-3.5 h-3.5 text-slate-500 group-hover:text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                        Restart Rotator Engine
+                    </span>
+                    <span class="text-[9px] font-mono text-slate-600 group-hover:text-sky-500/50">⌘+R</span>
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- Master App Logic -->
     <script type="module" src="main.js"></script>

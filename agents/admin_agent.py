@@ -9,9 +9,10 @@ import os
 
 class AdminAgent(BaseAgent):
     """Serves the Admin Dashboard UI."""
-    def __init__(self, store: EndpointStore):
+    def __init__(self, store: EndpointStore, port: int = 8081):
         super().__init__("admin")
         self.store = store
+        self.port = port
         self.app = FastAPI(title="LLM Proxy Admin")
         self._setup_routes()
 
@@ -54,8 +55,8 @@ class AdminAgent(BaseAgent):
                 "metadata": e.metadata
             } for e in endpoints])
 
-    async def run(self, port: int = 8081):
-        self.logger.info(f"Starting Admin Dashboard on port {port}...")
-        config = uvicorn.Config(self.app, host="0.0.0.0", port=port, log_level="error")
+    async def run(self):
+        self.logger.info(f"Starting Admin Dashboard on port {self.port}...")
+        config = uvicorn.Config(self.app, host="0.0.0.0", port=self.port, log_level="error")
         server = uvicorn.Server(config)
         await server.serve()

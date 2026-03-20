@@ -21,7 +21,7 @@ from core.base_agent import BaseAgent
 from store.store import EndpointStore
 from models import LLMEndpoint, EndpointStatus
 from core.metrics import MetricsTracker
-from core.tracing import TraceManager
+from core.tracing import TraceManager, start_span
 from core.vllm_engine import VLLMEngine
 from core.rate_limiter import DynamicRateLimiter
 from core.semantic_router import SemanticRouter, TaskComplexity
@@ -116,16 +116,11 @@ class RotatorAgent(BaseAgent):
         await self.telemetry_queue.put(event)
 
     def _setup_static(self):
-        # Point to the new React build directory
-        ui_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend", "dist")
+        # Serve the perfected cyber-dark UI
+        ui_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ui")
         if os.path.exists(ui_path):
             self.app.mount("/ui", StaticFiles(directory=ui_path, html=True), name="ui")
             self.logger.info(f"UI mounted at /ui from {ui_path}")
-        else:
-            # Fallback to legacy UI if React build is missing
-            legacy_ui = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ui")
-            if os.path.exists(legacy_ui):
-                self.app.mount("/ui", StaticFiles(directory=legacy_ui, html=True), name="ui")
 
     def _load_config(self):
         if os.path.exists(self.config_path):
@@ -351,7 +346,7 @@ class RotatorAgent(BaseAgent):
 
     async def proxy_request(self, request: Request, session_id: str = "default"):
         self.predictor.record_request()
-        with TraceManager.start_span("proxy_request"):
+        with start_span("proxy_request"):
             req_id = uuid.uuid4().hex[:8]
             await self.broadcast_event("proxy.request.start", {
                 "id": req_id, "method": request.method, "path": request.url.path, "ip": request.client.host

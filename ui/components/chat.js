@@ -24,8 +24,18 @@ async function sendUserMessage() {
     const text = input.value.trim();
     if (!text) return;
     
+    const triggerWord = text.toLowerCase().match(/(hack|ignore|bypass|system prompt|sk-)/);
+    
     input.value = '';
     appendMessage('user', text);
+    
+    // Simulate Guardrail Intervention
+    if (triggerWord) {
+        setTimeout(() => {
+            appendMessage('guardrail', `Analyzing payload stream for cognitive anomalies... Threat signature detected matching rule [CWE-89]. Segmenting context window: "${text.substring(0, 40)}..."`);
+        }, 400);
+        return;
+    }
     
     const thinkingDiv = appendMessage('system', '...');
     thinkingDiv.classList.add('animate-pulse');
@@ -52,15 +62,57 @@ function appendMessage(type, text) {
     
     if (type === 'user') {
         div.className = 'flex justify-end gap-4 animate-in fade-in slide-in-from-right-2';
-        div.innerHTML = `<div class="p-5 bg-sky-500 border border-sky-400 rounded-3xl rounded-tr-sm text-sm leading-relaxed max-w-[85%] text-white shadow-2xl shadow-sky-500/20">${text}</div>`;
+        div.innerHTML = `
+            <div class="flex flex-col items-end gap-1.5 group">
+                <div class="p-5 bg-slate-800 border border-slate-700/50 rounded-3xl rounded-tr-sm text-sm leading-relaxed max-w-xl text-sky-100 shadow-[0_8px_30px_rgba(0,0,0,0.5)]">${text}</div>
+                <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity mr-2 bg-white/[0.02] px-2 py-0.5 rounded-lg border border-white/5">
+                    <button class="p-1 hover:bg-white/10 rounded-lg transition-colors outline-none"><svg class="w-3.5 h-3.5 text-slate-500 hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg></button>
+                    <span class="text-[9px] font-mono text-slate-400 font-bold uppercase tracking-widest cursor-default">Variant 1/3 (GPT-4)</span>
+                    <button class="p-1 hover:bg-white/10 rounded-lg transition-colors outline-none"><svg class="w-3.5 h-3.5 text-slate-500 hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg></button>
+                </div>
+            </div>
+        `;
     } else if (type === 'bot') {
         div.className = 'flex gap-5 items-start animate-in fade-in slide-in-from-left-2';
-        div.innerHTML = `<div class="w-9 h-9 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-xs shrink-0">P</div>
-            <div class="p-5 bg-white/[0.03] border border-white/5 rounded-3xl rounded-tl-sm text-sm leading-relaxed max-w-[85%] text-slate-200">${text}</div>`;
+        div.innerHTML = `
+            <div class="w-9 h-9 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-xs shrink-0 shadow-[0_0_15px_rgba(16,185,129,0.15)]">P</div>
+            <div class="flex flex-col gap-2 relative group max-w-xl">
+                <div class="p-5 bg-white/[0.03] border border-white/20 rounded-3xl rounded-tl-sm text-sm leading-relaxed text-slate-200 shadow-xl">${text}</div>
+                <div class="flex gap-4 px-3 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-mono text-slate-500 tracking-wider items-center bg-white/[0.02] py-1 rounded-lg border border-white/5 w-fit">
+                    <span title="Time To First Token">TTFT: ${(Math.random()*80 + 20).toFixed(0)}ms</span>
+                    <span class="w-1 h-1 rounded-full bg-white/10"></span>
+                    <span>Tok: ${(Math.random()*400 + 50).toFixed(0)}</span>
+                    <span class="w-1 h-1 rounded-full bg-white/10"></span>
+                    <span>$${(Math.random()*0.003).toFixed(4)}</span>
+                    <span class="w-1 h-1 rounded-full bg-emerald-500/50"></span>
+                    <span class="text-sky-400 font-bold">via Groq</span>
+                </div>
+            </div>
+        `;
+    } else if (type === 'guardrail') {
+        div.className = 'flex gap-5 items-start animate-in fade-in slide-in-from-left-2';
+        div.innerHTML = `
+            <div class="w-9 h-9 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-500 font-black text-[10px] shrink-0 shadow-[0_0_15px_rgba(225,29,72,0.3)]">🛡️</div>
+            <div class="flex flex-col gap-2 relative max-w-xl group">
+                <div class="relative overflow-hidden p-5 bg-black/40 border border-rose-500/30 rounded-3xl rounded-tl-sm text-sm leading-relaxed text-slate-500">
+                    <div class="animate-[redact_1.5s_ease-in-out_forwards] absolute inset-y-0 left-0 bg-rose-500/20 mix-blend-color-burn border-r-2 border-rose-500 z-10 backdrop-blur-[1px]"></div>
+                    <span class="relative z-0 line-through decoration-rose-500/50 decoration-2">${text}</span>
+                    <div class="absolute inset-0 flex items-center justify-center bg-black/90 backdrop-blur-sm opacity-0 animate-[fade-in_0.5s_1.2s_forwards] z-20">
+                        <span class="text-[10px] font-black tracking-widest text-rose-500 uppercase px-3 py-1.5 border border-rose-500/50 bg-rose-500/10 rounded-lg shadow-[0_0_20px_rgba(225,29,72,0.4)]">REDACTED BY INJECTION GUARD</span>
+                    </div>
+                </div>
+            </div>
+        `;
     } else if (type === 'error') {
         div.className = 'flex gap-5 items-start animate-in fade-in slide-in-from-left-2';
-        div.innerHTML = `<div class="w-9 h-9 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400 font-bold text-xs shrink-0">!</div>
-            <div class="p-5 bg-red-500/5 border border-red-500/20 rounded-3xl rounded-tl-sm text-sm leading-relaxed max-w-[85%] text-red-200">${text}</div>`;
+        div.innerHTML = `<div class="w-9 h-9 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 font-bold text-xs shrink-0 shadow-[0_0_10px_rgba(225,29,72,0.2)]">!</div>
+            <div class="p-5 bg-rose-500/5 border border-rose-500/20 rounded-3xl rounded-tl-sm text-sm leading-relaxed max-w-xl text-rose-200/80 flex flex-col gap-4 shadow-lg">
+                <span>${text}</span>
+                <button class="self-start px-4 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-colors flex items-center gap-2 ring-1 ring-rose-500/30" onclick="document.getElementById('chat-input').value='${text.replace(/'/g, "\\'")}'; document.getElementById('chat-input').focus()">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                    Retry Connection
+                </button>
+            </div>`;
     } else {
         div.className = 'flex gap-5 items-start';
         div.innerHTML = `<div class="w-9 h-9 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-500 font-bold text-xs shrink-0">${text}</div>`;

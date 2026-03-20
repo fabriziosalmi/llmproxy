@@ -17,6 +17,9 @@ server:
   metrics:
     enabled: false
     port: 9091
+  admin:
+    enabled: true
+    port: 8081
   vllm:
     enabled: true
     model_path: "smollm-360m-instruct-mlx"

@@ -24,6 +24,14 @@ body {
     margin: 0;
 }
 
+/* 60fps Micro-interactions (FAANG Feature #25) */
+button, .cursor-pointer, input[type="text"], input[type="password"], input[type="number"], a {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+button:active, .cursor-pointer:active {
+    transform: scale(0.95);
+}
+
 /* Glassmorphism Classes */
 .glass {
     background: rgba(255, 255, 255, 0.03);
@@ -103,8 +111,65 @@ body {
 }
 
 /* Registry Row Glow */
-tr:hover .w-1.5 {
+tr:hover .w-1\.5 {
     box-shadow: 0 0 10px currentColor;
     transform: scale(1.2);
 }
-.w-1.5 { transition: all 0.3s ease; }
+.w-1\.5 { transition: all 0.3s ease; }
+
+/* Hide native number spinners for custom UI (Stepper fix) */
+input[type=number]::-webkit-inner-spin-button, 
+input[type=number]::-webkit-outer-spin-button { 
+  appearance: none;
+  -webkit-appearance: none; 
+  margin: 0; 
+}
+input[type=number] {
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+
+/* Data-Viz Equalizer */
+@keyframes eq {
+    0% { transform: scaleY(0.2); opacity: 0.6; }
+    100% { transform: scaleY(1.0); opacity: 1; filter: brightness(1.2); }
+}
+#token-eq > div {
+    transform-origin: bottom;
+}
+
+/* Event Ticker Marquee */
+@keyframes marquee {
+    0% { transform: translateX(20%); }
+    100% { transform: translateX(-100%); }
+}
+.animate-marquee {
+    animation: marquee 20s linear infinite;
+}
+.animate-marquee:hover {
+    animation-play-state: paused;
+}
+
+/* Guardrail Redaction */
+@keyframes redact {
+    0% { width: 0%; opacity: 1; }
+    80% { width: 100%; opacity: 1; }
+    98% { width: 100%; opacity: 1; border-color: #f43f5e; }
+    100% { width: 100%; opacity: 0; }
+}
+
+/* Cinema Mode */
+body.cinema-mode aside, 
+body.cinema-mode header,
+body.cinema-mode #event-ticker {
+    transform: translateY(-20px);
+    opacity: 0;
+    pointer-events: none;
+    position: absolute;
+}
+body.cinema-mode main {
+    background: #000;
+}
+
+
+
