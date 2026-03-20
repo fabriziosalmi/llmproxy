@@ -157,6 +157,26 @@
                     </div>
                 </div>
 
+                <!-- Extended Metrics -->
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4">
+                        <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Errors</p>
+                        <p id="kpi-errors" class="text-lg font-black text-red-400 font-mono">0</p>
+                    </div>
+                    <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4">
+                        <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Tokens</p>
+                        <p id="kpi-tokens" class="text-lg font-black text-sky-400 font-mono">0</p>
+                    </div>
+                </div>
+
+                <!-- Budget Gauge -->
+                <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-6">
+                    <h2 class="text-xs font-bold text-white mb-3">Daily Budget</h2>
+                    <div id="budget-gauge">
+                        <div class="text-[9px] text-slate-600 font-mono">Loading...</div>
+                    </div>
+                </div>
+
                 <!-- Threat Timeline Chart -->
                 <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-6">
                     <div class="flex items-center justify-between mb-4">
@@ -240,8 +260,21 @@
                     </div>
                 </div>
 
+                <!-- Priority Steering -->
+                <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-sm font-bold text-white">Priority Steering</h2>
+                            <p class="text-[10px] text-slate-500 mt-0.5">Route to highest-priority endpoint only</p>
+                        </div>
+                        <button id="priority-toggle-btn" class="relative w-14 h-7 rounded-full transition-colors bg-slate-700/50 border border-slate-600/30">
+                            <div id="priority-toggle-dot" class="absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-slate-500 transition-transform translate-x-0"></div>
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Security Guards Grid -->
-                <div id="guards-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div id="guards-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     <!-- Populated by guards.js -->
                 </div>
             </div>

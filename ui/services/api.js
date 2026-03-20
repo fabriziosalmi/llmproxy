@@ -91,6 +91,26 @@ export const api = {
         });
     },
 
+    async panic() {
+        const response = await fetch(`${BASE_URL}/api/v1/panic`, { method: 'POST' });
+        return await response.json();
+    },
+
+    async fetchPluginStats() {
+        const response = await fetch(`${BASE_URL}/api/v1/plugins/stats`);
+        return await response.json();
+    },
+
+    async fetchMetrics() {
+        const response = await fetch(`${BASE_URL}/metrics`);
+        return await response.text();
+    },
+
+    async fetchHealth() {
+        const response = await fetch(`${BASE_URL}/health`);
+        return await response.json();
+    },
+
     async sendChatMessage(text, model = 'auto') {
         return await fetch(`${BASE_URL}/v1/chat/completions`, {
             method: 'POST',

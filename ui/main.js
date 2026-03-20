@@ -258,23 +258,23 @@ function initHUD() {
         }
     });
 
-    // 15.9 Panic Kill-Switch Handler
+    // Kill Switch Handler
     const panicBtn = document.getElementById('panic-btn');
     if (panicBtn) {
         panicBtn.addEventListener('click', async () => {
-            if (confirm("EMERGENCY: Drop all traffic and halt proxy?")) {
+            if (confirm("EMERGENCY KILL SWITCH\n\nThis will immediately halt ALL proxy traffic.\nAre you sure?")) {
                 try {
-                    const res = await fetch('/api/v1/panic', { method: 'POST' });
-                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                    const data = await res.json();
+                    const data = await api.panic();
                     if (data.status === 'HALTED') {
-                        document.body.classList.add('panic-halt');
-                        showSection('proxy-view');
-                        alert("SYSTEM HALTED: Neural Proxy Disabled.");
+                        store.update({ proxyEnabled: false });
+                        panicBtn.innerHTML = `
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+                            HALTED`;
+                        panicBtn.classList.add('bg-rose-500/30', 'border-rose-500/50');
+                        document.getElementById('nav-guards')?.click();
                     }
                 } catch (e) {
-                    console.error('Panic endpoint failed:', e);
-                    alert("Panic request failed — check backend connectivity.");
+                    console.error('Kill switch failed:', e);
                 }
             }
         });

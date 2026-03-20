@@ -1,5 +1,5 @@
 /**
- * Threats View — Security dashboard with KPI cards, threat timeline, event feed.
+ * Threats View — Security dashboard with KPI cards, budget gauge, threat timeline, event feed.
  */
 import { store } from '../services/store.js';
 import { api } from '../services/api.js';
@@ -16,23 +16,76 @@ export function initThreats() {
 
 async function refreshMetrics() {
     try {
-        const metrics = await fetch(`${window.location.origin}/metrics`);
-        if (!metrics.ok) return;
-        const text = await metrics.text();
+        const text = await api.fetchMetrics();
 
         const requests = extractMetric(text, 'llm_proxy_requests_total') || 0;
         const blocked = extractMetric(text, 'llm_proxy_injection_blocked_total') || 0;
         const authFails = extractMetric(text, 'llm_proxy_auth_failures_total') || 0;
         const totalBlocked = blocked + authFails;
         const passRate = requests > 0 ? ((1 - totalBlocked / requests) * 100).toFixed(1) + '%' : '100%';
+        const errors = extractMetric(text, 'llm_proxy_request_errors_total') || 0;
+        const tokens = extractMetric(text, 'llm_proxy_token_usage_total') || 0;
+        const cost = extractMetric(text, 'llm_proxy_cost_total') || 0;
+        const budgetConsumed = extractMetric(text, 'llm_proxy_budget_consumed_usd') || 0;
+        const budgetLimit = extractMetric(text, 'llm_proxy_budget_limit_usd') || 0;
 
-        document.getElementById('kpi-requests').textContent = requests.toLocaleString();
-        document.getElementById('kpi-blocked').textContent = totalBlocked.toLocaleString();
-        document.getElementById('kpi-pii').textContent = '—';
-        document.getElementById('kpi-passrate').textContent = passRate;
+        // KPI cards
+        setText('kpi-requests', requests.toLocaleString());
+        setText('kpi-blocked', totalBlocked.toLocaleString());
+        setText('kpi-pii', blocked > 0 ? blocked.toLocaleString() : '0');
+        setText('kpi-passrate', passRate);
+
+        // Extended metrics
+        setText('kpi-errors', errors.toLocaleString());
+        setText('kpi-tokens', tokens > 1000 ? (tokens / 1000).toFixed(1) + 'k' : tokens.toLocaleString());
+
+        // Budget gauge
+        renderBudgetGauge(budgetConsumed, budgetLimit, cost);
+
     } catch {
         // Backend unavailable
     }
+}
+
+function setText(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+}
+
+function renderBudgetGauge(consumed, limit, totalCost) {
+    const container = document.getElementById('budget-gauge');
+    if (!container) return;
+
+    if (limit <= 0 && totalCost <= 0) {
+        container.innerHTML = `
+            <div class="flex items-center gap-3">
+                <div class="text-[9px] text-slate-600 font-mono">No budget configured</div>
+            </div>`;
+        return;
+    }
+
+    const pct = limit > 0 ? Math.min((consumed / limit) * 100, 100) : 0;
+    const color = pct > 80 ? 'rose' : pct > 50 ? 'amber' : 'emerald';
+    const remaining = limit > 0 ? (limit - consumed).toFixed(2) : '--';
+
+    container.innerHTML = `
+        <div class="flex items-center justify-between mb-2">
+            <div>
+                <span class="text-lg font-black font-mono text-white">$${consumed.toFixed(2)}</span>
+                ${limit > 0 ? `<span class="text-[10px] text-slate-500"> / $${limit.toFixed(2)}</span>` : ''}
+            </div>
+            <span class="text-[9px] font-mono text-${color}-400">${limit > 0 ? pct.toFixed(0) + '% used' : '$' + totalCost.toFixed(4) + ' total'}</span>
+        </div>
+        ${limit > 0 ? `
+            <div class="w-full h-2 bg-white/5 rounded-full overflow-hidden">
+                <div class="h-full bg-${color}-500/60 rounded-full transition-all" style="width: ${pct}%"></div>
+            </div>
+            <div class="flex justify-between mt-1">
+                <span class="text-[8px] text-slate-600 font-mono">$${remaining} remaining</span>
+                <span class="text-[8px] text-slate-600 font-mono">Daily reset</span>
+            </div>
+        ` : ''}
+    `;
 }
 
 function extractMetric(text, name) {
@@ -127,19 +180,19 @@ function initEventFeed() {
 function isSecurityEvent(entry) {
     const level = (entry.level || '').toUpperCase();
     const msg = (entry.message || '').toUpperCase();
-    return level === 'SECURITY' || level === 'WARNING' || level === 'ERROR' ||
+    return level === 'SECURITY' || level === 'WARNING' || level === 'ERROR' || level === 'CRITICAL' ||
         msg.includes('SHIELD') || msg.includes('BLOCK') || msg.includes('INJECT') ||
         msg.includes('PII') || msg.includes('FIREWALL') || msg.includes('AUTH') ||
-        msg.includes('RATE') || msg.includes('ZT');
+        msg.includes('RATE') || msg.includes('ZT') || msg.includes('PANIC') || msg.includes('BUDGET');
 }
 
 function addEventToFeed(feed, entry) {
-    // Remove placeholder
     const placeholder = feed.querySelector('p.italic');
     if (placeholder) placeholder.remove();
 
     const level = (entry.level || 'INFO').toUpperCase();
     const colors = {
+        CRITICAL: 'text-red-300 bg-red-500/20 border-red-500/30',
         SECURITY: 'text-rose-400 bg-rose-500/10 border-rose-500/20',
         WARNING: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
         ERROR: 'text-red-400 bg-red-500/10 border-red-500/20',
@@ -157,7 +210,6 @@ function addEventToFeed(feed, entry) {
 
     feed.insertBefore(el, feed.firstChild);
 
-    // Cap at 50 events
     while (feed.children.length > 50) {
         feed.removeChild(feed.lastChild);
     }

@@ -75,11 +75,10 @@ def create_router(agent) -> APIRouter:
     @router.post("/api/v1/panic")
     async def emergency_panic():
         from core.webhooks import EventType
-        agent.config["server"]["proxy_enabled"] = False
         agent.proxy_enabled = False
-        await agent._add_log("EMERGENCY: Panic Kill-Switch activated. ALL NEURAL TRAFFIC DROPPED.", level="CRITICAL")
+        await agent.store.set_state("proxy_enabled", False)
+        await agent._add_log("EMERGENCY: Panic Kill-Switch activated. ALL TRAFFIC DROPPED.", level="CRITICAL")
         await agent.webhooks.dispatch(EventType.PANIC_ACTIVATED, {"action": "kill_switch", "timestamp": time.strftime("%H:%M:%S")})
-        await agent.chatbot.notify_ops("🚨 *PANIC KILL-SWITCH ACTIVATED* — All traffic dropped")
         return {"status": "HALTED"}
 
     return router

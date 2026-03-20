@@ -60,6 +60,10 @@ def create_router(agent) -> APIRouter:
         await agent._add_log(f"PLUGIN: Uninstalled '{plugin_name}'", level="WARNING")
         return {"status": "uninstalled", "name": plugin_name}
 
+    @router.get("/api/v1/plugins/stats")
+    async def get_plugin_stats():
+        return agent.plugin_manager.get_plugin_stats()
+
     @router.post("/api/v1/plugins/hot-swap")
     async def hot_swap_plugins():
         try:

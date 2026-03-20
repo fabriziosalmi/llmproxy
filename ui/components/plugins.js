@@ -1,5 +1,5 @@
 /**
- * Plugins View — Security plugin pipeline management.
+ * Plugins View — Security plugin pipeline with per-plugin stats and config.
  */
 import { api } from '../services/api.js';
 
@@ -36,7 +36,10 @@ async function renderPluginList() {
     if (!grid) return;
 
     try {
-        const data = await api.fetchPlugins();
+        const [data, stats] = await Promise.all([
+            api.fetchPlugins(),
+            api.fetchPluginStats().catch(() => ({})),
+        ]);
         const plugins = data.plugins || data || [];
         grid.innerHTML = '';
 
@@ -44,21 +47,52 @@ async function renderPluginList() {
             const ring = (p.hook || 'unknown').toLowerCase();
             const color = RING_COLORS[ring] || 'slate';
             const enabled = p.enabled !== false;
+            const s = stats[p.name] || {};
+            const inv = s.invocations || 0;
+            const errs = s.errors || 0;
+            const blocks = s.blocks || 0;
+            const timeouts = s.timeouts || 0;
+            const avgLat = s.avg_latency_ms || 0;
+            const hasStats = inv > 0;
+            const errRate = inv > 0 ? ((errs / inv) * 100).toFixed(1) : '0.0';
 
             const card = document.createElement('div');
             card.className = `bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4 transition-all ${enabled ? '' : 'opacity-50'}`;
             card.innerHTML = `
                 <div class="flex items-start justify-between mb-2">
-                    <div>
-                        <h3 class="text-[11px] font-bold text-white">${p.name || 'Unknown'}</h3>
-                        <span class="text-[8px] font-mono text-${color}-400 bg-${color}-500/10 px-1.5 py-0.5 rounded mt-1 inline-block">${ring.toUpperCase()}</span>
+                    <div class="flex-1 min-w-0">
+                        <h3 class="text-[11px] font-bold text-white truncate">${p.name || 'Unknown'}</h3>
+                        <div class="flex items-center gap-2 mt-1">
+                            <span class="text-[8px] font-mono text-${color}-400 bg-${color}-500/10 px-1.5 py-0.5 rounded">${ring.toUpperCase()}</span>
+                            <span class="text-[8px] font-mono text-slate-600">${p.timeout_ms || 500}ms</span>
+                            <span class="text-[8px] font-mono text-slate-600">${p.fail_policy || 'open'}</span>
+                        </div>
                     </div>
-                    <div class="flex items-center gap-1.5">
-                        ${p.version ? `<span class="text-[8px] font-mono text-slate-500">${p.version}</span>` : ''}
+                    <div class="flex items-center gap-1.5 shrink-0">
+                        ${p.version && p.version !== '0.0.0' ? `<span class="text-[8px] font-mono text-slate-500">v${p.version}</span>` : ''}
                         <div class="w-2 h-2 rounded-full ${enabled ? 'bg-emerald-400' : 'bg-slate-600'}"></div>
                     </div>
                 </div>
-                <p class="text-[9px] text-slate-500 font-mono truncate">${p.entrypoint || ''}</p>
+                ${p.description ? `<p class="text-[9px] text-slate-500 mb-2 line-clamp-2">${p.description}</p>` : ''}
+                <div class="grid grid-cols-4 gap-1 mt-2 pt-2 border-t border-white/[0.04]">
+                    <div class="text-center">
+                        <p class="text-[10px] font-bold font-mono ${hasStats ? 'text-white' : 'text-slate-600'}">${inv.toLocaleString()}</p>
+                        <p class="text-[7px] text-slate-600 uppercase">calls</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-[10px] font-bold font-mono ${blocks > 0 ? 'text-rose-400' : 'text-slate-600'}">${blocks}</p>
+                        <p class="text-[7px] text-slate-600 uppercase">blocks</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-[10px] font-bold font-mono ${errs > 0 ? 'text-amber-400' : 'text-slate-600'}">${errRate}%</p>
+                        <p class="text-[7px] text-slate-600 uppercase">err</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-[10px] font-bold font-mono ${avgLat > 100 ? 'text-amber-400' : 'text-slate-600'}">${avgLat.toFixed(1)}</p>
+                        <p class="text-[7px] text-slate-600 uppercase">ms</p>
+                    </div>
+                </div>
+                ${renderConfigFields(p)}
             `;
             grid.appendChild(card);
         });
@@ -74,4 +108,23 @@ async function renderPluginList() {
                 <p class="text-[9px] text-slate-600 font-mono">Start the gateway to load the plugin pipeline</p>
             </div>`;
     }
+}
+
+function renderConfigFields(plugin) {
+    const schema = plugin.ui_schema;
+    if (!schema || !Array.isArray(schema) || schema.length === 0) return '';
+
+    const fields = schema.map(f => `
+        <div class="flex items-center justify-between">
+            <span class="text-[8px] text-slate-500">${f.label || f.key}</span>
+            <span class="text-[8px] font-mono text-slate-400">${f.default !== undefined ? f.default : '--'}</span>
+        </div>
+    `).join('');
+
+    return `
+        <div class="mt-2 pt-2 border-t border-white/[0.04] space-y-1">
+            <p class="text-[7px] text-slate-600 uppercase font-bold mb-1">Config</p>
+            ${fields}
+        </div>
+    `;
 }
