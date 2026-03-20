@@ -138,6 +138,13 @@ ASGI middleware scanning request body bytes for injection patterns:
 - **Instant 403 response**: Terminates request before it reaches the LLM, preventing cost incurrence.
 - **Limitation**: Pattern-based only — not a substitute for ML-based injection detection. Sophisticated prompt injection can bypass static patterns.
 
+### SecurityShield (`core/security.py`)
+Deep inspection layer wired pre-INGRESS in the request chain:
+- **Multi-turn trajectory detection**: Tracks prompt score history per session, detects escalating jailbreak attempts via sliding window analysis.
+- **Injection scoring**: Regex-based threat scoring with configurable threshold.
+- **PII detection & masking**: Regex-based detection of emails, phone numbers, SSNs. `mask_pii()` replaces PII with vault tokens; `demask_pii()` restores originals.
+- **Wired in `RotatorAgent.proxy_request()`**: Runs before the plugin INGRESS ring — blocked requests return 403 with diagnostic message.
+
 ### Identity & SSO (`core/identity.py`)
 Stateless multi-provider OIDC/JWT verification:
 - **Providers**: Google, Microsoft, Apple — auto-configured via well-known OIDC discovery.
@@ -381,22 +388,28 @@ Vanilla JS single-page application (`ui/`) with ES Modules, Tailwind CSS CDN, an
 - Right-click context menu: Toggle, Copy ID, View Latency, Set Priority, Delete.
 - Click provider name → slide-over detail panel (400px) with Chart.js latency graph, health bars, and action buttons.
 
-**Neural Chat**
+**Chat**
 - Model dropdown selector: Router Auto, GPT-4o, Claude Sonnet 4, Llama 3.3 70B, Gemini 2.5 Pro, DeepSeek R1.
 - A/B/C Compare mode: 3-column parallel streaming from different models.
 - User/bot bubble differentiation with TTFT/token/cost telemetry on hover.
-- Injection guard visualization with redaction animation.
 - Token-aware live cost counter.
 
-**Transparent Proxy**
+**Proxy**
 - Unified system toggles with smooth animations.
-- xterm.js terminal with WebGL acceleration, Fira Code font.
+- Priority steering toggle with visual feedback.
+- xterm.js terminal with WebGL acceleration, JetBrains Mono font.
 - Live diff rendering (GitHub-style red/green with ANSI backgrounds).
 - Native JSON pretty-print with syntax highlighting (keys, strings, numbers, booleans, null).
 - Intelligent autoscroll with "+N hidden" badge.
 - Topology map with animated particle flow.
+- Feature toggles (language_guard, injection_guard, link_sanitizer) with per-feature descriptions.
 
-**Operations**
+**Plugins**
+- Grid view of all loaded plugins with enable/disable toggles.
+- Ring, priority, and entrypoint metadata per plugin card.
+- Reload button with hot-swap animation.
+
+**Settings**
 - Password visibility toggle.
 - Regenerate key with double-click confirmation.
 - Emergency kill-switch with confirm dialog.
@@ -473,7 +486,7 @@ All sensitive values are loaded via **Infisical SDK** with environment variable 
 
 ## Testing
 
-93 tests across 9 modules, all passing on `pytest` + `pytest-asyncio`.
+46 plugin/WASM tests across core modules, all passing on `pytest` + `pytest-asyncio`. Additional integration tests require optional dependencies (`aiosqlite`, `pytest-asyncio` for Python 3.14).
 
 ```bash
 # Run full suite
@@ -548,7 +561,7 @@ The `docker-compose.yml` includes:
 
 **`.github/workflows/ci.yml`** — Runs on every push/PR:
 - **Lint**: ruff check (Python code quality).
-- **Test**: pytest with 93 tests across 9 modules.
+- **Test**: pytest with plugin/WASM test suite.
 - **Syntax**: AST parse of all Python files.
 
 **`.github/workflows/docker.yml`** — Runs on version tags (`v*`):

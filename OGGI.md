@@ -64,6 +64,22 @@
 
 ---
 
+## SESSIONE K: UI/UX Surgical Cleanup ✅
+**Priorità: MEDIA | Commit: a103905**
+
+- [x] **K.1** Critical HTML nesting fix: `view-proxy` never closed, `plugins-view` nested inside — rebuilt lines 345-489
+- [x] **K.2** View ID convention: `plugins-view` → `view-plugins` (allineato a `view-${tabName}` pattern in content.js)
+- [x] **K.3** Sidebar labels: "Transparent Proxy" → "Proxy", "Neural Chat" → "Chat", "Operations" → "Settings"
+- [x] **K.4** `plugins.js`: raw fetch → `api.fetchPlugins()` / `api.togglePlugin()` (centralizzato in api.js)
+- [x] **K.5** `api.js`: aggiunti `fetchPlugins()` e `togglePlugin()` methods
+- [x] **K.6** `proxy.js`: wired priority-mode-btn click handler con visual toggle + API call
+- [x] **K.7** `chat.js`: rimosso fake guardrail simulation (triggerWord intercept) + fix double appendMessage in compare mode
+- [x] **K.8** `settings.js`: aggiunto `FEATURE_DESCRIPTIONS` map con testo specifico per feature
+- [x] **K.9** `logs.js`: font priority JetBrains Mono > Fira Code (era invertito)
+- [x] **K.10** Topology + terminal sections correttamente contenuti dentro `view-proxy`
+
+---
+
 ## SESSIONE J: Migrazioni Future (Non Bloccanti) — BACKLOG
 **Priorità: BASSA**
 
@@ -85,6 +101,7 @@
 | G. 5 Principi FAANG | Timeouts, AST, Contracts, DI, Tests | ✅ DONE |
 | H. WASM/Rust Pipeline | WasmRunner, Extism, JSON protocol, 15 test | ✅ DONE |
 | I. Wiring + Dead Code | SecurityShield cleanup, PluginState DI, inspect() wired | ✅ DONE |
+| K. UI/UX Surgical Cleanup | HTML nesting, view IDs, sidebar labels, API centralization | ✅ DONE |
 | J. Backlog | Watcher, migration, OpenObserve, UI, budget persistence, refactor | 🔲 BACKLOG |
 
-**46 test plugin/WASM — 100% pass. Zero dead code in security.py.**
+**46 test plugin/WASM — 100% pass. Zero dead code in security.py. UI tag soup fixed.**
