@@ -455,11 +455,62 @@
                 
                 <div class="relative bg-white/[0.02] border border-white/10 rounded-[1.25rem] flex flex-col focus-within:border-sky-500/50 focus-within:bg-white/[0.04] transition-all shadow-2xl p-2 gap-2">
                     <div class="flex items-center justify-between px-3 pt-2">
-                        <div class="flex items-center gap-2 bg-sky-500/10 px-2.5 py-1 rounded-full border border-sky-500/20 shadow-[0_0_10px_rgba(14,165,233,0.1)]">
-                            <span class="w-1.5 h-1.5 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]"></span>
-                            <span id="active-model-token" class="text-[9px] font-black text-sky-400 uppercase tracking-widest cursor-pointer hover:text-white transition-colors">Router: Llama-3.3-70B</span>
+                        <div class="relative" id="model-selector-wrapper">
+                            <button id="model-selector-btn" class="flex items-center gap-2 bg-sky-500/10 px-2.5 py-1 rounded-full border border-sky-500/20 shadow-[0_0_10px_rgba(14,165,233,0.1)] hover:bg-sky-500/20 transition-all outline-none">
+                                <span class="w-1.5 h-1.5 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]"></span>
+                                <span id="active-model-token" class="text-[9px] font-black text-sky-400 uppercase tracking-widest">Router: Auto</span>
+                                <svg class="w-2.5 h-2.5 text-sky-500/60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/></svg>
+                            </button>
+                            <div id="model-dropdown" class="hidden absolute left-0 top-full mt-1 w-56 bg-black/95 border border-white/10 rounded-xl shadow-2xl z-50 py-1 backdrop-blur-xl">
+                                <div class="px-3 py-1.5 text-[8px] font-bold text-slate-500 uppercase tracking-widest">Select Model</div>
+                                <button data-model="auto" class="model-option w-full text-left px-3 py-2 text-[10px] text-sky-400 font-bold hover:bg-sky-500/10 transition-colors flex items-center justify-between">
+                                    <span>🔀 Router: Auto</span><span class="text-[8px] text-slate-600">smart routing</span>
+                                </button>
+                                <button data-model="gpt-4o" class="model-option w-full text-left px-3 py-2 text-[10px] text-slate-300 hover:bg-white/5 transition-colors flex items-center justify-between">
+                                    <span>OpenAI GPT-4o</span><span class="text-[8px] text-slate-600">$5/M tok</span>
+                                </button>
+                                <button data-model="claude-sonnet" class="model-option w-full text-left px-3 py-2 text-[10px] text-slate-300 hover:bg-white/5 transition-colors flex items-center justify-between">
+                                    <span>Claude Sonnet 4</span><span class="text-[8px] text-slate-600">$3/M tok</span>
+                                </button>
+                                <button data-model="llama-3.3-70b" class="model-option w-full text-left px-3 py-2 text-[10px] text-slate-300 hover:bg-white/5 transition-colors flex items-center justify-between">
+                                    <span>Llama 3.3 70B</span><span class="text-[8px] text-slate-600">$0.27/M tok</span>
+                                </button>
+                                <button data-model="gemini-2.5-pro" class="model-option w-full text-left px-3 py-2 text-[10px] text-slate-300 hover:bg-white/5 transition-colors flex items-center justify-between">
+                                    <span>Gemini 2.5 Pro</span><span class="text-[8px] text-slate-600">$1.25/M tok</span>
+                                </button>
+                                <button data-model="deepseek-r1" class="model-option w-full text-left px-3 py-2 text-[10px] text-slate-300 hover:bg-white/5 transition-colors flex items-center justify-between">
+                                    <span>DeepSeek R1</span><span class="text-[8px] text-slate-600">$0.55/M tok</span>
+                                </button>
+                            </div>
                         </div>
                         <span class="text-[10px] text-slate-500 font-mono font-medium" id="token-counter">0 / 4096 tokens</span>
+                        <button id="compare-mode-btn" class="ml-auto text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border border-white/10 text-slate-500 hover:text-sky-400 hover:border-sky-500/30 hover:bg-sky-500/10 transition-all" title="A/B/C Compare">⚔ Compare</button>
+                    </div>
+                    <!-- 5.2: A/B/C Split Compare View (hidden by default) -->
+                    <div id="abc-compare-view" class="hidden">
+                        <div class="grid grid-cols-3 gap-2 mb-2">
+                            <div class="glass rounded-xl border border-white/5 p-3 flex flex-col min-h-[200px]">
+                                <div class="flex items-center gap-2 mb-2 pb-2 border-b border-white/5">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-sky-400"></span>
+                                    <span class="text-[9px] font-black text-sky-400 uppercase tracking-widest" id="abc-label-a">GPT-4o</span>
+                                </div>
+                                <div id="abc-stream-a" class="flex-1 text-xs text-slate-300 leading-relaxed overflow-y-auto scrollbar-hide font-mono"></div>
+                            </div>
+                            <div class="glass rounded-xl border border-white/5 p-3 flex flex-col min-h-[200px]">
+                                <div class="flex items-center gap-2 mb-2 pb-2 border-b border-white/5">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                                    <span class="text-[9px] font-black text-emerald-400 uppercase tracking-widest" id="abc-label-b">Claude Sonnet</span>
+                                </div>
+                                <div id="abc-stream-b" class="flex-1 text-xs text-slate-300 leading-relaxed overflow-y-auto scrollbar-hide font-mono"></div>
+                            </div>
+                            <div class="glass rounded-xl border border-white/5 p-3 flex flex-col min-h-[200px]">
+                                <div class="flex items-center gap-2 mb-2 pb-2 border-b border-white/5">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                                    <span class="text-[9px] font-black text-amber-400 uppercase tracking-widest" id="abc-label-c">Llama 3.3</span>
+                                </div>
+                                <div id="abc-stream-c" class="flex-1 text-xs text-slate-300 leading-relaxed overflow-y-auto scrollbar-hide font-mono"></div>
+                            </div>
+                        </div>
                     </div>
                     <div class="flex items-end gap-2 relative">
                         <textarea id="chat-input" rows="1" placeholder="Type instructions or data for proxying..." class="w-full bg-transparent border-none pl-4 pr-16 py-3 text-sm text-slate-200 outline-none resize-none placeholder:text-slate-600 min-h-[44px] max-h-[200px]"></textarea>
@@ -592,6 +643,39 @@
                     </span>
                     <span class="text-[9px] font-mono text-slate-600 group-hover:text-sky-500/50">⌘+R</span>
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5.3: Slide-over Node Detail Panel -->
+    <div id="node-slideover-backdrop" class="hidden fixed inset-0 bg-black/50 z-[70] transition-opacity" style="opacity:0"></div>
+    <div id="node-slideover" class="fixed top-0 right-0 h-full w-[400px] max-w-[90vw] bg-[#0a0a0c]/95 border-l border-white/5 z-[80] transform translate-x-full transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] backdrop-blur-xl overflow-y-auto">
+        <div class="p-6 space-y-6">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-bold text-white" id="slideover-title">Provider Details</h3>
+                <button id="slideover-close" class="p-2 hover:bg-white/5 rounded-xl text-slate-500 hover:text-white transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <div class="glass rounded-2xl border border-white/5 p-4 space-y-3">
+                    <div class="flex justify-between text-[10px]"><span class="text-slate-500 uppercase tracking-widest font-bold">Status</span><span id="slideover-status" class="font-bold text-emerald-400">—</span></div>
+                    <div class="flex justify-between text-[10px]"><span class="text-slate-500 uppercase tracking-widest font-bold">Type</span><span id="slideover-type" class="text-slate-300 font-mono">—</span></div>
+                    <div class="flex justify-between text-[10px]"><span class="text-slate-500 uppercase tracking-widest font-bold">Priority</span><span id="slideover-priority" class="text-sky-400 font-bold font-mono">—</span></div>
+                    <div class="flex justify-between text-[10px]"><span class="text-slate-500 uppercase tracking-widest font-bold">Roundtrip</span><span id="slideover-latency" class="text-white font-mono tabular-nums">—</span></div>
+                </div>
+                <div class="glass rounded-2xl border border-white/5 p-4">
+                    <div class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-3">Latency (last 30s)</div>
+                    <canvas id="slideover-chart" height="120"></canvas>
+                </div>
+                <div class="glass rounded-2xl border border-white/5 p-4">
+                    <div class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-3">Health History</div>
+                    <div id="slideover-health" class="flex gap-[2px] items-center"></div>
+                </div>
+                <div class="flex gap-2 pt-2">
+                    <button id="slideover-toggle" class="flex-1 px-4 py-2 bg-sky-500/10 border border-sky-500/20 text-sky-400 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-sky-500/20 transition-colors">Toggle</button>
+                    <button id="slideover-delete" class="flex-1 px-4 py-2 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-rose-500/20 transition-colors">Delete</button>
+                </div>
             </div>
         </div>
     </div>

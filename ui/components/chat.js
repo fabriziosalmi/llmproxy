@@ -4,16 +4,59 @@
 import { store } from '../services/store.js';
 import { api } from '../services/api.js';
 
+// Model selector state
+let selectedModel = 'auto';
+let compareActive = false;
+const COMPARE_MODELS = [
+    { key: 'a', model: 'gpt-4o', label: 'GPT-4o' },
+    { key: 'b', model: 'claude-sonnet', label: 'Claude Sonnet' },
+    { key: 'c', model: 'llama-3.3-70b', label: 'Llama 3.3' },
+];
+
 export function initChat() {
     const input = document.getElementById('chat-input');
     if (!input) return;
-    
+
     input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) { 
-            e.preventDefault(); 
-            sendUserMessage(); 
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendUserMessage();
         }
     });
+
+    // Model Dropdown Toggle
+    const selectorBtn = document.getElementById('model-selector-btn');
+    const dropdown = document.getElementById('model-dropdown');
+    if (selectorBtn && dropdown) {
+        selectorBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dropdown.classList.toggle('hidden');
+        });
+
+        // Model option selection
+        dropdown.querySelectorAll('.model-option').forEach(opt => {
+            opt.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const model = opt.dataset.model;
+                selectedModel = model;
+                const label = document.getElementById('active-model-token');
+                if (label) label.textContent = opt.querySelector('span')?.textContent || model;
+                // Highlight active option
+                dropdown.querySelectorAll('.model-option').forEach(o => {
+                    o.classList.remove('text-sky-400', 'font-bold');
+                    o.classList.add('text-slate-300');
+                });
+                opt.classList.add('text-sky-400', 'font-bold');
+                opt.classList.remove('text-slate-300');
+                dropdown.classList.add('hidden');
+            });
+        });
+
+        // Close on outside click
+        document.addEventListener('click', () => {
+            dropdown.classList.add('hidden');
+        });
+    }
 
     // 15.17 Token-Aware Telemetry (Live Cost)
     input.addEventListener('input', () => {
@@ -29,6 +72,20 @@ export function initChat() {
     document.querySelector('#nav-chat').addEventListener('click', () => {
         setTimeout(() => input.focus(), 100);
     });
+
+    // 5.2: A/B/C Compare Mode
+    const compareBtn = document.getElementById('compare-mode-btn');
+    const compareView = document.getElementById('abc-compare-view');
+    if (compareBtn && compareView) {
+        compareBtn.addEventListener('click', () => {
+            compareActive = !compareActive;
+            compareView.classList.toggle('hidden', !compareActive);
+            compareBtn.classList.toggle('text-sky-400', compareActive);
+            compareBtn.classList.toggle('border-sky-500/30', compareActive);
+            compareBtn.classList.toggle('bg-sky-500/10', compareActive);
+            compareBtn.classList.toggle('text-slate-500', !compareActive);
+        });
+    }
 
     // 20. Regenerate Key (Double Click Protection)
     const regenBtn = document.getElementById('regenerate-key-btn');
@@ -82,11 +139,37 @@ async function sendUserMessage() {
         return;
     }
     
+    // 5.2: A/B/C Compare Mode — fire parallel requests
+    if (compareActive) {
+        COMPARE_MODELS.forEach(m => {
+            const streamEl = document.getElementById(`abc-stream-${m.key}`);
+            const labelEl = document.getElementById(`abc-label-${m.key}`);
+            if (streamEl) streamEl.innerHTML = '<span class="animate-pulse text-slate-500">Thinking…</span>';
+            if (labelEl) labelEl.textContent = m.label;
+
+            api.sendChatMessage(text, m.model)
+                .then(async resp => {
+                    if (!resp.ok) {
+                        if (streamEl) streamEl.innerHTML = `<span class="text-rose-400">Error ${resp.status}</span>`;
+                        return;
+                    }
+                    const data = await resp.json();
+                    const content = data?.choices?.[0]?.message?.content || '(empty)';
+                    if (streamEl) streamEl.textContent = content;
+                })
+                .catch(() => {
+                    if (streamEl) streamEl.innerHTML = '<span class="text-rose-400">Connection failed</span>';
+                });
+        });
+        appendMessage('user', text);
+        return;
+    }
+
     const thinkingDiv = appendMessage('system', '...');
     thinkingDiv.classList.add('animate-pulse');
-    
+
     try {
-        const response = await api.sendChatMessage(text);
+        const response = await api.sendChatMessage(text, selectedModel);
         if (!response.ok) {
             if (thinkingDiv.parentNode) scroller.removeChild(thinkingDiv);
             const errData = await response.json().catch(() => ({}));

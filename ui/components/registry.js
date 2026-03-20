@@ -20,6 +20,148 @@ export function initRegistry() {
 // 2.10: Drag state
 let dragSrcRow = null;
 
+// 4.7: Context menu
+let ctxMenu = null;
+function showContextMenu(x, y, item) {
+    hideContextMenu();
+    ctxMenu = document.createElement('div');
+    ctxMenu.className = 'fixed z-[100] w-48 bg-black/95 border border-white/10 rounded-xl shadow-2xl py-1 backdrop-blur-xl text-[10px] animate-in';
+    ctxMenu.style.left = `${x}px`;
+    ctxMenu.style.top = `${y}px`;
+    const actions = [
+        { label: '⚡ Toggle Endpoint', action: () => api.toggleEndpoint(item.id).then(fetchRegistry).catch(() => {}) },
+        { label: '📋 Copy Provider ID', action: () => { navigator.clipboard.writeText(item.id || item.name).catch(() => {}); } },
+        { label: '📊 View Latency', action: () => { alert(`Roundtrip: ${item.latency || '--ms'}`); } },
+        { label: '🔺 Set Priority 1', action: () => api.updatePriority(item.id, 1).then(fetchRegistry).catch(() => {}) },
+        { sep: true },
+        { label: '🗑 Delete', danger: true, action: () => { if (confirm(`Delete ${item.name}?`)) api.deleteEndpoint(item.id).then(fetchRegistry).catch(() => {}); } },
+    ];
+    actions.forEach(a => {
+        if (a.sep) {
+            const hr = document.createElement('div');
+            hr.className = 'my-1 border-t border-white/5';
+            ctxMenu.appendChild(hr);
+            return;
+        }
+        const btn = document.createElement('button');
+        btn.className = `w-full text-left px-3 py-2 ${a.danger ? 'text-rose-400 hover:bg-rose-500/10' : 'text-slate-300 hover:bg-white/5'} transition-colors font-medium`;
+        btn.textContent = a.label;
+        btn.addEventListener('click', () => { a.action(); hideContextMenu(); });
+        ctxMenu.appendChild(btn);
+    });
+    document.body.appendChild(ctxMenu);
+    // Adjust if overflows viewport
+    const rect = ctxMenu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) ctxMenu.style.left = `${window.innerWidth - rect.width - 8}px`;
+    if (rect.bottom > window.innerHeight) ctxMenu.style.top = `${window.innerHeight - rect.height - 8}px`;
+}
+function hideContextMenu() {
+    if (ctxMenu) { ctxMenu.remove(); ctxMenu = null; }
+}
+document.addEventListener('click', hideContextMenu);
+document.addEventListener('contextmenu', (e) => {
+    if (ctxMenu && !ctxMenu.contains(e.target)) hideContextMenu();
+});
+
+// 5.3: Slide-over Node Detail
+let slideoverChart = null;
+
+function openSlideover(item) {
+    const panel = document.getElementById('node-slideover');
+    const backdrop = document.getElementById('node-slideover-backdrop');
+    if (!panel) return;
+
+    // Fill data
+    const title = document.getElementById('slideover-title');
+    if (title) title.textContent = item.name || item.id || 'Provider';
+    const status = document.getElementById('slideover-status');
+    if (status) {
+        status.textContent = item.status || '—';
+        const s = (item.status || '').toLowerCase();
+        status.className = `font-bold ${s === 'live' || s === 'verified' ? 'text-emerald-400' : s === 'error' ? 'text-rose-400' : 'text-slate-400'}`;
+    }
+    const type = document.getElementById('slideover-type');
+    if (type) type.textContent = item.type || '—';
+    const priority = document.getElementById('slideover-priority');
+    if (priority) priority.textContent = item.priority || '—';
+    const latency = document.getElementById('slideover-latency');
+    if (latency) latency.textContent = item.latency || '--ms';
+
+    // Health heatmap
+    const healthEl = document.getElementById('slideover-health');
+    if (healthEl && item.history) {
+        healthEl.innerHTML = item.history.map(c => {
+            const colors = { emerald: 'bg-emerald-500', amber: 'bg-amber-500', sky: 'bg-sky-500', slate: 'bg-slate-600', rose: 'bg-rose-500' };
+            return `<div class="w-2 h-5 rounded-sm ${colors[c] || colors.slate}"></div>`;
+        }).join('');
+    }
+
+    // Mini chart
+    const canvas = document.getElementById('slideover-chart');
+    if (canvas && typeof Chart !== 'undefined') {
+        if (slideoverChart) slideoverChart.destroy();
+        const fakeData = Array.from({ length: 15 }, () => Math.floor(Math.random() * 200 + 50));
+        slideoverChart = new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels: fakeData.map((_, i) => `${i * 2}s`),
+                datasets: [{
+                    data: fakeData,
+                    borderColor: '#38bdf8',
+                    backgroundColor: 'rgba(56,189,248,0.08)',
+                    fill: true,
+                    tension: 0.4,
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                }]
+            },
+            options: {
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { display: false },
+                    y: { display: true, grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#475569', font: { size: 9 } } }
+                },
+                responsive: true,
+                maintainAspectRatio: false,
+            }
+        });
+    }
+
+    // Actions
+    const toggleBtn = document.getElementById('slideover-toggle');
+    const deleteBtn = document.getElementById('slideover-delete');
+    if (toggleBtn) {
+        toggleBtn.onclick = () => api.toggleEndpoint(item.id).then(fetchRegistry).catch(() => {});
+    }
+    if (deleteBtn) {
+        deleteBtn.onclick = () => {
+            if (confirm(`Delete ${item.name}?`)) {
+                api.deleteEndpoint(item.id).then(fetchRegistry).catch(() => {});
+                closeSlideover();
+            }
+        };
+    }
+
+    // Open animation
+    if (backdrop) { backdrop.classList.remove('hidden'); requestAnimationFrame(() => { backdrop.style.opacity = '1'; }); }
+    panel.style.transform = 'translateX(0)';
+
+    // Close handlers
+    const closeBtn = document.getElementById('slideover-close');
+    if (closeBtn) closeBtn.onclick = closeSlideover;
+    if (backdrop) backdrop.onclick = closeSlideover;
+}
+
+function closeSlideover() {
+    const panel = document.getElementById('node-slideover');
+    const backdrop = document.getElementById('node-slideover-backdrop');
+    if (panel) panel.style.transform = 'translateX(100%)';
+    if (backdrop) {
+        backdrop.style.opacity = '0';
+        setTimeout(() => backdrop.classList.add('hidden'), 300);
+    }
+}
+
 export function renderRegistry() {
     const { registry } = store.state;
     const tbody = document.getElementById('registry-table-body');
@@ -158,6 +300,22 @@ export function renderRegistry() {
             items.forEach(it => {
                 api.updatePriority(it.id, it.priority).catch(() => {});
             });
+        });
+
+        // 5.3: Click provider name to open slide-over
+        const nameSpan = tr.querySelector('.text-slate-200.tracking-tight');
+        if (nameSpan) {
+            nameSpan.classList.add('cursor-pointer', 'hover:text-sky-400', 'transition-colors');
+            nameSpan.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openSlideover(item);
+            });
+        }
+
+        // 4.7: Right-click context menu
+        tr.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            showContextMenu(e.clientX, e.clientY, item);
         });
 
         // Events

@@ -116,30 +116,82 @@ function appendLogToTerm(log) {
     const level = `${levelColor}${log.level}\x1b[0m`;
     let message = log.message;
 
-    // 15.19 JSON Syntax Highlighting (Regex-based for xterm.js)
+    // 5.4 + 15.19: JSON native syntax highlighting (pretty-print + ANSI colors)
     if (message.includes('{') && message.includes('}')) {
-        message = message.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
-            let cls = '\x1b[32m'; // Key/String (Green)
-            if (/^"/.test(match)) {
-                if (/:$/.test(match)) {
-                    cls = '\x1b[36m'; // Key (Cyan)
-                }
-            } else if (/true|false/.test(match)) {
-                cls = '\x1b[33m'; // Boolean (Yellow)
-            } else if (/null/.test(match)) {
-                cls = '\x1b[90m'; // Null (Gray)
-            } else {
-                cls = '\x1b[31m'; // Number (Red)
+        // Try to extract and pretty-print embedded JSON
+        const jsonMatch = message.match(/(\{[\s\S]*\})/);
+        if (jsonMatch) {
+            try {
+                const parsed = JSON.parse(jsonMatch[1]);
+                const pretty = JSON.stringify(parsed, null, 2);
+                const prefix = message.slice(0, message.indexOf(jsonMatch[1]));
+                const suffix = message.slice(message.indexOf(jsonMatch[1]) + jsonMatch[1].length);
+                // Render prefix on its own line, then pretty JSON with colors
+                const isAtBottom = term.buffer.active.viewportY >= term.buffer.active.baseY;
+                if (prefix.trim()) term.writeln(`${timestamp} ${level} ${prefix.trim()}`);
+                pretty.split('\n').forEach(line => {
+                    const colored = line.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (m) {
+                        if (/^"/.test(m)) {
+                            return (/:$/.test(m) ? '\x1b[36m' : '\x1b[32m') + m + '\x1b[0m';
+                        } else if (/true|false/.test(m)) return '\x1b[33m' + m + '\x1b[0m';
+                        else if (/null/.test(m)) return '\x1b[90m' + m + '\x1b[0m';
+                        return '\x1b[31m' + m + '\x1b[0m';
+                    });
+                    // Braces/brackets in white
+                    term.writeln(`  \x1b[90m│\x1b[0m ${colored}`);
+                });
+                if (suffix.trim()) term.writeln(`${timestamp} ${level} ${suffix.trim()}`);
+                handleAutoScroll(isAtBottom);
+                return;
+            } catch (_) {
+                // Not valid JSON, fall through to regex coloring
             }
+        }
+        // Fallback: inline regex highlighting
+        message = message.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+            let cls = '\x1b[32m';
+            if (/^"/.test(match)) {
+                if (/:$/.test(match)) cls = '\x1b[36m';
+            } else if (/true|false/.test(match)) cls = '\x1b[33m';
+            else if (/null/.test(match)) cls = '\x1b[90m';
+            else cls = '\x1b[31m';
             return cls + match + '\x1b[0m';
         });
     }
 
+    // 5.1: Live Diff — GitHub-style colored lines for prompt-blocked diff output
+    if (message.includes('@@') || /^[\-+]{3}\s/.test(message.trim())) {
+        const lines = message.split('\n');
+        const isAtBottom = term.buffer.active.viewportY >= term.buffer.active.baseY;
+        lines.forEach(line => {
+            const trimmed = line.trimStart();
+            if (trimmed.startsWith('@@')) {
+                term.writeln(`${timestamp} \x1b[36;1m${line}\x1b[0m`);
+            } else if (trimmed.startsWith('---')) {
+                term.writeln(`${timestamp} \x1b[1;90m${line}\x1b[0m`);
+            } else if (trimmed.startsWith('+++')) {
+                term.writeln(`${timestamp} \x1b[1;90m${line}\x1b[0m`);
+            } else if (trimmed.startsWith('-')) {
+                term.writeln(`${timestamp} \x1b[41;37m ${line} \x1b[0m`);
+            } else if (trimmed.startsWith('+')) {
+                term.writeln(`${timestamp} \x1b[42;30m ${line} \x1b[0m`);
+            } else {
+                term.writeln(`${timestamp} ${level} ${line}`);
+            }
+        });
+        handleAutoScroll(isAtBottom);
+        return;
+    }
+
     // 15.16 Intelligent Autoscroll (Freeze if user scrolled up)
     const isAtBottom = term.buffer.active.viewportY >= term.buffer.active.baseY;
-    
+
     term.writeln(`${timestamp} ${level} ${message}`);
     
+    handleAutoScroll(isAtBottom);
+}
+
+function handleAutoScroll(isAtBottom) {
     if (isAtBottom) {
         term.scrollToBottom();
         const badge = document.getElementById('log-paused-badge');

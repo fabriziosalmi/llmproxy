@@ -78,16 +78,16 @@ export const api = {
         return await response.json();
     },
 
-    async sendChatMessage(text) {
+    async sendChatMessage(text, model = 'auto') {
         return await fetch(`${BASE_URL}/v1/chat/completions`, {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json', 
+            headers: {
+                'Content-Type': 'application/json',
                 'Authorization': `Bearer ${localStorage.getItem('proxy_key') || ''}`
             },
-            body: JSON.stringify({ 
-                model: 'auto', 
-                messages: [{ role: 'user', content: text }] 
+            body: JSON.stringify({
+                model,
+                messages: [{ role: 'user', content: text }]
             })
         });
     }
