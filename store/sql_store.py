@@ -108,3 +108,12 @@ class SQLiteStore:
             async with conn.execute("SELECT value FROM app_state WHERE key = ?", (key,)) as cursor:
                 row = await cursor.fetchone()
                 return json.loads(row[0]) if row else default
+
+    async def update_metrics(self, endpoint_id: str, latency_ms: float, success_rate: float):
+        """Updates latency and success rate for an endpoint."""
+        async with aiosqlite.connect(self.db_path) as conn:
+            await conn.execute(
+                "UPDATE endpoints SET latency_ms = ?, success_rate = ? WHERE id = ?",
+                (latency_ms, success_rate, endpoint_id)
+            )
+            await conn.commit()

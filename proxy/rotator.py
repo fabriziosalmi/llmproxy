@@ -88,6 +88,7 @@ class RotatorAgent(BaseAgent):
             "link_sanitizer": True
         }
         self.log_queue = asyncio.Queue(maxsize=100)
+        self.telemetry_queue = asyncio.Queue(maxsize=1000)
         self.app = FastAPI(title="LLMPROXY")
         TraceManager.instrument_app(self.app)
         self.app.add_middleware(
@@ -99,11 +100,28 @@ class RotatorAgent(BaseAgent):
         self._setup_routes()
         self._setup_static()
 
+    async def broadcast_event(self, event_type: str, data: Dict[str, Any]):
+        """Broadcasts a real-time event to the telemetry queue."""
+        event = {
+            "type": event_type,
+            "timestamp": datetime.now().isoformat(),
+            "data": data
+        }
+        if self.telemetry_queue.full():
+            self.telemetry_queue.get_nowait() # Drop oldest
+        await self.telemetry_queue.put(event)
+
     def _setup_static(self):
-        ui_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ui")
+        # Point to the new React build directory
+        ui_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend", "dist")
         if os.path.exists(ui_path):
             self.app.mount("/ui", StaticFiles(directory=ui_path, html=True), name="ui")
             self.logger.info(f"UI mounted at /ui from {ui_path}")
+        else:
+            # Fallback to legacy UI if React build is missing
+            legacy_ui = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ui")
+            if os.path.exists(legacy_ui):
+                self.app.mount("/ui", StaticFiles(directory=legacy_ui, html=True), name="ui")
 
     def _load_config(self):
         if os.path.exists(self.config_path):
@@ -239,6 +257,20 @@ class RotatorAgent(BaseAgent):
             await self._add_log(f"ENDPOINT: {endpoint_id} set to {new_status.value}")
             return {"id": endpoint_id, "status": new_status.value}
 
+        @self.app.get("/api/v1/telemetry/stream")
+        async def telemetry_stream(request: Request):
+            """Real-time SSE stream for the 'Shadow-ops' HUD."""
+            async def event_generator():
+                while True:
+                    if await request.is_disconnected():
+                        break
+                    try:
+                        event = await asyncio.wait_for(self.telemetry_queue.get(), timeout=1.0)
+                        yield f"data: {json.dumps(event)}\n\n"
+                    except asyncio.TimeoutError:
+                        yield ": keep-alive\n\n"
+            return StreamingResponse(event_generator(), media_type="text/event-stream")
+
         @self.app.delete("/api/v1/registry/{endpoint_id}")
         async def delete_endpoint(endpoint_id: str):
             await self.store.remove_endpoint(endpoint_id)
@@ -316,10 +348,16 @@ class RotatorAgent(BaseAgent):
     async def proxy_request(self, request: Request, session_id: str = "default"):
         self.predictor.record_request()
         with TraceManager.start_span("proxy_request"):
+            req_id = uuid.uuid4().hex[:8]
+            await self.broadcast_event("proxy.request.start", {
+                "id": req_id, "method": request.method, "path": request.url.path, "ip": request.client.host
+            })
+            
             # 1. Rate limiting
             client_ip = request.client.host
             bucket = self.limiter.get_bucket(client_ip, capacity=100, rate=5.0)
             if not await bucket.acquire():
+                await self.broadcast_event("proxy.request.error", {"id": req_id, "error": "Rate limit exceeded"})
                 raise HTTPException(status_code=429, detail="Too Many Requests")
 
             body = await request.json()
@@ -390,6 +428,9 @@ class RotatorAgent(BaseAgent):
                 target = next(e for e in active_pool if e.id == target_id)
             
             await self._add_log(f"Routing to: {target.id} ({target.url})", level="PROXY")
+            await self.broadcast_event("proxy.routing.decision", {
+                "id": req_id, "target": target.id, "complexity": complexity.value, "tier": preferred_tier
+            })
             self.logger.info(f"RL selected endpoint: {target.url} (Tier: {ModelRegistry.get_tier(target.metadata)})")
             
             if is_coding:
@@ -465,35 +506,42 @@ class RotatorAgent(BaseAgent):
                     if body.get("stream"):
                         kill_event = asyncio.Event()
                         stream_chunks = []
-                        # Start background speculative analyzer
-                        speculative_task = asyncio.create_task(
-                            self.security.analyze_speculative(prompt, stream_chunks, kill_event)
-                        )
 
                         async def stream_generator():
                             first_token = True
+                            # OLIMPO: Send initial agent telemetry
+                            yield f"data: {json.dumps({'object': 'proxy.metadata', 'content': f'Agentic Routing: {target.id} selected for {complexity.value} task.', 'tier': preferred_tier})}\n\n".encode()
+                            
                             try:
-                                async for chunk in response.content.iter_any():
-                                    if kill_event.is_set():
-                                        await self._add_log("SECURITY ALERT: Kill Switch triggered mid-stream!", level="CRITICAL")
-                                        yield b"\n\n[SECURITY ALERT: STREAM TERMINATED BY LLMPROXY GUARDRAILS - POTENTIAL THREAT DETECTED]"
-                                        break
-                                    
-                                    chunk_text = chunk.decode(errors="ignore")
-                                    stream_chunks.append(chunk_text)
-                                    
-                                    if first_token:
-                                        ttft = time.time() - start_time
-                                        MetricsTracker.track_ttft(target.id, ttft)
-                                        first_token = False
-                                    
-                                    # Still apply basic per-chunk sanitization
-                                    yield self.security.sanitize_response(chunk_text).encode()
+                                # Python 3.12 TaskGroup for robust speculative execution
+                                async with asyncio.TaskGroup() as tg:
+                                    # Spawn background speculative analyzer within the group
+                                    tg.create_task(
+                                        self.security.analyze_speculative(prompt, stream_chunks, kill_event)
+                                    )
+
+                                    async for chunk in response.content.iter_any():
+                                        if kill_event.is_set():
+                                            await self._add_log("SECURITY ALERT: Kill Switch triggered mid-stream!", level="CRITICAL")
+                                            yield f"data: {json.dumps({'object': 'proxy.error', 'message': 'STREAM TERMINATED BY LLMPROXY GUARDRAILS'})}\n\n".encode()
+                                            # Gracefully exit the TaskGroup
+                                            return 
+
+                                        chunk_text = chunk.decode(errors="ignore")
+                                        stream_chunks.append(chunk_text)
+                                        
+                                        if first_token:
+                                            ttft = time.time() - start_time
+                                            MetricsTracker.track_ttft(target.id, ttft)
+                                            first_token = False
+                                            yield f"data: {json.dumps({'object': 'proxy.metrics', 'ttft_ms': round(ttft*1000, 2)})}\n\n".encode()
+                                        
+                                        yield self.security.sanitize_response(chunk_text).encode()
                                 
                                 self.rl_rotator.update(target.id, True, time.time() - start_time)
-                            finally:
-                                if not speculative_task.done():
-                                    speculative_task.cancel()
+                            except Exception as e:
+                                self.logger.error(f"Streaming TaskGroup Error: {e}")
+                                yield f"data: {json.dumps({'object': 'proxy.error', 'message': str(e)})}\n\n".encode()
 
                         return StreamingResponse(stream_generator(), media_type="text/event-stream")
                     
@@ -561,6 +609,10 @@ class RotatorAgent(BaseAgent):
 
                             data['choices'][0]['message']['content'] = sanitized
                         
+                    duration = time.time() - start_time
+                    await self.broadcast_event("proxy.request.complete", {
+                        "id": req_id, "status": response.status, "latency_ms": round(duration*1000, 2)
+                    })
                     return JSONResponse(content=data, status_code=response.status)
             except Exception as e:
                 breaker = self.circuit_manager.get_breaker(target.id)
