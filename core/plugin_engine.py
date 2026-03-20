@@ -27,6 +27,7 @@ from typing import List, Dict, Any, Optional, Callable
 from dataclasses import dataclass, field
 
 from core.plugin_sdk import BasePlugin, PluginResponse, PluginResponseError, PluginHook as SDKHook
+from core.wasm_runner import WasmRunner
 
 class PluginHook(Enum):
     INGRESS = "ingress"         # Ring 1: Auth, ZT, Rate Limit
@@ -308,14 +309,21 @@ class PluginManager:
             file_path = os.path.join(self.plugins_dir, f"{entrypoint.replace('.', '/')}.wasm")
             if not os.path.exists(file_path):
                 raise FileNotFoundError(f"WASM plugin not found: {file_path}")
+
+            # Initialize WasmRunner with async thread-pool execution
+            runner = WasmRunner(wasm_path=file_path, config=config)
+            loaded = await runner.load()
+
             self.rings[hook].append({
                 "type": "wasm",
                 "path": file_path,
                 "name": name,
                 "timeout_ms": timeout_ms,
                 "fail_policy": fail_policy,
+                "_runner": runner if loaded else None,
             })
-            self.logger.info(f"Plugin Prepared (WASM): {name}")
+            status = "LIVE" if loaded else "STUB (extism not installed)"
+            self.logger.info(f"Plugin Prepared (WASM): {name} [{status}]")
 
     def _should_stop_on_failure(self, plugin: Dict[str, Any], hook: PluginHook) -> bool:
         """
@@ -452,31 +460,44 @@ class PluginManager:
                     stats["total_latency_ms"] += elapsed_ms
 
     async def _execute_wasm(self, plugin: Dict[str, Any], context: PluginContext):
-        """9.5: Execute a WASM plugin via Extism (if installed)."""
-        try:
-            import extism
-        except ImportError:
-            self.logger.debug(f"Extism not installed, skipping WASM plugin {plugin['name']}")
+        """
+        Execute a WASM plugin via WasmRunner.
+
+        Uses asyncio.to_thread for non-blocking execution.
+        Returns PluginResponse mapped to context (same logic as class plugins).
+        """
+        runner = plugin.get("_runner")
+        if runner is None:
+            self.logger.debug(f"WASM runner not initialized for {plugin['name']}")
             return
 
-        wasm_path = plugin["path"]
-        try:
-            with extism.Plugin(wasm_path, wasi=True) as p:
-                input_data = {
-                    "body": context.body,
-                    "metadata": context.metadata,
-                    "session_id": context.session_id,
-                }
-                import json
-                result = p.call("handle", json.dumps(input_data).encode())
-                if result:
-                    output = json.loads(result)
-                    context.body = output.get("body", context.body)
-                    context.metadata.update(output.get("metadata", {}))
-                    if output.get("stop_chain"):
-                        context.stop_chain = True
-        except Exception as e:
-            self.logger.error(f"WASM plugin {plugin['name']} error: {e}")
+        result: PluginResponse = await runner.execute(
+            body=context.body,
+            metadata=context.metadata,
+            session_id=context.session_id,
+        )
+
+        # Apply PluginResponse to context (same logic as class plugins)
+        if result and result.action != "passthrough":
+            name = plugin.get("name", "wasm_unknown")
+            stats = self._plugin_stats.get(name)
+
+            if result.action == "block":
+                context.stop_chain = True
+                context.error = result.message or "Blocked by WASM plugin"
+                context.metadata["_block_status"] = result.status_code
+                context.metadata["_block_error_type"] = result.error_type
+                if stats:
+                    stats["blocks"] += 1
+            elif result.action == "modify":
+                if result.body:
+                    context.body = result.body
+                if result.message:
+                    context.metadata["_plugin_message"] = result.message
+            elif result.action == "cache_hit":
+                context.response = result.response
+                context.stop_chain = True
+                context.metadata["_cache_hit"] = True
 
     async def hot_swap(self):
         """

@@ -30,16 +30,24 @@
 
 ---
 
-## SESSIONE H: WASM/Rust Plugin Pipeline — TODO
-**Priorità: ALTA | File: core/wasm_runner.py, plugins/wasm/**
+## SESSIONE H: WASM/Rust Plugin Pipeline ✅
+**Priorità: ALTA | Commit: pending**
 
-- [ ] **H.1** Analisi architettura WASM spec (Gemini) — valutare cosa ha senso vs bloat
-- [ ] **H.2** `core/wasm_runner.py`: WasmRunner con asyncio.to_thread + Extism Plugin
-- [ ] **H.3** Integrare WasmRunner nel plugin engine execute_ring (upgrade `_execute_wasm`)
-- [ ] **H.4** JSON I/O protocol: PluginContext → JSON input, WafOutput → PluginResponse mapping
-- [ ] **H.5** Timeout + metrics per WASM plugins (stesse garanzie dei Python plugins)
-- [ ] **H.6** Test suite WASM (mock-based, non richiede Rust toolchain)
-- [ ] **H.7** Documentazione per plugin developer Rust (Cargo.toml, lib.rs template)
+- [x] **H.1** Analisi architettura WASM spec — 3 cose buone, 3 bloat scartati (vedi sotto)
+- [x] **H.2** `core/wasm_runner.py`: WasmRunner con `asyncio.to_thread` + Extism Plugin
+- [x] **H.3** Integrato WasmRunner in `_execute_wasm` con PluginResponse mapping
+- [x] **H.4** JSON I/O protocol allineato a PluginResponse (+ compat legacy ALLOW/BLOCK/MODIFIED)
+- [x] **H.5** Timeout + metrics + fail_policy per WASM plugins (stesse garanzie)
+- [x] **H.6** 15 test mock-based (no Rust toolchain richiesto) — passthrough, block, modify, legacy compat, error handling, engine integration
+- [x] **H.7** `plugins/wasm/README.md`: template Rust completo (Cargo.toml, lib.rs, build, manifest)
+
+**Analisi spec Gemini — Verdetto:**
+- ✅ asyncio.to_thread (corretto, fix del bug event loop blocking)
+- ✅ JSON I/O protocol (standard universale, allineato a PluginResponse)
+- ✅ Memory-safe sandboxing (vero valore per marketplace plugins non fidati)
+- ❌ WAF PII in Rust (prematura optimization: 0.18ms diff su 8KB, invisibile vs 200ms+ LLM latency)
+- ❌ "C10k problem risolto" (FUD: il bottleneck è I/O-bound, non regex CPU)
+- ❌ Distribuzione .wasm universale (prematuro con 2 plugin, serve con 50+)
 
 ---
 
@@ -68,8 +76,8 @@
 |----------|-------|-------|
 | F. Dual-Mode Engine + SDK | BasePlugin, PluginResponse, 2 marketplace plugins | ✅ DONE |
 | G. 5 Principi FAANG | Timeouts, AST, Contracts, DI, Tests | ✅ DONE |
-| H. WASM/Rust Pipeline | WasmRunner, Extism, JSON protocol | 🔲 TODO |
+| H. WASM/Rust Pipeline | WasmRunner, Extism, JSON protocol, 15 test | ✅ DONE |
 | I. PluginState Wiring | DI nel runtime RotatorAgent | 🔲 TODO |
 | J. Backlog | Watcher, migration, OpenObserve, UI | 🔲 BACKLOG |
 
-**78 test totali — 100% pass. Zero dead code.**
+**93 test totali — 100% pass. Zero dead code.**
