@@ -74,6 +74,7 @@ export function renderRegistry() {
                 <div class="flex items-center gap-1.5">
                     <div class="w-2 h-2 rounded-full ${circuit.dot} shadow-[0_0_6px]"></div>
                     <span class="text-[9px] font-bold font-mono ${circuit.text}">${circuit.label}</span>
+                    ${(ep.failure_count || 0) > 0 ? `<span class="text-[8px] font-mono text-slate-600">${ep.failure_count}/${ep.failure_threshold || 5}</span>` : ''}
                 </div>
             </td>
             <td class="px-4 py-3 text-[10px] font-mono text-slate-400">${ep.latency || '--'}</td>

@@ -72,6 +72,76 @@ def create_router(agent) -> APIRouter:
         await agent._add_log(f"SYSTEM: Priority Steering {'ENABLED' if agent.priority_mode else 'DISABLED'}")
         return {"enabled": agent.priority_mode}
 
+    @router.get("/api/v1/guards/status")
+    async def get_guards_status():
+        """Consolidated security subsystem status."""
+        from core.firewall_asgi import ByteLevelFirewallMiddleware
+        return {
+            "features": agent.features,
+            "circuit_breakers": agent.circuit_manager.get_all_states(),
+            "firewall": {
+                "total_scanned": ByteLevelFirewallMiddleware.total_scanned,
+                "total_blocked": ByteLevelFirewallMiddleware.total_blocked,
+                "block_by_signature": ByteLevelFirewallMiddleware.block_by_signature,
+                "signatures_count": 11,
+            },
+            "rate_limiter": {
+                "enabled": agent.config.get("rate_limiting", {}).get("enabled", False),
+                "requests_per_minute": agent.config.get("rate_limiting", {}).get("requests_per_minute", 60),
+            },
+            "budget": {
+                "total_cost_today": agent.total_cost_today,
+                "budget_date": agent._budget_date,
+            },
+        }
+
+    @router.get("/api/v1/webhooks")
+    async def get_webhooks():
+        """List configured webhook endpoints."""
+        return {
+            "enabled": agent.webhooks.enabled,
+            "endpoints": [
+                {
+                    "name": ep.name,
+                    "target": ep.target.value,
+                    "events": ep.events,
+                    "url_masked": ep.url[:20] + "..." if len(ep.url) > 20 else ep.url,
+                }
+                for ep in agent.webhooks.endpoints
+            ],
+            "event_types": [e.value for e in __import__('core.webhooks', fromlist=['EventType']).EventType],
+        }
+
+    @router.get("/api/v1/export/status")
+    async def get_export_status():
+        """Export subsystem status."""
+        if not agent.exporter:
+            return {"enabled": False}
+        import os
+        export_dir = str(agent.exporter.output_dir)
+        files = []
+        if os.path.isdir(export_dir):
+            for f in sorted(os.listdir(export_dir), reverse=True)[:10]:
+                fp = os.path.join(export_dir, f)
+                if os.path.isfile(fp):
+                    files.append({"name": f, "size_bytes": os.path.getsize(fp)})
+        return {
+            "enabled": True,
+            "output_dir": export_dir,
+            "scrub_pii": agent.exporter.scrub,
+            "compress": agent.exporter.compress_on_rotate,
+            "current_date": str(agent.exporter._current_date) if agent.exporter._current_date else None,
+            "files": files,
+        }
+
+    @router.get("/api/v1/rbac/roles")
+    async def get_rbac_roles():
+        """RBAC role matrix."""
+        return {
+            role: sorted(perms)
+            for role, perms in agent.rbac.permissions.items()
+        }
+
     @router.post("/api/v1/panic")
     async def emergency_panic():
         from core.webhooks import EventType

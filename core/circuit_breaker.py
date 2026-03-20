@@ -96,3 +96,16 @@ class CircuitManager:
                 name=endpoint_id, on_state_change=self._on_state_change
             )
         return self._circuits[endpoint_id]
+
+    def get_all_states(self) -> dict:
+        """Return circuit breaker state for all tracked endpoints."""
+        result = {}
+        for name, cb in self._circuits.items():
+            result[name] = {
+                "state": cb.state.value,
+                "failure_count": cb.failure_count,
+                "failure_threshold": cb.failure_threshold,
+                "recovery_timeout": cb.recovery_timeout,
+                "last_failure_time": cb.last_failure_time,
+            }
+        return result

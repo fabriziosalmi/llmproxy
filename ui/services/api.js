@@ -111,6 +111,33 @@ export const api = {
         return await response.json();
     },
 
+    async fetchGuardsStatus() {
+        const response = await fetch(`${BASE_URL}/api/v1/guards/status`);
+        return await response.json();
+    },
+
+    async fetchWebhooks() {
+        const response = await fetch(`${BASE_URL}/api/v1/webhooks`);
+        return await response.json();
+    },
+
+    async fetchExportStatus() {
+        const response = await fetch(`${BASE_URL}/api/v1/export/status`);
+        return await response.json();
+    },
+
+    async fetchRbacRoles() {
+        const response = await fetch(`${BASE_URL}/api/v1/rbac/roles`);
+        return await response.json();
+    },
+
+    async fetchIdentityMe() {
+        const response = await fetch(`${BASE_URL}/api/v1/identity/me`, {
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('proxy_key') || ''}` }
+        });
+        return await response.json();
+    },
+
     async sendChatMessage(text, model = 'auto') {
         return await fetch(`${BASE_URL}/v1/chat/completions`, {
             method: 'POST',

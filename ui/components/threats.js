@@ -1,5 +1,6 @@
 /**
- * Threats View — Security dashboard with KPI cards, budget gauge, threat timeline, event feed.
+ * Threats View — Security dashboard with KPI cards, budget gauge, per-endpoint
+ * breakdown, latency percentiles, threat timeline, and live event feed.
  */
 import { store } from '../services/store.js';
 import { api } from '../services/api.js';
@@ -16,7 +17,10 @@ export function initThreats() {
 
 async function refreshMetrics() {
     try {
-        const text = await api.fetchMetrics();
+        const [text, guardsStatus] = await Promise.all([
+            api.fetchMetrics().catch(() => ''),
+            api.fetchGuardsStatus().catch(() => null),
+        ]);
 
         const requests = extractMetric(text, 'llm_proxy_requests_total') || 0;
         const blocked = extractMetric(text, 'llm_proxy_injection_blocked_total') || 0;
@@ -34,13 +38,17 @@ async function refreshMetrics() {
         setText('kpi-blocked', totalBlocked.toLocaleString());
         setText('kpi-pii', blocked > 0 ? blocked.toLocaleString() : '0');
         setText('kpi-passrate', passRate);
-
-        // Extended metrics
         setText('kpi-errors', errors.toLocaleString());
         setText('kpi-tokens', tokens > 1000 ? (tokens / 1000).toFixed(1) + 'k' : tokens.toLocaleString());
 
         // Budget gauge
-        renderBudgetGauge(budgetConsumed, budgetLimit, cost);
+        renderBudgetGauge(budgetConsumed, budgetLimit, cost, guardsStatus);
+
+        // Per-endpoint breakdown
+        renderEndpointBreakdown(text);
+
+        // Firewall stats
+        if (guardsStatus) renderFirewallStats(guardsStatus);
 
     } catch {
         // Backend unavailable
@@ -52,15 +60,17 @@ function setText(id, value) {
     if (el) el.textContent = value;
 }
 
-function renderBudgetGauge(consumed, limit, totalCost) {
+function renderBudgetGauge(consumed, limit, totalCost, guardsStatus) {
     const container = document.getElementById('budget-gauge');
     if (!container) return;
 
-    if (limit <= 0 && totalCost <= 0) {
-        container.innerHTML = `
-            <div class="flex items-center gap-3">
-                <div class="text-[9px] text-slate-600 font-mono">No budget configured</div>
-            </div>`;
+    // Use guardsStatus for more accurate budget data
+    if (guardsStatus?.budget) {
+        consumed = guardsStatus.budget.total_cost_today || consumed;
+    }
+
+    if (limit <= 0 && totalCost <= 0 && consumed <= 0) {
+        container.innerHTML = `<div class="text-[9px] text-slate-600 font-mono">No budget activity yet</div>`;
         return;
     }
 
@@ -71,10 +81,10 @@ function renderBudgetGauge(consumed, limit, totalCost) {
     container.innerHTML = `
         <div class="flex items-center justify-between mb-2">
             <div>
-                <span class="text-lg font-black font-mono text-white">$${consumed.toFixed(2)}</span>
+                <span class="text-lg font-black font-mono text-white">$${consumed.toFixed(4)}</span>
                 ${limit > 0 ? `<span class="text-[10px] text-slate-500"> / $${limit.toFixed(2)}</span>` : ''}
             </div>
-            <span class="text-[9px] font-mono text-${color}-400">${limit > 0 ? pct.toFixed(0) + '% used' : '$' + totalCost.toFixed(4) + ' total'}</span>
+            <span class="text-[9px] font-mono text-${color}-400">${limit > 0 ? pct.toFixed(0) + '% used' : 'tracking'}</span>
         </div>
         ${limit > 0 ? `
             <div class="w-full h-2 bg-white/5 rounded-full overflow-hidden">
@@ -83,6 +93,84 @@ function renderBudgetGauge(consumed, limit, totalCost) {
             <div class="flex justify-between mt-1">
                 <span class="text-[8px] text-slate-600 font-mono">$${remaining} remaining</span>
                 <span class="text-[8px] text-slate-600 font-mono">Daily reset</span>
+            </div>
+        ` : ''}
+    `;
+}
+
+function renderEndpointBreakdown(text) {
+    const container = document.getElementById('endpoint-breakdown');
+    if (!container) return;
+
+    // Parse per-endpoint metrics from Prometheus text
+    const endpoints = {};
+    const lines = text.split('\n');
+    for (const line of lines) {
+        if (line.startsWith('#')) continue;
+        const match = line.match(/llm_proxy_requests_total\{.*endpoint="([^"]+)".*\}\s+([\d.]+)/);
+        if (match) {
+            const [, ep, val] = match;
+            if (!endpoints[ep]) endpoints[ep] = { requests: 0, errors: 0 };
+            endpoints[ep].requests += parseFloat(val);
+        }
+        const errMatch = line.match(/llm_proxy_request_errors_total\{.*endpoint="([^"]+)".*\}\s+([\d.]+)/);
+        if (errMatch) {
+            const [, ep, val] = errMatch;
+            if (!endpoints[ep]) endpoints[ep] = { requests: 0, errors: 0 };
+            endpoints[ep].errors += parseFloat(val);
+        }
+    }
+
+    const entries = Object.entries(endpoints);
+    if (entries.length === 0) {
+        container.innerHTML = `<p class="text-[9px] text-slate-600 font-mono">No per-endpoint data yet</p>`;
+        return;
+    }
+
+    container.innerHTML = entries.map(([ep, data]) => {
+        const errRate = data.requests > 0 ? ((data.errors / data.requests) * 100).toFixed(1) : '0.0';
+        const errColor = parseFloat(errRate) > 5 ? 'text-rose-400' : parseFloat(errRate) > 0 ? 'text-amber-400' : 'text-emerald-400';
+        return `
+            <div class="flex items-center justify-between py-1.5 border-b border-white/[0.04] last:border-0">
+                <span class="text-[9px] font-mono text-slate-400 truncate max-w-[200px]">${ep}</span>
+                <div class="flex items-center gap-4">
+                    <span class="text-[9px] font-mono text-slate-500">${data.requests.toLocaleString()} req</span>
+                    <span class="text-[9px] font-mono ${errColor}">${errRate}% err</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderFirewallStats(guardsStatus) {
+    const container = document.getElementById('firewall-stats');
+    if (!container) return;
+
+    const fw = guardsStatus.firewall || {};
+    const scanned = fw.total_scanned || 0;
+    const fwBlocked = fw.total_blocked || 0;
+    const signatures = fw.block_by_signature || {};
+    const sigEntries = Object.entries(signatures);
+
+    container.innerHTML = `
+        <div class="flex items-center gap-6 mb-2">
+            <div>
+                <span class="text-lg font-black font-mono text-white">${scanned.toLocaleString()}</span>
+                <span class="text-[9px] text-slate-500 ml-1">scanned</span>
+            </div>
+            <div>
+                <span class="text-lg font-black font-mono ${fwBlocked > 0 ? 'text-rose-400' : 'text-emerald-400'}">${fwBlocked}</span>
+                <span class="text-[9px] text-slate-500 ml-1">blocked</span>
+            </div>
+        </div>
+        ${sigEntries.length > 0 ? `
+            <div class="space-y-1 mt-2 pt-2 border-t border-white/[0.04]">
+                ${sigEntries.map(([sig, count]) => `
+                    <div class="flex items-center justify-between">
+                        <span class="text-[8px] font-mono text-slate-500 truncate max-w-[250px]">${sig}</span>
+                        <span class="text-[8px] font-mono text-rose-400">${count}x</span>
+                    </div>
+                `).join('')}
             </div>
         ` : ''}
     `;
@@ -141,16 +229,8 @@ function initChart() {
                 },
             },
             scales: {
-                x: {
-                    stacked: true,
-                    ticks: { color: '#334155', font: { size: 9 } },
-                    grid: { color: 'rgba(255,255,255,0.03)' },
-                },
-                y: {
-                    stacked: true,
-                    ticks: { color: '#334155', font: { size: 9 } },
-                    grid: { color: 'rgba(255,255,255,0.03)' },
-                },
+                x: { stacked: true, ticks: { color: '#334155', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.03)' } },
+                y: { stacked: true, ticks: { color: '#334155', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.03)' } },
             },
         },
     });
@@ -209,12 +289,7 @@ function addEventToFeed(feed, entry) {
     `;
 
     feed.insertBefore(el, feed.firstChild);
-
-    while (feed.children.length > 50) {
-        feed.removeChild(feed.lastChild);
-    }
+    while (feed.children.length > 50) feed.removeChild(feed.lastChild);
 }
 
-export function renderThreats() {
-    // KPIs are updated via refreshMetrics interval
-}
+export function renderThreats() {}

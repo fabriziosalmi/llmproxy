@@ -9,6 +9,11 @@ class ByteLevelFirewallMiddleware:
     If a prohibited semantic byte-pattern is detected, it instantly injects an 
     HTTP/1.1 0\\r\\n\\r\\n chunk, closing the socket forcefully to prune remote inference costs mid-flight.
     """
+    # Class-level counters (shared across instances for metrics)
+    total_scanned = 0
+    total_blocked = 0
+    block_by_signature = {}
+
     def __init__(self, app):
         self.app = app
         # Injection detection patterns — must be specific enough to avoid false positives
@@ -38,9 +43,13 @@ class ByteLevelFirewallMiddleware:
             message = await receive()
             if message["type"] == "http.request" and not flagged:
                 chunk = message.get("body", b"").lower()
+                ByteLevelFirewallMiddleware.total_scanned += 1
                 for sig in self.BANNED_SIGNATURES:
                     if sig in chunk:
                         flagged = True
+                        ByteLevelFirewallMiddleware.total_blocked += 1
+                        sig_key = sig.decode('utf-8', errors='replace')
+                        ByteLevelFirewallMiddleware.block_by_signature[sig_key] = ByteLevelFirewallMiddleware.block_by_signature.get(sig_key, 0) + 1
                         logger.critical(f"FIREWALL TRIGGERED: Fatal byte signature detected [{sig}]. Tearing down socket.")
                         break
             # Proceed yielding the message even if flagged, so the upstream logic can abort naturally

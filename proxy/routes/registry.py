@@ -58,6 +58,7 @@ def create_router(agent) -> APIRouter:
     @router.get("/api/v1/registry")
     async def get_registry():
         endpoints = await agent.store.get_all()
+        circuit_states = agent.circuit_manager.get_all_states() if hasattr(agent, 'circuit_manager') else {}
         return [{
             "id": e.id,
             "name": e.url.host if e.url.host else str(e.url),
@@ -65,7 +66,10 @@ def create_router(agent) -> APIRouter:
             "status": "Live" if e.status == EndpointStatus.VERIFIED else e.status.name,
             "latency": f"{e.latency_ms:.0f}ms" if e.latency_ms else "--",
             "priority": e.metadata.get("priority", 0),
-            "type": e.metadata.get("provider_type", "Generic")
+            "type": e.metadata.get("provider_type", "Generic"),
+            "circuit_state": circuit_states.get(e.id, {}).get("state", "closed"),
+            "failure_count": circuit_states.get(e.id, {}).get("failure_count", 0),
+            "failure_threshold": circuit_states.get(e.id, {}).get("failure_threshold", 5),
         } for e in endpoints]
 
     return router
