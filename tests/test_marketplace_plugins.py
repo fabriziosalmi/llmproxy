@@ -373,3 +373,165 @@ async def test_engine_stats_all_plugins():
     assert "plugin_b" in all_stats
     assert all_stats["plugin_a"]["avg_latency_ms"] == 5.0
     assert all_stats["plugin_b"]["avg_latency_ms"] == 0
+
+
+# ── Principle 1: Fail Policy Tests ──
+
+@pytest.mark.asyncio
+async def test_fail_open_timeout_continues():
+    """Fail-open plugin timeout should NOT stop the chain."""
+    from core.plugin_engine import PluginHook as EngineHook
+    manager = PluginManager(plugins_dir="plugins")
+    instance = SlowPlugin()
+
+    manager.rings[EngineHook.BACKGROUND] = [{
+        "type": "class",
+        "instance": instance,
+        "name": "slow_open",
+        "timeout_ms": 50,
+        "fail_policy": "open",  # Fail-open: request continues
+    }]
+    manager._init_stats("slow_open")
+
+    ctx = PluginContext()
+    await manager.execute_ring(EngineHook.BACKGROUND, ctx)
+
+    assert ctx.stop_chain is False  # Should NOT stop
+    assert ctx.error is not None    # Error is recorded
+
+
+@pytest.mark.asyncio
+async def test_fail_closed_timeout_stops():
+    """Fail-closed plugin timeout should stop the chain."""
+    from core.plugin_engine import PluginHook as EngineHook
+    manager = PluginManager(plugins_dir="plugins")
+    instance = SlowPlugin()
+
+    manager.rings[EngineHook.BACKGROUND] = [{
+        "type": "class",
+        "instance": instance,
+        "name": "slow_closed",
+        "timeout_ms": 50,
+        "fail_policy": "closed",  # Fail-closed: request blocked
+    }]
+    manager._init_stats("slow_closed")
+
+    ctx = PluginContext()
+    await manager.execute_ring(EngineHook.BACKGROUND, ctx)
+
+    assert ctx.stop_chain is True  # MUST stop
+    assert "timed out" in ctx.error
+
+
+# ── Principle 2: AST Blocking I/O Detection ──
+
+from core.plugin_engine import ast_scan, PluginSecurityError
+
+
+def test_ast_blocks_requests_import():
+    """AST scanner should block 'import requests' (blocking I/O)."""
+    source = "import requests\ndef run(ctx): requests.get('http://evil.com')"
+    with pytest.raises(PluginSecurityError, match="Forbidden import 'requests'"):
+        ast_scan(source, "bad_plugin")
+
+
+def test_ast_blocks_time_sleep():
+    """AST scanner should block 'time.sleep()' (blocks event loop)."""
+    source = "import time\ndef run(ctx): time.sleep(5)"
+    with pytest.raises(PluginSecurityError, match="time.sleep"):
+        ast_scan(source, "sleepy_plugin")
+
+
+def test_ast_blocks_urllib():
+    """AST scanner should block 'import urllib' (blocking I/O)."""
+    source = "import urllib.request\ndef run(ctx): urllib.request.urlopen('http://evil.com')"
+    with pytest.raises(PluginSecurityError, match="Forbidden import"):
+        ast_scan(source, "urllib_plugin")
+
+
+def test_ast_blocks_sqlite3():
+    """AST scanner should block 'import sqlite3' (blocking DB)."""
+    source = "import sqlite3\ndef run(ctx): pass"
+    with pytest.raises(PluginSecurityError, match="Forbidden import 'sqlite3'"):
+        ast_scan(source, "db_plugin")
+
+
+def test_ast_allows_asyncio_sleep():
+    """AST scanner should ALLOW 'asyncio.sleep()' (non-blocking)."""
+    source = "import asyncio\nasync def run(ctx): await asyncio.sleep(0.1)"
+    assert ast_scan(source, "good_plugin") is True
+
+
+# ── Principle 3: PluginResponse Validation ──
+
+from core.plugin_sdk import PluginResponseError, PluginAction
+
+
+def test_invalid_action_raises():
+    """PluginResponse with invalid action should raise PluginResponseError."""
+    with pytest.raises(PluginResponseError, match="Invalid PluginResponse action 'banana'"):
+        PluginResponse(action="banana")
+
+
+def test_valid_actions_accepted():
+    """All valid PluginAction values should be accepted."""
+    for action in PluginAction:
+        resp = PluginResponse(action=action.value)
+        assert resp.action == action.value
+
+
+def test_block_low_status_autocorrected():
+    """BLOCK with status_code < 400 should be auto-corrected to 403."""
+    resp = PluginResponse(action="block", status_code=200)
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_engine_invalid_response_type_ignored():
+    """Plugin returning wrong type should be caught and ignored."""
+    from core.plugin_engine import PluginHook as EngineHook
+
+    class BadPlugin(BasePlugin):
+        name = "bad_return"
+        timeout_ms = 100
+        async def execute(self, ctx):
+            return {"action": "passthrough"}  # Wrong type! Should be PluginResponse
+
+    manager = PluginManager(plugins_dir="plugins")
+    instance = BadPlugin()
+
+    manager.rings[EngineHook.BACKGROUND] = [{
+        "type": "class",
+        "instance": instance,
+        "name": "bad_return",
+        "timeout_ms": 100,
+        "fail_policy": "open",
+    }]
+    manager._init_stats("bad_return")
+
+    ctx = PluginContext()
+    await manager.execute_ring(EngineHook.BACKGROUND, ctx)
+
+    stats = manager.get_plugin_stats("bad_return")
+    assert stats["errors"] == 1
+    assert ctx.stop_chain is False  # Fail-open: continues
+
+
+# ── Principle 4: PluginState Injection ──
+
+from core.plugin_engine import PluginState
+
+
+def test_plugin_state_accessible():
+    """PluginState should be accessible via PluginContext.state."""
+    state = PluginState(config={"budget": {"limit": 100}})
+    ctx = PluginContext(state=state)
+    assert ctx.state is not None
+    assert ctx.state.config["budget"]["limit"] == 100
+
+
+def test_plugin_state_extra_slot():
+    """PluginState.extra should allow arbitrary shared resources."""
+    state = PluginState(extra={"redis": "mock_redis_conn"})
+    ctx = PluginContext(state=state)
+    assert ctx.state.extra["redis"] == "mock_redis_conn"

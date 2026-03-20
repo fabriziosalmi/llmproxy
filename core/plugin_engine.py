@@ -26,7 +26,7 @@ from enum import Enum
 from typing import List, Dict, Any, Optional, Callable
 from dataclasses import dataclass, field
 
-from core.plugin_sdk import BasePlugin, PluginResponse, PluginHook as SDKHook
+from core.plugin_sdk import BasePlugin, PluginResponse, PluginResponseError, PluginHook as SDKHook
 
 class PluginHook(Enum):
     INGRESS = "ingress"         # Ring 1: Auth, ZT, Rate Limit
@@ -34,6 +34,25 @@ class PluginHook(Enum):
     ROUTING = "routing"         # Ring 3: Model Selection, Cache
     POST_FLIGHT = "post_flight" # Ring 4: Streaming, Sanitization, JSON Healing
     BACKGROUND = "background"   # Ring 5: FinOps, Logs, Shadow Traffic
+
+@dataclass
+class PluginState:
+    """
+    Shared state injected into plugins (Principle 4: Dependency Injection).
+
+    Plugins should NOT instantiate their own connections. The proxy injects
+    pre-configured, shared resources via this object.
+
+    Attributes set by the proxy at startup:
+      - cache: SemanticCache instance (or None)
+      - metrics: MetricsTracker instance (or None)
+      - config: Global proxy config dict
+      - Any future shared resources (Redis, DB pools, etc.)
+    """
+    cache: Any = None          # SemanticCache instance
+    metrics: Any = None        # MetricsTracker instance
+    config: Dict[str, Any] = field(default_factory=dict)  # Global proxy config
+    extra: Dict[str, Any] = field(default_factory=dict)    # Extensible slot
 
 @dataclass
 class PluginContext:
@@ -44,9 +63,19 @@ class PluginContext:
     session_id: str = "default"
     error: Optional[str] = None
     stop_chain: bool = False
+    state: Optional[PluginState] = None  # Principle 4: injected shared state
 
 # Default timeout for raw function plugins (ms)
-DEFAULT_TIMEOUT_MS = 5000
+# 500ms is a reasonable compromise: strict enough to protect the event loop,
+# permissive enough to not break legacy plugins that do light I/O.
+DEFAULT_TIMEOUT_MS = 500
+
+# Fail policies for timeout/error handling
+FAIL_OPEN = "open"    # Plugin failure → request continues (default for Background/PostFlight)
+FAIL_CLOSED = "closed"  # Plugin failure → request blocked (default for Ingress/Routing)
+
+# Rings that default to fail-closed (errors stop the chain)
+FAIL_CLOSED_RINGS = {PluginHook.INGRESS, PluginHook.ROUTING}
 
 # 9.2: Forbidden AST node types for security scanning
 FORBIDDEN_AST_NODES = {
@@ -55,6 +84,9 @@ FORBIDDEN_AST_NODES = {
 FORBIDDEN_MODULES = {
     "os", "subprocess", "shutil", "socket", "ctypes",
     "multiprocessing", "signal", "sys", "builtins", "__builtins__",
+    # Blocking I/O libraries (Principle 2: Zero-Blocking Event Loop)
+    "requests", "urllib",  # sync HTTP — use aiohttp/httpx instead
+    "sqlite3",             # sync DB — use aiosqlite instead
 }
 ALLOWED_MODULES = {
     "json", "re", "math", "datetime", "hashlib", "base64",
@@ -113,6 +145,12 @@ def ast_scan(source: str, plugin_name: str) -> bool:
             if isinstance(func, ast.Attribute) and func.attr in ("exec", "eval", "system", "popen"):
                 raise PluginSecurityError(
                     f"Plugin '{plugin_name}': Forbidden method call '.{func.attr}()'"
+                )
+            # Principle 2: Block time.sleep() — use asyncio.sleep() instead
+            if (isinstance(func, ast.Attribute) and func.attr == "sleep"
+                    and isinstance(func.value, ast.Name) and func.value.id == "time"):
+                raise PluginSecurityError(
+                    f"Plugin '{plugin_name}': Blocking call 'time.sleep()' — use 'await asyncio.sleep()' instead"
                 )
 
     return True
@@ -200,6 +238,10 @@ class PluginManager:
         p_type = p_info.get("type", "python")
         timeout_ms = p_info.get("timeout_ms", DEFAULT_TIMEOUT_MS)
         config = p_info.get("config", {})
+        # Fail policy: "open" (request continues on failure) or "closed" (request blocked)
+        # Default: closed for Ingress/Routing, open for everything else
+        default_fail = FAIL_CLOSED if hook in FAIL_CLOSED_RINGS else FAIL_OPEN
+        fail_policy = p_info.get("fail_policy", default_fail)
 
         # Store metadata (ui_schema, version, author) for marketplace
         self._plugin_meta[name] = {
@@ -212,6 +254,7 @@ class PluginManager:
             "ui_schema": p_info.get("ui_schema"),
             "enabled": p_info.get("enabled", True),
             "timeout_ms": timeout_ms,
+            "fail_policy": fail_policy,
         }
 
         self._init_stats(name)
@@ -246,8 +289,9 @@ class PluginManager:
                     "instance": instance,
                     "name": name,
                     "timeout_ms": instance.timeout_ms,
+                    "fail_policy": fail_policy,
                 })
-                self.logger.info(f"Plugin Loaded (class): {name} v{instance.version} → {hook.value}")
+                self.logger.info(f"Plugin Loaded (class): {name} v{instance.version} → {hook.value} [fail={fail_policy}]")
             else:
                 # Legacy raw function
                 func = target
@@ -256,8 +300,9 @@ class PluginManager:
                     "func": func,
                     "name": name,
                     "timeout_ms": timeout_ms,
+                    "fail_policy": fail_policy,
                 })
-                self.logger.info(f"Plugin Loaded (function): {name} → {hook.value}")
+                self.logger.info(f"Plugin Loaded (function): {name} → {hook.value} [fail={fail_policy}]")
 
         elif p_type == "wasm":
             file_path = os.path.join(self.plugins_dir, f"{entrypoint.replace('.', '/')}.wasm")
@@ -268,8 +313,17 @@ class PluginManager:
                 "path": file_path,
                 "name": name,
                 "timeout_ms": timeout_ms,
+                "fail_policy": fail_policy,
             })
             self.logger.info(f"Plugin Prepared (WASM): {name}")
+
+    def _should_stop_on_failure(self, plugin: Dict[str, Any], hook: PluginHook) -> bool:
+        """
+        Determine if a plugin failure should stop the chain.
+        Uses per-plugin fail_policy, falling back to ring defaults.
+        """
+        policy = plugin.get("fail_policy", FAIL_CLOSED if hook in FAIL_CLOSED_RINGS else FAIL_OPEN)
+        return policy == FAIL_CLOSED
 
     async def execute_ring(self, hook: PluginHook, context: PluginContext):
         """
@@ -282,6 +336,8 @@ class PluginManager:
 
         All plugins run under strict timeout enforcement.
         Per-plugin metrics are tracked automatically.
+        Fail policy (open/closed) is per-plugin configurable (Principle 1).
+        PluginResponse is validated (Principle 3).
         """
         for p in self.rings[hook]:
             if context.stop_chain:
@@ -291,6 +347,7 @@ class PluginManager:
             timeout_ms = p.get("timeout_ms", DEFAULT_TIMEOUT_MS)
             timeout_s = timeout_ms / 1000.0
             stats = self._plugin_stats.get(name)
+            fail_closed = self._should_stop_on_failure(p, hook)
 
             t0 = time.perf_counter()
 
@@ -308,12 +365,27 @@ class PluginManager:
                             stats["timeouts"] += 1
                             stats["errors"] += 1
                         context.error = f"Plugin {name} timed out"
-                        if hook in (PluginHook.INGRESS, PluginHook.ROUTING):
+                        if fail_closed:
+                            context.stop_chain = True
+                        continue
+
+                    # Principle 3: Validate PluginResponse
+                    if result is None:
+                        self.logger.warning(f"Plugin {name} returned None, treating as passthrough")
+                        continue
+                    if not isinstance(result, PluginResponse):
+                        self.logger.error(
+                            f"Plugin {name} returned {type(result).__name__} instead of PluginResponse — ignored"
+                        )
+                        if stats:
+                            stats["errors"] += 1
+                        if fail_closed:
+                            context.error = f"Plugin {name} returned invalid response type"
                             context.stop_chain = True
                         continue
 
                     # Apply PluginResponse to context
-                    if result and result.action != "passthrough":
+                    if result.action != "passthrough":
                         if result.action == "block":
                             context.stop_chain = True
                             context.error = result.message or "Blocked by plugin"
@@ -350,20 +422,28 @@ class PluginManager:
                             stats["timeouts"] += 1
                             stats["errors"] += 1
                         context.error = f"Plugin {name} timed out"
-                        if hook in (PluginHook.INGRESS, PluginHook.ROUTING):
+                        if fail_closed:
                             context.stop_chain = True
                         continue
 
                 elif p["type"] == "wasm":
                     await self._execute_wasm(p, context)
 
+            except PluginResponseError as e:
+                # Principle 3: Plugin returned malformed response
+                self.logger.error(f"Plugin {name} invalid response: {e}")
+                if stats:
+                    stats["errors"] += 1
+                if fail_closed:
+                    context.error = str(e)
+                    context.stop_chain = True
+
             except Exception as e:
                 self.logger.error(f"Error executing plugin {name} in {hook.value}: {e}")
                 context.error = str(e)
                 if stats:
                     stats["errors"] += 1
-                # Ingress/Routing errors might be fatal
-                if hook in (PluginHook.INGRESS, PluginHook.ROUTING):
+                if fail_closed:
                     context.stop_chain = True
             finally:
                 elapsed_ms = (time.perf_counter() - t0) * 1000

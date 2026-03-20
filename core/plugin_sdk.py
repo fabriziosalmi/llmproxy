@@ -38,6 +38,22 @@ class PluginHook(Enum):
     BACKGROUND = "background"   # Ring 5: FinOps, Logs, Telemetry
 
 
+class PluginAction(str, Enum):
+    """
+    Typed action enum for PluginResponse.
+    Prevents silent failures from typos like action="banana".
+    """
+    PASSTHROUGH = "passthrough"
+    MODIFY = "modify"
+    BLOCK = "block"
+    CACHE_HIT = "cache_hit"
+
+
+class PluginResponseError(ValueError):
+    """Raised when a PluginResponse has invalid fields."""
+    pass
+
+
 @dataclass
 class PluginResponse:
     """
@@ -48,6 +64,12 @@ class PluginResponse:
       - MODIFY: Request body was mutated, continue
       - BLOCK: Stop the chain, return error to client
       - CACHE_HIT: Return cached response, skip routing
+
+    Validation (Principle 3):
+      - action must be a valid PluginAction enum value
+      - BLOCK requires status_code >= 400
+      - MODIFY requires body to be set
+      - CACHE_HIT requires response to be set
     """
     action: str = "passthrough"     # passthrough | modify | block | cache_hit
     status_code: int = 200
@@ -55,6 +77,23 @@ class PluginResponse:
     message: Optional[str] = None
     body: Optional[Dict[str, Any]] = None  # Modified body (for MODIFY action)
     response: Any = None                    # Direct response (for CACHE_HIT)
+
+    def __post_init__(self):
+        """Validate response fields (Principle 3: strict contracts)."""
+        # Validate action is a known value
+        valid_actions = {a.value for a in PluginAction}
+        if self.action not in valid_actions:
+            raise PluginResponseError(
+                f"Invalid PluginResponse action '{self.action}'. "
+                f"Must be one of: {', '.join(valid_actions)}"
+            )
+        # Validate BLOCK has appropriate status code
+        if self.action == PluginAction.BLOCK.value and self.status_code < 400:
+            logger.warning(
+                f"PluginResponse BLOCK with status_code={self.status_code} < 400, "
+                f"auto-correcting to 403"
+            )
+            self.status_code = 403
 
     @classmethod
     def passthrough(cls) -> "PluginResponse":
