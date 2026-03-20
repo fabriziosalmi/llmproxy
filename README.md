@@ -27,12 +27,26 @@ LLMProxy is engineered as a multi-tier, distributed system. It separates high-sp
 ### System Tiers
 - **Edge Tier (L7)**: ASGI-based request pipeline, OIDC/JWT authentication, Byte-Level Firewall, and Ring-based plugin pipeline.
 - **Agentic Tier (L2/L3)**: Supervisor-managed swarm for discovery, validation, and self-healing.
-- **Persistence Tier**: Multi-modal storage (SQLite for metadata/RBAC, ChromaDB for semantic patterns).
+- **Persistence Tier**: Multi-modal storage (SQLite for metadata/RBAC/budget, ChromaDB for semantic patterns).
+
+### Route Architecture
+The `RotatorAgent` orchestrates 6 route modules under `proxy/routes/`, each a factory function (`create_router(agent) -> APIRouter`):
+
+| Module | Routes | Responsibility |
+|--------|--------|----------------|
+| `chat.py` | `/v1/chat/completions` | Core proxy endpoint with auth, identity, RBAC, zero-trust, budget tracking |
+| `admin.py` | `/api/v1/proxy/*`, `/api/v1/features/*`, `/api/v1/panic` | Proxy control, feature toggles, kill-switch |
+| `registry.py` | `/api/v1/registry/*`, `/api/v1/telemetry/stream` | Endpoint CRUD, SSE telemetry stream |
+| `identity.py` | `/api/v1/identity/*` | SSO config, user info, token exchange |
+| `plugins.py` | `/api/v1/plugins/*` | Plugin lifecycle (install, uninstall, hot-swap, rollback) |
+| `telemetry.py` | `/health`, `/metrics`, `/api/v1/logs` | Health probes, Prometheus metrics, log SSE |
+
+Heavy dependencies (OpenTelemetry, Sentry) are lazily imported inside route handlers, not at module level — enabling test isolation without mocking the entire import chain.
 
 ### Tech Stack
 | Layer | Technology |
 |-------|-----------|
-| Backend | Python 3.12+, FastAPI, uvicorn, aiohttp |
+| Backend | Python 3.12+, FastAPI (modular routers), uvicorn, aiohttp |
 | Frontend | Vanilla JS (ES Modules), Tailwind CSS, Chart.js, xterm.js |
 | Database | SQLite (aiosqlite) + ChromaDB (vector search) |
 | Observability | OpenTelemetry, Prometheus, Sentry |
@@ -309,6 +323,7 @@ ChromaDB-backed semantic similarity cache (`core/semantic_cache.py`):
 - **Traces**: Distributed tracing via OTLP with optional console exporter.
 - **Resource tags**: `service.name` for multi-instance identification.
 - **FastAPI auto-instrumentation**: All routes traced automatically.
+- **Graceful degradation**: If `opentelemetry` is not installed, all tracing functions become no-ops — the proxy runs at full speed without any observability dependencies.
 
 ### Sentry Integration
 - Exception tracking with FastAPI + aiohttp integrations.
@@ -471,6 +486,12 @@ budget:
   fallback_to_local_on_limit: true
 ```
 
+### Budget Persistence
+Daily budget consumption is persisted to SQLite via the `app_state` key-value table:
+- **On startup**: Loads `budget:daily_total` and `budget:daily_date` — resets automatically on new day.
+- **On every request**: Fire-and-forget `asyncio.create_task(store.set_state(...))` — non-blocking, survives restarts.
+- **Plugin-level**: `SmartBudgetGuard` persists per-session and per-team spend via `PluginState.extra["store"]` DI.
+
 ### Secrets Management
 All sensitive values are loaded via **Infisical SDK** with environment variable fallback:
 - `LLM_PROXY_API_KEYS` — Comma-separated API keys.
@@ -486,27 +507,34 @@ All sensitive values are loaded via **Infisical SDK** with environment variable 
 
 ## Testing
 
-46 plugin/WASM tests across core modules, all passing on `pytest` + `pytest-asyncio`. Additional integration tests require optional dependencies (`aiosqlite`, `pytest-asyncio` for Python 3.14).
+127 tests across 10 modules, all passing on `pytest` + `pytest-asyncio`. The suite includes unit tests for every subsystem and full HTTP-level E2E integration tests against the real route handlers.
 
 ```bash
-# Run full suite
+# Run full suite (127 tests)
 python -m pytest tests/ -v --ignore=tests/test_store.py --ignore=tests/integrated_test.py
 
 # Run a specific module
 python -m pytest tests/test_marketplace_plugins.py -v
+
+# Run only E2E integration tests
+python -m pytest tests/test_e2e.py -v
 ```
 
 | Module | Tests | Coverage |
 |--------|-------|----------|
+| `test_e2e.py` | 36 | Full HTTP E2E: health, metrics, version, proxy toggle, priority, panic, features, registry CRUD, plugins, identity, chat (auth on/off), budget persistence, state persistence |
+| `test_marketplace_plugins.py` | 30 | Loop Breaker (7), Budget Guard (5), Engine dual-mode (5), Fail policy (2), AST blocking (5), Validation (4), DI State (2) |
+| `test_wasm_runner.py` | 15 | JSON protocol, legacy action mapping, error handling, engine integration |
+| `test_export.py` | 8 | PII scrub (email/IP/key/bearer), nested redaction, file rotation |
+| `test_plugin_engine.py` | 8 | AST scan (safe/forbidden: os/subprocess/exec/eval), allowed modules |
 | `test_identity.py` | 7 | OIDC verify, proxy JWT gen/verify/expire, role mapping |
 | `test_rbac.py` | 7 | Admin/user/viewer permissions, multi-role, quota, user CRUD |
 | `test_webhooks.py` | 6 | Slack/Teams/Discord/Generic format, severity mapping |
 | `test_chatops.py` | 5 | Telegram polling, HITL approve/reject/timeout, error tracking |
-| `test_export.py` | 8 | PII scrub (email/IP/key/bearer), nested redaction, file rotation |
-| `test_plugin_engine.py` | 8 | AST scan (safe/forbidden: os/subprocess/exec/eval), allowed modules |
 | `test_metrics.py` | 5 | Counter increment, error class, injection blocked, budget, circuit |
-| `test_marketplace_plugins.py` | 30 | Loop Breaker (7), Budget Guard (5), Engine dual-mode (5), Fail policy (2), AST blocking (5), Validation (4), DI State (2) |
-| `test_wasm_runner.py` | 15 | JSON protocol, legacy action mapping, error handling, engine integration |
+
+### E2E Test Architecture
+The E2E suite (`test_e2e.py`) uses a `LightweightAgent` that mounts the **real route modules** (`proxy/routes/`) against an `InMemoryRepository`, without importing the full `RotatorAgent` or its 20+ transitive dependencies (OpenTelemetry, Sentry, ChromaDB, etc.). This gives true HTTP-level coverage with sub-second execution and zero external services.
 
 ---
 

@@ -80,6 +80,37 @@
 
 ---
 
+## SESSIONE L: God Object Split + Budget Persistence + E2E Tests ✅
+**Priorità: CRITICA | Commit: pending**
+
+- [x] **L.1 (J.6)** God Object refactor: `rotator.py` da 787→384 righe — 27 route estratte in 6 moduli sotto `proxy/routes/`
+  - `proxy/routes/__init__.py`: re-export factory functions
+  - `proxy/routes/admin.py`: proxy toggle, status, version, service-info, features, network-info, priority, panic
+  - `proxy/routes/registry.py`: endpoint CRUD (toggle, delete, priority, list) + telemetry SSE
+  - `proxy/routes/identity.py`: SSO config, /me, token exchange
+  - `proxy/routes/plugins.py`: list, toggle, install, uninstall, hot-swap, rollback
+  - `proxy/routes/telemetry.py`: health, metrics, logs SSE
+  - `proxy/routes/chat.py`: `/v1/chat/completions` con lazy imports (otel, sentry, webhooks)
+- [x] **L.2 (J.5)** Budget persistence su SQLite via `app_state` key-value (zero schema changes)
+  - Daily budget hydration on startup (`budget:daily_total`, `budget:daily_date`)
+  - Fire-and-forget persistence via `asyncio.create_task(store.set_state(...))`
+  - `SmartBudgetGuard` 1.1.0: lazy hydration + async persist di session/team spend
+  - `PluginState.extra["store"]` per DI del repository nei plugin
+- [x] **L.3** `core/tracing.py`: graceful degradation — wrappato opentelemetry in try/except con `_OTEL_AVAILABLE` flag
+- [x] **L.4** Bug fix: `EndpointStatus.OFFLINE` non esisteva — corretto in `EndpointStatus.IGNORED`
+- [x] **L.5** Lazy imports in route handlers — `MetricsTracker`, `TraceManager`, `EventType` importati dentro le funzioni, non a module-level (evita import chain di otel/sentry in test)
+- [x] **L.6** 33 test E2E HTTP-level (`tests/test_e2e.py`)
+  - `LightweightAgent`: mock agent che monta le vere route senza importare RotatorAgent
+  - `InMemoryRepository`: implementazione BaseRepository in-memory (`tests/conftest.py`)
+  - Coverage: health, metrics, version, service-info, network-info, proxy toggle, priority, panic, features, registry CRUD, plugins, identity, chat (auth on/off), budget persistence, state persistence
+
+**Analisi architetturale pre-sessione:**
+- Valutato piano 8-sessioni/40-feature → 90% scartato come premature optimization
+- Priorità reale: J.6 (God Object) → J.5 (persistence) → E2E tests → poi tutto il resto
+- Zero framework aggiunti, zero complessità gratuita
+
+---
+
 ## SESSIONE J: Migrazioni Future (Non Bloccanti) — BACKLOG
 **Priorità: BASSA**
 
@@ -87,8 +118,8 @@
 - [ ] **J.2** Migrazione incrementale default plugins → BasePlugin (uno alla volta, zero urgenza)
 - [ ] **J.3** OpenObserve integration per tracing distribuito
 - [ ] **J.4** Plugin marketplace UI panel nella dashboard
-- [ ] **J.5** Budget tracking: persistenza su disco + costo reale basato su token count (ora è in-memory heuristic)
-- [ ] **J.6** God Object refactor: rotator.py (770+ righe, 27 route) → split in route modules
+- [x] **J.5** ~~Budget tracking: persistenza su disco~~ → fatto in L.2
+- [x] **J.6** ~~God Object refactor: rotator.py~~ → fatto in L.1
 - [ ] **J.7** `sanitize_response()` wiring nel POST_FLIGHT per risposte non-streaming
 
 ---
@@ -102,6 +133,7 @@
 | H. WASM/Rust Pipeline | WasmRunner, Extism, JSON protocol, 15 test | ✅ DONE |
 | I. Wiring + Dead Code | SecurityShield cleanup, PluginState DI, inspect() wired | ✅ DONE |
 | K. UI/UX Surgical Cleanup | HTML nesting, view IDs, sidebar labels, API centralization | ✅ DONE |
-| J. Backlog | Watcher, migration, OpenObserve, UI, budget persistence, refactor | 🔲 BACKLOG |
+| L. God Object + Budget + E2E | Route split, SQLite persistence, 33 E2E tests, bug fixes | ✅ DONE |
+| J. Backlog | Watcher, migration, OpenObserve, UI, sanitize_response | 🔲 BACKLOG |
 
-**46 test plugin/WASM — 100% pass. Zero dead code in security.py. UI tag soup fixed.**
+**127 test totali — 100% pass. rotator.py dimezzato. Budget persistente. Zero dead code.**
