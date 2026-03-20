@@ -1,0 +1,36 @@
+plugins:
+  - name: "Ingress Auth & Zero-Trust"
+    hook: "ingress"
+    priority: 10
+    enabled: true
+    entrypoint: "default.ingress_auth:verify"
+
+  - name: "PII Neural Masker"
+    hook: "pre_flight"
+    priority: 20
+    enabled: true
+    entrypoint: "default.pii_masker:mask"
+
+  - name: "Semantic Cache Hook"
+    hook: "pre_flight"
+    priority: 30
+    enabled: true
+    entrypoint: "default.cache_check:lookup"
+
+  - name: "Enterprise Neural Router"
+    hook: "routing"
+    priority: 50
+    enabled: true
+    entrypoint: "default.neural_router:select_endpoint"
+
+  - name: "Post-Flight Sanitizer"
+    hook: "post_flight"
+    priority: 80
+    enabled: true
+    entrypoint: "default.shield_sanitizer:cleanse"
+
+  - name: "Unified Telemetry & FinOps"
+    hook: "background"
+    priority: 100
+    enabled: true
+    entrypoint: "default.telemetry_ops:record"

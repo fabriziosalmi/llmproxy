@@ -5,12 +5,13 @@ import { store } from './services/store.js';
 import { api } from './services/api.js';
 import { renderSidebar, initSidebar } from './components/sidebar.js';
 import { renderContent, initNavigation } from './components/content.js';
-import { renderRegistry, fetchRegistry } from './components/registry.js';
+import { renderRegistry, fetchRegistry, initRegistry } from './components/registry.js';
 import { renderProxy, initProxy } from './components/proxy.js';
-import { renderDashboard } from './components/dashboard.js';
+import { renderDashboard, initDashboard } from './components/dashboard.js';
 import { initChat } from './components/chat.js';
 import { renderSettings } from './components/settings.js';
 import { initLogs } from './components/logs.js';
+import { initPlugins } from './components/plugins.js'; // NEW: Import initPlugins
 
 // Global state listener for UI updates
 store.subscribe((state) => {
@@ -21,6 +22,17 @@ store.subscribe((state) => {
     renderDashboard();
     renderSettings();
 });
+
+// Helper function for navigation (assuming it's defined elsewhere or will be added)
+function showSection(sectionId) {
+    document.querySelectorAll('.content-view').forEach(view => {
+        view.classList.add('hidden');
+    });
+    const targetView = document.getElementById(sectionId);
+    if (targetView) {
+        targetView.classList.remove('hidden');
+    }
+}
 
 async function init() {
     // Initial fetch of critical system state
@@ -36,6 +48,27 @@ async function init() {
             proxyEnabled: status.enabled,
             priorityMode: status.priority_mode || false,
             features: features
+        });
+
+        // Component initialization
+        initDashboard(); // NEW: Initialize Dashboard
+        initRegistry(); // NEW: Initialize Registry
+        initChat();
+        initLogs();
+        initPlugins(); // NEW: Initialize Plugins
+
+        // Navigation setup
+        const sections = ['dashboard-view', 'registry-view', 'chat-view', 'proxy-view', 'plugins-view'];
+        const navItems = ['nav-dashboard', 'nav-registry', 'nav-chat', 'nav-proxy', 'nav-plugins'];
+
+        navItems.forEach((id, index) => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    showSection(sections[index]);
+                });
+            }
         });
 
         // Initialize UI components and listeners with individual protection
@@ -115,6 +148,7 @@ function initHUD() {
             { id: 'clear-logs', name: 'Terminal: Flush Buffer', desc: 'Clear xterm.js WebGL cache' },
             { id: 'view-registry', name: 'Nav: Service Registry', desc: 'Inspect live endpoints' },
             { id: 'view-chat', name: 'Nav: Neural Chat', desc: 'Direct interaction mode' },
+            { id: 'view-plugins', name: 'Nav: Plugin Hub', desc: 'Manage Neural OS modules' },
             { id: 'zenith-hard-reset', name: 'Zenith: Hard Reset', desc: 'Clear all memory and restart' }
         ];
 
@@ -158,6 +192,7 @@ function initHUD() {
         if (id === 'clear-logs') document.getElementById('clear-logs-btn').click();
         if (id === 'view-registry') document.getElementById('nav-registry').click();
         if (id === 'view-chat') document.getElementById('nav-chat').click();
+        if (id === 'view-plugins') document.getElementById('nav-plugins').click();
         console.info(`Executed HUD command: ${id}`);
     }
 
