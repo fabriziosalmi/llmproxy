@@ -14,8 +14,9 @@ Professional high-performance aggregator, intelligent load balancer, and autonom
 9. [ChatOps & Webhooks](#chatops--webhooks)
 10. [Frontend HUD](#frontend-hud)
 11. [Configuration](#configuration)
-12. [Installation & Deployment](#installation--deployment)
-13. [Advanced Features](#advanced-features)
+12. [Testing](#testing)
+13. [Installation & Deployment](#installation--deployment)
+14. [Advanced Features](#advanced-features)
 
 ---
 
@@ -89,6 +90,7 @@ Translates OpenAI-compatible requests into proprietary provider formats (Anthrop
 |----------|--------|-------------|
 | `/api/v1/identity/me` | `GET` | Current user identity, roles, and permissions (from JWT or API key). |
 | `/api/v1/identity/exchange` | `POST` | Exchange external OIDC JWT for internal proxy session token. |
+| `/api/v1/identity/config` | `GET` | Public SSO provider list (for frontend OAuth flow). |
 
 ### Plugins
 | Endpoint | Method | Description |
@@ -144,6 +146,14 @@ Stateless multi-provider OIDC/JWT verification:
 - **Fallback chain**: JWT → API key → Tailscale identity (via LocalAPI socket).
 - **No user database**: Identity is derived entirely from cryptographic token claims.
 
+### OAuth Frontend (`ui/services/auth.js`)
+Browser-based SSO login flow:
+- **Popup-based OAuth**: Click provider button → popup opens OIDC authorize URL → `id_token` extracted from URL fragment.
+- **Callback handler**: `oauth-callback.html` relays token via `postMessage` to opener window.
+- **Token exchange**: `POST /api/v1/identity/exchange` converts external JWT to internal proxy session token (stored in `localStorage`).
+- **Guard route**: If identity is enabled and no valid session exists, a glassmorphism login overlay is shown.
+- **API key fallback**: Manual API key entry for environments without SSO.
+
 ### RBAC (`core/rbac.py`)
 Four built-in roles with granular permissions:
 
@@ -167,15 +177,71 @@ Four built-in roles with granular permissions:
 
 ## Plugin Engine
 
-Ring-based architecture (`core/plugin_engine.py`) with 5 processing stages:
+**Dual-mode** ring-based architecture (`core/plugin_engine.py`) with 5 processing stages. Supports both legacy raw functions and `BasePlugin` class instances side by side — zero breaking changes.
 
 | Ring | Stage | Purpose |
 |------|-------|---------|
 | 1 | **Ingress** | Auth, Zero-Trust, Global Rate Limiting |
-| 2 | **Pre-Flight** | PII Masking, Prompt Mutation, AST Security Scan |
+| 2 | **Pre-Flight** | PII Masking, Prompt Mutation, Budget Guard, Loop Breaker |
 | 3 | **Routing** | Semantic Cache Lookup, Dynamic Model Selection |
 | 4 | **Post-Flight** | JSON Healing, Response Sanitization, Watermarking |
 | 5 | **Background** | FinOps Tracking, Telemetry Export, Shadow Traffic |
+
+### Plugin SDK (`core/plugin_sdk.py`)
+The official SDK for building marketplace plugins:
+
+```python
+from core.plugin_sdk import BasePlugin, PluginResponse, PluginHook
+from core.plugin_engine import PluginContext
+
+class MyPlugin(BasePlugin):
+    name = "my_plugin"
+    hook = PluginHook.PRE_FLIGHT
+    version = "1.0.0"
+    timeout_ms = 50  # Strict timeout enforcement
+
+    async def execute(self, ctx: PluginContext) -> PluginResponse:
+        # Your logic here
+        return PluginResponse.passthrough()  # or .block(), .modify(), .cache_hit()
+```
+
+**PluginResponse** typed contracts:
+| Action | Effect |
+|--------|--------|
+| `passthrough` | Let the request continue unchanged |
+| `modify` | Mutate request body, continue pipeline |
+| `block` | Stop chain, return error to client (status code + error type) |
+| `cache_hit` | Return cached response, skip routing |
+
+### Dual-Mode Execution
+- **Class plugins** (`BasePlugin` subclasses): `execute(ctx) → PluginResponse`, with `on_load()` / `on_unload()` lifecycle hooks.
+- **Function plugins** (legacy): raw `async def func(ctx)` — existing plugins work unchanged.
+- **Auto-detection**: the engine inspects the entrypoint — if it's a class subclassing `BasePlugin`, it instantiates it; otherwise treats it as a raw function.
+
+### Strict Timeout Enforcement
+Every plugin runs under `asyncio.wait_for(timeout)`:
+- Configurable per-plugin via `timeout_ms` in manifest (default 5000ms for functions, custom per class plugin).
+- Timeout kills the coroutine and logs a warning.
+- Ingress/Routing timeouts are fatal (stop chain).
+
+### Per-Plugin Metrics
+Tracked automatically by the engine:
+- `invocations`, `errors`, `blocks`, `timeouts`, `total_latency_ms`, `avg_latency_ms`.
+- Queryable via `PluginManager.get_plugin_stats(name)` or `get_plugin_stats()` for all.
+
+### Marketplace Plugins (Built-in)
+
+| Plugin | Ring | Description |
+|--------|------|-------------|
+| **Agentic Loop Breaker** | Pre-Flight | Detects AI agents stuck in retry loops via SHA-256 prompt hashing with sliding window. Blocks with 429 + diagnostic message. |
+| **Smart Budget Guard** | Pre-Flight | Pre-flight cost estimation with per-session and per-team budget enforcement. Warning threshold + post-flight actual cost correction. |
+
+Both ship with `ui_schema` for dynamic UI rendering and configurable parameters.
+
+### Default Plugins (Legacy Functions)
+
+9 built-in function plugins (backward compatible, no changes needed):
+- Ingress Auth & Zero-Trust, PII Neural Masker, Semantic Cache Hook, Enterprise Neural Router, Post-Flight Sanitizer, Unified Telemetry & FinOps, Context Minifier, Kill-Switch, JSON Auto-Healer.
 
 ### Security Scanning
 All Python plugins are **AST-scanned** before loading:
@@ -184,11 +250,13 @@ All Python plugins are **AST-scanned** before loading:
 - Raises `PluginSecurityError` on violation — plugin is never loaded.
 
 ### Zero-Downtime Hot-Swap (RCU)
-1. Snapshot current ring state (rollback target).
-2. Load new plugin configuration into fresh rings.
-3. Health check: run dummy context through all rings.
-4. Atomic swap: replace active rings reference.
-5. Auto-rollback on any failure.
+1. Call `on_unload()` on all existing `BasePlugin` instances.
+2. Snapshot current ring state (rollback target).
+3. Load new plugin configuration into fresh rings.
+4. Call `on_load()` on new `BasePlugin` instances.
+5. Health check: run dummy context through all rings.
+6. Atomic swap: replace active rings reference.
+7. Auto-rollback on any failure.
 
 ### WASM Support
 Optional Extism-based sandbox for Rust/Go plugins:
@@ -197,7 +265,7 @@ Optional Extism-based sandbox for Rust/Go plugins:
 - Memory-isolated execution.
 
 ### Marketplace API
-Install, uninstall, toggle, hot-swap, and rollback plugins via REST API. Plugin manifests support `ui_schema` for dynamic UI rendering, versioning, and author metadata.
+Install, uninstall, toggle, hot-swap, and rollback plugins via REST API. Plugin manifests support `ui_schema` for dynamic UI rendering, versioning, author metadata, and per-plugin `config` blocks.
 
 ---
 
@@ -400,8 +468,34 @@ All sensitive values are loaded via **Infisical SDK** with environment variable 
 
 ---
 
+## Testing
+
+65 tests across 8 modules, all passing on `pytest` + `pytest-asyncio`.
+
+```bash
+# Run full suite
+python -m pytest tests/ -v --ignore=tests/test_store.py --ignore=tests/integrated_test.py
+
+# Run a specific module
+python -m pytest tests/test_marketplace_plugins.py -v
+```
+
+| Module | Tests | Coverage |
+|--------|-------|----------|
+| `test_identity.py` | 7 | OIDC verify, proxy JWT gen/verify/expire, role mapping |
+| `test_rbac.py` | 7 | Admin/user/viewer permissions, multi-role, quota, user CRUD |
+| `test_webhooks.py` | 6 | Slack/Teams/Discord/Generic format, severity mapping |
+| `test_chatops.py` | 5 | Telegram polling, HITL approve/reject/timeout, error tracking |
+| `test_export.py` | 8 | PII scrub (email/IP/key/bearer), nested redaction, file rotation |
+| `test_plugin_engine.py` | 8 | AST scan (safe/forbidden: os/subprocess/exec/eval), allowed modules |
+| `test_metrics.py` | 5 | Counter increment, error class, injection blocked, budget, circuit |
+| `test_marketplace_plugins.py` | 17 | Loop Breaker (7), Budget Guard (5), Engine dual-mode (5) |
+
+---
+
 ## Installation & Deployment
 
+### Quick Start
 ```bash
 # Clone
 git clone https://github.com/fabriziosalmi/llmproxy
@@ -413,6 +507,9 @@ pip install -r requirements.txt
 # Playwright setup (for SOTA Explorer agent)
 playwright install chromium
 
+# Copy env template and configure
+cp .env.example .env
+
 # Run
 python main.py
 
@@ -420,6 +517,39 @@ python main.py
 # API available at http://localhost:8090/v1/chat/completions
 # Metrics at http://localhost:8090/metrics
 ```
+
+### Docker Compose
+```bash
+# Copy env template
+cp .env.example .env
+# Edit .env with your API keys and secrets
+
+# Start
+docker compose up -d
+
+# Logs
+docker compose logs -f llmproxy
+
+# Health check
+curl http://localhost:8090/health
+```
+
+The `docker-compose.yml` includes:
+- Health check (30s interval, 3 retries, 15s start period).
+- Volume mounts: `llmproxy-data` for persistence, `config.yaml` and `plugins/` read-only.
+- Resource limits: 2GB memory limit, 512MB reservation.
+- Ports: 8090 (API) + 9091 (Prometheus).
+
+### CI/CD (GitHub Actions)
+
+**`.github/workflows/ci.yml`** — Runs on every push/PR:
+- **Lint**: ruff check (Python code quality).
+- **Test**: pytest with 65+ tests across 8 modules.
+- **Syntax**: AST parse of all Python files.
+
+**`.github/workflows/docker.yml`** — Runs on version tags (`v*`):
+- Builds Docker image and pushes to GitHub Container Registry (GHCR).
+- Tags: semver (`1.0.0`), minor (`1.0`), and commit SHA.
 
 ### Optional Dependencies
 ```bash
