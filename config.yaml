@@ -31,6 +31,26 @@ server:
     link_sanitization:
       enabled: true
       blocked_domains: ["malicious-site.com", "phishing.net"]
+# Session 6: Identity & SSO — Multi-provider OIDC
+identity:
+  enabled: false  # Set true to require JWT auth (falls back to API key if false)
+  default_role: "user"
+  # OIDC Providers — client_id loaded from Infisical/env via client_id_env
+  providers:
+    - name: google
+      client_id_env: "OIDC_GOOGLE_CLIENT_ID"
+      # issuer and jwks_uri auto-resolved from well-known config
+    - name: microsoft
+      client_id_env: "OIDC_MICROSOFT_CLIENT_ID"
+    - name: apple
+      client_id_env: "OIDC_APPLE_CLIENT_ID"
+  # Email → role mapping (override JWT claims)
+  role_mappings:
+    # "admin@example.com": ["admin"]
+    # "ops@example.com": ["operator"]
+  # Session JWT config
+  session_ttl: 3600  # Internal proxy JWT lifetime (seconds)
+
 local_llm:
   enabled: true
   host: "http://localhost:1234"

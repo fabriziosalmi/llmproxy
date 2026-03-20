@@ -23,8 +23,8 @@ prometheus-client>=0.22.0
 # Secret Management
 infisical-python-sdk>=3.0.0
 
-# Security
-# (built-in: unicodedata, re)
+# Security & Identity
+python-multipart>=0.0.9
 
 # Optional: Local LLM (LM Studio not required if bootstrap endpoints available)
 # mlx>=0.22.0

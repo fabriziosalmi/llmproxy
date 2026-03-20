@@ -39,6 +39,7 @@ from core.logger import setup_logger
 from core.trajectory import TrajectoryBuffer
 from core.firewall_asgi import ByteLevelFirewallMiddleware
 from core.plugin_engine import PluginManager, PluginHook, PluginContext
+from core.identity import IdentityManager, IdentityContext
 
 API_KEY_HEADER = APIKeyHeader(name="Authorization", auto_error=False)
 
@@ -84,6 +85,9 @@ class RotatorAgent(BaseAgent):
         
         # Initialize RBAC Manager
         self.rbac = RBACManager()
+
+        # Session 6: Initialize Identity Manager (SSO/OIDC)
+        self.identity = IdentityManager(self.config)
         
         self.total_cost_today = 0.0 # Persistent state would be better, but this is a start
         
@@ -163,24 +167,55 @@ class RotatorAgent(BaseAgent):
         @self.app.post("/v1/chat/completions")
         async def chat_completions(request: Request, api_key: str = Depends(API_KEY_HEADER)):
             if self.config["server"]["auth"]["enabled"]:
-                valid_keys = self._get_api_keys()
                 if not api_key:
                     raise HTTPException(status_code=401, detail="Unauthorized: Missing API key")
                 token = api_key.replace("Bearer ", "").strip()
-                if not token or token not in valid_keys:
-                    raise HTTPException(status_code=401, detail="Unauthorized: Invalid or missing API key")
-                
-                # RBAC Quota Check
-                if not self.rbac.check_quota(token):
-                    raise HTTPException(status_code=402, detail="Enterprise Quota Exceeded for this API Key.")
+                if not token:
+                    raise HTTPException(status_code=401, detail="Unauthorized: Empty token")
+
+                identity: IdentityContext | None = None
+
+                # Session 6: Try OIDC JWT verification first
+                if self.identity.enabled:
+                    try:
+                        # Check internal proxy JWT first (session continuity)
+                        identity = self.identity.verify_proxy_jwt(token)
+                        if not identity:
+                            # Try external OIDC provider JWT
+                            identity = await self.identity.verify_token(token)
+                    except ValueError as e:
+                        raise HTTPException(status_code=401, detail=f"Identity: {e}")
+
+                if identity and identity.verified:
+                    # JWT-authenticated user
+                    request.state.identity = identity
+                    request.state.user = identity.email or identity.subject
+                    request.state.roles = identity.roles
+                    # RBAC permission check
+                    if not self.rbac.check_permission(identity.roles, "proxy:use"):
+                        raise HTTPException(status_code=403, detail="Insufficient permissions")
+                    # Persist roles from SSO claims
+                    self.rbac.set_user_roles(identity.subject, identity.email, identity.roles)
+                    await self._add_log(
+                        f"IDENTITY: {identity.provider} user={identity.email or identity.subject} roles={identity.roles}",
+                        level="SECURITY"
+                    )
+                else:
+                    # Fallback to API key auth
+                    valid_keys = self._get_api_keys()
+                    if token not in valid_keys:
+                        raise HTTPException(status_code=401, detail="Unauthorized: Invalid API key or JWT")
+
+                    # RBAC Quota Check (API key mode)
+                    if not self.rbac.check_quota(token):
+                        raise HTTPException(status_code=402, detail="Enterprise Quota Exceeded for this API Key.")
 
                 # 11.5: Tailscale Zero-Trust LocalAPI Verification
                 client_host = request.client.host if request.client else "0.0.0.0"
                 ts_id = await self.zt_manager.verify_tailscale_identity(client_host)
                 if ts_id["status"] == "verified":
                     await self._add_log(f"ZT VERIFIED: {ts_id['user']} on {ts_id['node']}", level="SECURITY")
-                    # Optionally append to request state for later use
-                    request.state.user = ts_id['user']
+                    request.state.user = getattr(request.state, 'user', None) or ts_id['user']
                     request.state.node = ts_id['node']
 
             if not self.proxy_enabled:
@@ -329,6 +364,78 @@ class RotatorAgent(BaseAgent):
                 "priority": e.metadata.get("priority", 0),
                 "type": e.metadata.get("provider_type", "Generic")
             } for e in endpoints]
+
+        # ── Session 6: Identity & SSO Routes ──
+
+        @self.app.get("/api/v1/identity/me")
+        async def get_identity(request: Request, api_key: str = Depends(API_KEY_HEADER)):
+            """Returns the current user's identity context (from JWT or API key)."""
+            if not api_key:
+                return {"authenticated": False}
+            token = api_key.replace("Bearer ", "").strip()
+            if not token:
+                return {"authenticated": False}
+            # Try JWT first
+            if self.identity.enabled:
+                identity = self.identity.verify_proxy_jwt(token)
+                if not identity:
+                    try:
+                        identity = await self.identity.verify_token(token)
+                    except ValueError:
+                        identity = None
+                if identity:
+                    return {
+                        "authenticated": True,
+                        "provider": identity.provider,
+                        "email": identity.email,
+                        "name": identity.name,
+                        "roles": identity.roles,
+                        "permissions": list(self.rbac.get_permissions_for_roles(identity.roles)),
+                    }
+            # API key fallback
+            valid_keys = self._get_api_keys()
+            if token in valid_keys:
+                return {
+                    "authenticated": True,
+                    "provider": "api_key",
+                    "roles": ["user"],
+                    "permissions": list(self.rbac.get_permissions_for_roles(["user"])),
+                }
+            return {"authenticated": False}
+
+        @self.app.post("/api/v1/identity/exchange")
+        async def exchange_token(request: Request):
+            """
+            Exchange an external OIDC JWT for a short-lived internal proxy JWT.
+            Used by the UI after OAuth callback: sends external token, gets proxy session token.
+            """
+            if not self.identity.enabled:
+                raise HTTPException(status_code=501, detail="SSO not enabled")
+            data = await request.json()
+            external_token = data.get("token", "")
+            if not external_token:
+                raise HTTPException(status_code=400, detail="Missing token")
+            try:
+                identity = await self.identity.verify_token(external_token)
+            except ValueError as e:
+                raise HTTPException(status_code=401, detail=str(e))
+            if not identity:
+                raise HTTPException(status_code=401, detail="Unrecognized JWT provider")
+            # Generate internal proxy JWT
+            ttl = self.config.get("identity", {}).get("session_ttl", 3600)
+            proxy_token = self.identity.generate_proxy_jwt(identity, ttl=ttl)
+            # Persist roles
+            self.rbac.set_user_roles(identity.subject, identity.email, identity.roles)
+            return {
+                "token": proxy_token,
+                "expires_in": ttl,
+                "identity": {
+                    "email": identity.email,
+                    "name": identity.name,
+                    "roles": identity.roles,
+                    "provider": identity.provider,
+                },
+            }
 
         @self.app.get("/api/v1/logs")
         async def stream_logs():
