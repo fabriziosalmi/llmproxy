@@ -31,6 +31,11 @@ class BaseRepository(ABC):
         pass
 
     @abstractmethod
+    async def get_by_status(self, status: EndpointStatus) -> List[LLMEndpoint]:
+        """Returns endpoints filtered by their status."""
+        pass
+
+    @abstractmethod
     async def update_status(self, endpoint_id: str, status: EndpointStatus, metadata: Optional[Dict] = None):
         """Updates the status and metadata of an endpoint."""
         pass

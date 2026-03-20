@@ -39,11 +39,15 @@ from core.logger import setup_logger
 
 API_KEY_HEADER = APIKeyHeader(name="Authorization", auto_error=False)
 
+from store.base import BaseRepository
+from .adapters.openai import OpenAIAdapter
+
 class RotatorAgent(BaseAgent):
-    def __init__(self, store: EndpointStore, assistant=None, config_path: str = "config.yaml"):
+    def __init__(self, store: BaseRepository, assistant=None, config_path: str = "config.yaml"):
         super().__init__("rotator")
         self.store = store
         self.config_path = config_path
+        self.model_adapter = OpenAIAdapter() # Default adapter (Architect's Refinement)
         self.config = self._load_config()
         self.vllm = VLLMEngine(model_path=self.config.get("server", {}).get("vllm", {}).get("model_path"))
         self.limiter = DynamicRateLimiter()
@@ -494,126 +498,114 @@ class RotatorAgent(BaseAgent):
                 headers.update(self.zt_manager.get_identity_headers())
                 ssl_context = self.zt_manager.get_ssl_context()
                 
-                async with session.post(
-                    str(target.url), 
-                    json=body, 
-                    headers=headers,
-                    ssl=ssl_context,
-                    timeout=aiohttp.ClientTimeout(total=45)
-                ) as response:
-                    duration = time.time() - start_time
-                    
-                    if body.get("stream"):
+                # Architect's Refinement: Modular Model Adapter
+                if body.get("stream"):
+                    async def stream_generator():
+                        # OLIMPO: Send initial agent telemetry
+                        yield f"data: {json.dumps({'object': 'proxy.metadata', 'content': f'Agentic Routing: {target.id} selected for {complexity.value} task.', 'tier': preferred_tier})}\n\n".encode()
+                        
                         kill_event = asyncio.Event()
                         stream_chunks = []
-
-                        async def stream_generator():
-                            first_token = True
-                            # OLIMPO: Send initial agent telemetry
-                            yield f"data: {json.dumps({'object': 'proxy.metadata', 'content': f'Agentic Routing: {target.id} selected for {complexity.value} task.', 'tier': preferred_tier})}\n\n".encode()
-                            
-                            try:
-                                # Python 3.12 TaskGroup for robust speculative execution
-                                async with asyncio.TaskGroup() as tg:
-                                    # Spawn background speculative analyzer within the group
-                                    tg.create_task(
-                                        self.security.analyze_speculative(prompt, stream_chunks, kill_event)
-                                    )
-
-                                    async for chunk in response.content.iter_any():
-                                        if kill_event.is_set():
-                                            await self._add_log("SECURITY ALERT: Kill Switch triggered mid-stream!", level="CRITICAL")
-                                            yield f"data: {json.dumps({'object': 'proxy.error', 'message': 'STREAM TERMINATED BY LLMPROXY GUARDRAILS'})}\n\n".encode()
-                                            # Gracefully exit the TaskGroup
-                                            return 
-
-                                        chunk_text = chunk.decode(errors="ignore")
-                                        stream_chunks.append(chunk_text)
-                                        
-                                        if first_token:
-                                            ttft = time.time() - start_time
-                                            MetricsTracker.track_ttft(target.id, ttft)
-                                            first_token = False
-                                            yield f"data: {json.dumps({'object': 'proxy.metrics', 'ttft_ms': round(ttft*1000, 2)})}\n\n".encode()
-                                        
-                                        yield self.security.sanitize_response(chunk_text).encode()
+                        
+                        try:
+                            # Python 3.12 TaskGroup for robust speculative execution
+                            async with asyncio.TaskGroup() as tg:
+                                tg.create_task(self.security.analyze_speculative(prompt, stream_chunks, kill_event))
                                 
-                                self.rl_rotator.update(target.id, True, time.time() - start_time)
-                            except Exception as e:
-                                self.logger.error(f"Streaming TaskGroup Error: {e}")
-                                yield f"data: {json.dumps({'object': 'proxy.error', 'message': str(e)})}\n\n".encode()
+                                first_token = True
+                                async for chunk in self.model_adapter.stream(str(target.url), body, headers, session):
+                                    if kill_event.is_set():
+                                        await self._add_log("SECURITY ALERT: Kill Switch triggered mid-stream!", level="CRITICAL")
+                                        yield f"data: {json.dumps({'object': 'proxy.error', 'message': 'STREAM TERMINATED BY LLMPROXY GUARDRAILS'})}\n\n".encode()
+                                        return
 
-                        return StreamingResponse(stream_generator(), media_type="text/event-stream")
+                                    chunk_text = chunk.decode(errors="ignore")
+                                    stream_chunks.append(chunk_text)
+                                    
+                                    if first_token:
+                                        ttft = time.time() - start_time
+                                        MetricsTracker.track_ttft(target.id, ttft)
+                                        first_token = False
+                                        yield f"data: {json.dumps({'object': 'proxy.metrics', 'ttft_ms': round(ttft*1000, 2)})}\n\n".encode()
+                                    
+                                    yield self.security.sanitize_response(chunk_text).encode()
+                        except Exception as e:
+                            yield f"data: {json.dumps({'object': 'proxy.error', 'message': str(e)})}\n\n".encode()
+
+                    return StreamingResponse(stream_generator(), media_type="text/event-stream")
+                
+                # Handling Non-Stream via Adapter
+                response = await self.model_adapter.request(str(target.url), body, headers, session)
+                duration = time.time() - start_time
                     
-                    # 3. Handle Blocking Response
-                    data = await response.json()
-                    success = response.status == 200
-                    breaker = self.circuit_manager.get_breaker(target.id)
+                # 3. Handle Blocking Response
+                data = await response.json()
+                success = response.status == 200
+                breaker = self.circuit_manager.get_breaker(target.id)
+                
+                if success:
+                    breaker.report_success()
+                    # Budget Tracking (Global)
+                    usage = data.get("usage", {})
+                    p_tk = usage.get("prompt_tokens", 0)
+                    c_tk = usage.get("completion_tokens", 0)
+                    cost = (p_tk + c_tk) * 0.00001
+                    self.total_cost_today += cost
                     
-                    if success:
-                        breaker.report_success()
-                        # Budget Tracking (Global)
-                        usage = data.get("usage", {})
-                        p_tk = usage.get("prompt_tokens", 0)
-                        c_tk = usage.get("completion_tokens", 0)
-                        cost = (p_tk + c_tk) * 0.00001
-                        self.total_cost_today += cost
+                    # RBAC Tracking (Per-Key)
+                    api_key = body.get("__api_key__", "default")
+                    self.rbac.update_usage(api_key, cost)
+                else:
+                    breaker.report_failure()
+                
+                self.logger.info("Request successful", extra={
+                    "source_endpoint": target.id, "latency": round(duration, 3),
+                    "model": body.get("model"), "mode": "blocking"
+                })
+                self.rl_rotator.update(target.id, success, duration)
+                
+                if success:
+                    message = data['choices'][0]['message']
+                    # 4.1 MCP Tool Calls
+                    if message.get("tool_calls"):
+                        tool_calls = message["tool_calls"]
+                        tool_results = []
+                        any_local = False
+                        for tc in tool_calls:
+                            func = tc.get("function", {})
+                            name = func.get("name")
+                            args = json.loads(func.get("arguments", "{}"))
+                            if name in self.mcp_hub.tools:
+                                any_local = True
+                                result = await self.mcp_hub.call_tool(name, args)
+                                tool_results.append({"tool_call_id": tc.get("id"), "role": "tool", "name": name, "content": result})
+                        if any_local:
+                            body["messages"] = body.get("messages", []) + [message] + tool_results
+                            return await self.proxy_request(request)
+                    
+                    raw_content = message.get('content', "")
+                    if raw_content:
+                        sanitized = self.security.sanitize_response(raw_content)
+                        if "[SEC_ERR:" in sanitized or not await self.security.inspect_response_ai(prompt, sanitized):
+                            return JSONResponse(content={"error": {"message": "Security Shield blocked response.", "type": "security_error"}}, status_code=403)
                         
-                        # RBAC Tracking (Per-Key)
-                        api_key = body.get("__api_key__", "default")
-                        self.rbac.update_usage(api_key, cost)
-                    else:
-                        breaker.report_failure()
+                        if await self.security.detect_anomaly(prompt, sanitized):
+                            return JSONResponse(content={"error": {"message": "Neural Shield anomaly detected.", "type": "security_error"}}, status_code=403)
+
+                        if self.semantic_cache:
+                            await self.semantic_cache.add(prompt, data)
+
+                        # 6. Shadow Traffic & Autonomous Tuning (Olimpo)
+                        if not body.get("__internal_shard__") and random.random() < 0.05:
+                            asyncio.create_task(self._run_shadow_test(body, sanitized))
+
+                        data['choices'][0]['message']['content'] = sanitized
                     
-                    self.logger.info("Request successful", extra={
-                        "source_endpoint": target.id, "latency": round(duration, 3),
-                        "model": body.get("model"), "mode": "blocking"
-                    })
-                    self.rl_rotator.update(target.id, success, duration)
-                    
-                    if success:
-                        message = data['choices'][0]['message']
-                        # 4.1 MCP Tool Calls
-                        if message.get("tool_calls"):
-                            # ... (Logic remains similar but fixed indentation)
-                            tool_calls = message["tool_calls"]
-                            tool_results = []
-                            any_local = False
-                            for tc in tool_calls:
-                                func = tc.get("function", {})
-                                name = func.get("name")
-                                args = json.loads(func.get("arguments", "{}"))
-                                if name in self.mcp_hub.tools:
-                                    any_local = True
-                                    result = await self.mcp_hub.call_tool(name, args)
-                                    tool_results.append({"tool_call_id": tc.get("id"), "role": "tool", "name": name, "content": result})
-                            if any_local:
-                                body["messages"] = body.get("messages", []) + [message] + tool_results
-                                return await self.proxy_request(request)
-                        
-                        raw_content = message.get('content', "")
-                        if raw_content:
-                            sanitized = self.security.sanitize_response(raw_content)
-                            if "[SEC_ERR:" in sanitized or not await self.security.inspect_response_ai(prompt, sanitized):
-                                return JSONResponse(content={"error": {"message": "Security Shield blocked response.", "type": "security_error"}}, status_code=403)
-                            
-                            if await self.security.detect_anomaly(prompt, sanitized):
-                                return JSONResponse(content={"error": {"message": "Neural Shield anomaly detected.", "type": "security_error"}}, status_code=403)
-
-                            if self.semantic_cache:
-                                await self.semantic_cache.add(prompt, data)
-
-                            # 6. Shadow Traffic & Autonomous Tuning (Olimpo)
-                            if not body.get("__internal_shard__") and random.random() < 0.05:
-                                asyncio.create_task(self._run_shadow_test(body, sanitized))
-
-                            data['choices'][0]['message']['content'] = sanitized
-                        
-                    duration = time.time() - start_time
-                    await self.broadcast_event("proxy.request.complete", {
-                        "id": req_id, "status": response.status, "latency_ms": round(duration*1000, 2)
-                    })
-                    return JSONResponse(content=data, status_code=response.status)
+                duration = time.time() - start_time
+                await self.broadcast_event("proxy.request.complete", {
+                    "id": req_id, "status": response.status, "latency_ms": round(duration*1000, 2)
+                })
+                return JSONResponse(content=data, status_code=response.status)
             except Exception as e:
                 breaker = self.circuit_manager.get_breaker(target.id)
                 breaker.report_failure()

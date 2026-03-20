@@ -47,3 +47,5 @@ Thumbs.db
 node_modules/
 .npm/
 dist/
+
+demo/

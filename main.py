@@ -41,8 +41,9 @@ async def main():
         config["server"]["host"] = ts_ip
         logger.info(f"Binding to Tailscale interface: {ts_ip}")
 
-    # Initialize store
-    store = EndpointStore()
+    # Initialize store via Factory (Architect's Refinement: Modular Adapters)
+    from store.factory import StorageFactory
+    store = StorageFactory.get_repository("config.yaml")
     await store.init()
 
     # Initialize Tracing
