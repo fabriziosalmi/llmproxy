@@ -1,8 +1,11 @@
 """
-LLMPROXY — Plugin Engine (Session 9 Enhanced)
+LLMPROXY — Plugin Engine (Dual-Mode)
 
 Ring-based plugin pipeline with:
+  - Dual-mode: raw async functions (legacy) + BasePlugin classes (marketplace)
   - AST security scanning pre-load
+  - Strict per-plugin timeout enforcement (asyncio.wait_for)
+  - Per-plugin metrics (invocations, errors, blocks, avg latency)
   - Zero-downtime RCU (Read-Copy-Update) hot-swap
   - WASM sandbox support via Extism (optional)
   - Plugin marketplace API
@@ -12,14 +15,18 @@ Ring-based plugin pipeline with:
 import os
 import ast
 import copy
+import time
 import importlib.util
 import yaml
 import asyncio
 import logging
 import hashlib
+import inspect
 from enum import Enum
 from typing import List, Dict, Any, Optional, Callable
 from dataclasses import dataclass, field
+
+from core.plugin_sdk import BasePlugin, PluginResponse, PluginHook as SDKHook
 
 class PluginHook(Enum):
     INGRESS = "ingress"         # Ring 1: Auth, ZT, Rate Limit
@@ -38,6 +45,9 @@ class PluginContext:
     error: Optional[str] = None
     stop_chain: bool = False
 
+# Default timeout for raw function plugins (ms)
+DEFAULT_TIMEOUT_MS = 5000
+
 # 9.2: Forbidden AST node types for security scanning
 FORBIDDEN_AST_NODES = {
     ast.Import, ast.ImportFrom,  # Checked selectively below
@@ -49,7 +59,8 @@ FORBIDDEN_MODULES = {
 ALLOWED_MODULES = {
     "json", "re", "math", "datetime", "hashlib", "base64",
     "typing", "dataclasses", "enum", "logging", "asyncio",
-    "aiohttp", "yaml",
+    "aiohttp", "yaml", "collections", "time",
+    "core",  # core.plugin_sdk, core.plugin_engine (for PluginContext import)
 }
 
 
@@ -110,11 +121,43 @@ def ast_scan(source: str, plugin_name: str) -> bool:
 class PluginManager:
     def __init__(self, plugins_dir: str = "plugins"):
         self.plugins_dir = plugins_dir
-        self.rings: Dict[PluginHook, List[Callable]] = {hook: [] for hook in PluginHook}
-        self._previous_rings: Optional[Dict[PluginHook, List[Callable]]] = None  # For rollback
+        self.rings: Dict[PluginHook, List[Dict[str, Any]]] = {hook: [] for hook in PluginHook}
+        self._previous_rings: Optional[Dict[PluginHook, List[Dict[str, Any]]]] = None
         self.logger = logging.getLogger("plugin_engine")
         self.manifest_path = os.path.join(plugins_dir, "manifest.yaml")
         self._plugin_meta: Dict[str, Dict[str, Any]] = {}  # name → metadata for marketplace
+        self._plugin_instances: Dict[str, BasePlugin] = {}  # name → BasePlugin instances
+        self._plugin_stats: Dict[str, Dict[str, Any]] = {}  # name → per-plugin metrics
+
+    def _init_stats(self, name: str):
+        """Initialize per-plugin stats tracker."""
+        if name not in self._plugin_stats:
+            self._plugin_stats[name] = {
+                "invocations": 0,
+                "errors": 0,
+                "blocks": 0,
+                "timeouts": 0,
+                "total_latency_ms": 0.0,
+            }
+
+    def get_plugin_stats(self, name: str = None) -> Any:
+        """Get per-plugin metrics. If name is None, return all."""
+        if name:
+            stats = self._plugin_stats.get(name, {})
+            inv = stats.get("invocations", 0)
+            return {
+                **stats,
+                "avg_latency_ms": round(stats["total_latency_ms"] / inv, 2) if inv > 0 else 0,
+            }
+        # All plugins
+        result = {}
+        for pname, stats in self._plugin_stats.items():
+            inv = stats.get("invocations", 0)
+            result[pname] = {
+                **stats,
+                "avg_latency_ms": round(stats["total_latency_ms"] / inv, 2) if inv > 0 else 0,
+            }
+        return result
 
     async def load_plugins(self):
         """Discovers and loads plugins based on manifest.yaml."""
@@ -124,6 +167,14 @@ class PluginManager:
 
         with open(self.manifest_path, 'r') as f:
             manifest = yaml.safe_load(f) or {}
+
+        # Unload existing BasePlugin instances
+        for name, instance in self._plugin_instances.items():
+            try:
+                await instance.on_unload()
+            except Exception as e:
+                self.logger.error(f"Error unloading plugin {name}: {e}")
+        self._plugin_instances.clear()
 
         # Reset rings
         for hook in PluginHook:
@@ -136,7 +187,7 @@ class PluginManager:
         for p_info in plugins:
             if not p_info.get("enabled", True):
                 continue
-            
+
             try:
                 await self._load_plugin(p_info)
             except Exception as e:
@@ -147,8 +198,10 @@ class PluginManager:
         hook = PluginHook(p_info["hook"])
         entrypoint = p_info["entrypoint"]
         p_type = p_info.get("type", "python")
+        timeout_ms = p_info.get("timeout_ms", DEFAULT_TIMEOUT_MS)
+        config = p_info.get("config", {})
 
-        # 9.1: Store metadata (ui_schema, version, author) for marketplace
+        # Store metadata (ui_schema, version, author) for marketplace
         self._plugin_meta[name] = {
             "name": name,
             "hook": hook.value,
@@ -158,16 +211,19 @@ class PluginManager:
             "description": p_info.get("description", ""),
             "ui_schema": p_info.get("ui_schema"),
             "enabled": p_info.get("enabled", True),
+            "timeout_ms": timeout_ms,
         }
 
+        self._init_stats(name)
+
         if p_type == "python":
-            module_path, func_name = entrypoint.split(":")
+            module_path, target_name = entrypoint.split(":")
             file_path = os.path.join(self.plugins_dir, f"{module_path.replace('.', '/')}.py")
 
             if not os.path.exists(file_path):
                 raise FileNotFoundError(f"Plugin file not found: {file_path}")
 
-            # 9.2: AST security scan before loading
+            # AST security scan before loading
             with open(file_path, 'r') as f:
                 source = f.read()
             ast_scan(source, name)
@@ -176,42 +232,144 @@ class PluginManager:
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
 
-            func = getattr(module, func_name)
-            self.rings[hook].append({"type": "python", "func": func, "name": name})
+            target = getattr(module, target_name)
+
+            # ── Dual-mode detection ──
+            # If target is a class that subclasses BasePlugin → class mode
+            # If target is a function → legacy raw function mode
+            if inspect.isclass(target) and issubclass(target, BasePlugin):
+                instance = target(config=config)
+                await instance.on_load()
+                self._plugin_instances[name] = instance
+                self.rings[hook].append({
+                    "type": "class",
+                    "instance": instance,
+                    "name": name,
+                    "timeout_ms": instance.timeout_ms,
+                })
+                self.logger.info(f"Plugin Loaded (class): {name} v{instance.version} → {hook.value}")
+            else:
+                # Legacy raw function
+                func = target
+                self.rings[hook].append({
+                    "type": "python",
+                    "func": func,
+                    "name": name,
+                    "timeout_ms": timeout_ms,
+                })
+                self.logger.info(f"Plugin Loaded (function): {name} → {hook.value}")
 
         elif p_type == "wasm":
-            # 9.5: WASM support via Extism (if available)
             file_path = os.path.join(self.plugins_dir, f"{entrypoint.replace('.', '/')}.wasm")
             if not os.path.exists(file_path):
                 raise FileNotFoundError(f"WASM plugin not found: {file_path}")
-            self.rings[hook].append({"type": "wasm", "path": file_path, "name": name})
+            self.rings[hook].append({
+                "type": "wasm",
+                "path": file_path,
+                "name": name,
+                "timeout_ms": timeout_ms,
+            })
             self.logger.info(f"Plugin Prepared (WASM): {name}")
 
-        self.logger.info(f"Plugin Loaded: {name} (Hook: {hook.value}, Type: {p_type})")
-
     async def execute_ring(self, hook: PluginHook, context: PluginContext):
-        """Executes all plugins in a specific ring sequentially."""
+        """
+        Executes all plugins in a specific ring sequentially.
+
+        Supports three plugin types:
+          - "class": BasePlugin instances (marketplace) → execute(ctx) → PluginResponse
+          - "python": raw async/sync functions (legacy) → func(ctx)
+          - "wasm": WASM plugins via Extism
+
+        All plugins run under strict timeout enforcement.
+        Per-plugin metrics are tracked automatically.
+        """
         for p in self.rings[hook]:
             if context.stop_chain:
                 break
+
+            name = p.get("name", "unknown")
+            timeout_ms = p.get("timeout_ms", DEFAULT_TIMEOUT_MS)
+            timeout_s = timeout_ms / 1000.0
+            stats = self._plugin_stats.get(name)
+
+            t0 = time.perf_counter()
+
             try:
-                if p["type"] == "python":
+                if p["type"] == "class":
+                    # ── BasePlugin class mode ──
+                    instance: BasePlugin = p["instance"]
+                    try:
+                        result: PluginResponse = await asyncio.wait_for(
+                            instance.execute(context), timeout=timeout_s
+                        )
+                    except asyncio.TimeoutError:
+                        self.logger.warning(f"Plugin {name} TIMEOUT ({timeout_ms}ms) in {hook.value}")
+                        if stats:
+                            stats["timeouts"] += 1
+                            stats["errors"] += 1
+                        context.error = f"Plugin {name} timed out"
+                        if hook in (PluginHook.INGRESS, PluginHook.ROUTING):
+                            context.stop_chain = True
+                        continue
+
+                    # Apply PluginResponse to context
+                    if result and result.action != "passthrough":
+                        if result.action == "block":
+                            context.stop_chain = True
+                            context.error = result.message or "Blocked by plugin"
+                            context.metadata["_block_status"] = result.status_code
+                            context.metadata["_block_error_type"] = result.error_type
+                            if stats:
+                                stats["blocks"] += 1
+                        elif result.action == "modify":
+                            if result.body:
+                                context.body = result.body
+                            if result.message:
+                                context.metadata["_plugin_message"] = result.message
+                        elif result.action == "cache_hit":
+                            context.response = result.response
+                            context.stop_chain = True
+                            context.metadata["_cache_hit"] = True
+
+                elif p["type"] == "python":
+                    # ── Legacy raw function mode ──
                     func = p["func"]
-                    if asyncio.iscoroutinefunction(func):
-                        await func(context)
-                    else:
-                        func(context)
-                
+                    try:
+                        if inspect.iscoroutinefunction(func):
+                            await asyncio.wait_for(func(context), timeout=timeout_s)
+                        else:
+                            # Sync functions run in executor with timeout
+                            loop = asyncio.get_event_loop()
+                            await asyncio.wait_for(
+                                loop.run_in_executor(None, func, context),
+                                timeout=timeout_s
+                            )
+                    except asyncio.TimeoutError:
+                        self.logger.warning(f"Plugin {name} TIMEOUT ({timeout_ms}ms) in {hook.value}")
+                        if stats:
+                            stats["timeouts"] += 1
+                            stats["errors"] += 1
+                        context.error = f"Plugin {name} timed out"
+                        if hook in (PluginHook.INGRESS, PluginHook.ROUTING):
+                            context.stop_chain = True
+                        continue
+
                 elif p["type"] == "wasm":
-                    # 9.5: WASM execution via Extism
                     await self._execute_wasm(p, context)
 
             except Exception as e:
-                self.logger.error(f"Error executing plugin {p.get('name')} in {hook.value}: {e}")
+                self.logger.error(f"Error executing plugin {name} in {hook.value}: {e}")
                 context.error = str(e)
+                if stats:
+                    stats["errors"] += 1
                 # Ingress/Routing errors might be fatal
-                if hook in [PluginHook.INGRESS, PluginHook.ROUTING]:
-                   context.stop_chain = True
+                if hook in (PluginHook.INGRESS, PluginHook.ROUTING):
+                    context.stop_chain = True
+            finally:
+                elapsed_ms = (time.perf_counter() - t0) * 1000
+                if stats:
+                    stats["invocations"] += 1
+                    stats["total_latency_ms"] += elapsed_ms
 
     async def _execute_wasm(self, plugin: Dict[str, Any], context: PluginContext):
         """9.5: Execute a WASM plugin via Extism (if installed)."""
