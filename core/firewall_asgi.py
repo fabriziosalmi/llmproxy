@@ -11,12 +11,20 @@ class ByteLevelFirewallMiddleware:
     """
     def __init__(self, app):
         self.app = app
-        # Lightning-fast byte patterns for instantaneous aborts (Zero-overhead O(N) Boyer-Moore via C)
+        # Injection detection patterns — must be specific enough to avoid false positives
+        # on legitimate queries like "what is a system prompt?"
         self.BANNED_SIGNATURES = [
             b"ignore previous instructions",
-            b"bypass guardrules",
-            b"system prompt",
-            b"you are a developer mode"
+            b"ignore all previous",
+            b"disregard previous instructions",
+            b"bypass guardrails",
+            b"bypass safety",
+            b"you are a developer mode",
+            b"you are now in developer mode",
+            b"ignore your instructions",
+            b"override your system prompt",
+            b"reveal your system prompt",
+            b"print your system prompt",
         ]
         
     async def __call__(self, scope, receive, send):
@@ -53,10 +61,9 @@ class ByteLevelFirewallMiddleware:
                         ]
                     })
                 elif message["type"] == "http.response.body":
-                    # Emit a raw socket zero-chunk frame and close stream cleanly per HTTP/1.1 chunking spec
                     await send({
                         "type": "http.response.body",
-                        "body": b'0\r\n\r\n{"error": "[REDACTED BY INJECTION GUARD]"}',
+                        "body": b'{"error": "request_blocked", "message": "Blocked by injection guard"}',
                         "more_body": False
                     })
                 return

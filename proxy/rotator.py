@@ -265,7 +265,7 @@ class RotatorAgent(BaseAgent):
             try:
                 session_id = token if 'token' in locals() else "anonymous"
                 body = await request.json()
-                response = await self.proxy_request(request, session_id=session_id)
+                response = await self.proxy_request(request, body=body, session_id=session_id)
                 duration = time.time() - start_time
                 MetricsTracker.track_request("POST", "/v1/chat/completions", response.status_code, duration)
                 # Session A: Record to dataset exporter
@@ -655,14 +655,18 @@ class RotatorAgent(BaseAgent):
         server = uvicorn.Server(config)
         await server.serve()
 
-    async def proxy_request(self, request: Request, session_id: str = "default"):
+    async def proxy_request(self, request: Request, body: Dict[str, Any] = None, session_id: str = "default"):
         self.predictor.record_request()
         start_total = time.time()
-        
-        # 13. Initialize Neural Plugin Context
+
+        # Use pre-parsed body if provided, avoid double request.json() read
+        if body is None:
+            body = await request.json()
+
+        # Initialize Plugin Context
         ctx = PluginContext(
-            request=request, 
-            body=await request.json(), 
+            request=request,
+            body=body,
             session_id=session_id,
             metadata={"rotator": self, "req_id": uuid.uuid4().hex[:8]}
         )
@@ -696,8 +700,9 @@ class RotatorAgent(BaseAgent):
             
             if ctx.body.get("stream"):
                 async def stream_generator():
-                    # Stream metadata (Neural OS Signature)
-                    yield f"data: {json.dumps({'object': 'proxy.plugin_chain', 'plugins': [p.__name__ for p in self.plugin_manager.rings[PluginHook.PRE_FLIGHT]]})}\n\n".encode()
+                    # Stream metadata (plugin chain info)
+                    plugin_names = [p.get("name", "unknown") for p in self.plugin_manager.rings[PluginHook.PRE_FLIGHT]]
+                    yield f"data: {json.dumps({'object': 'proxy.plugin_chain', 'plugins': plugin_names})}\n\n".encode()
                     async for chunk in self.model_adapter.stream(str(target.url), ctx.body, headers, session):
                         yield chunk
                 ctx.response = StreamingResponse(stream_generator(), media_type="text/event-stream")

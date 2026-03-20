@@ -132,11 +132,11 @@ The swarm utilizes a Finite State Machine (FSM) for predictable transitions and 
 
 ## Security & Identity
 
-### Byte-Level Firewall (Speculative Guardrails)
-Zero-latency ASGI middleware scanning raw byte streams:
-- **Pattern matching** for injection signatures (`ignore previous instructions`, `bypass guardrails`).
-- **Instant termination**: Force-closes socket mid-stream on violation, preventing remote cost incurrence.
-- **Fail-closed**: Returns `False` on any error — never permits traffic when in doubt.
+### Byte-Level Firewall (`core/firewall_asgi.py`)
+ASGI middleware scanning request body bytes for injection patterns:
+- **Pattern matching** for injection signatures (11 patterns: `ignore previous instructions`, `bypass guardrails`, `reveal your system prompt`, etc.).
+- **Instant 403 response**: Terminates request before it reaches the LLM, preventing cost incurrence.
+- **Limitation**: Pattern-based only — not a substitute for ML-based injection detection. Sophisticated prompt injection can bypass static patterns.
 
 ### Identity & SSO (`core/identity.py`)
 Stateless multi-provider OIDC/JWT verification:
@@ -168,9 +168,8 @@ Four built-in roles with granular permissions:
 - Roles persisted in SQLite `user_roles` table.
 - Budget quota enforcement per API key.
 
-### Zero-Trust & mTLS
+### Zero-Trust
 - **Tailscale LocalAPI**: Verifies machine/user identity via Unix socket (`whois` API).
-- **mTLS Pipeline**: Client certificate verification for upstream provider connections.
 - **URL injection prevention**: All user-supplied IPs/URLs are escaped via `urllib.parse.quote()`.
 
 ---
@@ -220,7 +219,7 @@ class MyPlugin(BasePlugin):
 
 ### Strict Timeout Enforcement
 Every plugin runs under `asyncio.wait_for(timeout)`:
-- Configurable per-plugin via `timeout_ms` in manifest (default 5000ms for functions, custom per class plugin).
+- Configurable per-plugin via `timeout_ms` in manifest (default 500ms for functions, 50ms for class plugins).
 - Timeout kills the coroutine and logs a warning.
 - Ingress/Routing timeouts are fatal (stop chain).
 
@@ -276,11 +275,10 @@ Install, uninstall, toggle, hot-swap, and rollback plugins via REST API. Plugin 
 
 ## Semantic Caching
 
-### 1-Bit Vector Quantization
-The `SemanticCache` binarizes embeddings into 1-bit vectors, rendering Cosine Similarity mathematically equivalent to **XOR Hamming Distance** for CPU-level hardware acceleration.
-
-### Deterministic Bloom Filter
-Front-end Bloom Filter (`bloom.bin`) prevents expensive vector DB lookups for guaranteed misses — O(1) latency for unique queries.
+ChromaDB-backed semantic similarity cache (`core/semantic_cache.py`):
+- **Embedding-based lookup**: Queries are embedded and matched against cached responses via cosine similarity.
+- **Configurable threshold**: Only returns cached response if similarity exceeds threshold (default 0.95).
+- **Optional**: Enabled via `config.yaml` caching section.
 
 ---
 
@@ -317,8 +315,8 @@ Front-end Bloom Filter (`bloom.bin`) prevents expensive vector DB lookups for gu
 - **Gzip compression** on rotation.
 - **Optional Parquet conversion** via pyarrow with zstd compression.
 
-### SQLite Replication
-Litestream configuration documented in `config.yaml` for WAL-mode SQLite → S3 continuous replication (10s sync interval, 30-day retention).
+### SQLite Replication (Planned)
+Litestream-based WAL-mode SQLite → S3 continuous replication is planned but not yet configured.
 
 ---
 
@@ -353,8 +351,8 @@ For "soft-violation" requests:
 4. Operator replies `/approve` or `/reject`.
 5. Request continues or is rejected.
 
-### Auto-Ticketing
-Debounced error rate alerting: >50 errors/hour triggers a summary notification with 10-minute cooldown.
+### Error Tracking
+The Telegram bot tracks errors via `track_error()` and can notify ops channels. Threshold-based auto-alerting is planned.
 
 ---
 
@@ -569,17 +567,6 @@ pip install sentry-sdk[fastapi]
 pip install extism
 ```
 
-### SQLite Replication (Litestream)
-```bash
-# Install Litestream
-curl -fsSL https://github.com/benbjohnson/litestream/releases/latest -o litestream
-
-# Replicate to S3
-litestream replicate -config /etc/litestream.yml
-
-# Restore from S3
-litestream restore -o /data/endpoints.db s3://llmproxy-backups/sqlite/endpoints
-```
 
 ---
 
@@ -589,10 +576,7 @@ litestream restore -o /data/endpoints.db s3://llmproxy-backups/sqlite/endpoints
 Leverages Tailscale mesh networks to discover and shard requests across idle GPU neighbors, creating a private, federated "AI Supercluster" without exposing endpoints to the public internet. Federation trust is verified via shared secret + Tailscale LocalAPI identity.
 
 ### MCP (Model Context Protocol) Hub
-Unified execution environment for MCP tools, allowing any connected model to leverage a shared pool of local tools (PostgreSQL, Filesystem, Search) via a standardized protocol.
-
-### Visibility & Cloaking
-Automatic User-Agent rotation and proxy-chaining to prevent upstream providers from fingerprinting the proxy infrastructure. Supports uTLS JA3 fingerprint forging (Chrome/Safari/Firefox profiles).
+Tool registry for MCP-compatible tools. Currently a scaffolding module (`core/mcp_hub.py`) — planned for full tool execution in a future release.
 
 ### Local LLM Fallback
 Automatic failover to local models (via LM Studio / Ollama) when:
