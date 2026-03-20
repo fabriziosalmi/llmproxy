@@ -38,7 +38,7 @@ from core.secrets import SecretManager
 from core.logger import setup_logger
 from core.trajectory import TrajectoryBuffer
 from core.firewall_asgi import ByteLevelFirewallMiddleware
-from core.plugin_engine import PluginManager, PluginHook, PluginContext
+from core.plugin_engine import PluginManager, PluginHook, PluginContext, PluginState
 from core.identity import IdentityManager, IdentityContext
 from core.webhooks import WebhookDispatcher, EventType
 from core.export import DatasetExporter
@@ -134,6 +134,13 @@ class RotatorAgent(BaseAgent):
         # 10.2: Initialize Trajectory Memory
         self.plugin_manager = PluginManager()
         self.trajectory = TrajectoryBuffer()
+
+        # Session I: PluginState DI — shared across all plugin contexts
+        self.plugin_state = PluginState(
+            cache={},
+            metrics=MetricsTracker,
+            config=self.config.get("plugins", {}),
+        )
         
         self._setup_routes()
         self._setup_static()
@@ -668,10 +675,18 @@ class RotatorAgent(BaseAgent):
             request=request,
             body=body,
             session_id=session_id,
-            metadata={"rotator": self, "req_id": uuid.uuid4().hex[:8]}
+            metadata={"rotator": self, "req_id": uuid.uuid4().hex[:8]},
+            state=self.plugin_state,
         )
 
         try:
+            # Pre-ring: SecurityShield inspection (session trajectory + injection scoring)
+            security_error = self.security.inspect(ctx.body, session_id)
+            if security_error:
+                logger.warning(f"SecurityShield blocked: {security_error}")
+                MetricsTracker.track_injection_blocked()
+                raise HTTPException(status_code=403, detail=security_error)
+
             # RING 1: INGRESS (Auth, ZT, Rate Limit)
             await self.plugin_manager.execute_ring(PluginHook.INGRESS, ctx)
             if ctx.stop_chain:

@@ -535,3 +535,40 @@ def test_plugin_state_extra_slot():
     state = PluginState(extra={"redis": "mock_redis_conn"})
     ctx = PluginContext(state=state)
     assert ctx.state.extra["redis"] == "mock_redis_conn"
+
+
+@pytest.mark.asyncio
+async def test_plugin_state_shared_cache_across_plugins():
+    """PluginState.cache should be shared and mutable across plugin executions."""
+    state = PluginState(cache={}, config={"flag": True})
+
+    class CacheWriter(BasePlugin):
+        name = "cache_writer"
+        hook = PluginHook.PRE_FLIGHT
+        async def execute(self, ctx):
+            ctx.state.cache["hit"] = True
+            return PluginResponse.passthrough()
+
+    class CacheReader(BasePlugin):
+        name = "cache_reader"
+        hook = PluginHook.PRE_FLIGHT
+        async def execute(self, ctx):
+            assert ctx.state.cache.get("hit") is True
+            assert ctx.state.config["flag"] is True
+            return PluginResponse.passthrough()
+
+    manager = PluginManager(plugins_dir="plugins")
+    writer = CacheWriter()
+    reader = CacheReader()
+    manager.rings[PluginHook.PRE_FLIGHT] = [
+        {"type": "class", "instance": writer, "name": "cache_writer", "timeout_ms": 100, "fail_policy": "open"},
+        {"type": "class", "instance": reader, "name": "cache_reader", "timeout_ms": 100, "fail_policy": "open"},
+    ]
+    manager._init_stats("cache_writer")
+    manager._init_stats("cache_reader")
+
+    ctx = PluginContext(body={}, state=state)
+    await manager.execute_ring(PluginHook.PRE_FLIGHT, ctx)
+
+    assert ctx.state.cache["hit"] is True
+    assert ctx.stop_chain is False

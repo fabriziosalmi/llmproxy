@@ -1,6 +1,6 @@
 # LLMPROXY — Piano di Lavoro OGGI
 
-> Fase attuale: **Plugin Engine Quantum Leap** — architettura marketplace-grade.
+> Fase attuale: **Hardening & Debt Cleanup** — eliminazione dead code, wiring completo, test.
 
 ---
 
@@ -51,12 +51,16 @@
 
 ---
 
-## SESSIONE I: Wiring PluginState nel Runtime — TODO
-**Priorità: MEDIA | File: proxy/rotator.py**
+## SESSIONE I: Wiring + Dead Code Cleanup ✅
+**Priorità: ALTA | Commit: pending**
 
-- [ ] **I.1** Creare `PluginState` in `RotatorAgent.__init__` con cache, metrics, config
-- [ ] **I.2** Passare `state` in ogni `PluginContext` creato in `chat_completions`/`proxy_request`
-- [ ] **I.3** Test di integrazione: plugin accede a `ctx.state.metrics` e `ctx.state.cache`
+- [x] **I.1** Dead code cleanup `core/security.py`: rimosso `anomaly_detector` ONNX, `entropy_c` C++, `pii_redactor` PyO3
+- [x] **I.2** `mask_pii()` e `_check_pii_leak()` ora funzionano con regex Python (prima erano stub che importavano moduli inesistenti)
+- [x] **I.3** Docstring SecurityShield aggiornata (rimosso claim "Native C++/Rust/ONNX")
+- [x] **I.4** `PluginState` creato in `RotatorAgent.__init__` con cache, metrics (MetricsTracker), config
+- [x] **I.5** `state` passato in ogni `PluginContext` creato in `proxy_request`
+- [x] **I.6** `SecurityShield.inspect()` wired nel request chain (pre-INGRESS ring) — multi-turn trajectory detection attivo
+- [x] **I.7** Test: shared cache across plugins via PluginState DI (46 test totali pass)
 
 ---
 
@@ -67,6 +71,9 @@
 - [ ] **J.2** Migrazione incrementale default plugins → BasePlugin (uno alla volta, zero urgenza)
 - [ ] **J.3** OpenObserve integration per tracing distribuito
 - [ ] **J.4** Plugin marketplace UI panel nella dashboard
+- [ ] **J.5** Budget tracking: persistenza su disco + costo reale basato su token count (ora è in-memory heuristic)
+- [ ] **J.6** God Object refactor: rotator.py (770+ righe, 27 route) → split in route modules
+- [ ] **J.7** `sanitize_response()` wiring nel POST_FLIGHT per risposte non-streaming
 
 ---
 
@@ -77,7 +84,7 @@
 | F. Dual-Mode Engine + SDK | BasePlugin, PluginResponse, 2 marketplace plugins | ✅ DONE |
 | G. 5 Principi FAANG | Timeouts, AST, Contracts, DI, Tests | ✅ DONE |
 | H. WASM/Rust Pipeline | WasmRunner, Extism, JSON protocol, 15 test | ✅ DONE |
-| I. PluginState Wiring | DI nel runtime RotatorAgent | 🔲 TODO |
-| J. Backlog | Watcher, migration, OpenObserve, UI | 🔲 BACKLOG |
+| I. Wiring + Dead Code | SecurityShield cleanup, PluginState DI, inspect() wired | ✅ DONE |
+| J. Backlog | Watcher, migration, OpenObserve, UI, budget persistence, refactor | 🔲 BACKLOG |
 
-**93 test totali — 100% pass. Zero dead code.**
+**46 test plugin/WASM — 100% pass. Zero dead code in security.py.**

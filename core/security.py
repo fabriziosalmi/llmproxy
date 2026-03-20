@@ -7,7 +7,7 @@ from typing import Dict, List, Any, Optional
 logger = logging.getLogger(__name__)
 
 class SecurityShield:
-    """Orchestrates security checks for incoming LLM requests using Native C++/Rust/ONNX."""
+    """Orchestrates security checks for incoming LLM requests (injection, PII, trajectory analysis)."""
     
     def __init__(self, config: Dict[str, Any], assistant: Optional[Any] = None):
         self.config = config.get("security", {})
@@ -15,15 +15,6 @@ class SecurityShield:
         self.assistant = assistant
         self.pii_vault = {}
         self.session_memory: Dict[str, List[float]] = {}
-        
-        # Phase 10: Load Native Compilations
-        try:
-            from core.anomaly_detector import SemanticAnomalyDetector
-            self.anomaly_detector = SemanticAnomalyDetector()
-            self.anomaly_detector.load()
-        except ImportError:
-            logger.error("ONNX Semantic Anomaly Detector missing.")
-            self.anomaly_detector = None
             
     async def analyze_speculative(self, prompt: str, stream_chunks: List[str], kill_event: Any):
         """Asynchronously monitors a response stream for security violations."""
@@ -48,30 +39,6 @@ class SecurityShield:
                     kill_event.set()
                     return
                     
-                # 3. ONNX Anomaly Detection & C++ Entropy (Phase 10)
-                try:
-                    import entropy_c
-                    import numpy as np
-                    # Mock tokenization for entropy calculation (normally use tiktoken)
-                    mock_tokens = np.array([abs(hash(c)) % 10000 for c in current_response], dtype=np.int32)
-                    entropy_val = entropy_c.compute_entropy(mock_tokens)
-                    if entropy_val > 9.5:  # Arbitrary extremely high entropy threshold for steganography
-                        logger.critical(f"STEGANOGRAPHY DETECTED: Abnormal Shannon Entropy ({entropy_val:.2f})")
-                        kill_event.set()
-                        return
-                        
-                    if self.anomaly_detector:
-                        # Feed the same mock sequence to our classifier
-                        shift_prob = self.anomaly_detector.detect_shift(mock_tokens[:512].tolist())
-                        if shift_prob > 0.85:
-                            logger.critical(f"SEMANTIC SHIFT: ONNX Model detected anomalous semantic trajectory! Prob: {shift_prob:.2f}")
-                            kill_event.set()
-                            return
-                except ImportError:
-                    pass  # Native extensions not available — skip C++/ONNX checks
-                except Exception as e:
-                    logger.error(f"Native extension error during speculative analysis: {e}")
-                
                 # 2. After a certain length, run an AI sanity check on the prefix
                 if len(current_response) > 500 and self.assistant:
                     # Run AI guard on prefix
@@ -86,24 +53,37 @@ class SecurityShield:
             await asyncio.sleep(0.05) # Hyper-fast polling
 
     def _check_pii_leak(self, text: str) -> bool:
-        # Phase 10: Use Rust PyO3 engine
-        try:
-            import pii_redactor
-            redacted = pii_redactor.redact_pii(text)
-            return redacted != text
-        except ImportError:
-            return False
+        """Checks for common PII patterns in text using regex."""
+        import re as _re
+        # Simple PII patterns: emails, phone numbers, SSN-like
+        pii_patterns = [
+            r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',  # Email
+            r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b',  # Phone
+            r'\b\d{3}-\d{2}-\d{4}\b',  # SSN
+        ]
+        for pattern in pii_patterns:
+            if _re.search(pattern, text):
+                return True
+        return False
 
     def mask_pii(self, text: str) -> str:
-        """Masks PII using the fast O(n) PyO3 Rust extension."""
+        """Masks PII patterns with tokens and stores originals in vault for later demasking."""
         if not self.enabled: return text
-        
-        try:
-            import pii_redactor
-            # Rust Regex ReDos-immune engine
-            return pii_redactor.redact_pii(text)
-        except ImportError:
-            return text
+
+        import re as _re
+        masked = text
+        pii_patterns = [
+            (r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', 'EMAIL'),
+            (r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b', 'PHONE'),
+            (r'\b\d{3}-\d{2}-\d{4}\b', 'SSN'),
+        ]
+        for pattern, label in pii_patterns:
+            for match in _re.finditer(pattern, masked):
+                original = match.group()
+                token = f"[PII_{label}_{uuid.uuid4().hex[:8]}]"
+                self.pii_vault[token] = original
+                masked = masked.replace(original, token, 1)
+        return masked
 
     def demask_pii(self, text: str) -> str:
         """Restores original PII from the vault into the response."""
