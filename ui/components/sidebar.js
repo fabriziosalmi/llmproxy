@@ -24,4 +24,33 @@ export function initSidebar() {
             store.update({ isCollapsed: !store.state.isCollapsed });
         });
     }
+
+    // Mobile hamburger
+    const mobileBtn = document.getElementById('mobile-menu-btn');
+    const sidebar = document.getElementById('sidebar');
+    const backdrop = document.getElementById('sidebar-backdrop');
+    if (mobileBtn && sidebar && backdrop) {
+        mobileBtn.addEventListener('click', () => {
+            const isHidden = sidebar.classList.contains('mobile-hidden');
+            if (isHidden) {
+                sidebar.classList.remove('mobile-hidden');
+                backdrop.classList.remove('hidden');
+            } else {
+                sidebar.classList.add('mobile-hidden');
+                backdrop.classList.add('hidden');
+            }
+        });
+    }
+
+    // Close sidebar when ANY nav item is clicked on mobile
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.addEventListener('click', () => {
+            if (window.innerWidth < 768) {
+                const sb = document.getElementById('sidebar');
+                const bd = document.getElementById('sidebar-backdrop');
+                if (sb) sb.classList.add('mobile-hidden');
+                if (bd) bd.classList.add('hidden');
+            }
+        });
+    });
 }

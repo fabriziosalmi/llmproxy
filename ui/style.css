@@ -304,6 +304,41 @@ body.cinema-mode main {
     transform: scale(1.05);
 }
 
+/* ─── Mobile Responsive ─── */
+@media (max-width: 767px) {
+    .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        height: 100%;
+        z-index: 60;
+        transform: translateX(0);
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        width: 260px;
+    }
+    .sidebar.mobile-hidden {
+        transform: translateX(-100%);
+    }
+    .sidebar.collapsed {
+        width: 260px;
+        transform: translateX(-100%);
+    }
+    /* Ticker hidden on mobile */
+    .event-ticker {
+        display: none;
+    }
+    /* Card text sizing */
+    .glass h2 {
+        font-size: 1.5rem;
+    }
+}
+
+@media (min-width: 768px) {
+    .sidebar.mobile-hidden {
+        transform: translateX(0) !important;
+    }
+}
+
 /* ─── 1.2: Breadcrumb divider ─── */
 .breadcrumb-sep {
     display: inline-flex;

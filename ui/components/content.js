@@ -21,9 +21,9 @@ export function renderContent() {
         targetNav.classList.remove('text-slate-500');
     }
     
-    const viewTitle = document.getElementById('view-title');
-    if (viewTitle && viewTitle.firstChild) {
-        viewTitle.firstChild.textContent = currentTab.charAt(0).toUpperCase() + currentTab.slice(1);
+    const viewTitleText = document.getElementById('view-title-text');
+    if (viewTitleText) {
+        viewTitleText.textContent = currentTab.charAt(0).toUpperCase() + currentTab.slice(1);
     }
 }
 
