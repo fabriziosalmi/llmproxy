@@ -27,29 +27,29 @@
                     <span id="app-version-badge" class="text-[8px] font-mono font-bold text-sky-400 bg-sky-400/5 px-2 py-0.5 rounded-full border border-sky-400/10 tracking-widest">v0.1.0</span>
                 </div>
             </div>
-            <button onclick="toggleSidebar()" class="p-1 hover:bg-white/5 rounded-lg text-slate-500 hover:text-white transition-all">
+            <button id="sidebar-toggle-btn" class="p-1 hover:bg-white/5 rounded-lg text-slate-500 hover:text-white transition-all">
                 <svg id="toggle-icon-svg" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/></svg>
             </button>
         </div>
 
         <nav class="flex-1 px-4 space-y-1.5 pt-4">
-            <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-item active w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all">
+            <button  id="nav-dashboard" class="nav-item active w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
                 <span class="sidebar-text">Dashboard</span>
             </button>
-            <button onclick="switchTab('registry')" id="nav-registry" class="nav-item w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-500 transition-all">
+            <button  id="nav-registry" class="nav-item w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-500 transition-all">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
                 <span class="sidebar-text">Service Registry</span>
             </button>
-            <button onclick="switchTab('proxy')" id="nav-proxy" class="nav-item w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-500 transition-all">
+            <button  id="nav-proxy" class="nav-item w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-500 transition-all">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
                 <span class="sidebar-text">Transparent Proxy</span>
             </button>
-            <button onclick="switchTab('chat')" id="nav-chat" class="nav-item w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-500 transition-all">
+            <button  id="nav-chat" class="nav-item w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-500 transition-all">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
                 <span class="sidebar-text">Neural Chat</span>
             </button>
-            <button onclick="switchTab('settings')" id="nav-settings" class="nav-item w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-500 transition-all">
+            <button  id="nav-settings" class="nav-item w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-500 transition-all">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/></svg>
                 <span class="sidebar-text">Operations</span>
             </button>
@@ -157,7 +157,7 @@
                     </div>
                     <div class="flex items-center gap-4 px-6 py-3 bg-white/5 rounded-2xl border border-white/5">
                         <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Priority Steering</span>
-                        <button id="priority-mode-btn" onclick="togglePriorityMode()" class="w-10 h-5 bg-slate-800 rounded-full flex items-center px-0.5 transition-all">
+                        <button id="priority-mode-btn"  class="w-10 h-5 bg-slate-800 rounded-full flex items-center px-0.5 transition-all">
                             <div class="w-4 h-4 bg-slate-500 rounded-full transition-all"></div>
                         </button>
                     </div>
@@ -196,7 +196,7 @@
                                     <span class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-1">Current State</span>
                                     <span class="text-emerald-400 font-mono text-xs font-black uppercase tracking-tighter shadow-sm shadow-emerald-500/10">ACTIVE</span>
                                 </div>
-                                <button id="proxy-toggle-btn" onclick="toggleProxyService()" class="w-16 h-8 bg-sky-500 rounded-full flex items-center px-1 transition-all shadow-lg shadow-sky-500/20">
+                                <button id="proxy-toggle-btn"  class="w-16 h-8 bg-sky-500 rounded-full flex items-center px-1 transition-all shadow-lg shadow-sky-500/20">
                                     <div class="w-6 h-6 bg-white rounded-full shadow-md ml-auto transition-all duration-300"></div>
                                 </button>
                             </div>
@@ -221,7 +221,7 @@
                             <div class="w-2 h-2 rounded-full bg-emerald-500/40"></div>
                         </div>
                         <span class="text-[9px] text-slate-600 font-black uppercase tracking-[0.2em]">TRANSPARENT LOG STREAM</span>
-                        <button onclick="clearLogs()" class="text-[8px] text-slate-500 hover:text-white font-bold uppercase tracking-widest">Clear</button>
+                        <button  class="text-[8px] text-slate-500 hover:text-white font-bold uppercase tracking-widest">Clear</button>
                     </div>
                     <div id="terminal-logs" class="flex-1 p-8 pt-14 font-mono text-[11px] leading-relaxed overflow-y-auto scrollbar-hide space-y-1">
                         <div class="text-slate-500 italic opacity-50">Waiting for neural traffic link...</div>
@@ -248,7 +248,7 @@
                         <span id="active-model-token" class="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Auto-Routing: [Llama-3.3-70B]</span>
                     </div>
                     <textarea id="chat-input" rows="1" placeholder="Type instructions or data for proxying..." class="w-full bg-white/[0.03] border border-white/10 rounded-2xl pl-6 pr-20 py-5 text-sm focus:ring-1 focus:ring-sky-500/50 focus:border-sky-500 outline-none transition-all resize-none shadow-2xl"></textarea>
-                    <button onclick="sendUserMessage()" class="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-sky-500 hover:bg-sky-600 rounded-xl flex items-center justify-center transition-all shadow-lg shadow-sky-500/30 group-focus-within:scale-105">
+                    <button  class="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-sky-500 hover:bg-sky-600 rounded-xl flex items-center justify-center transition-all shadow-lg shadow-sky-500/30 group-focus-within:scale-105">
                         <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
                     </button>
                 </div>
@@ -295,6 +295,6 @@
     </main>
 
     <!-- Master App Logic -->
-    <script src="app.js"></script>
+    <script type="module" src="main.js"></script>
 </body>
 </html>

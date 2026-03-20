@@ -8,10 +8,13 @@ from agents.validator import ValidatorAgent
 from agents.advanced_validator import AdvancedValidatorAgent
 from proxy.rotator import RotatorAgent
 from agents.admin_agent import AdminAgent
+from agents.self_healer import SelfHealerAgent
+from agents.distiller import DistillerAgent
 from core.metrics import start_metrics_server
 from core.local_assistant import LocalAssistant
 from core.supervisor import AgentSupervisor
 from core.discovery_utils import get_tailscale_ip
+from core.tracing import TraceManager
 from repl.interface import start_repl
 from dotenv import load_dotenv
 import yaml
@@ -41,6 +44,14 @@ async def main():
     # Initialize store
     store = EndpointStore()
     await store.init()
+
+    # Initialize Tracing
+    obs_config = config.get("observability", {}).get("tracing", {})
+    if obs_config.get("enabled"):
+        TraceManager.initialize(
+            service_name=obs_config.get("service_name", "llmproxy"),
+            otlp_endpoint=obs_config.get("otlp_endpoint")
+        )
     
     # Initialize supervisor
     supervisor = AgentSupervisor()
@@ -57,8 +68,14 @@ async def main():
     interface = SOTAInterfaceAgent(store, local_llm)
     validator = ValidatorAgent(store)
     adv_validator = AdvancedValidatorAgent(store)
-    rotator = RotatorAgent(store)
+    rotator = RotatorAgent(store, assistant=local_llm)
     admin = AdminAgent(store)
+    healer = SelfHealerAgent(store, local_llm)
+    distiller = DistillerAgent(store)
+    
+    # Start background agents
+    asyncio.create_task(healer.start())
+    asyncio.create_task(distiller.start())
     
     # Start Metrics
     if config["server"]["metrics"]["enabled"]:
@@ -74,8 +91,11 @@ async def main():
     supervisor.add_agent(rotator)
     supervisor.add_agent(admin)
 
+    # Load Dynamic Plugins
+    supervisor.load_plugins(store=store)
+
     # Start REPL
-    start_repl(store, supervisor.agents)
+    start_repl(store, supervisor.agents, local_llm)
 
     logger.info("Starting Agentic LLM Proxy System (Hardened)...")
     

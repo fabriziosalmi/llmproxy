@@ -4,6 +4,7 @@ from store.store import EndpointStore
 import asyncio
 import aiohttp
 from datetime import datetime
+from core.capabilities import CapabilityProber
 
 class ValidatorAgent(BaseAgent):
     def __init__(self, store: EndpointStore):
@@ -21,6 +22,23 @@ class ValidatorAgent(BaseAgent):
             
             await asyncio.sleep(300) # Re-validate every 5 min
 
+            await asyncio.sleep(300) # Re-validate every 5 min
+
+    async def validate(self, url: str) -> dict:
+        """Standalone validation of a URL. Returns a status dict."""
+        try:
+            async with aiohttp.ClientSession() as session:
+                payload = {
+                    "model": "gpt-3.5-turbo",
+                    "messages": [{"role": "user", "content": "ping"}]
+                }
+                async with session.post(url, json=payload, timeout=10) as response:
+                    if response.status == 200:
+                        return {"status": "healthy", "response": await response.json()}
+                    return {"status": "unhealthy", "error": f"HTTP {response.status}"}
+        except Exception as e:
+            return {"status": "unhealthy", "error": str(e)}
+
     async def validate_endpoint(self, endpoint: LLMEndpoint):
         self.logger.info(f"Testing endpoint: {endpoint.url}")
         start_time = datetime.now()
@@ -35,16 +53,19 @@ class ValidatorAgent(BaseAgent):
                 async with session.post(str(endpoint.url), json=payload, timeout=10) as response:
                     latency = (datetime.now() - start_time).total_seconds() * 1000
                     if response.status == 200:
+                        # Success! Now probe for capabilities
+                        capabilities = await CapabilityProber.probe_all(str(endpoint.url))
+                        
                         metadata = {
                             "latency_ms": latency,
-                            "last_verified": datetime.now(),
-                            "success_rate": (endpoint.success_rate + 1.0) / 2 # Update success rate
+                            "last_verified": datetime.now().isoformat(),
+                            "success_rate": (endpoint.success_rate + 1.0) / 2,
+                            "capabilities": capabilities
                         }
                         await self.store.update_status(endpoint.id, EndpointStatus.VERIFIED, metadata=metadata)
-                        self.logger.info(f"Endpoint {endpoint.url} VALIDATED. Latency: {latency:.2f}ms")
+                        self.logger.info(f"Endpoint {endpoint.url} VALIDATED. Capabilities: {capabilities}")
                     else:
                         self.logger.warning(f"Endpoint {endpoint.url} FAILED (status {response.status})")
-                        # If failed, update status to IGNORED
                         await self.store.update_status(endpoint.id, EndpointStatus.IGNORED)
         except Exception as e:
             self.logger.error(f"Error validating {endpoint.url}: {e}")

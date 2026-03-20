@@ -1,5 +1,8 @@
 import asyncio
 import logging
+import os
+import importlib.util
+import inspect
 from typing import List, Dict, Type
 from core.base_agent import BaseAgent
 
@@ -16,6 +19,34 @@ class AgentSupervisor:
     def add_agent(self, agent: BaseAgent):
         self.agents[agent.name] = agent
         self.restart_counts[agent.name] = 0
+
+    def load_plugins(self, plugins_dir: str = "plugins", **kwargs):
+        """Dynamically loads agent plugins from the specified directory."""
+        if not os.path.exists(plugins_dir):
+            os.makedirs(plugins_dir)
+            return
+
+        for filename in os.listdir(plugins_dir):
+            if filename.endswith(".py") and not filename.startswith("__"):
+                path = os.path.join(plugins_dir, filename)
+                module_name = f"plugins.{filename[:-3]}"
+                
+                spec = importlib.util.spec_from_file_location(module_name, path)
+                if spec and spec.loader:
+                    module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(module)
+                    
+                    for name, obj in inspect.getmembers(module):
+                        if inspect.isclass(obj) and issubclass(obj, BaseAgent) and obj is not BaseAgent:
+                            try:
+                                # Attempt to instantiate with provided kwargs that match init signature
+                                sig = inspect.signature(obj.__init__)
+                                agent_args = {k: v for k, v in kwargs.items() if k in sig.parameters}
+                                agent_instance = obj(**agent_args)
+                                self.add_agent(agent_instance)
+                                logger.info(f"Supervisor: Loaded plugin agent '{agent_instance.name}' from {filename}")
+                            except Exception as e:
+                                logger.error(f"Supervisor: Failed to load plugin {name} from {filename}: {e}")
 
     async def start(self):
         logger.info("Supervisor starting agents...")

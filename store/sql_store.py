@@ -36,17 +36,21 @@ class SQLiteStore:
     async def add_endpoint(self, endpoint: LLMEndpoint):
         async with aiosqlite.connect(self.db_path) as conn:
             await conn.execute(
-                "INSERT OR REPLACE INTO endpoints (id, url, status, metadata) VALUES (?, ?, ?, ?)",
-                (endpoint.id, str(endpoint.url), endpoint.status.value, json.dumps(endpoint.metadata))
+                "INSERT OR REPLACE INTO endpoints (id, url, status, metadata, latency_ms, success_rate) VALUES (?, ?, ?, ?, ?, ?)",
+                (endpoint.id, str(endpoint.url), endpoint.status.value, json.dumps(endpoint.metadata), endpoint.latency_ms, endpoint.success_rate)
             )
             await conn.commit()
 
     async def update_status(self, endpoint_id: str, status: EndpointStatus, metadata: Optional[Dict] = None):
         async with aiosqlite.connect(self.db_path) as conn:
+            # Extract latency_ms from metadata if present
+            latency_ms = metadata.get("latency_ms") if metadata else None
+            success_rate = metadata.get("success_rate") if metadata else None
+            
             if metadata:
                 await conn.execute(
-                    "UPDATE endpoints SET status = ?, metadata = ?, last_verified = CURRENT_TIMESTAMP WHERE id = ?",
-                    (status.value, json.dumps(metadata), endpoint_id)
+                    "UPDATE endpoints SET status = ?, metadata = ?, latency_ms = COALESCE(?, latency_ms), success_rate = COALESCE(?, success_rate), last_verified = CURRENT_TIMESTAMP WHERE id = ?",
+                    (status.value, json.dumps(metadata), latency_ms, success_rate, endpoint_id)
                 )
             else:
                 await conn.execute(
@@ -62,20 +66,26 @@ class SQLiteStore:
     async def get_by_status(self, status: EndpointStatus) -> List[LLMEndpoint]:
         """Returns all endpoints with a specific status."""
         async with aiosqlite.connect(self.db_path) as conn:
-            async with conn.execute("SELECT id, url, status, metadata FROM endpoints WHERE status = ?", (status.value,)) as cursor:
+            async with conn.execute("SELECT id, url, status, metadata, latency_ms, success_rate FROM endpoints WHERE status = ?", (status.value,)) as cursor:
                 rows = await cursor.fetchall()
                 return [
-                    LLMEndpoint(id=r[0], url=r[1], status=EndpointStatus(int(r[2])), metadata=json.loads(r[3]))
+                    LLMEndpoint(
+                        id=r[0], url=r[1], status=EndpointStatus(int(r[2])), 
+                        metadata=json.loads(r[3]), latency_ms=r[4], success_rate=r[5]
+                    )
                     for r in rows
                 ]
 
     async def get_all(self) -> List[LLMEndpoint]:
         """Returns all endpoints in the database."""
         async with aiosqlite.connect(self.db_path) as conn:
-            async with conn.execute("SELECT id, url, status, metadata FROM endpoints") as cursor:
+            async with conn.execute("SELECT id, url, status, metadata, latency_ms, success_rate FROM endpoints") as cursor:
                 rows = await cursor.fetchall()
                 return [
-                    LLMEndpoint(id=r[0], url=r[1], status=EndpointStatus(int(r[2])), metadata=json.loads(r[3]))
+                    LLMEndpoint(
+                        id=r[0], url=r[1], status=EndpointStatus(int(r[2])), 
+                        metadata=json.loads(r[3]), latency_ms=r[4], success_rate=r[5]
+                    )
                     for r in rows
                 ]
             

@@ -16,8 +16,8 @@ class LLMEndpoint(BaseModel):
     provider_type: Optional[str] = None # e.g. "openai-compatible", "hf-space", "gradio"
     metadata: Dict[str, Any] = {}
     last_verified: Optional[datetime] = None
-    latency_ms: Optional[float] = None
-    success_rate: float = 0.0
+    latency_ms: Optional[float] = 0.0
+    success_rate: Optional[float] = 0.0
     tags: List[str] = []
 
 class AgentState(BaseModel):

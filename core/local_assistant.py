@@ -57,6 +57,29 @@ class LocalAssistant:
             
         return None
 
+    async def generate(self, prompt: str, task_id: str = "default", model: Optional[str] = None) -> Optional[str]:
+        """Alias for consult() to match common AI interfaces."""
+        return await self.consult(prompt, task_id, model)
+
+    async def get_embeddings(self, text: str, model: Optional[str] = None) -> Optional[List[float]]:
+        """Generates embeddings for the given text using the local LLM host."""
+        target_model = model or self.default_model
+        try:
+            async with aiohttp.ClientSession() as session:
+                payload = {
+                    "model": target_model,
+                    "input": text
+                }
+                async with session.post(f"{self.host}/v1/embeddings", json=payload, timeout=30) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return data["data"][0]["embedding"]
+                    else:
+                        logger.error(f"Embeddings failed: {response.status}")
+        except Exception as e:
+            logger.error(f"Embeddings connection error: {e}")
+        return None
+
     async def consult_vision(self, prompt: str, image_path: str, model: Optional[str] = None) -> Optional[str]:
         """Consults the local vision model with an image."""
         import base64

@@ -1,80 +1,82 @@
-import asyncio
 import time
-from enum import Enum
 import logging
+from enum import Enum
+from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
 
 class CircuitState(Enum):
-    CLOSED = "CLOSED"
-    OPEN = "OPEN"
-    HALF_OPEN = "HALF_OPEN"
+    CLOSED = "closed"       # Normal operation
+    OPEN = "open"           # Blocked due to failures
+    HALF_OPEN = "half_open" # Testing for recovery
 
 class CircuitBreaker:
-    def __init__(
-        self,
-        name: str,
-        failure_threshold: int = 5,
-        recovery_timeout: float = 60.0,
-        half_open_max_calls: int = 3
-    ):
+    """Implements a stateful circuit breaker for an LLM endpoint."""
+    
+    def __init__(self, name: str = "default", failure_threshold: int = 5, recovery_timeout: int = 60):
         self.name = name
         self.failure_threshold = failure_threshold
         self.recovery_timeout = recovery_timeout
-        self.half_open_max_calls = half_open_max_calls
-        
+        self.failure_count = 0
         self.state = CircuitState.CLOSED
-        self.failures = 0
         self.last_failure_time = 0
-        self.half_open_calls = 0
-        self._lock = asyncio.Lock()
 
-    async def call(self, func, *args, **kwargs):
-        async with self._lock:
-            await self._before_call()
+    def can_execute(self) -> bool:
+        """Checks if the circuit allows execution."""
+        if self.state == CircuitState.CLOSED:
+            return True
         
-        try:
-            result = await func(*args, **kwargs)
-            async with self._lock:
-                await self._on_success()
-            return result
-        except Exception as e:
-            async with self._lock:
-                await self._on_failure()
-            raise e
-
-    async def _before_call(self):
         if self.state == CircuitState.OPEN:
             if time.time() - self.last_failure_time > self.recovery_timeout:
-                logger.info(f"Circuit {self.name} moving to HALF_OPEN")
                 self.state = CircuitState.HALF_OPEN
-                self.half_open_calls = 0
-            else:
-                raise Exception(f"Circuit {self.name} is OPEN. Blocking request.")
+                logger.info("CircuitBreaker: Transitioning to HALF_OPEN for recovery testing.")
+                return True
+            return False
         
         if self.state == CircuitState.HALF_OPEN:
-            if self.half_open_calls >= self.half_open_max_calls:
-                raise Exception(f"Circuit {self.name} is HALF_OPEN and limit reached. Blocking request.")
-            self.half_open_calls += 1
+            # Only allow one request at a time in half_open (simplified)
+            return True
+            
+        return False
 
-    async def _on_success(self):
-        if self.state == CircuitState.HALF_OPEN:
-            # If we reach certain successful calls in HALF_OPEN, we close it
-            # For simplicity, if this call succeeds, we could close it or wait for more
+    def report_success(self):
+        """Reports a successful interaction, closing the circuit if it was half-open."""
+        self.failure_count = 0
+        if self.state != CircuitState.CLOSED:
+            logger.info("CircuitBreaker: Success detected. Closing circuit.")
             self.state = CircuitState.CLOSED
-            self.failures = 0
-            logger.info(f"Circuit {self.name} CLOSED (recovered)")
-        elif self.state == CircuitState.CLOSED:
-            self.failures = 0
 
-    async def _on_failure(self):
-        self.failures += 1
+    def report_failure(self):
+        """Reports a failure, opening the circuit if threshold is reached."""
+        self.failure_count += 1
         self.last_failure_time = time.time()
         
-        if self.state == CircuitState.CLOSED:
-            if self.failures >= self.failure_threshold:
-                logger.error(f"Circuit {self.name} OPENED due to {self.failures} failures")
+        if self.state == CircuitState.HALF_OPEN or self.failure_count >= self.failure_threshold:
+            if self.state != CircuitState.OPEN:
+                logger.warning(f"CircuitBreaker ({self.name}): Failure threshold ({self.failure_threshold}) reached. Opening circuit.")
                 self.state = CircuitState.OPEN
-        elif self.state == CircuitState.HALF_OPEN:
-            logger.error(f"Circuit {self.name} returned to OPEN from HALF_OPEN")
-            self.state = CircuitState.OPEN
+
+    async def call(self, func, *args, **kwargs):
+        """Wraps a function call with circuit breaker logic."""
+        if not self.can_execute():
+            raise Exception(f"Circuit {self.name} is OPEN. Blocking execution.")
+            
+        try:
+            result = await func(*args, **kwargs)
+            self.report_success()
+            return result
+        except Exception as e:
+            self.report_failure()
+            logger.error(f"CircuitBreaker ({self.name}) caught error: {e}")
+            raise e
+
+class CircuitManager:
+    """Manages circuit breakers for all endpoints."""
+    
+    def __init__(self):
+        self._circuits: Dict[str, CircuitBreaker] = {}
+
+    def get_breaker(self, endpoint_id: str) -> CircuitBreaker:
+        if endpoint_id not in self._circuits:
+            self._circuits[endpoint_id] = CircuitBreaker(name=endpoint_id)
+        return self._circuits[endpoint_id]

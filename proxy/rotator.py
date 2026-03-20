@@ -25,23 +25,61 @@ from core.tracing import TraceManager
 from core.vllm_engine import VLLMEngine
 from core.rate_limiter import DynamicRateLimiter
 from core.semantic_router import SemanticRouter, TaskComplexity
+from core.semantic_cache import SemanticCache
+from core.mcp_hub import MCPHub
+from core.load_predictor import LoadPredictor
+from core.zero_trust import ZeroTrustManager
+from core.federation import FederationManager
+from core.rbac import RBACManager
+from core.circuit_breaker import CircuitManager
 from core.rl_rotator import RLRotator, ModelRegistry
 from core.security import SecurityShield
+from core.secrets import SecretManager
 from core.logger import setup_logger
 
 API_KEY_HEADER = APIKeyHeader(name="Authorization", auto_error=False)
 
 class RotatorAgent(BaseAgent):
-    def __init__(self, store: EndpointStore, config_path: str = "config.yaml"):
+    def __init__(self, store: EndpointStore, assistant=None, config_path: str = "config.yaml"):
         super().__init__("rotator")
         self.store = store
         self.config_path = config_path
         self.config = self._load_config()
         self.vllm = VLLMEngine(model_path=self.config.get("server", {}).get("vllm", {}).get("model_path"))
         self.limiter = DynamicRateLimiter()
-        self.router = SemanticRouter()
+        self.router = SemanticRouter(assistant=assistant)
         self.rl_rotator = RLRotator()
-        self.security = SecurityShield(self.config)
+        self.circuit_manager = CircuitManager()
+        
+        # Initialize Semantic Cache
+        cache_config = self.config.get("caching", {})
+        if cache_config.get("enabled"):
+            self.semantic_cache = SemanticCache(
+                assistant=assistant,
+                db_path=cache_config.get("db_path", "cache_db"),
+                threshold=cache_config.get("threshold", 0.95)
+            )
+        else:
+            self.semantic_cache = None
+            
+        # Initialize MCP Hub
+        self.mcp_hub = MCPHub()
+        
+        # Initialize Load Predictor
+        self.predictor = LoadPredictor()
+        
+        # Initialize Zero Trust Manager
+        self.zt_manager = ZeroTrustManager(self.config)
+        
+        # Initialize Federation Manager
+        self.federation = FederationManager(self.config)
+        
+        # Initialize RBAC Manager
+        self.rbac = RBACManager()
+        
+        self.total_cost_today = 0.0 # Persistent state would be better, but this is a start
+        
+        self.security = SecurityShield(self.config, assistant=assistant)
         self.proxy_enabled = True
         self.priority_mode = False
         self.features = {
@@ -51,6 +89,7 @@ class RotatorAgent(BaseAgent):
         }
         self.log_queue = asyncio.Queue(maxsize=100)
         self.app = FastAPI(title="LLMPROXY")
+        TraceManager.instrument_app(self.app)
         self.app.add_middleware(
             CORSMiddleware,
             allow_origins=["*"],
@@ -73,9 +112,9 @@ class RotatorAgent(BaseAgent):
         return {"server": {"auth": {"enabled": False}}}
 
     def _get_api_keys(self) -> list[str]:
-        """Load API keys from environment variable (never from config file)."""
+        """Load API keys from environment variable (secure via SecretManager)."""
         env_var = self.config.get("server", {}).get("auth", {}).get("api_keys_env", "LLM_PROXY_API_KEYS")
-        raw = os.environ.get(env_var, "")
+        raw = SecretManager.get_secret(env_var, "")
         return [k.strip() for k in raw.split(",") if k.strip()]
 
     async def _get_session(self) -> aiohttp.ClientSession:
@@ -91,16 +130,21 @@ class RotatorAgent(BaseAgent):
         async def chat_completions(request: Request, api_key: str = Depends(API_KEY_HEADER)):
             if self.config["server"]["auth"]["enabled"]:
                 valid_keys = self._get_api_keys()
-                token = api_key.replace("Bearer ", "").strip() if api_key else ""
+                token = api_key.replace("Bearer ", "").strip() if api_key else "default"
                 if not token or token not in valid_keys:
                     raise HTTPException(status_code=401, detail="Unauthorized: Invalid or missing API key")
+                
+                # RBAC Quota Check
+                if not self.rbac.check_quota(token):
+                    raise HTTPException(status_code=402, detail="Enterprise Quota Exceeded for this API Key.")
 
             if not self.proxy_enabled:
                 raise HTTPException(status_code=503, detail="Proxy service is currently STOPPED.")
             
             start_time = time.time()
             try:
-                response = await self.proxy_request(request)
+                session_id = token if 'token' in locals() else "anonymous"
+                response = await self.proxy_request(request, session_id=session_id)
                 duration = time.time() - start_time
                 MetricsTracker.track_request("POST", "/v1/chat/completions", response.status_code, duration)
                 return response
@@ -269,7 +313,8 @@ class RotatorAgent(BaseAgent):
         server = uvicorn.Server(config)
         await server.serve()
 
-    async def proxy_request(self, request: Request):
+    async def proxy_request(self, request: Request, session_id: str = "default"):
+        self.predictor.record_request()
         with TraceManager.start_span("proxy_request"):
             # 1. Rate limiting
             client_ip = request.client.host
@@ -278,33 +323,61 @@ class RotatorAgent(BaseAgent):
                 raise HTTPException(status_code=429, detail="Too Many Requests")
 
             body = await request.json()
+            prompt = body.get("messages", [{}])[-1].get("content", "")
             
-            # 2. Security Shield Inspection
-            security_error = self.security.inspect(body)
+            # 1.0 Enterprise PII Masking (Bidirectional)
+            prompt = self.security.mask_pii(prompt)
+            if body.get("messages"):
+                body["messages"][-1]["content"] = prompt
+
+            # 1.1 Semantic Cache Check
+            if self.semantic_cache:
+                cached_response = await self.semantic_cache.get(prompt)
+                if cached_response:
+                    await self._add_log(f"CACHE HIT: Serving semantically similar response for '{prompt[:30]}...'", level="SYSTEM")
+                    return JSONResponse(content=cached_response, status_code=200)
+
+            # 1.3 MCP Tool Injection
+            if body.get("tools") is not None or self.config.get("mcp", {}).get("auto_inject", True):
+                local_tools = self.mcp_hub.get_tool_definitions()
+                if local_tools:
+                    existing_tools = body.get("tools", [])
+                    body["tools"] = existing_tools + local_tools
+                    self.logger.info(f"MCPHub: Injected {len(local_tools)} local tools into the request")
+
+            # 2. Security Shield Inspection (Session-Aware)
+            security_error = self.security.inspect(body, session_id=session_id)
             if security_error:
-                self.logger.warning(f"Security Alert: {security_error}")
+                self.logger.warning(f"Security Alert for {session_id}: {security_error}")
                 raise HTTPException(status_code=403, detail=security_error)
 
             prompt = body['messages'][-1]['content']
             
             # 2. Semantic Classification
-            complexity = self.router.classify(prompt)
+            complexity = await self.router.classify(prompt)
             preferred_tier = self.router.get_preferred_model_tier(complexity)
             log_msg = f"Inbound Request: {prompt[:50]}... -> Complexity: {complexity.value}"
             await self._add_log(log_msg, metadata={"complexity": complexity.value, "tier": preferred_tier})
             self.logger.info(log_msg)
 
-            # 3. RL-Based Endpoint Selection
+            # 3. RL-Based Endpoint Selection (w/ Circuit Breaker Filter)
             pool = await self.store.get_pool()
             if not pool:
-                if self.config.get("vllm", {}).get("enabled"):
-                    response_text = await self.vllm.generate(prompt)
-                    return JSONResponse(content={"choices": [{"message": {"content": response_text}}]}, status_code=200)
+                if self.config.get("server", {}).get("vllm", {}).get("enabled"):
+                   return await self._handle_vllm_fallback(prompt)
                 raise HTTPException(status_code=503, detail="No verified endpoints available.")
             
-            # Filter pool by tier (if possible)
-            tier_pool = [e for e in pool if ModelRegistry.get_tier(e.metadata) == preferred_tier]
-            active_pool = tier_pool if tier_pool else pool # Fallback to any verified endpoint
+            # Filter pool by circuit breaker status
+            healthy_pool = [e for e in pool if self.circuit_manager.get_breaker(e.id).can_execute()]
+            if not healthy_pool:
+                # If all are OPEN, try vLLM fallback if enabled
+                if self.config.get("server", {}).get("vllm", {}).get("enabled"):
+                   return await self._handle_vllm_fallback(prompt)
+                raise HTTPException(status_code=503, detail="All endpoints are currently offline (Circuit OPEN).")
+
+            # Filter pool by tier 
+            tier_pool = [e for e in healthy_pool if ModelRegistry.get_tier(e.metadata) == preferred_tier]
+            active_pool = tier_pool if tier_pool else healthy_pool 
             
             # 3.1 Priority Override (Optional)
             if self.priority_mode:
@@ -319,70 +392,232 @@ class RotatorAgent(BaseAgent):
             await self._add_log(f"Routing to: {target.id} ({target.url})", level="PROXY")
             self.logger.info(f"RL selected endpoint: {target.url} (Tier: {ModelRegistry.get_tier(target.metadata)})")
             
-            # 4. Cognitive Intent Analysis (100x Leap)
-            prompt_text = body.get("messages", [{}])[-1].get("content", "")
-            is_coding = any(kw in prompt_text.lower() for kw in ["code", "python", "fix", "function", "rust", "javascript"])
-            is_creative = any(kw in prompt_text.lower() for kw in ["story", "write", "poem", "creative", "essay"])
-            
             if is_coding:
                 self.logger.info("Cognitive Routing: CODING intent detected. Prioritizing logic-heavy endpoints.")
             elif is_creative:
                 self.logger.info("Cognitive Routing: CREATIVE intent detected. Prioritizing prose-heavy endpoints.")
 
+            # 4.1 'Olimpo' Semantic Request Sharding & Fusion (Parallelization)
+            if complexity == TaskComplexity.HEAVY and not body.get("__internal_shard__"):
+                sub_tasks = await self.router.decompose_prompt(prompt)
+                if len(sub_tasks) > 1:
+                    await self._add_log(f"OLIMPO: Sharding complex task into {len(sub_tasks)} parallel sub-tasks...", level="SYSTEM")
+                    
+                    async def execute_sub_task(sub_prompt):
+                        # Create a copy of the body with the sub-prompt
+                        sub_body = body.copy()
+                        sub_body["messages"] = sub_body.get("messages", [])[:-1] + [{"role": "user", "content": sub_prompt}]
+                        sub_body["__internal_shard__"] = True # Prevent recursion
+                        sub_body["stream"] = False # Fusion requires full text
+                        
+                        # Use a simplified proxy_request-like logic or just recurse with the flag
+                        # Recursing is cleaner as it re-uses the whole pipeline
+                        # We mock the FastAPI 'request' object for the recursion
+                        from unittest.mock import MagicMock
+                        mock_req = MagicMock(spec=Request)
+                        mock_req.json = asyncio.Typed(lambda: sub_body)
+                        mock_req.client.host = request.client.host if request.client else "127.0.0.1"
+                        
+                        resp = await self.proxy_request(mock_req, session_id=session_id)
+                        if resp.status_code == 200:
+                            data = json.loads(resp.body.decode())
+                            return data["choices"][0]["message"]["content"]
+                        return ""
+
+                    sub_responses = await asyncio.gather(*(execute_sub_task(st) for st in sub_tasks))
+                    fused_text = await self.router.fuse_responses(prompt, [r for r in sub_responses if r])
+                    
+                    # Return a synthesized OpenAI-style response
+                    return JSONResponse(content={
+                        "id": f"fused-{uuid.uuid4().hex[:6]}",
+                        "object": "chat.completion",
+                        "choices": [{"message": {"role": "assistant", "content": fused_text}, "finish_reason": "stop", "index": 0}],
+                        "usage": {"total_tokens": 0}, # Placeholder
+                        "model": "olimpo-fusion-v1"
+                    }, status_code=200)
+
             start_time = time.time()
             try:
-                session = await self._get_session()
-                async with session.post(str(target.url), json=body, timeout=aiohttp.ClientTimeout(total=30)) as response:
-                        duration = time.time() - start_time
-                        
-                        if body.get("stream"):
-                            async def stream_generator():
-                                async for chunk in response.content.iter_any():
-                                    # Basic sanitization on chunks (simplified for demo)
-                                    # In a production system, we'd reconstruct tokens
-                                    yield self.security.sanitize_response(chunk.decode(errors="ignore")).encode()
-                                    
-                                self.logger.info("Stream successful", extra={
-                                    "source_endpoint": target.id,
-                                    "latency": round(time.time() - start_time, 3),
-                                    "mode": "streaming"
-                                })
-                                self.rl_rotator.update(target.id, True, time.time() - start_time)
+                # 2.5 Budget Check
+                budget_config = self.config.get("budget", {})
+                if self.total_cost_today >= budget_config.get("monthly_limit", 1000.0):
+                    if budget_config.get("fallback_to_local_on_limit", True):
+                        await self._add_log("BUDGET EXCEEDED: Falling back to local/cheaper models", level="WARNING")
+                        return await self._handle_vllm_fallback(prompt)
+                    else:
+                        raise HTTPException(status_code=402, detail="Monthly budget exceeded. Please top up.")
 
-                            return StreamingResponse(stream_generator(), media_type="text/event-stream")
+                session = await self._get_session()
+                # Zero-Trust Integration
+                headers = body.get("headers", {})
+                headers.update(self.zt_manager.get_identity_headers())
+                ssl_context = self.zt_manager.get_ssl_context()
+                
+                async with session.post(
+                    str(target.url), 
+                    json=body, 
+                    headers=headers,
+                    ssl=ssl_context,
+                    timeout=aiohttp.ClientTimeout(total=45)
+                ) as response:
+                    duration = time.time() - start_time
+                    
+                    if body.get("stream"):
+                        kill_event = asyncio.Event()
+                        stream_chunks = []
+                        # Start background speculative analyzer
+                        speculative_task = asyncio.create_task(
+                            self.security.analyze_speculative(prompt, stream_chunks, kill_event)
+                        )
+
+                        async def stream_generator():
+                            first_token = True
+                            try:
+                                async for chunk in response.content.iter_any():
+                                    if kill_event.is_set():
+                                        await self._add_log("SECURITY ALERT: Kill Switch triggered mid-stream!", level="CRITICAL")
+                                        yield b"\n\n[SECURITY ALERT: STREAM TERMINATED BY LLMPROXY GUARDRAILS - POTENTIAL THREAT DETECTED]"
+                                        break
+                                    
+                                    chunk_text = chunk.decode(errors="ignore")
+                                    stream_chunks.append(chunk_text)
+                                    
+                                    if first_token:
+                                        ttft = time.time() - start_time
+                                        MetricsTracker.track_ttft(target.id, ttft)
+                                        first_token = False
+                                    
+                                    # Still apply basic per-chunk sanitization
+                                    yield self.security.sanitize_response(chunk_text).encode()
+                                
+                                self.rl_rotator.update(target.id, True, time.time() - start_time)
+                            finally:
+                                if not speculative_task.done():
+                                    speculative_task.cancel()
+
+                        return StreamingResponse(stream_generator(), media_type="text/event-stream")
+                    
+                    # 3. Handle Blocking Response
+                    data = await response.json()
+                    success = response.status == 200
+                    breaker = self.circuit_manager.get_breaker(target.id)
+                    
+                    if success:
+                        breaker.report_success()
+                        # Budget Tracking (Global)
+                        usage = data.get("usage", {})
+                        p_tk = usage.get("prompt_tokens", 0)
+                        c_tk = usage.get("completion_tokens", 0)
+                        cost = (p_tk + c_tk) * 0.00001
+                        self.total_cost_today += cost
                         
-                        # Non-streaming fallback
-                        data = await response.json()
-                        success = response.status == 200
+                        # RBAC Tracking (Per-Key)
+                        api_key = body.get("__api_key__", "default")
+                        self.rbac.update_usage(api_key, cost)
+                    else:
+                        breaker.report_failure()
+                    
+                    self.logger.info("Request successful", extra={
+                        "source_endpoint": target.id, "latency": round(duration, 3),
+                        "model": body.get("model"), "mode": "blocking"
+                    })
+                    self.rl_rotator.update(target.id, success, duration)
+                    
+                    if success:
+                        message = data['choices'][0]['message']
+                        # 4.1 MCP Tool Calls
+                        if message.get("tool_calls"):
+                            # ... (Logic remains similar but fixed indentation)
+                            tool_calls = message["tool_calls"]
+                            tool_results = []
+                            any_local = False
+                            for tc in tool_calls:
+                                func = tc.get("function", {})
+                                name = func.get("name")
+                                args = json.loads(func.get("arguments", "{}"))
+                                if name in self.mcp_hub.tools:
+                                    any_local = True
+                                    result = await self.mcp_hub.call_tool(name, args)
+                                    tool_results.append({"tool_call_id": tc.get("id"), "role": "tool", "name": name, "content": result})
+                            if any_local:
+                                body["messages"] = body.get("messages", []) + [message] + tool_results
+                                return await self.proxy_request(request)
                         
-                        # Structured Logging & Metrics Enrichment
-                        self.logger.info("Request successful", extra={
-                            "source_endpoint": target.id,
-                            "latency": round(duration, 3),
-                            "model": body.get("model"),
-                            "preferred_tier": preferred_tier.value,
-                            "mode": "blocking"
-                        })
-                        
-                        self.rl_rotator.update(target.id, success, duration)
-                        
-                        # Response Sanitization & Guarding
-                        if success:
-                            raw_response = data['choices'][0]['message']['content']
-                            sanitized = self.security.sanitize_response(raw_response)
+                        raw_content = message.get('content', "")
+                        if raw_content:
+                            sanitized = self.security.sanitize_response(raw_content)
+                            if "[SEC_ERR:" in sanitized or not await self.security.inspect_response_ai(prompt, sanitized):
+                                return JSONResponse(content={"error": {"message": "Security Shield blocked response.", "type": "security_error"}}, status_code=403)
                             
-                            if "[SEC_ERR:" in sanitized:
-                                await self._add_log(f"SECURITY BREACH: {sanitized} from {target.id}", level="ERROR")
-                                return JSONResponse(content={"error": {"message": "Neural Guard blocked the response due to policy violation.", "type": "security_error"}}, status_code=403)
-                            
+                            if await self.security.detect_anomaly(prompt, sanitized):
+                                return JSONResponse(content={"error": {"message": "Neural Shield anomaly detected.", "type": "security_error"}}, status_code=403)
+
+                            if self.semantic_cache:
+                                await self.semantic_cache.add(prompt, data)
+
+                            # 6. Shadow Traffic & Autonomous Tuning (Olimpo)
+                            if not body.get("__internal_shard__") and random.random() < 0.05:
+                                asyncio.create_task(self._run_shadow_test(body, sanitized))
+
                             data['choices'][0]['message']['content'] = sanitized
-                            
-                        return JSONResponse(content=data, status_code=response.status)
+                        
+                    return JSONResponse(content=data, status_code=response.status)
             except Exception as e:
-                await self._add_log(f"Proxying failed: {str(e)}", level="ERROR")
-                self.logger.error("Proxying failed", extra={
-                    "target_url": str(target.url),
-                    "error": str(e)
-                })
-                self.rl_rotator.update(target.id, False, 1.0) # Feedback for failure
-                raise HTTPException(status_code=502, detail="Failed to reach upstream endpoint.")
+                breaker = self.circuit_manager.get_breaker(target.id)
+                breaker.report_failure()
+                self.logger.error(f"Proxying failed: {e}")
+                self.rl_rotator.update(target.id, False, 1.0)
+                raise HTTPException(status_code=502, detail=f"Upstream error: {e}")
+
+        # Federated Fallback
+        peer = self.federation.get_random_peer()
+        if peer:
+            await self._add_log(f"FEDERATION: All local circuits open. Trying peer {peer}...", level="WARNING")
+            peer_response = await self.federation.forward_to_peer(peer, await request.json(), self.zt_manager.get_identity_headers())
+            if peer_response:
+                return JSONResponse(content=peer_response, status_code=200)
+
+        # Local vLLM Fallback
+        return await self._handle_vllm_fallback(prompt)
+
+    async def _run_shadow_test(self, body: Dict[str, Any], production_content: str):
+        """Asynchronously duplicates traffic to an experimental setup to compare safety/performance."""
+        if not self.security.enabled: return
+        
+        # 1. Select a 'Shadow' endpoint (e.g., a highly strict one or a new model)
+        pool = await self.store.get_all()
+        if not pool: return
+        
+        # Filter for a logical shadow target (e.g., furthest from the production target)
+        shadow_target = random.choice(pool)
+        
+        try:
+            session = await self._get_session()
+            async with session.post(str(shadow_target.url), json=body, timeout=10) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    shadow_content = data['choices'][0]['message'].get('content', "")
+                    
+                    # 2. Compare using local AI
+                    if self.security.assistant and shadow_content:
+                        comparison_prompt = f"""
+                        Compare these two AI responses for the same prompt.
+                        Prompt: {body['messages'][-1]['content']}
+                        Production: {production_content[:500]}
+                        Shadow: {shadow_content[:500]}
+                        
+                        Which one is safer? Respond ONLY with 'PROD' or 'SHADOW'.
+                        """
+                        judgment = await self.security.assistant.generate(comparison_prompt)
+                        if "SHADOW" in judgment.upper():
+                           await self._add_log(f"SHADOW TUNING: Shadow node {shadow_target.id} provided a SAFER response. Consider rule update.", level="SYSTEM")
+                
+        except Exception as e:
+            self.logger.error(f"Shadow Test Error: {e}")
+
+    async def _handle_vllm_fallback(self, prompt: str):
+        """Generates a response using the local vLLM engine if available."""
+        self.logger.info("CRITICAL FAILURE: No healthy endpoints. Falling back to local vLLM...")
+        await self._add_log("CRITICAL: Fallback to local SOTA vLLM (All circuits OPEN)", level="WARNING")
+        response_text = await self.vllm.generate(prompt)
+        return JSONResponse(content={"choices": [{"message": {"content": response_text}}], "model": "local-fallback"}, status_code=200)
