@@ -306,29 +306,7 @@ function initHUD() {
         }
     }, 5000);
 
-    // UX Feature 24: Audio/Haptics Physics
-    let audioCtx = null;
-    function playBloop() {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        if(audioCtx.state === 'suspended') audioCtx.resume();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(600, audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(300, audioCtx.currentTime + 0.1);
-        gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.1);
-    }
-    
-    document.addEventListener('click', (e) => {
-        if (e.target.closest('button, a, .content-view label, .priority-input, tr')) {
-            try { playBloop(); } catch(err) {} // Fail silently if audio context restricted
-        }
-    });
+    // Audio feedback removed — instant page transitions don't need sound cues
 }
 
 document.addEventListener('DOMContentLoaded', init);
