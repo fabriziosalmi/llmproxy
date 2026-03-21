@@ -95,8 +95,10 @@ class LightweightAgent:
         from proxy.routes import (
             admin_router, registry_router, identity_router,
             plugins_router, telemetry_router, chat_router,
+            models_router,
         )
         self.app.include_router(chat_router(self))
+        self.app.include_router(models_router(self))
         self.app.include_router(admin_router(self))
         self.app.include_router(registry_router(self))
         self.app.include_router(identity_router(self))
@@ -495,3 +497,90 @@ async def test_priority_toggle_persists_state(client, store):
     await client.post("/api/v1/proxy/priority/toggle", json={"enabled": True})
     saved = await store.get_state("priority_mode")
     assert saved is True
+
+
+# ── GET /v1/models ──
+
+
+@pytest.mark.asyncio
+async def test_models_empty_config(client):
+    """No endpoints configured → empty model list."""
+    resp = await client.get("/v1/models")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["object"] == "list"
+    assert isinstance(data["data"], list)
+
+
+@pytest_asyncio.fixture
+async def client_with_models():
+    """Client with endpoints configured in config."""
+    store = InMemoryRepository()
+    config = minimal_config()
+    config["endpoints"] = {
+        "openai": {"provider": "openai", "models": ["gpt-4o", "gpt-4o-mini"]},
+        "anthropic": {"provider": "anthropic", "models": ["claude-sonnet-4-20250514"]},
+        "ollama": {"provider": "ollama", "models": ["llama3.3"]},
+    }
+    agent = LightweightAgent(store, config)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=agent.app), base_url="http://test") as c:
+        yield c
+
+
+@pytest.mark.asyncio
+async def test_models_list(client_with_models):
+    resp = await client_with_models.get("/v1/models")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["object"] == "list"
+    model_ids = [m["id"] for m in data["data"]]
+    assert "gpt-4o" in model_ids
+    assert "gpt-4o-mini" in model_ids
+    assert "claude-sonnet-4-20250514" in model_ids
+    assert "llama3.3" in model_ids
+
+
+@pytest.mark.asyncio
+async def test_models_owned_by(client_with_models):
+    resp = await client_with_models.get("/v1/models")
+    data = resp.json()
+    by_id = {m["id"]: m for m in data["data"]}
+    assert by_id["gpt-4o"]["owned_by"] == "openai"
+    assert by_id["claude-sonnet-4-20250514"]["owned_by"] == "anthropic"
+    assert by_id["llama3.3"]["owned_by"] == "ollama"
+
+
+@pytest.mark.asyncio
+async def test_models_object_format(client_with_models):
+    resp = await client_with_models.get("/v1/models")
+    for model in resp.json()["data"]:
+        assert model["object"] == "model"
+        assert "id" in model
+        assert "created" in model
+        assert "owned_by" in model
+
+
+@pytest.mark.asyncio
+async def test_model_get_single(client_with_models):
+    resp = await client_with_models.get("/v1/models/gpt-4o")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["id"] == "gpt-4o"
+    assert data["object"] == "model"
+    assert data["owned_by"] == "openai"
+
+
+@pytest.mark.asyncio
+async def test_model_get_unknown(client_with_models):
+    resp = await client_with_models.get("/v1/models/some-unknown-model")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["id"] == "some-unknown-model"
+    assert data["object"] == "model"
+
+
+@pytest.mark.asyncio
+async def test_models_no_duplicates(client_with_models):
+    resp = await client_with_models.get("/v1/models")
+    model_ids = [m["id"] for m in resp.json()["data"]]
+    assert len(model_ids) == len(set(model_ids))
