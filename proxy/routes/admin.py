@@ -116,6 +116,7 @@ def create_router(agent) -> APIRouter:
     @router.get("/api/v1/webhooks")
     async def get_webhooks():
         """List configured webhook endpoints."""
+        from core.webhooks import EventType
         return {
             "enabled": agent.webhooks.enabled,
             "endpoints": [
@@ -127,7 +128,7 @@ def create_router(agent) -> APIRouter:
                 }
                 for ep in agent.webhooks.endpoints
             ],
-            "event_types": [e.value for e in __import__('core.webhooks', fromlist=['EventType']).EventType],
+            "event_types": [e.value for e in EventType],
         }
 
     @router.get("/api/v1/export/status")

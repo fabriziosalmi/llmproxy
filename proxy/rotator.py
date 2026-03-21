@@ -614,10 +614,13 @@ class RotatorAgent(BaseAgent):
 
             asyncio.create_task(_bg_ring())
 
-            # Inject cache status header on non-cached responses
-            cache_status = ctx.metadata.get("_cache_status", "")
-            if cache_status and ctx.response and hasattr(ctx.response, "headers"):
-                ctx.response.headers["X-LLMProxy-Cache"] = cache_status
+            # Inject proxy metadata headers on responses
+            if ctx.response and hasattr(ctx.response, "headers"):
+                cache_status = ctx.metadata.get("_cache_status", "")
+                if cache_status:
+                    ctx.response.headers["X-LLMProxy-Cache"] = cache_status
+                ctx.response.headers["X-LLMProxy-Provider"] = ctx.metadata.get("_provider", "")
+                ctx.response.headers["X-LLMProxy-Request-Id"] = ctx.metadata.get("req_id", "")
 
             # Store total pipeline latency in trace (O(1) via index dict)
             total_ms = (time.time() - start_total) * 1000

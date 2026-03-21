@@ -137,15 +137,19 @@ def create_router(agent) -> APIRouter:
             _now = int(time.time())
             _date = _dt.date.today().isoformat()
             _key = (token[:8] + "...") if 'token' in locals() and token else ""
+            # Extract metadata from response headers (set by rotator.proxy_request)
             _provider = ""
+            _req_id = ""
             _in_tok = 0
             _out_tok = 0
+            if response and hasattr(response, "headers"):
+                _provider = response.headers.get("X-LLMProxy-Provider", "")
+                _req_id = response.headers.get("X-LLMProxy-Request-Id", "")
             try:
                 if hasattr(response, "body"):
                     _usage = __import__("json").loads(response.body).get("usage", {})
                     _in_tok = _usage.get("prompt_tokens", 0)
                     _out_tok = _usage.get("completion_tokens", 0)
-                _provider = body.get("_provider", "")
             except Exception:
                 pass
             _status = response.status_code if response and hasattr(response, "status_code") else 200
@@ -158,7 +162,7 @@ def create_router(agent) -> APIRouter:
                         cost_usd=cost_usd, latency_ms=round(duration * 1000, 1), status=_status,
                     )
                     await agent.store.log_audit(
-                        ts=_now, req_id=body.get("_req_id", ""), session_id=session_id[:16],
+                        ts=_now, req_id=_req_id, session_id=session_id[:16],
                         key_prefix=_key, model=model_name, provider=_provider,
                         status=_status, prompt_tokens=_in_tok, completion_tokens=_out_tok,
                         cost_usd=cost_usd, latency_ms=round(duration * 1000, 1),

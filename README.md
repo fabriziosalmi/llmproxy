@@ -56,7 +56,7 @@ Heavy dependencies (OpenTelemetry, Sentry) are lazily imported inside route hand
 |-------|-----------|
 | Backend | Python 3.12+, FastAPI (modular routers), uvicorn, aiohttp |
 | Frontend | Vanilla JS (ES Modules), Tailwind CSS, Chart.js, xterm.js |
-| Database | SQLite (aiosqlite) + ChromaDB (vector search) |
+| Database | SQLite (aiosqlite) — endpoints, app state, spend analytics, audit log |
 | Observability | OpenTelemetry, Prometheus, Sentry |
 | Security | PyJWT, OIDC/JWKS, mTLS, Tailscale Zero-Trust |
 | Secrets | Infisical SDK + env fallback |

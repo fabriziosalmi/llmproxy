@@ -54,3 +54,26 @@ class BaseRepository(ABC):
     async def get_state(self, key: str, default: Any = None) -> Any:
         """Retrieves a system-wide state value."""
         pass
+
+    # ── Spend & Audit Logging ──
+    # Default no-op implementations — subclasses with SQLite override these.
+
+    async def log_spend(self, **kwargs):
+        """Record a spend entry. No-op without persistent storage."""
+        pass
+
+    async def log_audit(self, **kwargs):
+        """Record an audit entry. No-op without persistent storage."""
+        pass
+
+    async def query_spend(self, **kwargs) -> list:
+        """Query spend data. Returns empty without persistent storage."""
+        return []
+
+    async def get_spend_total(self, **kwargs) -> dict:
+        """Get spend totals. Returns zeros without persistent storage."""
+        return {"requests": 0, "total_usd": 0.0, "total_prompt_tokens": 0, "total_completion_tokens": 0}
+
+    async def query_audit(self, **kwargs) -> dict:
+        """Query audit log. Returns empty without persistent storage."""
+        return {"total": 0, "items": []}
