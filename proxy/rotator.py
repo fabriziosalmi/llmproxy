@@ -41,7 +41,7 @@ from core.cache import CacheBackend, NegativeCache
 from core.stream_faker import fake_stream
 
 from store.base import BaseRepository
-from .adapters.openai import OpenAIAdapter
+from .adapters.registry import get_adapter, detect_provider
 
 logger = logging.getLogger("llmproxy.rotator")
 
@@ -94,7 +94,7 @@ class RotatorAgent(BaseAgent):
         self._session: Optional[aiohttp.ClientSession] = None
         self.store = store
         self.config_path = config_path
-        self.model_adapter = OpenAIAdapter()
+        self.model_adapter = get_adapter("openai")  # default, overridden per-request
         self.config = self._load_config()
 
         # Security subsystems
@@ -343,6 +343,17 @@ class RotatorAgent(BaseAgent):
 
             endpoint_id = getattr(target, 'id', str(target.url)) if target else 'unknown'
 
+            # Resolve provider adapter: explicit config > model prefix auto-detect > openai default
+            provider_type = getattr(target, 'provider', None) or getattr(target, 'provider_type', None)
+            model_name = ctx.body.get("model", "")
+            adapter = get_adapter(provider_type, model_name)
+            ctx.metadata["_provider"] = adapter.provider_name
+
+            # Translate request to provider-native format
+            target_url, translated_body, translated_headers = adapter.translate_request(
+                str(target.url), ctx.body, headers,
+            )
+
             # Circuit breaker: check before forwarding, track outcome after
             cb = self.circuit_manager.get_breaker(endpoint_id)
             if not cb.can_execute():
@@ -359,7 +370,7 @@ class RotatorAgent(BaseAgent):
                 async def stream_generator():
                     nonlocal first_chunk_seen, circuit_success_reported
                     try:
-                        async for chunk in self.model_adapter.stream(str(target.url), ctx.body, headers, session):
+                        async for chunk in adapter.stream(target_url, translated_body, translated_headers, session):
                             if not first_chunk_seen:
                                 first_chunk_seen = True
                                 # First chunk received = upstream accepted the request
@@ -376,7 +387,7 @@ class RotatorAgent(BaseAgent):
                 ctx.response = StreamingResponse(stream_generator(), media_type="text/event-stream")
             else:
                 try:
-                    ctx.response = await self.model_adapter.request(str(target.url), ctx.body, headers, session)
+                    ctx.response = await adapter.request(target_url, translated_body, translated_headers, session)
                     cb.report_success()
                 except Exception as e:
                     cb.report_failure()

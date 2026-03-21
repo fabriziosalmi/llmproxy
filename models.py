@@ -13,7 +13,8 @@ class LLMEndpoint(BaseModel):
     id: str
     url: HttpUrl
     status: EndpointStatus
-    provider_type: Optional[str] = None # e.g. "openai-compatible", "hf-space", "gradio"
+    provider: str = "openai"  # openai, anthropic, google, azure, ollama, groq, together, mistral, deepseek, openai-compatible
+    provider_type: Optional[str] = None  # legacy alias for provider
     metadata: Dict[str, Any] = {}
     last_verified: Optional[datetime] = None
     latency_ms: Optional[float] = 0.0

@@ -67,25 +67,93 @@ rotation:
     retry_delay: 1s
     switch_on_status: [429, 500, 503]
 
-# LLM Providers
+# LLM Providers — each endpoint maps to an adapter in proxy/adapters/
 endpoints:
   openai:
+    provider: "openai"
     base_url: "https://api.openai.com/v1"
-    keys_env: "OPENAI_API_KEYS"
-    organization_ids_env: "OPENAI_ORG_IDS"
-    rate_limit:
-      rpm: 3500
-      tpm: 60000
+    api_key_env: "OPENAI_API_KEY"
+    models: ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "o3-mini"]
+    rate_limit: { rpm: 3500, tpm: 60000 }
 
   anthropic:
+    provider: "anthropic"
     base_url: "https://api.anthropic.com/v1"
-    keys_env: "ANTHROPIC_API_KEYS"
-    rate_limit:
-      rpm: 1000
+    api_key_env: "ANTHROPIC_API_KEY"
+    models: ["claude-sonnet-4-20250514", "claude-haiku-4-5-20251001", "claude-opus-4-20250514"]
+    rate_limit: { rpm: 1000 }
 
-  generic_llm:
+  google:
+    provider: "google"
+    base_url: "https://generativelanguage.googleapis.com/v1beta"
+    api_key_env: "GOOGLE_API_KEY"
+    models: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash"]
+
+  azure:
+    provider: "azure"
+    base_url: "https://{resource}.openai.azure.com/openai/deployments/{deployment}"
+    api_key_env: "AZURE_OPENAI_API_KEY"
+    models: ["gpt-4o", "gpt-4o-mini"]
+
+  ollama:
+    provider: "ollama"
     base_url: "http://localhost:11434"
     auth_type: "none"
+    models: ["llama3.3", "qwen3", "phi-4", "gemma3"]
+
+  groq:
+    provider: "groq"
+    base_url: "https://api.groq.com/openai/v1"
+    api_key_env: "GROQ_API_KEY"
+    models: ["llama-3.3-70b-versatile", "mixtral-8x7b-32768"]
+
+  together:
+    provider: "together"
+    base_url: "https://api.together.xyz/v1"
+    api_key_env: "TOGETHER_API_KEY"
+    models: ["meta-llama/Llama-3.3-70B-Instruct-Turbo", "mistralai/Mixtral-8x7B-Instruct-v0.1"]
+
+  mistral:
+    provider: "mistral"
+    base_url: "https://api.mistral.ai/v1"
+    api_key_env: "MISTRAL_API_KEY"
+    models: ["mistral-large-latest", "mistral-small-latest", "codestral-latest"]
+
+  deepseek:
+    provider: "deepseek"
+    base_url: "https://api.deepseek.com/v1"
+    api_key_env: "DEEPSEEK_API_KEY"
+    models: ["deepseek-chat", "deepseek-reasoner"]
+
+  xai:
+    provider: "xai"
+    base_url: "https://api.x.ai/v1"
+    api_key_env: "XAI_API_KEY"
+    models: ["grok-3", "grok-3-mini"]
+
+  perplexity:
+    provider: "perplexity"
+    base_url: "https://api.perplexity.ai"
+    api_key_env: "PERPLEXITY_API_KEY"
+    models: ["sonar-pro", "sonar"]
+
+  openrouter:
+    provider: "openrouter"
+    base_url: "https://openrouter.ai/api/v1"
+    api_key_env: "OPENROUTER_API_KEY"
+    models: []  # supports all models via unified API
+
+  fireworks:
+    provider: "fireworks"
+    base_url: "https://api.fireworks.ai/inference/v1"
+    api_key_env: "FIREWORKS_API_KEY"
+    models: ["accounts/fireworks/models/llama-v3p3-70b-instruct"]
+
+  sambanova:
+    provider: "sambanova"
+    base_url: "https://api.sambanova.ai/v1"
+    api_key_env: "SAMBANOVA_API_KEY"
+    models: ["Meta-Llama-3.3-70B-Instruct"]
 
 # Monitoring and Logging
 logging:

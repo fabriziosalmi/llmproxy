@@ -1,5 +1,5 @@
 """
-OpenAI-compatible adapter.
+OpenAI adapter — identity translation (OpenAI is the canonical format).
 
 request() reads the full response body inside the aiohttp context manager and
 returns a Starlette Response with .status_code and .body populated — matching
@@ -8,14 +8,28 @@ what the rest of the pipeline (shield_sanitizer, cache write, metrics) expects.
 stream() yields raw SSE byte chunks while the connection is open.
 """
 
+import json
 import aiohttp
-from typing import Dict, Any, AsyncGenerator
+from typing import Dict, Any, AsyncGenerator, Tuple
 from starlette.responses import Response
 from .base import BaseModelAdapter
 
 
 class OpenAIAdapter(BaseModelAdapter):
-    """Adapter for OpenAI-compatible endpoints."""
+    """Adapter for OpenAI and OpenAI-compatible endpoints."""
+
+    provider_name = "openai"
+
+    def translate_request(
+        self, base_url: str, body: Dict[str, Any], headers: Dict[str, str],
+    ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
+        url = f"{base_url.rstrip('/')}/chat/completions"
+        # OpenAI uses Authorization: Bearer <key>
+        return url, body, headers
+
+    def translate_response(self, response_data: Dict[str, Any]) -> Dict[str, Any]:
+        # Already in OpenAI format
+        return response_data
 
     async def request(
         self,
@@ -24,11 +38,6 @@ class OpenAIAdapter(BaseModelAdapter):
         headers: Dict[str, str],
         session: aiohttp.ClientSession,
     ) -> Response:
-        """Non-streaming request.
-
-        Reads the full response body before the aiohttp context manager closes,
-        then wraps it in a Starlette Response so callers get .status_code / .body.
-        """
         async with session.post(url, json=body, headers=headers) as resp:
             content = await resp.read()
             status = resp.status
@@ -42,7 +51,6 @@ class OpenAIAdapter(BaseModelAdapter):
         headers: Dict[str, str],
         session: aiohttp.ClientSession,
     ) -> AsyncGenerator[bytes, None]:
-        """Streaming request — yields raw SSE byte chunks."""
         async with session.post(url, json=body, headers=headers) as resp:
             async for chunk in resp.content.iter_any():
                 yield chunk
