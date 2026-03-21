@@ -11,6 +11,8 @@ import { initGuards, renderGuards } from './components/guards.js';
 import { renderSettings, initSettings } from './components/settings.js';
 import { initLogs } from './components/logs.js';
 import { initPlugins } from './components/plugins.js';
+import { initModels } from './components/models.js';
+import { initAnalytics } from './components/analytics.js';
 import { auth } from './services/auth.js';
 
 // Global state listener for UI updates
@@ -97,6 +99,8 @@ async function init() {
         { name: 'settings', fn: initSettings },
         { name: 'logs', fn: initLogs },
         { name: 'plugins', fn: initPlugins },
+        { name: 'models', fn: initModels },
+        { name: 'analytics', fn: initAnalytics },
     ];
 
     initWrappers.forEach(w => {

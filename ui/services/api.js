@@ -184,5 +184,29 @@ export const api = {
                 messages: [{ role: 'user', content: text }]
             })
         });
+    },
+
+    // Models discovery
+    async fetchModels() {
+        const response = await fetch(`${BASE_URL}/v1/models`);
+        return await response.json();
+    },
+
+    // Spend analytics
+    async fetchSpend(groupBy = 'model') {
+        const response = await fetch(`${BASE_URL}/api/v1/analytics/spend?group_by=${groupBy}`);
+        return await response.json();
+    },
+
+    async fetchTopModels(limit = 10) {
+        const response = await fetch(`${BASE_URL}/api/v1/analytics/spend/topmodels?limit=${limit}`);
+        return await response.json();
+    },
+
+    // Audit log
+    async fetchAudit(params = {}) {
+        const qs = new URLSearchParams(params).toString();
+        const response = await fetch(`${BASE_URL}/api/v1/audit?${qs}`);
+        return await response.json();
     }
 };
