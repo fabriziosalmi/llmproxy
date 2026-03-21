@@ -4,7 +4,7 @@ Security-first proxy for Large Language Models with a ring-based plugin pipeline
 
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-232%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-449%20passing-brightgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 [![CI](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml/badge.svg)](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml)
 
@@ -35,12 +35,15 @@ LLMProxy is a security-focused LLM proxy with a layered defense pipeline:
 5. **Rate Limiter** — Per-IP/per-key token bucket ASGI middleware
 
 ### Route Architecture
-The `RotatorAgent` orchestrates 6 route modules under `proxy/routes/`, each a factory function (`create_router(agent) -> APIRouter`):
+The `RotatorAgent` orchestrates 9 route modules under `proxy/routes/`, each a factory function (`create_router(agent) -> APIRouter`):
 
 | Module | Routes | Responsibility |
 |--------|--------|----------------|
 | `chat.py` | `/v1/chat/completions` | Core proxy endpoint with auth, identity, RBAC, zero-trust, budget tracking |
-| `admin.py` | `/api/v1/proxy/*`, `/api/v1/features/*`, `/api/v1/panic` | Proxy control, feature toggles, kill-switch |
+| `completions.py` | `/v1/completions` | Legacy text completion endpoint (prompt→messages translation) |
+| `embeddings.py` | `/v1/embeddings` | Embedding endpoint with PII security check, multi-provider translation |
+| `models.py` | `/v1/models`, `/v1/models/{id}` | OpenAI-compatible model discovery (aggregated from all providers) |
+| `admin.py` | `/api/v1/proxy/*`, `/api/v1/features/*`, `/api/v1/panic`, `/api/v1/analytics/*`, `/api/v1/audit` | Proxy control, feature toggles, kill-switch, spend analytics, audit log |
 | `registry.py` | `/api/v1/registry/*`, `/api/v1/telemetry/stream` | Endpoint CRUD, SSE telemetry stream |
 | `identity.py` | `/api/v1/identity/*` | SSO config, user info, token exchange |
 | `plugins.py` | `/api/v1/plugins/*` | Plugin lifecycle (install, uninstall, hot-swap, rollback) |
@@ -65,7 +68,11 @@ Heavy dependencies (OpenTelemetry, Sentry) are lazily imported inside route hand
 ### Model Proxy (Port 8090)
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/v1/chat/completions` | `POST` | Unified inference endpoint (OpenAI-compatible). Supports model selection, JWT/API key auth. |
+| `/v1/chat/completions` | `POST` | Unified inference endpoint (OpenAI-compatible). 15 providers, cross-provider fallback, model aliases. |
+| `/v1/completions` | `POST` | Legacy text completion endpoint. Translates prompt→messages, supports streaming. |
+| `/v1/embeddings` | `POST` | Embedding endpoint with PII security check. Supports OpenAI, Google, Ollama, Azure. |
+| `/v1/models` | `GET` | Model discovery — aggregates models from all configured providers. Required by Cursor, OpenWebUI, etc. |
+| `/v1/models/{model_id}` | `GET` | Single model info with auto-detection fallback. |
 | `/health` | `GET` | Liveness/readiness probe with pool stats. |
 | `/metrics` | `GET` | Prometheus metrics: req/s, errors, latency P50/P95/P99, budget, TTFT, circuit state. |
 
@@ -105,6 +112,10 @@ Heavy dependencies (OpenTelemetry, Sentry) are lazily imported inside route hand
 | `/api/v1/telemetry/stream` | `GET` | Real-time SSE stream of system events. |
 | `/api/v1/logs` | `GET` | SSE log stream for terminal. |
 | `/api/v1/panic` | `POST` | Emergency kill-switch — halts all traffic. |
+| `/api/v1/admin/reload` | `POST` | Hot-reload config.yaml without restart. |
+| `/api/v1/analytics/spend` | `GET` | Spend breakdown by model/provider/key/date. Params: `from`, `to`, `group_by`, `limit`. |
+| `/api/v1/analytics/spend/topmodels` | `GET` | Top models by spend. |
+| `/api/v1/audit` | `GET` | Persistent audit log query. Params: `from`, `to`, `model`, `key_prefix`, `status`, `blocked`. |
 | `/api/v1/version` | `GET` | Current version. |
 | `/api/v1/service-info` | `GET` | Host, port, URL. |
 | `/api/v1/network/info` | `GET` | Network and Tailscale status. |
