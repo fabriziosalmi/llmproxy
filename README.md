@@ -426,10 +426,10 @@ All sensitive values are loaded via **Infisical SDK** with environment variable 
 
 ## Testing
 
-232 tests across 16 modules, all passing. Unit tests for every subsystem + HTTP-level E2E integration tests.
+449 tests across 16 modules, all passing. Unit tests for every subsystem + HTTP-level E2E integration tests.
 
 ```bash
-# Run full suite (232 tests)
+# Run full suite (449 tests)
 python -m pytest tests/ -v --ignore=tests/test_store.py --ignore=tests/integrated_test.py --ignore=tests/test_export.py
 
 # Run a specific module
