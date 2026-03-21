@@ -8,7 +8,6 @@ Tests for new marketplace plugins:
 import json
 import time
 import pytest
-from unittest.mock import MagicMock
 from fastapi.responses import Response
 
 from core.plugin_engine import PluginContext, PluginState
@@ -109,7 +108,7 @@ async def test_complexity_code_heavy():
     plugin = PromptComplexityScorer()
     code = "```python\n" + "x = 1\n" * 50 + "```"
     ctx = _make_ctx([{"role": "user", "content": f"Debug this:\n{code}"}])
-    result = await plugin.execute(ctx)
+    await plugin.execute(ctx)
 
     assert ctx.metadata["_complexity_signals"]["code"] > 0.3
 

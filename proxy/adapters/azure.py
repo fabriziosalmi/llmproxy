@@ -7,7 +7,6 @@ Same request/response format as OpenAI, but different:
   - Model comes from deployment name in URL, not request body
 """
 
-import json
 import aiohttp
 from typing import Dict, Any, AsyncGenerator, Tuple
 from starlette.responses import Response

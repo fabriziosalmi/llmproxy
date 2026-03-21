@@ -6,9 +6,7 @@ model prefix auto-detection, and provider registry resolution.
 """
 
 import json
-import pytest
 
-from proxy.adapters.base import BaseModelAdapter
 from proxy.adapters.openai import OpenAIAdapter
 from proxy.adapters.anthropic import AnthropicAdapter
 from proxy.adapters.google import GoogleAdapter

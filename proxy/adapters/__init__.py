@@ -1,8 +1,10 @@
-from .base import BaseModelAdapter
-from .openai import OpenAIAdapter
-from .anthropic import AnthropicAdapter
-from .google import GoogleAdapter
-from .azure import AzureAdapter
-from .ollama import OllamaAdapter
-from .openai_compat import OpenAICompatAdapter
-from .registry import get_adapter, detect_provider, SUPPORTED_PROVIDERS
+from .base import BaseModelAdapter as BaseModelAdapter
+from .openai import OpenAIAdapter as OpenAIAdapter
+from .anthropic import AnthropicAdapter as AnthropicAdapter
+from .google import GoogleAdapter as GoogleAdapter
+from .azure import AzureAdapter as AzureAdapter
+from .ollama import OllamaAdapter as OllamaAdapter
+from .openai_compat import OpenAICompatAdapter as OpenAICompatAdapter
+from .registry import get_adapter as get_adapter
+from .registry import detect_provider as detect_provider
+from .registry import SUPPORTED_PROVIDERS as SUPPORTED_PROVIDERS

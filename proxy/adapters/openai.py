@@ -8,7 +8,6 @@ what the rest of the pipeline (shield_sanitizer, cache write, metrics) expects.
 stream() yields raw SSE byte chunks while the connection is open.
 """
 
-import json
 import aiohttp
 from typing import Dict, Any, AsyncGenerator, Tuple
 from starlette.responses import Response

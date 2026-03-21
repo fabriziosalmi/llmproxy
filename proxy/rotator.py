@@ -41,7 +41,7 @@ from core.cache import CacheBackend, NegativeCache
 from core.stream_faker import fake_stream
 
 from store.base import BaseRepository
-from .adapters.registry import get_adapter, detect_provider
+from .adapters.registry import get_adapter
 
 logger = logging.getLogger("llmproxy.rotator")
 
