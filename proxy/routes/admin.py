@@ -3,13 +3,29 @@ import os
 import time
 import asyncio
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, HTTPException
 
 def create_router(agent) -> APIRouter:
     router = APIRouter()
 
+    def _check_admin_auth(request: Request):
+        """Enforce API key auth on mutating admin endpoints when auth is enabled.
+
+        Read-only endpoints (status, metrics, version) remain open so dashboards
+        can poll without credentials. Mutating / destructive endpoints (panic,
+        toggle, hot-swap) require the same API key used for chat requests.
+        """
+        if not agent.config.get("server", {}).get("auth", {}).get("enabled", False):
+            return  # Auth disabled — development mode, allow all
+        auth_header = request.headers.get("Authorization", "")
+        token = auth_header.replace("Bearer ", "").strip()
+        valid_keys = agent._get_api_keys()
+        if not token or token not in valid_keys:
+            raise HTTPException(status_code=401, detail="Admin: Unauthorized")
+
     @router.post("/api/v1/proxy/toggle")
     async def toggle_proxy_service(request: Request):
+        _check_admin_auth(request)
         data = await request.json()
         agent.proxy_enabled = data.get("enabled", not agent.proxy_enabled)
         await agent.store.set_state("proxy_enabled", agent.proxy_enabled)
@@ -53,7 +69,7 @@ def create_router(agent) -> APIRouter:
 
     @router.post("/api/v1/features/toggle")
     async def toggle_feature(request: Request):
-        from fastapi import HTTPException
+        _check_admin_auth(request)
         data = await request.json()
         name = data.get("name")
         if name in agent.features:
@@ -66,6 +82,7 @@ def create_router(agent) -> APIRouter:
 
     @router.post("/api/v1/proxy/priority/toggle")
     async def toggle_priority_mode(request: Request):
+        _check_admin_auth(request)
         data = await request.json()
         agent.priority_mode = data.get("enabled", False)
         await agent.store.set_state("priority_mode", agent.priority_mode)
@@ -181,8 +198,19 @@ def create_router(agent) -> APIRouter:
         traces = agent.plugin_manager.get_ring_traces(limit)
         return {"traces": traces, "count": len(traces)}
 
+    @router.get("/api/v1/cache/stats")
+    async def get_cache_stats():
+        """Cache subsystem status (L1 negative + L2 positive)."""
+        l2_stats = await agent.cache_backend.stats()
+        l1_stats = agent.negative_cache.stats()
+        return {
+            "negative_cache": l1_stats,
+            "positive_cache": l2_stats,
+        }
+
     @router.post("/api/v1/panic")
-    async def emergency_panic():
+    async def emergency_panic(request: Request):
+        _check_admin_auth(request)
         from core.webhooks import EventType
         agent.proxy_enabled = False
         await agent.store.set_state("proxy_enabled", False)

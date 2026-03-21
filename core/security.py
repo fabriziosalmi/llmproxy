@@ -1,10 +1,18 @@
 import re
+import time
 import logging
 import unicodedata
 import uuid
 from typing import Dict, List, Any, Optional
 
 logger = logging.getLogger(__name__)
+
+# cachetools opt-in: TTL-based eviction for pii_vault (prevents unbounded growth)
+try:
+    from cachetools import TTLCache as _TTLCache
+    _CACHETOOLS_AVAILABLE = True
+except ImportError:
+    _CACHETOOLS_AVAILABLE = False
 
 # Presidio opt-in: NLP-based PII detection when available, regex fallback otherwise
 try:
@@ -22,12 +30,26 @@ except ImportError:
 class SecurityShield:
     """Orchestrates security checks for incoming LLM requests (injection, PII, trajectory analysis)."""
     
+    # Per-session trajectory state: {session_id: [(score, timestamp), ...]}
+    # Kept separate from pii_vault to allow independent TTL policies.
+    _SESSION_TTL = 3600          # Evict sessions idle for 1 hour
+    _SESSION_SCORE_TTL = 300     # Only count scores from the last 5 minutes
+
     def __init__(self, config: Dict[str, Any], assistant: Optional[Any] = None):
         self.config = config.get("security", {})
         self.enabled = self.config.get("enabled", True)
         self.assistant = assistant
-        self.pii_vault = {}
-        self.session_memory: Dict[str, List[float]] = {}
+
+        # PII vault: maps token → original value. TTLCache prevents unbounded
+        # growth in long-running deployments (tokens expire after 1 hour).
+        if _CACHETOOLS_AVAILABLE:
+            self.pii_vault = _TTLCache(maxsize=10_000, ttl=3600)
+        else:
+            self.pii_vault = {}
+
+        # Session memory: {session_id: {"scores": [(score, ts), ...], "last_seen": ts}}
+        # Plain dict — eviction handled in check_session_trajectory via timestamps.
+        self.session_memory: Dict[str, Any] = {}
             
     async def analyze_speculative(self, prompt: str, stream_chunks: List[str], kill_event: Any):
         """Asynchronously monitors a response stream for security violations."""
@@ -166,32 +188,55 @@ class SecurityShield:
     _MAX_TRACKED_SESSIONS = 10_000
 
     def check_session_trajectory(self, session_id: str, current_prompt: str) -> Optional[str]:
-        """Analyzes the 'threat trajectory' of a session to detect multi-turn jailbreaks."""
-        if not self.enabled: return None
+        """Analyzes the 'threat trajectory' of a session to detect multi-turn jailbreaks.
 
-        # 1. Calculate score for current prompt
-        score, _ = self._calculate_threat_score(current_prompt)
+        Uses time-windowed scoring: only threat scores from the last
+        _SESSION_SCORE_TTL seconds count toward the crescent-attack threshold.
+        Sessions idle longer than _SESSION_TTL are evicted to bound memory.
+        """
+        if not self.enabled:
+            return None
 
-        # 2. Update memory (with bounded growth)
+        now = time.time()
+
+        # 1. Time-based eviction: purge sessions idle > _SESSION_TTL
+        #    Done opportunistically (every call) — cheap O(1) check per session,
+        #    full scan only when a stale session is found.
+        stale = [sid for sid, data in self.session_memory.items()
+                 if now - data["last_seen"] > self._SESSION_TTL]
+        for sid in stale:
+            del self.session_memory[sid]
+
+        # 2. Capacity guard (hard cap after eviction)
         if session_id not in self.session_memory:
             if len(self.session_memory) >= self._MAX_TRACKED_SESSIONS:
-                # Evict oldest session (FIFO)
-                oldest = next(iter(self.session_memory))
-                del self.session_memory[oldest]
-            self.session_memory[session_id] = []
-        
-        self.session_memory[session_id].append(score)
-        if len(self.session_memory[session_id]) > 10:
-            self.session_memory[session_id].pop(0)
-            
-        # 3. Multi-turn Analysis (Crescent Attack detection)
-        # If the sum of scores in any 3-turn window exceeds 1.5, block.
-        if len(self.session_memory[session_id]) >= 3:
-            recent_sum = sum(self.session_memory[session_id][-3:])
+                # Evict the session that was seen least recently (LRU)
+                lru = min(self.session_memory, key=lambda k: self.session_memory[k]["last_seen"])
+                del self.session_memory[lru]
+            self.session_memory[session_id] = {"scores": [], "last_seen": now}
+
+        # 3. Record timestamped score for current prompt
+        score, _ = self._calculate_threat_score(current_prompt)
+        self.session_memory[session_id]["scores"].append((score, now))
+        self.session_memory[session_id]["last_seen"] = now
+
+        # 4. Drop scores older than _SESSION_SCORE_TTL (sliding window)
+        cutoff = now - self._SESSION_SCORE_TTL
+        self.session_memory[session_id]["scores"] = [
+            (s, ts) for s, ts in self.session_memory[session_id]["scores"]
+            if ts >= cutoff
+        ]
+
+        # 5. Crescent Attack detection: sum of last 3 scores in the window
+        recent_scores = [s for s, _ in self.session_memory[session_id]["scores"][-3:]]
+        if len(recent_scores) >= 3:
+            recent_sum = sum(recent_scores)
             if recent_sum > 1.5:
-                logger.warning(f"SESSION BLOCK: Multi-turn threat detected for {session_id} (Sum={recent_sum:.2f})")
+                logger.warning(
+                    f"SESSION BLOCK: Multi-turn threat for {session_id[:8]}... (sum={recent_sum:.2f})"
+                )
                 return "Conversation trajectory indicates security risk (Multi-turn violation)"
-        
+
         return None
 
     def _calculate_threat_score(self, prompt: str) -> (float, List[str]):

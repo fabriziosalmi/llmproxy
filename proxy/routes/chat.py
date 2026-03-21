@@ -77,7 +77,10 @@ def create_router(agent) -> APIRouter:
 
         start_time = time.time()
         try:
-            session_id = token if 'token' in locals() else "anonymous"
+            # Use token as session_id when available; fall back to client IP to
+            # avoid collapsing ALL anonymous users into a single trajectory bucket
+            # (which would cross-contaminate threat scores across unrelated clients).
+            session_id = token if 'token' in locals() else (request.client.host if request.client else "anon")
             body = await request.json()
             response = await agent.proxy_request(request, body=body, session_id=session_id)
             duration = time.time() - start_time
@@ -89,7 +92,24 @@ def create_router(agent) -> APIRouter:
                     "latency_ms": round(duration * 1000, 1),
                     "status": response.status_code,
                 }))
-            agent.total_cost_today += duration * 0.001
+            # Token-based cost estimate (matches telemetry_ops.py formula).
+            # Prefer actual usage fields from the response; fall back to
+            # char-count heuristic (~4 chars/token) for streaming responses
+            # where the body is not available as a single blob.
+            cost_usd = 0.0
+            try:
+                if hasattr(response, "body"):
+                    import json as _json
+                    usage = _json.loads(response.body).get("usage", {})
+                    in_tok = usage.get("prompt_tokens", len(_json.dumps(body.get("messages", []))) // 4)
+                    out_tok = usage.get("completion_tokens", 0)
+                    cost_usd = (in_tok / 1_000_000) * 5.00 + (out_tok / 1_000_000) * 15.00
+                else:
+                    # Streaming: estimate from prompt only
+                    cost_usd = len(str(body.get("messages", []))) / 4 / 1_000_000 * 5.00
+            except Exception:
+                pass
+            agent.total_cost_today += cost_usd
             budget_cfg = agent.config.get("budget", {})
             MetricsTracker.set_budget(agent.total_cost_today, budget_cfg.get("monthly_limit", 1000.0))
             # J.5: Persist daily budget to SQLite (async, non-blocking)
@@ -101,7 +121,6 @@ def create_router(agent) -> APIRouter:
             duration = time.time() - start_time
             MetricsTracker.track_request("POST", "/v1/chat/completions", 500, duration)
             TraceManager.capture_exception(e)
-            asyncio.create_task(agent.chatbot.track_error())
             raise e
 
     return router

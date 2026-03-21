@@ -22,6 +22,7 @@ import asyncio
 import logging
 import hashlib
 import inspect
+from collections import deque
 from enum import Enum
 from typing import List, Dict, Any, Optional, Callable
 from dataclasses import dataclass, field
@@ -167,11 +168,13 @@ class PluginManager:
         self._plugin_meta: Dict[str, Dict[str, Any]] = {}  # name → metadata for marketplace
         self._plugin_instances: Dict[str, BasePlugin] = {}  # name → BasePlugin instances
         self._plugin_stats: Dict[str, Dict[str, Any]] = {}  # name → per-plugin metrics
-        # Per-plugin latency histogram (rolling window for P50/P95/P99)
-        self._latency_window: Dict[str, list] = {}  # name → last N latency samples
+        # Per-plugin latency histogram: deque(maxlen=N) gives O(1) append + auto-eviction
+        self._latency_window: Dict[str, deque] = {}  # name → rolling window of latency samples
         self._latency_window_size = 500
-        # Per-ring timing for last N requests (circular buffer for timeline)
-        self._ring_traces: list = []  # [{req_id, timestamp, rings: {hook: {start, end, plugins: [{name, ms}]}}}]
+        # Per-ring timing: dict keyed by req_id for O(1) lookup during a request,
+        # plus an ordered list for chronological iteration / capping at max size.
+        self._ring_traces: list = []       # ordered list, capped at _ring_traces_max
+        self._ring_traces_index: Dict[str, dict] = {}  # req_id → trace dict (O(1) lookup)
         self._ring_traces_max = 100
 
     def _init_stats(self, name: str):
@@ -185,7 +188,7 @@ class PluginManager:
                 "total_latency_ms": 0.0,
             }
         if name not in self._latency_window:
-            self._latency_window[name] = []
+            self._latency_window[name] = deque(maxlen=self._latency_window_size)
 
     @staticmethod
     def _percentiles(samples: list) -> Dict[str, float]:
@@ -505,27 +508,24 @@ class PluginManager:
                     stats["invocations"] += 1
                     stats["total_latency_ms"] += elapsed_ms
                 # Rolling latency window for percentile calculation
+                # deque(maxlen=N) auto-evicts oldest entry — no manual trimming needed
                 window = self._latency_window.get(name)
                 if window is not None:
                     window.append(elapsed_ms)
-                    if len(window) > self._latency_window_size:
-                        del window[:len(window) - self._latency_window_size]
 
-        # Record ring timing for request trace
+        # Record ring timing for request trace (O(1) via index dict)
         ring_elapsed_ms = (time.perf_counter() - ring_start) * 1000
         req_id = context.metadata.get("req_id", "unknown")
         if req_id != "unknown":
-            # Find or create trace entry for this request
-            trace = None
-            for t in reversed(self._ring_traces):
-                if t["req_id"] == req_id:
-                    trace = t
-                    break
+            trace = self._ring_traces_index.get(req_id)
             if trace is None:
                 trace = {"req_id": req_id, "timestamp": time.time(), "rings": {}}
+                self._ring_traces_index[req_id] = trace
                 self._ring_traces.append(trace)
+                # Evict oldest entry when cap is exceeded
                 if len(self._ring_traces) > self._ring_traces_max:
-                    del self._ring_traces[0]
+                    evicted = self._ring_traces.pop(0)
+                    self._ring_traces_index.pop(evicted["req_id"], None)
             trace["rings"][hook.value] = {
                 "duration_ms": round(ring_elapsed_ms, 2),
                 "plugins": ring_plugin_timings,

@@ -37,6 +37,8 @@ from core.plugin_engine import PluginManager, PluginHook, PluginContext, PluginS
 from core.identity import IdentityManager
 from core.webhooks import WebhookDispatcher, EventType
 from core.export import DatasetExporter
+from core.cache import CacheBackend, NegativeCache
+from core.stream_faker import fake_stream
 
 from store.base import BaseRepository
 from .adapters.openai import OpenAIAdapter
@@ -123,10 +125,26 @@ class RotatorAgent(BaseAgent):
         self.log_queue = asyncio.Queue(maxsize=100)
         self.telemetry_queue = asyncio.Queue(maxsize=1000)
 
+        # L1: Negative cache (in-memory WAF drop)
+        neg_cfg = self.config.get("caching", {}).get("negative_cache", {})
+        self.negative_cache = NegativeCache(
+            maxsize=neg_cfg.get("maxsize", 50_000),
+            ttl=neg_cfg.get("ttl", 300),
+            enabled=self.config.get("caching", {}).get("enabled", True),
+        )
+
+        # L2: Positive cache backend (WAF-aware exact-match)
+        cache_cfg = self.config.get("caching", {})
+        self.cache_backend = CacheBackend(
+            db_path=cache_cfg.get("db_path", "cache.db"),
+            ttl=cache_cfg.get("ttl", 3600),
+            enabled=cache_cfg.get("enabled", True),
+        )
+
         # Plugin engine
         self.plugin_manager = PluginManager()
         self.plugin_state = PluginState(
-            cache={},
+            cache=self.cache_backend,
             metrics=MetricsTracker,
             config=self.config.get("plugins", {}),
             extra={"store": self.store},
@@ -193,8 +211,9 @@ class RotatorAgent(BaseAgent):
     # ── Lifecycle ──
 
     async def setup(self):
-        """Pre-flight: DB init, plugin load, state hydration."""
+        """Pre-flight: DB init, plugin load, state hydration, cache init."""
         await self.store.init()
+        await self.cache_backend.init()
         await self.plugin_manager.load_plugins()
 
         # Hydrate persisted state
@@ -216,6 +235,11 @@ class RotatorAgent(BaseAgent):
             await self.store.set_state("budget:daily_total", 0.0)
         self._budget_date = today
 
+        # Background cache eviction loop
+        eviction_interval = self.config.get("caching", {}).get("eviction_interval", 3600)
+        if self.cache_backend._enabled:
+            asyncio.create_task(self._cache_eviction_loop(eviction_interval))
+
         self.logger.info("Security gateway ready.")
 
     async def run(self, port: int = None):
@@ -225,6 +249,19 @@ class RotatorAgent(BaseAgent):
         config = uvicorn.Config(self.app, host="0.0.0.0", port=port, log_level="info")
         server = uvicorn.Server(config)
         await server.serve()
+
+    # ── Cache Eviction ──
+
+    async def _cache_eviction_loop(self, interval: int = 3600):
+        """Background loop: evict expired cache entries periodically."""
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                deleted = await self.cache_backend.evict_expired()
+                if deleted > 0:
+                    self.logger.info(f"Cache eviction: {deleted} entries purged")
+            except Exception as e:
+                self.logger.error(f"Cache eviction error: {e}")
 
     # ── Core Proxy Pipeline ──
 
@@ -237,16 +274,29 @@ class RotatorAgent(BaseAgent):
             request=request,
             body=body,
             session_id=session_id,
-            metadata={"rotator": self, "req_id": uuid.uuid4().hex[:8]},
+            metadata={
+                "rotator": self,
+                "req_id": uuid.uuid4().hex[:8],
+                "_cache_control": request.headers.get("cache-control", "") if request else "",
+            },
             state=self.plugin_state,
         )
 
         try:
+            # L1: Negative Cache — drop repeated attacks in <0.1ms
+            neg_reason = self.negative_cache.check(ctx.body)
+            if neg_reason:
+                logger.debug(f"L1 Negative Cache drop: {neg_reason[:50]}")
+                MetricsTracker.track_injection_blocked()
+                raise HTTPException(status_code=403, detail=neg_reason)
+
             # Pre-ring: SecurityShield (injection scoring + trajectory analysis)
             security_error = self.security.inspect(ctx.body, session_id)
             if security_error:
                 logger.warning(f"SecurityShield blocked: {security_error}")
                 MetricsTracker.track_injection_blocked()
+                # Write to L1 negative cache for future instant drops
+                self.negative_cache.add(ctx.body, security_error)
                 raise HTTPException(status_code=403, detail=security_error)
 
             # RING 1: INGRESS (Auth, ZT, Rate Limit)
@@ -260,11 +310,19 @@ class RotatorAgent(BaseAgent):
                 ))
                 raise HTTPException(status_code=403, detail=ctx.error or "Ingress Blocked")
 
-            # RING 2: PRE-FLIGHT (PII masking, budget guard, loop breaker)
+            # RING 2: PRE-FLIGHT (PII masking, budget guard, loop breaker, cache lookup)
             r2_start = time.perf_counter()
             await self.plugin_manager.execute_ring(PluginHook.PRE_FLIGHT, ctx)
             MetricsTracker.track_ring_latency("pre_flight", time.perf_counter() - r2_start)
             if ctx.stop_chain:
+                # Cache hit: if client wants streaming, convert cached response to SSE
+                if ctx.metadata.get("_cache_hit") and ctx.body.get("stream"):
+                    cached_data = ctx.metadata.get("_cached_response_data")
+                    if cached_data:
+                        ctx.response = StreamingResponse(
+                            fake_stream(cached_data), media_type="text/event-stream",
+                            headers={"X-LLMProxy-Cache": "HIT"},
+                        )
                 return ctx.response
 
             # RING 3: ROUTING
@@ -284,22 +342,44 @@ class RotatorAgent(BaseAgent):
 
             endpoint_id = getattr(target, 'id', str(target.url)) if target else 'unknown'
 
+            # Circuit breaker: check before forwarding, track outcome after
+            cb = self.circuit_manager.get_breaker(endpoint_id)
+            if not cb.can_execute():
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Circuit open for endpoint '{endpoint_id}' — upstream unhealthy, retry later",
+                )
+
             if ctx.body.get("stream"):
                 ttft_start = time.perf_counter()
                 first_chunk_seen = False
+                circuit_success_reported = False
 
                 async def stream_generator():
-                    nonlocal first_chunk_seen
-                    async for chunk in self.model_adapter.stream(str(target.url), ctx.body, headers, session):
-                        if not first_chunk_seen:
-                            first_chunk_seen = True
-                            ttft = time.perf_counter() - ttft_start
-                            MetricsTracker.track_ttft(endpoint_id, ttft)
-                            ctx.metadata["ttft_ms"] = round(ttft * 1000, 2)
-                        yield chunk
+                    nonlocal first_chunk_seen, circuit_success_reported
+                    try:
+                        async for chunk in self.model_adapter.stream(str(target.url), ctx.body, headers, session):
+                            if not first_chunk_seen:
+                                first_chunk_seen = True
+                                # First chunk received = upstream accepted the request
+                                cb.report_success()
+                                circuit_success_reported = True
+                                ttft = time.perf_counter() - ttft_start
+                                MetricsTracker.track_ttft(endpoint_id, ttft)
+                                ctx.metadata["ttft_ms"] = round(ttft * 1000, 2)
+                            yield chunk
+                    except Exception as e:
+                        if not circuit_success_reported:
+                            cb.report_failure()
+                        raise e
                 ctx.response = StreamingResponse(stream_generator(), media_type="text/event-stream")
             else:
-                ctx.response = await self.model_adapter.request(str(target.url), ctx.body, headers, session)
+                try:
+                    ctx.response = await self.model_adapter.request(str(target.url), ctx.body, headers, session)
+                    cb.report_success()
+                except Exception as e:
+                    cb.report_failure()
+                    raise e
 
             ctx.metadata["duration"] = time.time() - start_req
 
@@ -310,23 +390,57 @@ class RotatorAgent(BaseAgent):
             if ctx.stop_chain:
                 return JSONResponse(content={"error": ctx.error}, status_code=403)
 
-            # RING 5: BACKGROUND (telemetry, export)
+            # RING 5: BACKGROUND (telemetry, export, cache write)
             async def _bg_ring():
                 r5_start = time.perf_counter()
                 await self.plugin_manager.execute_ring(PluginHook.BACKGROUND, ctx)
                 MetricsTracker.track_ring_latency("background", time.perf_counter() - r5_start)
+
+                # Fase 3: Post-flight validated cache write
+                # Only cache if:
+                #   1. Cache key was computed (miss on lookup)
+                #   2. Response exists and is not a streaming response
+                #   3. POST_FLIGHT didn't block (no [SEC_ERR:])
+                #   4. Not a cache bypass request
+                cache_key = ctx.metadata.get("_cache_key")
+                if (
+                    cache_key
+                    and self.cache_backend._enabled
+                    and not ctx.metadata.get("_cache_bypass")
+                    and ctx.response
+                    and hasattr(ctx.response, "body")
+                    and not ctx.metadata.get("_cache_hit")
+                ):
+                    try:
+                        response_data = json.loads(ctx.response.body.decode())
+                        # Verify POST_FLIGHT didn't flag security issues
+                        content = response_data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                        if "[SEC_ERR:" not in content:
+                            await self.cache_backend.put(
+                                body=ctx.body,
+                                response_data=response_data,
+                                tenant_id=ctx.metadata.get("_cache_tenant", ctx.session_id),
+                                model=ctx.body.get("model", ""),
+                            )
+                    except Exception as e:
+                        logger.debug(f"Cache write skipped: {e}")
+
             asyncio.create_task(_bg_ring())
 
-            # Store total pipeline latency in trace
+            # Inject cache status header on non-cached responses
+            cache_status = ctx.metadata.get("_cache_status", "")
+            if cache_status and ctx.response and hasattr(ctx.response, "headers"):
+                ctx.response.headers["X-LLMProxy-Cache"] = cache_status
+
+            # Store total pipeline latency in trace (O(1) via index dict)
             total_ms = (time.time() - start_total) * 1000
             req_id = ctx.metadata.get("req_id", "unknown")
-            for trace in reversed(self.plugin_manager._ring_traces):
-                if trace.get("req_id") == req_id:
-                    trace["total_ms"] = round(total_ms, 2)
-                    trace["upstream_ms"] = round(ctx.metadata.get("duration", 0) * 1000, 2)
-                    if "ttft_ms" in ctx.metadata:
-                        trace["ttft_ms"] = ctx.metadata["ttft_ms"]
-                    break
+            trace = self.plugin_manager._ring_traces_index.get(req_id)
+            if trace:
+                trace["total_ms"] = round(total_ms, 2)
+                trace["upstream_ms"] = round(ctx.metadata.get("duration", 0) * 1000, 2)
+                if "ttft_ms" in ctx.metadata:
+                    trace["ttft_ms"] = ctx.metadata["ttft_ms"]
 
             return ctx.response
 

@@ -154,6 +154,23 @@
 
 ---
 
+---
+
+## SESSIONE N: FAANG Code Review — 6 Bug Fix P0/P1 ✅
+**Priorità: CRITICA | 105 test — 100% pass**
+
+Review sistematica full-codebase (FAANG-level). 6 fix su bug critici trovati:
+
+- [x] **N.1** `chat.py`: rimosso `agent.chatbot.track_error()` — `chatbot` non esiste su `RotatorAgent`, crash silenzioso nell'error handler (ogni eccezione nel pipeline triggerava `AttributeError` swallowed da asyncio.create_task)
+- [x] **N.2** `chat.py`: fix `session_id = "anonymous"` per tutti gli utenti non autenticati → ora usa `request.client.host` come fallback. Bug: un utente legittimo ereditava il threat score di un attaccante precedente (cross-contamination trajectory)
+- [x] **N.3** `admin.py`: aggiunto `_check_admin_auth()` guard su `/api/v1/panic`, `/proxy/toggle`, `/features/toggle`, `/proxy/priority/toggle`. Chiunque poteva triggare il kill-switch senza auth
+- [x] **N.4** `rotator.py`: circuit breaker finalmente integrato nel forward path. `CircuitManager` era inizializzato, esposto nel dashboard, ma `cb.can_execute()` non veniva mai chiamato prima di forwardare verso l'upstream. Ora: check pre-forward + `report_success/failure` su outcome + streaming-aware
+- [x] **N.5** `chat.py`: budget tracking corretto — `duration * 0.001` rimpiazzato con stima token-based (prompt_tokens/completion_tokens dalla risposta, fallback char//4). La formula precedente rendeva il soft_limit di $800 irraggiungibile in condizioni normali
+- [x] **N.6** `security.py`: `pii_vault` ora usa `TTLCache(maxsize=10_000, ttl=3600)` se cachetools disponibile — prev. dict unbounded cresceva per sempre. `session_memory` ora con time-eviction: scores scadono dopo 5 min (`_SESSION_SCORE_TTL`), sessioni idle dopo 1h (`_SESSION_TTL`), LRU eviction al raggiungimento del cap
+- [x] **N.7** `plugin_engine.py`: latency window migrata da `list` con `del window[:n]` a `deque(maxlen=500)` — O(1) append + auto-eviction. Ring trace lookup migrato da O(n) scan a O(1) dict (`_ring_traces_index`). `rotator.py` aggiornato di conseguenza
+
+---
+
 ## STATUS TRACKER
 
 | Sessione | Scope | Stato |
@@ -165,6 +182,7 @@
 | K. UI/UX Surgical Cleanup | HTML nesting, view IDs, sidebar labels, API centralization | ✅ DONE |
 | L. God Object + Budget + E2E | Route split, SQLite persistence, 33 E2E tests, bug fixes | ✅ DONE |
 | M. Security Pivot | Thesis focus, 1500 righe cut, SOC UI, Presidio, rate limiter | ✅ DONE |
+| N. FAANG Review Fix | 6 bug P0/P1: chatbot crash, session_id, admin auth, circuit breaker, budget, pii_vault TTL | ✅ DONE |
 | J. Backlog | Watcher, migration, OpenObserve, sanitize_response | 🔲 BACKLOG |
 
-**158 test totali — 100% pass. Thesis: LLM Security Gateway. UI: SOC dashboard.**
+**105 test totali — 100% pass. Circuit breaker attivo. Admin auth. Budget reale.**
