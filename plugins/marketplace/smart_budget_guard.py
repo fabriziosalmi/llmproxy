@@ -42,8 +42,6 @@ class SmartBudgetGuard(BasePlugin):
         super().__init__(config)
         self.session_budget_usd: float = self.config.get("session_budget_usd", 5.0)
         self.team_budget_usd: float = self.config.get("team_budget_usd", 100.0)
-        self.cost_per_1k_input: float = self.config.get("cost_per_1k_input", 0.003)
-        self.cost_per_1k_output: float = self.config.get("cost_per_1k_output", 0.015)
         self.avg_output_ratio: float = self.config.get("avg_output_ratio", 0.5)
         self.warn_threshold: float = self.config.get("warn_threshold", 0.8)
 
@@ -68,12 +66,10 @@ class SmartBudgetGuard(BasePlugin):
                         total_chars += len(part.get("text", ""))
         return max(total_chars // 4, 1)
 
-    def _estimate_cost(self, input_tokens: int) -> float:
-        """Estimate total cost (input + expected output)."""
-        est_output_tokens = int(input_tokens * self.avg_output_ratio)
-        input_cost = (input_tokens / 1000) * self.cost_per_1k_input
-        output_cost = (est_output_tokens / 1000) * self.cost_per_1k_output
-        return input_cost + output_cost
+    def _estimate_cost(self, model: str, input_tokens: int) -> float:
+        """Estimate total cost (input + expected output) using per-model pricing."""
+        from core.pricing import estimate_cost_pre_flight
+        return estimate_cost_pre_flight(model, input_tokens, self.avg_output_ratio)
 
     def _get_store(self, ctx: PluginContext):
         """Get store from PluginState DI (returns None if unavailable)."""
@@ -121,7 +117,8 @@ class SmartBudgetGuard(BasePlugin):
             await self._hydrate(store)
 
         input_tokens = self._estimate_tokens(body)
-        estimated_cost = self._estimate_cost(input_tokens)
+        model = body.get("model", "")
+        estimated_cost = self._estimate_cost(model, input_tokens)
 
         # Check session budget
         session_spent = self._session_spend[session_id]

@@ -92,21 +92,24 @@ def create_router(agent) -> APIRouter:
                     "latency_ms": round(duration * 1000, 1),
                     "status": response.status_code,
                 }))
-            # Token-based cost estimate (matches telemetry_ops.py formula).
+            # Token-based cost estimate using per-model pricing table.
             # Prefer actual usage fields from the response; fall back to
             # char-count heuristic (~4 chars/token) for streaming responses
             # where the body is not available as a single blob.
+            from core.pricing import estimate_cost, estimate_cost_pre_flight
             cost_usd = 0.0
+            model_name = body.get("model", "")
             try:
                 if hasattr(response, "body"):
                     import json as _json
                     usage = _json.loads(response.body).get("usage", {})
                     in_tok = usage.get("prompt_tokens", len(_json.dumps(body.get("messages", []))) // 4)
                     out_tok = usage.get("completion_tokens", 0)
-                    cost_usd = (in_tok / 1_000_000) * 5.00 + (out_tok / 1_000_000) * 15.00
+                    cost_usd = estimate_cost(model_name, in_tok, out_tok)
                 else:
                     # Streaming: estimate from prompt only
-                    cost_usd = len(str(body.get("messages", []))) / 4 / 1_000_000 * 5.00
+                    est_tokens = len(str(body.get("messages", []))) // 4
+                    cost_usd = estimate_cost_pre_flight(model_name, est_tokens)
             except Exception:
                 pass
             agent.total_cost_today += cost_usd

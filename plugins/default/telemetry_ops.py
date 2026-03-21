@@ -16,10 +16,10 @@ async def record(ctx: PluginContext):
     in_tokens = len(prompt_content) // 4
     out_tokens = len(response_content) // 4
 
-    # 2. Cost calculation (Mock Gpt-4o prices)
-    price_in = (in_tokens / 1_000_000) * 5.00
-    price_out = (out_tokens / 1_000_000) * 15.00
-    total_cost = price_in + price_out
+    # 2. Cost calculation using per-model pricing table
+    from core.pricing import estimate_cost
+    model_name = ctx.body.get("model", "")
+    total_cost = estimate_cost(model_name, in_tokens, out_tokens)
 
     # 3. Store metrics in context for dashboard
     target = ctx.metadata.get("target_endpoint")

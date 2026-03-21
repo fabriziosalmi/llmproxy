@@ -14,9 +14,7 @@ Outputs:
   - ctx.metadata["_actual_cost_usd"]: real cost based on actual tokens
   - Calls SmartBudgetGuard.record_actual_cost() if available (budget correction)
 
-Config (via manifest ui_schema):
-  - cost_per_1k_input: float (0.003) — $/1K input tokens
-  - cost_per_1k_output: float (0.015) — $/1K output tokens
+Uses core.pricing for per-model cost calculation instead of flat rates.
 """
 
 import json
@@ -39,9 +37,6 @@ class TokenCounter(BasePlugin):
 
     def __init__(self, config: Dict[str, Any] = None):
         super().__init__(config)
-        self.cost_per_1k_input: float = self.config.get("cost_per_1k_input", 0.003)
-        self.cost_per_1k_output: float = self.config.get("cost_per_1k_output", 0.015)
-
         # Lifetime counters
         self._total_input_tokens: int = 0
         self._total_output_tokens: int = 0
@@ -61,11 +56,10 @@ class TokenCounter(BasePlugin):
             pass
         return None
 
-    def _compute_cost(self, input_tokens: int, output_tokens: int) -> float:
-        """Compute actual cost from real token counts."""
-        input_cost = (input_tokens / 1000) * self.cost_per_1k_input
-        output_cost = (output_tokens / 1000) * self.cost_per_1k_output
-        return input_cost + output_cost
+    def _compute_cost(self, model: str, input_tokens: int, output_tokens: int) -> float:
+        """Compute actual cost from real token counts using per-model pricing."""
+        from core.pricing import estimate_cost
+        return estimate_cost(model, input_tokens, output_tokens)
 
     def get_stats(self) -> Dict[str, Any]:
         """Public stats for SOC dashboard / admin API."""
@@ -92,7 +86,8 @@ class TokenCounter(BasePlugin):
 
         input_tokens = usage.get("prompt_tokens", 0)
         output_tokens = usage.get("completion_tokens", 0)
-        actual_cost = self._compute_cost(input_tokens, output_tokens)
+        model = ctx.body.get("model", "")
+        actual_cost = self._compute_cost(model, input_tokens, output_tokens)
 
         # Update lifetime counters
         self._total_input_tokens += input_tokens
@@ -114,7 +109,4 @@ class TokenCounter(BasePlugin):
         return PluginResponse.passthrough()
 
     async def on_load(self):
-        self.logger.info(
-            f"TokenCounter loaded: input=${self.cost_per_1k_input}/1K, "
-            f"output=${self.cost_per_1k_output}/1K"
-        )
+        self.logger.info("TokenCounter loaded: using per-model pricing from core.pricing")
