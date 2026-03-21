@@ -100,12 +100,18 @@ def create_router(agent) -> APIRouter:
                        f"Use an OpenAI, Google, or Ollama embedding model instead.",
             )
 
-        # Resolve endpoint URL from config
+        # Resolve endpoint URL and provider API key from config
+        import os
         endpoints_cfg = agent.config.get("endpoints", {})
         base_url = ""
+        provider_api_key = ""
         for ep_name, ep_config in endpoints_cfg.items():
             if ep_config.get("provider") == provider or ep_name == provider:
                 base_url = ep_config.get("base_url", "")
+                # Load provider API key from environment (NOT the client's proxy key)
+                api_key_env = ep_config.get("api_key_env", "")
+                if api_key_env:
+                    provider_api_key = os.environ.get(api_key_env, "")
                 break
 
         if not base_url:
@@ -114,10 +120,10 @@ def create_router(agent) -> APIRouter:
                 detail=f"No endpoint configured for provider '{provider}'",
             )
 
-        # Build auth headers
+        # Build auth headers with PROVIDER key (never forward client's proxy key)
         headers = {}
-        if api_key:
-            headers["Authorization"] = api_key
+        if provider_api_key:
+            headers["Authorization"] = f"Bearer {provider_api_key}"
 
         # Translate request
         target_url, translated_body, translated_headers = adapter.translate_embedding_request(

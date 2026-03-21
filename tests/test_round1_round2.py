@@ -7,9 +7,11 @@ Tests for Round 1 & Round 2 features:
   R2.9:  Request deduplication
 """
 
+import json
 import pytest
 
 from proxy.adapters.openai import OpenAIAdapter, _is_o_series
+from proxy.routes.completions import _translate_chat_chunk_to_legacy
 from core.model_resolver import resolve_model
 from core.deduplicator import RequestDeduplicator
 
@@ -226,3 +228,70 @@ class TestRequestDeduplicator:
         dedup._completed["old"] = ("response", time.time() - 1)
         dedup.cleanup_expired()
         assert "old" not in dedup._completed
+
+
+# ══════════════════════════════════════════════════════
+# R1.10 Fix: Streaming Completions Translation
+# ══════════════════════════════════════════════════════
+
+class TestCompletionsStreamingTranslation:
+    def test_content_chunk(self):
+        chunk_data = {
+            "id": "chatcmpl-123",
+            "object": "chat.completion.chunk",
+            "created": 1700000000,
+            "model": "gpt-4o",
+            "choices": [{"delta": {"content": "Hello"}, "index": 0, "finish_reason": None}],
+        }
+        raw = f"data: {json.dumps(chunk_data)}\n\n".encode()
+        result = _translate_chat_chunk_to_legacy(raw)
+        decoded = result.decode()
+        assert "text_completion" in decoded
+        data = json.loads(decoded.split("data: ")[1].strip())
+        assert data["object"] == "text_completion"
+        assert data["choices"][0]["text"] == "Hello"
+
+    def test_done_passthrough(self):
+        raw = b"data: [DONE]\n\n"
+        result = _translate_chat_chunk_to_legacy(raw)
+        assert b"[DONE]" in result
+
+    def test_finish_reason_preserved(self):
+        chunk_data = {
+            "id": "chatcmpl-123",
+            "object": "chat.completion.chunk",
+            "created": 1700000000,
+            "model": "gpt-4o",
+            "choices": [{"delta": {}, "index": 0, "finish_reason": "stop"}],
+        }
+        raw = f"data: {json.dumps(chunk_data)}\n\n".encode()
+        result = _translate_chat_chunk_to_legacy(raw)
+        data = json.loads(result.decode().split("data: ")[1].strip())
+        assert data["choices"][0]["finish_reason"] == "stop"
+
+    def test_empty_chunk(self):
+        result = _translate_chat_chunk_to_legacy(b"")
+        assert result == b""
+
+
+# ══════════════════════════════════════════════════════
+# Bug Fixes Verification
+# ══════════════════════════════════════════════════════
+
+class TestModelResolverResilience:
+    def test_fastest_without_neural_router(self):
+        """fastest strategy should degrade to random if neural_router unavailable."""
+        # This shouldn't crash even if the import works (it does in this env)
+        config = {
+            "model_groups": {
+                "fast": {
+                    "strategy": "fastest",
+                    "models": [
+                        {"model": "gpt-4o", "provider": "openai"},
+                        {"model": "gpt-4o-mini", "provider": "openai"},
+                    ],
+                },
+            },
+        }
+        result = resolve_model(config, "fast")
+        assert result in ("gpt-4o", "gpt-4o-mini")

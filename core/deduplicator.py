@@ -48,7 +48,7 @@ class RequestDeduplicator:
             return await self._in_flight[key]
 
         # 3. First time: execute and cache.
-        future: asyncio.Future = asyncio.get_event_loop().create_future()
+        future: asyncio.Future = asyncio.get_running_loop().create_future()
         self._in_flight[key] = future
         try:
             result = await coro

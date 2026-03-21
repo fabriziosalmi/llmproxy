@@ -65,8 +65,13 @@ def _pick_from_group(group: Dict[str, Any]) -> Optional[str]:
         return min(models, key=lambda m: get_pricing(m["model"])["input"])["model"]
 
     elif strategy == "fastest":
-        from plugins.default.neural_router import get_endpoint_stats
-        # Pick model with lowest known latency (or first if no data)
+        try:
+            from plugins.default.neural_router import get_endpoint_stats
+        except ImportError:
+            # Plugin not loaded — degrade to random
+            logger.debug("neural_router not available for 'fastest' strategy, falling back to random")
+            return random.choice(models)["model"]
+
         def _latency(m):
             stats = get_endpoint_stats(m.get("provider", ""))
             return stats.get("latency_ms", 999.0)

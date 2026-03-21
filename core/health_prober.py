@@ -54,8 +54,9 @@ class EndpointHealthProber:
             if not base_url or not models:
                 continue
 
-            # Skip local endpoints (Ollama) — they may not be running
-            if "localhost" in base_url or "127.0.0.1" in base_url:
+            # Skip local endpoints unless probe_local is enabled
+            probe_local = ep_config.get("probe_local", False)
+            if not probe_local and ("localhost" in base_url or "127.0.0.1" in base_url):
                 continue
 
             tasks.append(self._probe_one(ep_name, provider, base_url, models[0]))
