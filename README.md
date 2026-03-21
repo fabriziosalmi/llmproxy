@@ -4,7 +4,7 @@ Security-first proxy for Large Language Models with a ring-based plugin pipeline
 
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-177%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-232%20passing-brightgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 [![CI](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml/badge.svg)](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml)
 
@@ -108,6 +108,13 @@ Heavy dependencies (OpenTelemetry, Sentry) are lazily imported inside route hand
 | `/api/v1/version` | `GET` | Current version. |
 | `/api/v1/service-info` | `GET` | Host, port, URL. |
 | `/api/v1/network/info` | `GET` | Network and Tailscale status. |
+| `/api/v1/cache/stats` | `GET` | Cache subsystem status (L1 negative + L2 positive). |
+| `/api/v1/guards/status` | `GET` | Consolidated security subsystem status. |
+| `/api/v1/metrics/latency` | `GET` | Per-ring and per-plugin latency percentiles (P50/P95/P99). |
+| `/api/v1/metrics/ring-timeline` | `GET` | Recent request traces with per-ring execution breakdown. |
+| `/api/v1/webhooks` | `GET` | Configured webhook endpoints and event types. |
+| `/api/v1/export/status` | `GET` | Export subsystem status and recent files. |
+| `/api/v1/rbac/roles` | `GET` | RBAC role permission matrix. |
 
 ---
 
@@ -169,9 +176,9 @@ Four built-in roles with granular permissions:
 | Ring | Stage | Purpose |
 |------|-------|---------|
 | 1 | **Ingress** | Auth, Zero-Trust, Global Rate Limiting |
-| 2 | **Pre-Flight** | PII Masking, Prompt Mutation, Budget Guard, Loop Breaker |
-| 3 | **Routing** | Semantic Cache Lookup, Dynamic Model Selection |
-| 4 | **Post-Flight** | JSON Healing, Response Sanitization, Watermarking |
+| 2 | **Pre-Flight** | PII Masking, Prompt Mutation, Budget Guard, Loop Breaker, Cache Lookup, Complexity Scoring |
+| 3 | **Routing** | Dynamic Model Selection, Load Balancing, Priority Steering |
+| 4 | **Post-Flight** | JSON Healing, Response Sanitization, Quality Gate, SLA Guard |
 | 5 | **Background** | FinOps Tracking, Telemetry Export, Shadow Traffic |
 
 ### Plugin SDK (`core/plugin_sdk.py`)
@@ -216,19 +223,31 @@ Tracked automatically by the engine:
 - `invocations`, `errors`, `blocks`, `timeouts`, `total_latency_ms`, `avg_latency_ms`.
 - Queryable via `PluginManager.get_plugin_stats(name)` or `get_plugin_stats()` for all.
 
-### Marketplace Plugins (Built-in)
+### Marketplace Plugins
 
-| Plugin | Ring | Description |
-|--------|------|-------------|
-| **Agentic Loop Breaker** | Pre-Flight | Detects AI agents stuck in retry loops via SHA-256 prompt hashing with sliding window. Blocks with 429 + diagnostic message. |
-| **Smart Budget Guard** | Pre-Flight | Pre-flight cost estimation with per-session and per-team budget enforcement. Warning threshold + post-flight actual cost correction. |
+All marketplace plugins use the `BasePlugin` SDK with `ui_schema` for dynamic SOC UI config forms.
 
-Both ship with `ui_schema` for dynamic UI rendering and configurable parameters.
+| Plugin | Ring | Default | Description |
+|--------|------|---------|-------------|
+| **Smart Budget Guard** | Pre-Flight | Enabled | Per-session/team budget enforcement with SQLite persistence and cost estimation. |
+| **Agentic Loop Breaker** | Pre-Flight | Enabled | Detects AI agents stuck in retry loops via SHA-256 prompt hashing with sliding window. |
+| **Per-Model Rate Limiter** | Pre-Flight | Disabled | Granular rate limiting per (tenant, model) pair with sliding window counters. |
+| **Prompt Complexity Scorer** | Pre-Flight | Disabled | Scores prompt complexity (0-1) on 4 signals (depth, turns, code, instructions) for intelligent model routing. |
+| **Model Downgrader** | Pre-Flight | Disabled | Automatically downgrades expensive models for simple prompts (10-20x cost savings). Works with Complexity Scorer. |
+| **Context Window Guard** | Pre-Flight | Disabled | Blocks requests exceeding the target model's context window (returns clear 413 instead of cryptic upstream 400). |
+| **Response Quality Gate** | Post-Flight | Disabled | Detects empty, refused ("I cannot..."), apology-only, and truncated LLM responses. |
+| **Latency SLA Guard** | Post-Flight | Disabled | Measures TTFT and total latency with rolling percentiles, flags SLA violations (warning/breach). |
+| **Canary Detector** | Post-Flight | Disabled | Detects system prompt leakage in responses (data exfiltration protection). Optional auto-block mode. |
+| **Token Counter** | Background | Disabled | Extracts real token counts from API responses, corrects budget heuristic estimates with actual data. |
+
+See [`plugins/marketplace/README.md`](plugins/marketplace/README.md) for the full plugin development guide.
 
 ### Default Plugins (Legacy Functions)
 
-9 built-in function plugins (backward compatible, no changes needed):
-- Ingress Auth & Zero-Trust, PII Neural Masker, Semantic Cache Hook, Enterprise Neural Router, Post-Flight Sanitizer, Unified Telemetry & FinOps, Context Minifier, Kill-Switch, JSON Auto-Healer.
+9 built-in function plugins (backward compatible, always enabled):
+- Ingress Auth & Zero-Trust, Context Minifier, PII Neural Masker, WAF-Aware Cache Lookup, Enterprise Neural Router, Speculative Kill-Switch, Post-Flight Sanitizer, JSON Auto-Healer, Unified Telemetry & FinOps.
+
+See [`plugins/default/README.md`](plugins/default/README.md) for the priority map and plugin details.
 
 ### Security Scanning
 All Python plugins are **AST-scanned** before loading:
@@ -396,11 +415,11 @@ All sensitive values are loaded via **Infisical SDK** with environment variable 
 
 ## Testing
 
-177 tests across 13 modules, all passing. Unit tests for every subsystem + HTTP-level E2E integration tests.
+232 tests across 16 modules, all passing. Unit tests for every subsystem + HTTP-level E2E integration tests.
 
 ```bash
-# Run full suite (177 tests)
-python -m pytest tests/ -v --ignore=tests/test_store.py --ignore=tests/integrated_test.py
+# Run full suite (232 tests)
+python -m pytest tests/ -v --ignore=tests/test_store.py --ignore=tests/integrated_test.py --ignore=tests/test_export.py
 
 # Run a specific module
 python -m pytest tests/test_marketplace_plugins.py -v
@@ -411,18 +430,19 @@ python -m pytest tests/test_e2e.py -v
 
 | Module | Tests | Coverage |
 |--------|-------|----------|
-| `test_e2e.py` | 36 | Full HTTP E2E: health, metrics, version, proxy toggle, priority, panic, features, registry CRUD, plugins, identity, chat (auth on/off), budget persistence, state persistence |
+| `test_e2e.py` | 34 | Full HTTP E2E: health, metrics, version, proxy toggle, priority, panic, features, registry CRUD, plugins, identity, chat (auth on/off), budget persistence, state persistence |
 | `test_marketplace_plugins.py` | 30 | Loop Breaker (7), Budget Guard (5), Engine dual-mode (5), Fail policy (2), AST blocking (5), Validation (4), DI State (2) |
+| `test_marketplace_new_plugins.py` | 24 | Prompt Complexity Scorer (7), Response Quality Gate (9), Latency SLA Guard (8) |
+| `test_marketplace_plugins_v2.py` | 31 | Token Counter (5), Model Downgrader (5), Canary Detector (7), Model Rate Limiter (6), Context Window Guard (8) |
+| `test_cache.py` | 27 | CacheBackend (12), StreamFaker (4), CacheCheck plugin (4), NegativeCache (7) |
 | `test_wasm_runner.py` | 15 | JSON protocol, legacy action mapping, error handling, engine integration |
-| `test_export.py` | 8 | PII scrub (email/IP/key/bearer), nested redaction, file rotation |
 | `test_plugin_engine.py` | 8 | AST scan (safe/forbidden: os/subprocess/exec/eval), allowed modules |
-| `test_identity.py` | 7 | OIDC verify, proxy JWT gen/verify/expire, role mapping |
-| `test_rbac.py` | 7 | Admin/user/viewer permissions, multi-role, quota, user CRUD |
+| `test_openapi_contracts.py` | 18 | OpenAPI schema validation, route presence, response shapes |
 | `test_pii_detection.py` | 17 | Presidio NLP + regex PII detection, masking, vault, demasking |
 | `test_rate_limiter.py` | 8 | Token bucket, per-key isolation, auto-eviction |
-| `test_openapi_contracts.py` | 20 | OpenAPI schema validation, route presence, response shapes |
+| `test_identity.py` | 7 | OIDC verify, proxy JWT gen/verify/expire, role mapping |
+| `test_rbac.py` | 7 | Admin/user/viewer permissions, multi-role, quota, user CRUD |
 | `test_webhooks.py` | 6 | Slack/Teams/Discord/Generic format, severity mapping |
-| `test_metrics.py` | 5 | Counter increment, error class, injection blocked, budget, circuit |
 
 ### E2E Test Architecture
 The E2E suite (`test_e2e.py`) uses a `LightweightAgent` that mounts the **real route modules** (`proxy/routes/`) against an `InMemoryRepository`, without importing the full `RotatorAgent` or its 20+ transitive dependencies (OpenTelemetry, Sentry, ChromaDB, etc.). This gives true HTTP-level coverage with sub-second execution and zero external services.

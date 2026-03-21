@@ -33,7 +33,7 @@ class InMemoryRepository(BaseRepository):
     async def get_all(self) -> List[LLMEndpoint]:
         return list(self._endpoints.values())
 
-    def get_pool(self) -> List[LLMEndpoint]:
+    async def get_pool(self) -> List[LLMEndpoint]:
         return [e for e in self._endpoints.values() if e.status == EndpointStatus.VERIFIED]
 
     async def get_by_status(self, status: EndpointStatus) -> List[LLMEndpoint]:
