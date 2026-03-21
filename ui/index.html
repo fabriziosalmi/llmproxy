@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLMProxy — Security Gateway</title>
+    <!-- All assets served locally — zero external CDN dependencies -->
+    <script src="vendor/tailwind.js"></script>
+    <script src="vendor/chart.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="vendor/fonts.css">
+    <link rel="stylesheet" href="vendor/xterm.css" />
+    <script src="vendor/xterm.js"></script>
+    <script src="vendor/xterm-addon-webgl.js"></script>
+    <script src="vendor/xterm-addon-fit.js"></script>
+    <style>
+        .font-mono { font-family: 'JetBrains Mono', 'Fira Code', monospace !important; }
+    </style>
+</head>
+<body class="h-screen flex overflow-hidden selection:bg-rose-500/30 bg-[#050506]">
+    <div class="nebula-grain"></div>
+
+    <!-- Login Overlay -->
+    <div id="login-overlay" class="hidden fixed inset-0 z-[100] bg-[#050506]/98 backdrop-blur-2xl flex items-center justify-center">
+        <div class="w-full max-w-sm mx-4">
+            <div class="flex items-center justify-center gap-3 mb-8">
+                <div class="w-10 h-10 rounded-xl bg-rose-500/20 flex items-center justify-center">
+                    <svg class="w-6 h-6 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                </div>
+                <span class="text-xl font-black text-white tracking-tight">LLMProxy</span>
+            </div>
+            <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6">
+                <div id="login-providers" class="space-y-3 mb-4"></div>
+                <div id="login-error" class="hidden mb-3 px-3 py-2 bg-rose-500/10 border border-rose-500/20 rounded-lg text-[10px] text-rose-400 font-mono"></div>
+                <div class="border-t border-white/10 pt-4">
+                    <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">API Key</label>
+                    <div class="flex gap-2">
+                        <input id="login-api-key" type="password" placeholder="sk-..." class="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-rose-500/50">
+                        <button id="login-api-key-btn" class="px-4 py-2 bg-rose-500/20 text-rose-400 rounded-lg text-xs font-bold hover:bg-rose-500/30 transition-colors">Enter</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="w-56 bg-[#0a0a0c]/80 backdrop-blur-xl border-r border-white/[0.04] flex flex-col transition-all duration-300 z-50 shrink-0 md:relative fixed inset-y-0 left-0 mobile-hidden">
+        <!-- Brand -->
+        <div class="p-4 border-b border-white/[0.04]">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-rose-500/20 flex items-center justify-center">
+                    <svg class="w-5 h-5 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                </div>
+                <div>
+                    <p class="text-xs font-black text-white tracking-tight">LLMProxy</p>
+                    <p class="text-[9px] text-slate-500 font-medium">Security Gateway</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status -->
+        <div class="px-4 py-3 border-b border-white/[0.04]">
+            <div class="flex items-center gap-2">
+                <div id="status-dot" class="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.4)] animate-pulse"></div>
+                <span id="status-text" class="text-[9px] font-black text-emerald-400 uppercase tracking-widest">Live</span>
+            </div>
+        </div>
+
+        <!-- Nav -->
+        <nav class="flex-1 p-3 space-y-1">
+            <p class="text-[9px] font-bold text-slate-600 uppercase tracking-widest px-3 mb-2">Security</p>
+            <button id="nav-threats" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all active">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                <span class="text-[11px] font-semibold">Threats</span>
+            </button>
+            <button id="nav-guards" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all text-slate-500">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                <span class="text-[11px] font-semibold">Guards</span>
+            </button>
+            <button id="nav-plugins" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all text-slate-500">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z"/></svg>
+                <span class="text-[11px] font-semibold">Plugins</span>
+            </button>
+
+            <p class="text-[9px] font-bold text-slate-600 uppercase tracking-widest px-3 mt-4 mb-2">Operations</p>
+            <button id="nav-endpoints" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all text-slate-500">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"/></svg>
+                <span class="text-[11px] font-semibold">Endpoints</span>
+            </button>
+            <button id="nav-logs" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all text-slate-500">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                <span class="text-[11px] font-semibold">Audit Log</span>
+            </button>
+            <button id="nav-settings" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all text-slate-500">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                <span class="text-[11px] font-semibold">Settings</span>
+            </button>
+        </nav>
+
+        <!-- Emergency -->
+        <div class="p-3 border-t border-white/[0.04]">
+            <button id="panic-btn" class="w-full px-3 py-2.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 rounded-xl text-rose-400 text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+                Kill Switch
+            </button>
+            <div id="user-section" class="flex items-center gap-2 mt-2 px-1">
+                <div id="user-avatar" class="hidden w-5 h-5 rounded-full bg-rose-500/20 flex items-center justify-center text-[8px] font-bold text-rose-400 shrink-0"></div>
+                <span id="user-display-name" class="hidden text-[9px] text-slate-400 truncate flex-1 font-mono"></span>
+                <span id="login-hint" class="text-[9px] text-slate-600 font-mono truncate flex-1">API Key</span>
+                <button id="logout-btn" class="hidden text-[9px] text-rose-400 hover:text-rose-300 font-bold shrink-0">Out</button>
+            </div>
+        </div>
+
+        <!-- Collapse -->
+        <div class="p-2 border-t border-white/[0.04]">
+            <button id="sidebar-toggle-btn" class="w-full flex items-center justify-center p-1.5 rounded-lg hover:bg-white/5 transition-colors">
+                <svg id="toggle-icon-svg" class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/></svg>
+            </button>
+        </div>
+    </aside>
+    <div id="sidebar-backdrop" class="hidden fixed inset-0 bg-black/50 z-40 md:hidden"></div>
+
+    <!-- Main Content -->
+    <main class="flex-1 overflow-y-auto bg-[#050506]">
+        <!-- Header -->
+        <header class="sticky top-0 z-30 bg-[#050506]/80 backdrop-blur-xl border-b border-white/[0.04] px-6 py-3 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <button id="mobile-menu-btn" class="md:hidden p-1.5 rounded-lg hover:bg-white/5">
+                    <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+                </button>
+                <h1 id="view-title-text" class="text-sm font-black text-white tracking-tight">Threats</h1>
+            </div>
+            <div class="flex items-center gap-3">
+                <kbd class="hidden md:inline text-[9px] font-mono text-slate-600 bg-white/5 px-2 py-0.5 rounded border border-white/10">⌘K</kbd>
+            </div>
+        </header>
+
+        <!-- Views -->
+        <div class="p-6">
+
+            <!-- THREATS VIEW -->
+            <div id="view-threats" class="content-view">
+                <!-- KPI Cards -->
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                    <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4">
+                        <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Requests Today</p>
+                        <p id="kpi-requests" class="text-2xl font-black text-white font-mono">--</p>
+                    </div>
+                    <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-rose-500/20 p-4">
+                        <p class="text-[9px] font-bold text-rose-400 uppercase tracking-widest mb-1">Threats Blocked</p>
+                        <p id="kpi-blocked" class="text-2xl font-black text-rose-400 font-mono">--</p>
+                    </div>
+                    <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-amber-500/20 p-4">
+                        <p class="text-[9px] font-bold text-amber-400 uppercase tracking-widest mb-1">PII Masked</p>
+                        <p id="kpi-pii" class="text-2xl font-black text-amber-400 font-mono">--</p>
+                    </div>
+                    <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-emerald-500/20 p-4">
+                        <p class="text-[9px] font-bold text-emerald-400 uppercase tracking-widest mb-1">Pass Rate</p>
+                        <p id="kpi-passrate" class="text-2xl font-black text-emerald-400 font-mono">--</p>
+                    </div>
+                </div>
+
+                <!-- Extended Metrics -->
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4">
+                        <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Errors</p>
+                        <p id="kpi-errors" class="text-lg font-black text-red-400 font-mono">0</p>
+                    </div>
+                    <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4">
+                        <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Tokens</p>
+                        <p id="kpi-tokens" class="text-lg font-black text-sky-400 font-mono">0</p>
+                    </div>
+                </div>
+
+                <!-- Budget Gauge -->
+                <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-6">
+                    <h2 class="text-xs font-bold text-white mb-3">Daily Budget</h2>
+                    <div id="budget-gauge">
+                        <div class="text-[9px] text-slate-600 font-mono">Loading...</div>
+                    </div>
+                </div>
+
+                <!-- Firewall & Endpoint Breakdown -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+                    <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-5">
+                        <h2 class="text-xs font-bold text-white mb-3">ASGI Firewall</h2>
+                        <div id="firewall-stats">
+                            <p class="text-[9px] text-slate-600 font-mono">Loading...</p>
+                        </div>
+                    </div>
+                    <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-5">
+                        <h2 class="text-xs font-bold text-white mb-3">Per-Endpoint Breakdown</h2>
+                        <div id="endpoint-breakdown">
+                            <p class="text-[9px] text-slate-600 font-mono">Loading...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Latency Percentiles (P50/P95/P99) -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+                    <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-5">
+                        <div class="flex items-center justify-between mb-3">
+                            <h2 class="text-xs font-bold text-white">Ring Latency</h2>
+                            <span class="text-[8px] font-mono text-slate-600">P50 / P95 / P99</span>
+                        </div>
+                        <div id="ring-latency-bars">
+                            <p class="text-[9px] text-slate-600 font-mono">Collecting samples...</p>
+                        </div>
+                    </div>
+                    <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-5">
+                        <div class="flex items-center justify-between mb-3">
+                            <h2 class="text-xs font-bold text-white">TTFT — Time to First Token</h2>
+                            <span class="text-[8px] font-mono text-slate-600">Streaming</span>
+                        </div>
+                        <div id="ttft-metrics">
+                            <p class="text-[9px] text-slate-600 font-mono">No streaming data yet</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ring Execution Timeline -->
+                <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-xs font-bold text-white">Ring Execution Timeline</h2>
+                        <span class="text-[9px] font-mono text-slate-500">Last 20 requests</span>
+                    </div>
+                    <div id="ring-timeline" class="space-y-2 max-h-72 overflow-y-auto">
+                        <p class="text-[9px] text-slate-600 font-mono">No request traces yet</p>
+                    </div>
+                </div>
+
+                <!-- Threat Timeline Chart -->
+                <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-xs font-bold text-white">Threat Timeline</h2>
+                        <span class="text-[9px] font-mono text-slate-500">Last 24h</span>
+                    </div>
+                    <div class="h-48">
+                        <canvas id="threat-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Security Pipeline Status -->
+                <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-6">
+                    <h2 class="text-xs font-bold text-white mb-4">Security Pipeline</h2>
+                    <div class="flex items-center gap-2 overflow-x-auto pb-2">
+                        <div class="flex items-center gap-2 shrink-0">
+                            <div class="px-3 py-2 bg-rose-500/10 border border-rose-500/20 rounded-xl text-center">
+                                <p class="text-[9px] font-bold text-rose-400 uppercase">Firewall</p>
+                                <p class="text-[8px] text-slate-500 mt-0.5">ASGI L7</p>
+                            </div>
+                            <svg class="w-4 h-4 text-slate-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                        </div>
+                        <div class="flex items-center gap-2 shrink-0">
+                            <div class="px-3 py-2 bg-amber-500/10 border border-amber-500/20 rounded-xl text-center">
+                                <p class="text-[9px] font-bold text-amber-400 uppercase">Shield</p>
+                                <p class="text-[8px] text-slate-500 mt-0.5">Injection + PII</p>
+                            </div>
+                            <svg class="w-4 h-4 text-slate-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                        </div>
+                        <div class="flex items-center gap-2 shrink-0">
+                            <div class="px-3 py-2 bg-sky-500/10 border border-sky-500/20 rounded-xl text-center">
+                                <p class="text-[9px] font-bold text-sky-400 uppercase">Ring 1</p>
+                                <p class="text-[8px] text-slate-500 mt-0.5">Ingress</p>
+                            </div>
+                            <svg class="w-4 h-4 text-slate-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                        </div>
+                        <div class="flex items-center gap-2 shrink-0">
+                            <div class="px-3 py-2 bg-violet-500/10 border border-violet-500/20 rounded-xl text-center">
+                                <p class="text-[9px] font-bold text-violet-400 uppercase">Ring 2</p>
+                                <p class="text-[8px] text-slate-500 mt-0.5">Pre-Flight</p>
+                            </div>
+                            <svg class="w-4 h-4 text-slate-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                        </div>
+                        <div class="flex items-center gap-2 shrink-0">
+                            <div class="px-3 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-center">
+                                <p class="text-[9px] font-bold text-emerald-400 uppercase">Proxy</p>
+                                <p class="text-[8px] text-slate-500 mt-0.5">Forward</p>
+                            </div>
+                            <svg class="w-4 h-4 text-slate-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                        </div>
+                        <div class="shrink-0">
+                            <div class="px-3 py-2 bg-teal-500/10 border border-teal-500/20 rounded-xl text-center">
+                                <p class="text-[9px] font-bold text-teal-400 uppercase">Ring 4-5</p>
+                                <p class="text-[8px] text-slate-500 mt-0.5">Post + BG</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Threats Table -->
+                <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6">
+                    <h2 class="text-xs font-bold text-white mb-4">Recent Security Events</h2>
+                    <div id="threat-feed" class="space-y-2 max-h-64 overflow-y-auto">
+                        <p class="text-[10px] text-slate-500 italic">Connecting to event stream...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- GUARDS VIEW -->
+            <div id="view-guards" class="content-view hidden">
+                <!-- Master Toggle -->
+                <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-sm font-bold text-white">Gateway Status</h2>
+                            <p class="text-[10px] text-slate-500 mt-0.5">Master proxy enable/disable</p>
+                        </div>
+                        <button id="proxy-toggle-btn" class="relative w-14 h-7 rounded-full transition-colors bg-emerald-500/20 border border-emerald-500/30">
+                            <div id="proxy-toggle-dot" class="absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-emerald-400 transition-transform translate-x-7 shadow-lg shadow-emerald-500/30"></div>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Priority Steering -->
+                <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-sm font-bold text-white">Priority Steering</h2>
+                            <p class="text-[10px] text-slate-500 mt-0.5">Route to highest-priority endpoint only</p>
+                        </div>
+                        <button id="priority-toggle-btn" class="relative w-14 h-7 rounded-full transition-colors bg-slate-700/50 border border-slate-600/30">
+                            <div id="priority-toggle-dot" class="absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-slate-500 transition-transform translate-x-0"></div>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Cache Performance -->
+                <div id="cache-stats-card" class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-2">
+                            <svg class="w-4 h-4 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg>
+                            <h2 class="text-sm font-bold text-white">Cache Performance</h2>
+                        </div>
+                        <span id="cache-status-badge" class="text-[8px] font-bold font-mono text-slate-500 bg-slate-500/10 px-2 py-0.5 rounded">LOADING</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <!-- L1 Negative Cache -->
+                        <div class="bg-white/[0.02] rounded-xl border border-teal-500/10 p-4">
+                            <div class="flex items-center gap-1.5 mb-3">
+                                <div class="w-1.5 h-1.5 rounded-full bg-teal-400"></div>
+                                <span class="text-[9px] font-bold text-teal-400 uppercase tracking-widest">L1 Negative Cache</span>
+                            </div>
+                            <div class="flex items-baseline gap-1 mb-1">
+                                <span id="l1-drops" class="text-lg font-black font-mono text-white">0</span>
+                                <span class="text-[9px] text-slate-500">drops</span>
+                            </div>
+                            <div class="flex items-center justify-between mt-2">
+                                <span class="text-[9px] text-slate-500 font-mono"><span id="l1-size">0</span> / <span id="l1-maxsize">50K</span> hashes</span>
+                                <span class="text-[9px] font-mono text-teal-400/60"><span id="l1-ttl">300</span>s TTL</span>
+                            </div>
+                        </div>
+                        <!-- L2 Positive Cache -->
+                        <div class="bg-white/[0.02] rounded-xl border border-sky-500/10 p-4">
+                            <div class="flex items-center gap-1.5 mb-3">
+                                <div class="w-1.5 h-1.5 rounded-full bg-sky-400"></div>
+                                <span class="text-[9px] font-bold text-sky-400 uppercase tracking-widest">L2 Positive Cache</span>
+                            </div>
+                            <div class="flex items-baseline gap-1 mb-1">
+                                <span id="l2-hit-ratio" class="text-lg font-black font-mono text-white">0%</span>
+                                <span class="text-[9px] text-slate-500">hit rate</span>
+                            </div>
+                            <div class="flex items-center justify-between mt-2">
+                                <span class="text-[9px] text-slate-500 font-mono"><span id="l2-entries">0</span> entries</span>
+                                <span class="text-[9px] font-mono text-sky-400/60"><span id="l2-hits">0</span>H / <span id="l2-misses">0</span>M</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Security Guards Grid -->
+                <div id="guards-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    <!-- Populated by guards.js -->
+                </div>
+            </div>
+
+            <!-- PLUGINS VIEW -->
+            <div id="view-plugins" class="content-view hidden">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xs font-bold text-white">Security Plugin Pipeline</h2>
+                    <div class="flex items-center gap-2">
+                        <button id="rollback-plugins-btn" class="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 rounded-lg text-[10px] font-bold text-amber-400 transition-colors">Rollback</button>
+                        <button id="install-plugin-toggle-btn" class="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg text-[10px] font-bold text-emerald-400 transition-colors">+ Install</button>
+                        <button id="reload-plugins-btn" class="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[10px] font-bold text-slate-400 transition-colors">Reload</button>
+                    </div>
+                </div>
+
+                <!-- Plugin Install Form (collapsed by default) -->
+                <div id="plugin-install-form" class="hidden bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-emerald-500/20 p-5 mb-4">
+                    <h3 class="text-[11px] font-bold text-white mb-3">Install Plugin</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                        <div>
+                            <label class="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Name *</label>
+                            <input id="install-name" type="text" placeholder="my_plugin" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50">
+                        </div>
+                        <div>
+                            <label class="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Hook (Ring) *</label>
+                            <select id="install-hook" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50 bg-[#0a0a0c]">
+                                <option value="ingress">ingress (Ring 1)</option>
+                                <option value="pre_flight">pre_flight (Ring 2)</option>
+                                <option value="routing">routing (Ring 3)</option>
+                                <option value="post_flight">post_flight (Ring 4)</option>
+                                <option value="background">background (Ring 5)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Entrypoint *</label>
+                            <input id="install-entrypoint" type="text" placeholder="marketplace/my_plugin:MyPlugin" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50">
+                        </div>
+                        <div>
+                            <label class="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Timeout (ms)</label>
+                            <input id="install-timeout" type="number" value="500" min="10" max="5000" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                        <div>
+                            <label class="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Fail Policy</label>
+                            <select id="install-fail-policy" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50 bg-[#0a0a0c]">
+                                <option value="open">open (fail-open)</option>
+                                <option value="closed">closed (fail-closed)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Description</label>
+                            <input id="install-description" type="text" placeholder="What does this plugin do?" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50">
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-end gap-2">
+                        <button id="install-cancel-btn" class="px-3 py-1.5 text-[10px] font-bold text-slate-500 hover:text-white transition-colors">Cancel</button>
+                        <button id="install-submit-btn" class="px-4 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 rounded-lg text-[10px] font-bold text-emerald-400 transition-colors">Install & Hot-Swap</button>
+                    </div>
+                </div>
+
+                <div id="plugins-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Populated by plugins.js -->
+                </div>
+            </div>
+
+            <!-- ENDPOINTS VIEW -->
+            <div id="view-endpoints" class="content-view hidden">
+                <div id="registry-container">
+                    <!-- Populated by registry.js -->
+                </div>
+            </div>
+
+            <!-- LOGS VIEW -->
+            <div id="view-logs" class="content-view hidden">
+                <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4 mb-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <h2 class="text-xs font-bold text-white">Security Audit Log</h2>
+                        <div class="flex items-center gap-2">
+                            <input id="log-filter" type="text" placeholder="Filter..." class="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono w-48 focus:outline-none focus:border-rose-500/50">
+                            <button id="clear-logs-btn" class="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[10px] font-bold text-slate-400">Clear</button>
+                        </div>
+                    </div>
+                    <div id="log-terminal" class="h-[500px] rounded-lg overflow-hidden"></div>
+                </div>
+            </div>
+
+            <!-- SETTINGS VIEW -->
+            <div id="view-settings" class="content-view hidden">
+                <!-- Identity & Access -->
+                <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-4">
+                    <h2 class="text-xs font-bold text-white mb-4">Identity & Access</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Auth Mode</label>
+                            <p id="auth-mode" class="text-xs text-white font-mono">--</p>
+                        </div>
+                        <div>
+                            <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">SSO Status</label>
+                            <p id="sso-status" class="text-xs text-white font-mono">--</p>
+                        </div>
+                    </div>
+                    <div id="identity-me" class="pt-3 border-t border-white/[0.04]">
+                        <p class="text-[9px] text-slate-600 font-mono">Loading identity...</p>
+                    </div>
+                </div>
+
+                <!-- RBAC Role Matrix -->
+                <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-4">
+                    <h2 class="text-xs font-bold text-white mb-4">RBAC Role Matrix</h2>
+                    <div id="rbac-matrix">
+                        <p class="text-[9px] text-slate-600 font-mono">Loading...</p>
+                    </div>
+                </div>
+
+                <!-- Webhooks -->
+                <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-4">
+                    <h2 class="text-xs font-bold text-white mb-4">Webhooks</h2>
+                    <div id="webhooks-status">
+                        <p class="text-[9px] text-slate-600 font-mono">Loading...</p>
+                    </div>
+                </div>
+
+                <!-- Data Export -->
+                <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-4">
+                    <h2 class="text-xs font-bold text-white mb-4">Data Export</h2>
+                    <div id="export-status">
+                        <p class="text-[9px] text-slate-600 font-mono">Loading...</p>
+                    </div>
+                </div>
+
+                <!-- System Info -->
+                <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6">
+                    <h2 class="text-xs font-bold text-white mb-2">System Info</h2>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Version</label>
+                            <p id="sys-version" class="text-xs text-white font-mono">--</p>
+                        </div>
+                        <div>
+                            <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Endpoint</label>
+                            <p id="sys-url" class="text-xs text-white font-mono">--</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Command Palette -->
+    <div id="cmd-palette-overlay" class="hidden fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm items-center justify-center">
+        <div id="cmd-palette-box" class="w-full max-w-lg mx-4 bg-[#0a0a0c]/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl scale-95 opacity-0 transition-all duration-200">
+            <div class="p-4 border-b border-white/[0.06]">
+                <input id="cmd-input" type="text" placeholder="Search commands..." class="w-full bg-transparent text-sm text-white placeholder-slate-500 focus:outline-none font-mono">
+            </div>
+            <div id="cmd-list" class="p-2 max-h-64 overflow-y-auto"></div>
+        </div>
+    </div>
+
+    <script type="module" src="main.js"></script>
+</body>
+</html>

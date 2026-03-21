@@ -1,0 +1,134 @@
+plugins:
+  - name: "Ingress Auth & Zero-Trust"
+    hook: "ingress"
+    priority: 10
+    enabled: true
+    entrypoint: "default.ingress_auth:verify"
+
+  - name: "PII Neural Masker"
+    hook: "pre_flight"
+    priority: 20
+    enabled: true
+    entrypoint: "default.pii_masker:mask"
+
+  - name: "WAF-Aware Cache Lookup"
+    hook: "pre_flight"
+    priority: 30
+    enabled: true
+    entrypoint: "default.cache_check:lookup"
+    timeout_ms: 10
+
+  - name: "Enterprise Neural Router"
+    hook: "routing"
+    priority: 50
+    enabled: true
+    entrypoint: "default.neural_router:select_endpoint"
+
+  - name: "Post-Flight Sanitizer"
+    hook: "post_flight"
+    priority: 80
+    enabled: true
+    entrypoint: "default.shield_sanitizer:cleanse"
+
+  - name: "Unified Telemetry & FinOps"
+    hook: "background"
+    priority: 100
+    enabled: true
+    entrypoint: "default.telemetry_ops:record"
+
+  - name: "Aider Context Minifier"
+    hook: "pre_flight"
+    priority: 15
+    enabled: true
+    entrypoint: "default.context_minifier:compress"
+
+  - name: "Speculative Kill-Switch"
+    hook: "post_flight"
+    priority: 70
+    enabled: true
+    entrypoint: "default.kill_switch:analyze"
+
+  - name: "JSON Auto-Healer"
+    hook: "post_flight"
+    priority: 90
+    enabled: true
+    entrypoint: "default.json_healer:repair"
+
+  # ── Marketplace Plugins (BasePlugin class mode) ──
+
+  - name: "Agentic Loop Breaker"
+    hook: "pre_flight"
+    priority: 12
+    enabled: true
+    type: "python"
+    entrypoint: "marketplace.agentic_loop_breaker:AgenticLoopBreaker"
+    version: "1.0.0"
+    author: "llmproxy"
+    description: "Detects and breaks agentic retry loops via prompt hashing"
+    timeout_ms: 10
+    config:
+      max_repeats: 3
+      window_seconds: 120
+      hash_messages: 3
+    ui_schema:
+      - key: "max_repeats"
+        type: "number"
+        label: "Max Repeats"
+        description: "Number of identical prompts before blocking"
+        default: 3
+        min: 2
+        max: 20
+      - key: "window_seconds"
+        type: "number"
+        label: "Window (seconds)"
+        description: "Sliding window for repeat detection"
+        default: 120
+        min: 30
+        max: 600
+      - key: "hash_messages"
+        type: "number"
+        label: "Messages to Hash"
+        description: "Number of trailing messages to fingerprint"
+        default: 3
+        min: 1
+        max: 10
+
+  - name: "Smart Budget Guard"
+    hook: "pre_flight"
+    priority: 11
+    enabled: true
+    type: "python"
+    entrypoint: "marketplace.smart_budget_guard:SmartBudgetGuard"
+    version: "1.0.0"
+    author: "llmproxy"
+    description: "Pre-flight budget enforcement with cost estimation"
+    timeout_ms: 5
+    config:
+      session_budget_usd: 5.0
+      team_budget_usd: 100.0
+      cost_per_1k_input: 0.003
+      cost_per_1k_output: 0.015
+      avg_output_ratio: 0.5
+      warn_threshold: 0.8
+    ui_schema:
+      - key: "session_budget_usd"
+        type: "number"
+        label: "Session Budget ($)"
+        description: "Maximum spend per session in USD"
+        default: 5.0
+        min: 0.1
+        max: 1000
+      - key: "team_budget_usd"
+        type: "number"
+        label: "Team Budget ($)"
+        description: "Maximum spend per team/API key in USD"
+        default: 100.0
+        min: 1
+        max: 100000
+      - key: "warn_threshold"
+        type: "number"
+        label: "Warning Threshold"
+        description: "Warn at this percentage of budget (0.0 - 1.0)"
+        default: 0.8
+        min: 0.5
+        max: 0.99

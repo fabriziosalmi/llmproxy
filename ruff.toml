@@ -1,0 +1,13 @@
+[lint]
+select = ["E", "F", "W"]
+ignore = ["E501"]
+exclude = ["venv/", ".venv/"]
+
+[lint.per-file-ignores]
+"validate_bootstrap.py" = ["E701", "E722"]
+"validate_bootstrap_r2.py" = ["E701", "E722"]
+"validate_bootstrap_r3.py" = ["E701", "E722"]
+"smoke_test.py" = ["F841"]
+"sota_demo.py" = ["F821"]
+"migrations/*.py" = ["E402"]
+"tests/test_marketplace_plugins.py" = ["E402"]

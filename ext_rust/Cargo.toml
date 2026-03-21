@@ -1,0 +1,12 @@
+[package]
+name = "pii_redactor"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "pii_redactor"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.20.0", features = ["extension-module"] }
+regex = "1.10.3"
