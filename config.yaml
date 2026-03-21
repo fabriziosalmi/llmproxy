@@ -67,6 +67,35 @@ rotation:
     retry_delay: 1s
     switch_on_status: [429, 500, 503]
 
+# Cross-provider fallback chains — when primary provider is down, try alternatives.
+# Each chain maps a model to ordered fallback options (tried left to right).
+fallback_chains:
+  "gpt-4o":
+    - provider: anthropic
+      model: "claude-sonnet-4-20250514"
+    - provider: google
+      model: "gemini-2.5-pro"
+  "gpt-4o-mini":
+    - provider: anthropic
+      model: "claude-haiku-4-5-20251001"
+    - provider: google
+      model: "gemini-2.5-flash"
+  "claude-sonnet-4-20250514":
+    - provider: openai
+      model: "gpt-4o"
+    - provider: google
+      model: "gemini-2.5-pro"
+  "claude-haiku-4-5-20251001":
+    - provider: openai
+      model: "gpt-4o-mini"
+    - provider: google
+      model: "gemini-2.5-flash"
+  "gemini-2.5-pro":
+    - provider: openai
+      model: "gpt-4o"
+    - provider: anthropic
+      model: "claude-sonnet-4-20250514"
+
 # LLM Providers — each endpoint maps to an adapter in proxy/adapters/
 endpoints:
   openai:

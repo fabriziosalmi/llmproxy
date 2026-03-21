@@ -266,6 +266,154 @@ class RotatorAgent(BaseAgent):
             except Exception as e:
                 self.logger.error(f"Cache eviction error: {e}")
 
+    # ── Forwarding with cross-provider fallback ──
+
+    def _resolve_endpoint_for_provider(self, provider: str) -> Any:
+        """Resolve the configured endpoint URL for a provider."""
+        endpoints_cfg = self.config.get("endpoints", {})
+        for ep_name, ep_config in endpoints_cfg.items():
+            if ep_config.get("provider") == provider or ep_name == provider:
+                base_url = ep_config.get("base_url", "")
+                # Build a lightweight endpoint-like object
+                from types import SimpleNamespace
+                return SimpleNamespace(
+                    id=ep_name,
+                    url=base_url,
+                    provider=provider,
+                    provider_type=provider,
+                )
+        return None
+
+    async def _forward_request(self, ctx, adapter, target_url, translated_body, translated_headers, session, cb, endpoint_id):
+        """Forward a single request (non-streaming) with circuit breaker tracking."""
+        response = await adapter.request(target_url, translated_body, translated_headers, session)
+        # Check for HTTP-level errors that should trigger fallback
+        if response.status_code in (429, 500, 502, 503, 504):
+            cb.report_failure()
+            raise HTTPException(status_code=response.status_code, detail=f"Upstream {endpoint_id} returned {response.status_code}")
+        cb.report_success()
+        return response
+
+    async def _forward_with_fallback(self, ctx, target, headers, session):
+        """Forward request with cross-provider fallback on failure.
+
+        Tries the primary endpoint first. On failure (circuit open, HTTP error,
+        connection error), walks the fallback_chain for the requested model.
+        """
+        original_model = ctx.body.get("model", "")
+        original_body = dict(ctx.body)  # shallow copy for fallback restoration
+        attempts = []
+
+        # Build attempt list: primary + fallback chain
+        primary_provider = getattr(target, 'provider', None) or getattr(target, 'provider_type', None)
+        primary_adapter = get_adapter(primary_provider, original_model)
+        attempts.append({
+            "target": target,
+            "adapter": primary_adapter,
+            "model": original_model,
+            "provider": primary_adapter.provider_name,
+            "is_fallback": False,
+        })
+
+        # Add fallback chain entries
+        chain = self.config.get("fallback_chains", {}).get(original_model, [])
+        for fb in chain:
+            fb_target = self._resolve_endpoint_for_provider(fb["provider"])
+            if fb_target:
+                fb_adapter = get_adapter(fb["provider"])
+                attempts.append({
+                    "target": fb_target,
+                    "adapter": fb_adapter,
+                    "model": fb["model"],
+                    "provider": fb["provider"],
+                    "is_fallback": True,
+                })
+
+        last_error = None
+        for i, attempt in enumerate(attempts):
+            a_target = attempt["target"]
+            a_adapter = attempt["adapter"]
+            a_model = attempt["model"]
+            endpoint_id = getattr(a_target, 'id', str(a_target.url)) if a_target else 'unknown'
+
+            # Circuit breaker check
+            cb = self.circuit_manager.get_breaker(endpoint_id)
+            if not cb.can_execute():
+                if attempt["is_fallback"]:
+                    continue  # skip this fallback, try next
+                # Primary circuit open — fall through to fallbacks
+                last_error = HTTPException(
+                    status_code=503,
+                    detail=f"Circuit open for endpoint '{endpoint_id}'",
+                )
+                continue
+
+            # Set model for this attempt
+            ctx.body["model"] = a_model
+            ctx.metadata["_provider"] = a_adapter.provider_name
+            if attempt["is_fallback"]:
+                ctx.metadata["_fallback_used"] = attempt["provider"]
+                ctx.metadata["_fallback_model"] = a_model
+                ctx.metadata["_original_model"] = original_model
+                await self._add_log(
+                    f"FALLBACK: {original_model} → {a_model} ({attempt['provider']})",
+                    level="PROXY",
+                )
+
+            # Translate request for this provider
+            target_url, translated_body, translated_headers = a_adapter.translate_request(
+                str(a_target.url), ctx.body, headers,
+            )
+
+            try:
+                if ctx.body.get("stream") or original_body.get("stream"):
+                    # Streaming: return generator (no fallback mid-stream)
+                    ttft_start = time.perf_counter()
+                    first_chunk_seen = False
+                    circuit_success_reported = False
+
+                    async def stream_generator(_adapter=a_adapter, _url=target_url,
+                                               _body=translated_body, _headers=translated_headers,
+                                               _cb=cb, _eid=endpoint_id):
+                        nonlocal first_chunk_seen, circuit_success_reported
+                        try:
+                            async for chunk in _adapter.stream(_url, _body, _headers, session):
+                                if not first_chunk_seen:
+                                    first_chunk_seen = True
+                                    _cb.report_success()
+                                    circuit_success_reported = True
+                                    ttft = time.perf_counter() - ttft_start
+                                    MetricsTracker.track_ttft(_eid, ttft)
+                                    ctx.metadata["ttft_ms"] = round(ttft * 1000, 2)
+                                yield chunk
+                        except Exception as e:
+                            if not circuit_success_reported:
+                                _cb.report_failure()
+                            raise e
+
+                    ctx.response = StreamingResponse(stream_generator(), media_type="text/event-stream")
+                    return ctx.response
+                else:
+                    ctx.response = await self._forward_request(
+                        ctx, a_adapter, target_url, translated_body, translated_headers,
+                        session, cb, endpoint_id,
+                    )
+                    return ctx.response
+
+            except Exception as e:
+                last_error = e
+                if not attempt["is_fallback"]:
+                    await self._add_log(
+                        f"PRIMARY FAILED: {endpoint_id} — {e}", level="PROXY",
+                    )
+                continue
+
+        # All attempts exhausted
+        ctx.body["model"] = original_model  # restore original model
+        if last_error:
+            raise last_error
+        raise HTTPException(status_code=503, detail="All providers failed")
+
     # ── Core Proxy Pipeline ──
 
     async def proxy_request(self, request: Request, body: Dict[str, Any] = None, session_id: str = "default"):
@@ -339,61 +487,10 @@ class RotatorAgent(BaseAgent):
             headers = ctx.body.get("headers", {})
             headers.update(self.zt_manager.get_identity_headers())
 
-            # Forward request
+            # Forward request with cross-provider fallback
             start_req = time.time()
             session = await self._get_session()
-
-            endpoint_id = getattr(target, 'id', str(target.url)) if target else 'unknown'
-
-            # Resolve provider adapter: explicit config > model prefix auto-detect > openai default
-            provider_type = getattr(target, 'provider', None) or getattr(target, 'provider_type', None)
-            model_name = ctx.body.get("model", "")
-            adapter = get_adapter(provider_type, model_name)
-            ctx.metadata["_provider"] = adapter.provider_name
-
-            # Translate request to provider-native format
-            target_url, translated_body, translated_headers = adapter.translate_request(
-                str(target.url), ctx.body, headers,
-            )
-
-            # Circuit breaker: check before forwarding, track outcome after
-            cb = self.circuit_manager.get_breaker(endpoint_id)
-            if not cb.can_execute():
-                raise HTTPException(
-                    status_code=503,
-                    detail=f"Circuit open for endpoint '{endpoint_id}' — upstream unhealthy, retry later",
-                )
-
-            if ctx.body.get("stream"):
-                ttft_start = time.perf_counter()
-                first_chunk_seen = False
-                circuit_success_reported = False
-
-                async def stream_generator():
-                    nonlocal first_chunk_seen, circuit_success_reported
-                    try:
-                        async for chunk in adapter.stream(target_url, translated_body, translated_headers, session):
-                            if not first_chunk_seen:
-                                first_chunk_seen = True
-                                # First chunk received = upstream accepted the request
-                                cb.report_success()
-                                circuit_success_reported = True
-                                ttft = time.perf_counter() - ttft_start
-                                MetricsTracker.track_ttft(endpoint_id, ttft)
-                                ctx.metadata["ttft_ms"] = round(ttft * 1000, 2)
-                            yield chunk
-                    except Exception as e:
-                        if not circuit_success_reported:
-                            cb.report_failure()
-                        raise e
-                ctx.response = StreamingResponse(stream_generator(), media_type="text/event-stream")
-            else:
-                try:
-                    ctx.response = await adapter.request(target_url, translated_body, translated_headers, session)
-                    cb.report_success()
-                except Exception as e:
-                    cb.report_failure()
-                    raise e
+            await self._forward_with_fallback(ctx, target, headers, session)
 
             ctx.metadata["duration"] = time.time() - start_req
 
