@@ -31,6 +31,46 @@ class SQLiteStore:
                     value TEXT NOT NULL
                 )
             """)
+            # Spend analytics log (R2.3)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS spend_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ts INTEGER NOT NULL,
+                    date TEXT NOT NULL,
+                    key_prefix TEXT NOT NULL DEFAULT '',
+                    model TEXT NOT NULL DEFAULT '',
+                    provider TEXT NOT NULL DEFAULT '',
+                    prompt_tokens INTEGER DEFAULT 0,
+                    completion_tokens INTEGER DEFAULT 0,
+                    cost_usd REAL DEFAULT 0.0,
+                    latency_ms REAL DEFAULT 0.0,
+                    status INTEGER DEFAULT 200
+                )
+            """)
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_spend_date ON spend_log(date)")
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_spend_model ON spend_log(model, date)")
+            # Persistent audit log (R2.10)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS audit_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ts INTEGER NOT NULL,
+                    req_id TEXT NOT NULL DEFAULT '',
+                    session_id TEXT DEFAULT '',
+                    key_prefix TEXT DEFAULT '',
+                    model TEXT DEFAULT '',
+                    provider TEXT DEFAULT '',
+                    status INTEGER DEFAULT 200,
+                    prompt_tokens INTEGER DEFAULT 0,
+                    completion_tokens INTEGER DEFAULT 0,
+                    cost_usd REAL DEFAULT 0.0,
+                    latency_ms REAL DEFAULT 0.0,
+                    blocked INTEGER DEFAULT 0,
+                    block_reason TEXT DEFAULT '',
+                    metadata TEXT DEFAULT '{}'
+                )
+            """)
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts)")
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_model ON audit_log(model)")
             await conn.commit()
 
     async def add_endpoint(self, endpoint: LLMEndpoint):
@@ -117,3 +157,139 @@ class SQLiteStore:
                 (latency_ms, success_rate, endpoint_id)
             )
             await conn.commit()
+
+    # ── Spend Log (R2.3) ──
+
+    async def log_spend(self, ts: int, date: str, key_prefix: str, model: str,
+                        provider: str, prompt_tokens: int, completion_tokens: int,
+                        cost_usd: float, latency_ms: float, status: int):
+        """Record a spend entry for analytics."""
+        async with aiosqlite.connect(self.db_path) as conn:
+            await conn.execute(
+                "INSERT INTO spend_log (ts, date, key_prefix, model, provider, prompt_tokens, completion_tokens, cost_usd, latency_ms, status) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (ts, date, key_prefix, model, provider, prompt_tokens, completion_tokens, cost_usd, latency_ms, status),
+            )
+            await conn.commit()
+
+    async def query_spend(self, date_from: str = "", date_to: str = "",
+                          group_by: str = "model", limit: int = 50) -> list:
+        """Aggregate spend data grouped by model, provider, key, or date."""
+        valid_groups = {"model", "provider", "key_prefix", "date"}
+        col = group_by if group_by in valid_groups else "model"
+
+        where = "WHERE 1=1"
+        params = []
+        if date_from:
+            where += " AND date >= ?"
+            params.append(date_from)
+        if date_to:
+            where += " AND date <= ?"
+            params.append(date_to)
+
+        sql = f"""
+            SELECT {col},
+                   COUNT(*) as requests,
+                   SUM(prompt_tokens) as total_prompt_tokens,
+                   SUM(completion_tokens) as total_completion_tokens,
+                   SUM(cost_usd) as total_cost_usd,
+                   AVG(latency_ms) as avg_latency_ms
+            FROM spend_log {where}
+            GROUP BY {col}
+            ORDER BY total_cost_usd DESC
+            LIMIT ?
+        """
+        params.append(limit)
+
+        async with aiosqlite.connect(self.db_path) as conn:
+            conn.row_factory = aiosqlite.Row
+            async with conn.execute(sql, params) as cursor:
+                rows = await cursor.fetchall()
+                return [dict(r) for r in rows]
+
+    async def get_spend_total(self, date_from: str = "", date_to: str = "") -> dict:
+        """Get total spend summary."""
+        where = "WHERE 1=1"
+        params = []
+        if date_from:
+            where += " AND date >= ?"
+            params.append(date_from)
+        if date_to:
+            where += " AND date <= ?"
+            params.append(date_to)
+
+        async with aiosqlite.connect(self.db_path) as conn:
+            async with conn.execute(
+                f"SELECT COUNT(*) as requests, SUM(cost_usd) as total_usd, SUM(prompt_tokens) as total_prompt, SUM(completion_tokens) as total_completion FROM spend_log {where}",
+                params,
+            ) as cursor:
+                row = await cursor.fetchone()
+                return {
+                    "requests": row[0] or 0,
+                    "total_usd": round(row[1] or 0.0, 6),
+                    "total_prompt_tokens": row[2] or 0,
+                    "total_completion_tokens": row[3] or 0,
+                }
+
+    # ── Audit Log (R2.10) ──
+
+    async def log_audit(self, ts: int, req_id: str, session_id: str, key_prefix: str,
+                        model: str, provider: str, status: int,
+                        prompt_tokens: int, completion_tokens: int,
+                        cost_usd: float, latency_ms: float,
+                        blocked: bool = False, block_reason: str = "",
+                        metadata: str = "{}"):
+        """Record an audit entry for compliance."""
+        async with aiosqlite.connect(self.db_path) as conn:
+            await conn.execute(
+                "INSERT INTO audit_log (ts, req_id, session_id, key_prefix, model, provider, status, prompt_tokens, completion_tokens, cost_usd, latency_ms, blocked, block_reason, metadata) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (ts, req_id, session_id, key_prefix, model, provider, status,
+                 prompt_tokens, completion_tokens, cost_usd, latency_ms,
+                 1 if blocked else 0, block_reason, metadata),
+            )
+            await conn.commit()
+
+    async def query_audit(self, date_from: str = "", date_to: str = "",
+                          model: str = "", key_prefix: str = "",
+                          status: int = 0, blocked: int = -1,
+                          limit: int = 100, offset: int = 0) -> dict:
+        """Query audit log with filters."""
+        where = "WHERE 1=1"
+        params = []
+        if date_from:
+            from datetime import datetime
+            ts_from = int(datetime.fromisoformat(date_from.replace("Z", "+00:00")).timestamp())
+            where += " AND ts >= ?"
+            params.append(ts_from)
+        if date_to:
+            from datetime import datetime
+            ts_to = int(datetime.fromisoformat(date_to.replace("Z", "+00:00")).timestamp())
+            where += " AND ts <= ?"
+            params.append(ts_to)
+        if model:
+            where += " AND model = ?"
+            params.append(model)
+        if key_prefix:
+            where += " AND key_prefix = ?"
+            params.append(key_prefix)
+        if status:
+            where += " AND status = ?"
+            params.append(status)
+        if blocked >= 0:
+            where += " AND blocked = ?"
+            params.append(blocked)
+
+        async with aiosqlite.connect(self.db_path) as conn:
+            # Count total
+            async with conn.execute(f"SELECT COUNT(*) FROM audit_log {where}", params) as c:
+                total = (await c.fetchone())[0]
+
+            # Fetch page
+            conn.row_factory = aiosqlite.Row
+            async with conn.execute(
+                f"SELECT * FROM audit_log {where} ORDER BY ts DESC LIMIT ? OFFSET ?",
+                params + [limit, offset],
+            ) as cursor:
+                rows = await cursor.fetchall()
+                items = [dict(r) for r in rows]
+
+        return {"total": total, "items": items}

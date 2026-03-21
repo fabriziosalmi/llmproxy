@@ -106,18 +106,19 @@ def create_router(agent) -> APIRouter:
             # char-count heuristic (~4 chars/token) for streaming responses
             # where the body is not available as a single blob.
             from core.pricing import estimate_cost, estimate_cost_pre_flight
+            from core.tokenizer import count_messages_tokens
             cost_usd = 0.0
             model_name = body.get("model", "")
             try:
                 if hasattr(response, "body"):
                     import json as _json
                     usage = _json.loads(response.body).get("usage", {})
-                    in_tok = usage.get("prompt_tokens", len(_json.dumps(body.get("messages", []))) // 4)
+                    in_tok = usage.get("prompt_tokens") or count_messages_tokens(body.get("messages", []), model_name)
                     out_tok = usage.get("completion_tokens", 0)
                     cost_usd = estimate_cost(model_name, in_tok, out_tok)
                 else:
-                    # Streaming: estimate from prompt only
-                    est_tokens = len(str(body.get("messages", []))) // 4
+                    # Streaming: estimate from prompt using tiktoken
+                    est_tokens = count_messages_tokens(body.get("messages", []), model_name)
                     cost_usd = estimate_cost_pre_flight(model_name, est_tokens)
             except Exception:
                 pass
@@ -130,6 +131,42 @@ def create_router(agent) -> APIRouter:
             asyncio.create_task(agent.store.set_state("budget:daily_total", agent.total_cost_today))
             if agent.total_cost_today >= soft_limit:
                 asyncio.create_task(agent.webhooks.dispatch(EventType.BUDGET_THRESHOLD, {"consumed": agent.total_cost_today, "limit": daily_limit}))
+
+            # Log spend + audit (async, non-blocking)
+            import datetime as _dt
+            _now = int(time.time())
+            _date = _dt.date.today().isoformat()
+            _key = (token[:8] + "...") if 'token' in locals() and token else ""
+            _provider = ""
+            _in_tok = 0
+            _out_tok = 0
+            try:
+                if hasattr(response, "body"):
+                    _usage = __import__("json").loads(response.body).get("usage", {})
+                    _in_tok = _usage.get("prompt_tokens", 0)
+                    _out_tok = _usage.get("completion_tokens", 0)
+                _provider = body.get("_provider", "")
+            except Exception:
+                pass
+            _status = response.status_code if response and hasattr(response, "status_code") else 200
+
+            async def _persist_logs():
+                try:
+                    await agent.store.log_spend(
+                        ts=_now, date=_date, key_prefix=_key, model=model_name,
+                        provider=_provider, prompt_tokens=_in_tok, completion_tokens=_out_tok,
+                        cost_usd=cost_usd, latency_ms=round(duration * 1000, 1), status=_status,
+                    )
+                    await agent.store.log_audit(
+                        ts=_now, req_id=body.get("_req_id", ""), session_id=session_id[:16],
+                        key_prefix=_key, model=model_name, provider=_provider,
+                        status=_status, prompt_tokens=_in_tok, completion_tokens=_out_tok,
+                        cost_usd=cost_usd, latency_ms=round(duration * 1000, 1),
+                    )
+                except Exception:
+                    pass
+            asyncio.create_task(_persist_logs())
+
             return response
         except Exception as e:
             duration = time.time() - start_time

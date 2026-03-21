@@ -51,7 +51,17 @@ class AnthropicAdapter(BaseModelAdapter):
         }
 
         if system_text:
-            anthropic_body["system"] = system_text
+            # Prompt caching: for large system prompts (>2048 chars ≈ 512 tokens),
+            # inject cache_control to enable Anthropic's 5-min ephemeral cache.
+            # This saves up to 90% on input tokens for agentic/RAG use cases.
+            if isinstance(system_text, str) and len(system_text) > 2048:
+                anthropic_body["system"] = [{
+                    "type": "text",
+                    "text": system_text,
+                    "cache_control": {"type": "ephemeral"},
+                }]
+            else:
+                anthropic_body["system"] = system_text
 
         # Optional params — only include if set
         if body.get("temperature") is not None:

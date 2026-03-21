@@ -118,7 +118,7 @@ class DatasetExporter:
             except Exception as e:
                 logger.error(f"Export: Compression failed for {filepath}: {e}")
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, _do_compress)
 
     async def record(self, entry: Dict[str, Any]):

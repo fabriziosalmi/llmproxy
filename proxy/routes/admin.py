@@ -236,4 +236,48 @@ def create_router(agent) -> APIRouter:
         await agent.webhooks.dispatch(EventType.PANIC_ACTIVATED, {"action": "kill_switch", "timestamp": time.strftime("%H:%M:%S")})
         return {"status": "HALTED"}
 
+    # ── Spend Analytics (R2.3) ──
+
+    @router.get("/api/v1/analytics/spend")
+    async def analytics_spend(request: Request):
+        """Spend breakdown by model, provider, key, or date."""
+        params = request.query_params
+        result = await agent.store.query_spend(
+            date_from=params.get("from", ""),
+            date_to=params.get("to", ""),
+            group_by=params.get("group_by", "model"),
+            limit=int(params.get("limit", "50")),
+        )
+        total = await agent.store.get_spend_total(
+            date_from=params.get("from", ""),
+            date_to=params.get("to", ""),
+        )
+        return {"total": total, "breakdown": result}
+
+    @router.get("/api/v1/analytics/spend/topmodels")
+    async def analytics_top_models(request: Request):
+        """Top models by spend."""
+        result = await agent.store.query_spend(
+            group_by="model",
+            limit=int(request.query_params.get("limit", "10")),
+        )
+        return result
+
+    # ── Audit Log (R2.10) ──
+
+    @router.get("/api/v1/audit")
+    async def query_audit_log(request: Request):
+        """Query persistent audit log with filters."""
+        params = request.query_params
+        return await agent.store.query_audit(
+            date_from=params.get("from", ""),
+            date_to=params.get("to", ""),
+            model=params.get("model", ""),
+            key_prefix=params.get("key_prefix", ""),
+            status=int(params.get("status", "0")),
+            blocked=int(params.get("blocked", "-1")),
+            limit=int(params.get("limit", "100")),
+            offset=int(params.get("offset", "0")),
+        )
+
     return router

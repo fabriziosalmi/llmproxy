@@ -62,20 +62,10 @@ class ContextWindowGuard(BasePlugin):
         self._total_blocked: int = 0
 
     def _estimate_tokens(self, body: Dict[str, Any]) -> int:
-        """Estimate total prompt tokens (4 chars ≈ 1 token)."""
-        messages = body.get("messages", [])
-        total_chars = 0
-        for msg in messages:
-            content = msg.get("content", "")
-            if isinstance(content, str):
-                total_chars += len(content)
-            elif isinstance(content, list):
-                for part in content:
-                    if isinstance(part, dict):
-                        total_chars += len(part.get("text", ""))
-            # Add overhead for role/structure (~4 tokens per message)
-            total_chars += 16
-        return max(total_chars // 4, 1)
+        """Estimate total prompt tokens using tiktoken or heuristic."""
+        from core.tokenizer import count_messages_tokens
+        model = body.get("model", "")
+        return count_messages_tokens(body.get("messages", []), model)
 
     def _get_context_window(self, model: str) -> int:
         """Get context window size for a model."""

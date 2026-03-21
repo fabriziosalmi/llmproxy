@@ -45,5 +45,25 @@ class SQLiteRepository(BaseRepository):
     async def get_state(self, key: str, default: Any = None) -> Any:
         return await self.sql.get_state(key, default)
 
+    # ── Spend Log (R2.3) ──
+
+    async def log_spend(self, **kwargs):
+        await self.sql.log_spend(**kwargs)
+
+    async def query_spend(self, **kwargs):
+        return await self.sql.query_spend(**kwargs)
+
+    async def get_spend_total(self, **kwargs):
+        return await self.sql.get_spend_total(**kwargs)
+
+    # ── Audit Log (R2.10) ──
+
+    async def log_audit(self, **kwargs):
+        await self.sql.log_audit(**kwargs)
+
+    async def query_audit(self, **kwargs):
+        return await self.sql.query_audit(**kwargs)
+
+
 # Legacy alias for backward compatibility during refactor
 EndpointStore = SQLiteRepository

@@ -453,8 +453,8 @@ async def test_ctx_guard_exceeds_limit():
     """Prompt exceeding context window should be blocked with 413."""
     plugin = ContextWindowGuard(config={"safety_margin": 0.9})
     # gpt-4 has 8192 context window, 90% = 7372 tokens
-    # 7400 tokens ≈ 29600 chars
-    huge_prompt = "x" * 30000
+    # Use real words to get accurate token count (each word ≈ 1-2 tokens)
+    huge_prompt = "The quick brown fox jumps over the lazy dog. " * 2000  # ~10000 tokens
     ctx = _make_ctx([{"role": "user", "content": huge_prompt}], model="gpt-4")
     result = await plugin.execute(ctx)
 
@@ -517,8 +517,8 @@ async def test_ctx_guard_stats():
     # One ok
     ctx1 = _make_ctx([{"role": "user", "content": "short"}], model="gpt-4")
     await plugin.execute(ctx1)
-    # One blocked
-    ctx2 = _make_ctx([{"role": "user", "content": "x" * 40000}], model="gpt-4")
+    # One blocked — use real words for accurate tiktoken counting
+    ctx2 = _make_ctx([{"role": "user", "content": "The quick brown fox jumps over the lazy dog. " * 2000}], model="gpt-4")
     await plugin.execute(ctx2)
 
     stats = plugin.get_stats()
@@ -531,8 +531,8 @@ async def test_ctx_guard_custom_margin():
     """Custom safety margin should change the effective limit."""
     # With safety_margin=0.5, effective limit = 4096 for gpt-4
     plugin = ContextWindowGuard(config={"safety_margin": 0.5})
-    # ~5000 tokens = 20000 chars → should be blocked at 50% of 8192
-    ctx = _make_ctx([{"role": "user", "content": "x" * 20000}], model="gpt-4")
+    # ~5000 tokens with real words → blocked at 50% of 8192 = 4096
+    ctx = _make_ctx([{"role": "user", "content": "The quick brown fox jumps over the lazy dog. " * 1200}], model="gpt-4")
     result = await plugin.execute(ctx)
 
     assert result.action == "block"

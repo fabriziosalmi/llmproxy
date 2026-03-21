@@ -53,18 +53,10 @@ class SmartBudgetGuard(BasePlugin):
         self._hydrated = False
 
     def _estimate_tokens(self, body: Dict[str, Any]) -> int:
-        """Estimate input token count from messages (rough: 1 token ≈ 4 chars)."""
-        messages = body.get("messages", [])
-        total_chars = 0
-        for msg in messages:
-            content = msg.get("content", "")
-            if isinstance(content, str):
-                total_chars += len(content)
-            elif isinstance(content, list):
-                for part in content:
-                    if isinstance(part, dict):
-                        total_chars += len(part.get("text", ""))
-        return max(total_chars // 4, 1)
+        """Estimate input token count from messages using tiktoken or heuristic."""
+        from core.tokenizer import count_messages_tokens
+        model = body.get("model", "")
+        return count_messages_tokens(body.get("messages", []), model)
 
     def _estimate_cost(self, model: str, input_tokens: int) -> float:
         """Estimate total cost (input + expected output) using per-model pricing."""
