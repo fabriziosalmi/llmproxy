@@ -208,6 +208,24 @@ def create_router(agent) -> APIRouter:
             "positive_cache": l2_stats,
         }
 
+    @router.post("/api/v1/admin/reload")
+    async def reload_config(request: Request):
+        """Hot-reload config.yaml without restart."""
+        _check_admin_auth(request)
+        try:
+            old_hash = agent._config_hash
+            agent.config = agent._load_config()
+            new_hash = agent._compute_config_hash()
+            agent._config_hash = new_hash
+            # Reinitialize config-dependent subsystems
+            from core.webhooks import WebhookDispatcher
+            agent.webhooks = WebhookDispatcher(agent.config)
+            agent.security = __import__('core.security', fromlist=['SecurityShield']).SecurityShield(agent.config)
+            await agent._add_log("Config reloaded via admin API", level="SYSTEM")
+            return {"status": "reloaded", "changed": old_hash != new_hash}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Config reload failed: {e}")
+
     @router.post("/api/v1/panic")
     async def emergency_panic(request: Request):
         _check_admin_auth(request)

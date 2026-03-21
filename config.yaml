@@ -96,6 +96,26 @@ fallback_chains:
     - provider: anthropic
       model: "claude-sonnet-4-20250514"
 
+# Model aliases — shorthand names that resolve to real model IDs
+model_aliases:
+  "gpt4": "gpt-4o"
+  "gpt4-mini": "gpt-4o-mini"
+  "claude": "claude-sonnet-4-20250514"
+  "claude-haiku": "claude-haiku-4-5-20251001"
+  "gemini": "gemini-2.5-flash"
+  "fast": "gpt-4o-mini"
+  "best": "gpt-4o"
+  "cheap": "gemini-2.0-flash"
+
+# Model groups — pool of models with routing strategy
+model_groups:
+  "auto":
+    strategy: "cheapest"
+    models:
+      - { model: "gpt-4o-mini", provider: "openai", weight: 0.5 }
+      - { model: "gemini-2.5-flash", provider: "google", weight: 0.3 }
+      - { model: "claude-haiku-4-5-20251001", provider: "anthropic", weight: 0.2 }
+
 # LLM Providers — each endpoint maps to an adapter in proxy/adapters/
 endpoints:
   openai:

@@ -82,7 +82,16 @@ def create_router(agent) -> APIRouter:
             # (which would cross-contaminate threat scores across unrelated clients).
             session_id = token if 'token' in locals() else (request.client.host if request.client else "anon")
             body = await request.json()
-            response = await agent.proxy_request(request, body=body, session_id=session_id)
+
+            # Request deduplication via X-Idempotency-Key header
+            idempotency_key = request.headers.get("X-Idempotency-Key")
+            if idempotency_key:
+                dedup_key = f"{session_id}:{idempotency_key}"
+                response = await agent.deduplicator.execute_or_wait(
+                    dedup_key, agent.proxy_request(request, body=body, session_id=session_id),
+                )
+            else:
+                response = await agent.proxy_request(request, body=body, session_id=session_id)
             duration = time.time() - start_time
             MetricsTracker.track_request("POST", "/v1/chat/completions", response.status_code, duration)
             if agent.exporter:

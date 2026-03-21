@@ -66,9 +66,10 @@ def create_app(agent) -> FastAPI:
     from .routes import (
         admin_router, registry_router, identity_router,
         plugins_router, telemetry_router, chat_router,
-        models_router, embeddings_router,
+        models_router, embeddings_router, completions_router,
     )
     app.include_router(chat_router(agent))
+    app.include_router(completions_router(agent))
     app.include_router(embeddings_router(agent))
     app.include_router(models_router(agent))
     app.include_router(admin_router(agent))
@@ -99,6 +100,7 @@ class RotatorAgent(BaseAgent):
         self.config_path = config_path
         self.model_adapter = get_adapter("openai")  # default, overridden per-request
         self.config = self._load_config()
+        self._config_hash = self._compute_config_hash()
 
         # Security subsystems
         self.security = SecurityShield(self.config, assistant=assistant)
@@ -148,6 +150,10 @@ class RotatorAgent(BaseAgent):
             enabled=cache_cfg.get("enabled", True),
         )
 
+        # Request deduplication (idempotency key support)
+        from core.deduplicator import RequestDeduplicator
+        self.deduplicator = RequestDeduplicator(ttl_seconds=300)
+
         # Plugin engine
         self.plugin_manager = PluginManager()
         self.plugin_state = PluginState(
@@ -166,6 +172,28 @@ class RotatorAgent(BaseAgent):
             with open(self.config_path, 'r') as f:
                 return yaml.safe_load(f)
         return {"server": {"auth": {"enabled": False}}}
+
+    def _compute_config_hash(self) -> str:
+        import hashlib
+        if os.path.exists(self.config_path):
+            with open(self.config_path, 'rb') as f:
+                return hashlib.md5(f.read()).hexdigest()
+        return ""
+
+    async def _config_watch_loop(self, interval: int = 30):
+        """Background loop: detect config.yaml changes and hot-reload."""
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                new_hash = self._compute_config_hash()
+                if new_hash and new_hash != self._config_hash:
+                    self.config = self._load_config()
+                    self._config_hash = new_hash
+                    self.webhooks = WebhookDispatcher(self.config)
+                    self.security = SecurityShield(self.config)
+                    self.logger.info("Config hot-reloaded (file change detected)")
+            except Exception as e:
+                self.logger.warning(f"Config watch error: {e}")
 
     def _get_api_keys(self) -> list[str]:
         env_var = self.config.get("server", {}).get("auth", {}).get("api_keys_env", "LLM_PROXY_API_KEYS")
@@ -242,6 +270,14 @@ class RotatorAgent(BaseAgent):
         eviction_interval = self.config.get("caching", {}).get("eviction_interval", 3600)
         if self.cache_backend._enabled:
             asyncio.create_task(self._cache_eviction_loop(eviction_interval))
+
+        # Background config watcher (hot-reload)
+        asyncio.create_task(self._config_watch_loop(30))
+
+        # Active health probing (background endpoint liveness checks)
+        from core.health_prober import EndpointHealthProber
+        self._health_prober = EndpointHealthProber(self.config, self.circuit_manager, self._get_session)
+        asyncio.create_task(self._health_prober.start())
 
         self.logger.info("Security gateway ready.")
 
@@ -377,6 +413,7 @@ class RotatorAgent(BaseAgent):
                                                _body=translated_body, _headers=translated_headers,
                                                _cb=cb, _eid=endpoint_id):
                         nonlocal first_chunk_seen, circuit_success_reported
+                        stream_usage = {}
                         try:
                             async for chunk in _adapter.stream(_url, _body, _headers, session):
                                 if not first_chunk_seen:
@@ -386,11 +423,32 @@ class RotatorAgent(BaseAgent):
                                     ttft = time.perf_counter() - ttft_start
                                     MetricsTracker.track_ttft(_eid, ttft)
                                     ctx.metadata["ttft_ms"] = round(ttft * 1000, 2)
+                                # Extract usage from final SSE chunks (OpenAI/Anthropic/Google)
+                                if b'"usage"' in chunk or b'"usageMetadata"' in chunk:
+                                    try:
+                                        for line in chunk.decode("utf-8", errors="replace").split("\n"):
+                                            if line.startswith("data: ") and line[6:].strip() != "[DONE]":
+                                                d = json.loads(line[6:])
+                                                u = d.get("usage") or d.get("usageMetadata", {})
+                                                if u:
+                                                    stream_usage = u
+                                    except Exception:
+                                        pass
                                 yield chunk
                         except Exception as e:
                             if not circuit_success_reported:
                                 _cb.report_failure()
                             raise e
+                        # Post-stream: update budget with real token cost
+                        if stream_usage:
+                            from core.pricing import estimate_cost
+                            p_tok = stream_usage.get("prompt_tokens") or stream_usage.get("promptTokenCount", 0)
+                            c_tok = stream_usage.get("completion_tokens") or stream_usage.get("candidatesTokenCount", 0)
+                            model_name = ctx.body.get("model", "")
+                            real_cost = estimate_cost(model_name, p_tok, c_tok)
+                            self.total_cost_today += real_cost
+                            ctx.metadata["_stream_usage"] = {"prompt_tokens": p_tok, "completion_tokens": c_tok}
+                            ctx.metadata["_stream_cost_usd"] = round(real_cost, 6)
 
                     ctx.response = StreamingResponse(stream_generator(), media_type="text/event-stream")
                     return ctx.response
@@ -476,6 +534,14 @@ class RotatorAgent(BaseAgent):
                             headers={"X-LLMProxy-Cache": "HIT"},
                         )
                 return ctx.response
+
+            # Model alias/group resolution (before routing)
+            from core.model_resolver import resolve_model
+            original_model = ctx.body.get("model", "")
+            resolved_model = resolve_model(self.config, original_model)
+            if resolved_model != original_model:
+                ctx.body["model"] = resolved_model
+                ctx.metadata["_model_alias"] = original_model
 
             # RING 3: ROUTING
             r3_start = time.perf_counter()
