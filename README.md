@@ -1,6 +1,6 @@
 # LLMProxy — LLM Security Gateway
 
-Security-first proxy for Large Language Models with a ring-based plugin pipeline, WASM-sandboxed plugin execution, NLP-powered PII detection, and a real-time Security Operations Center UI.
+Security-first proxy for Large Language Models with multi-provider support (15 providers), cross-provider fallback, per-model pricing, smart latency-based routing, ring-based plugin pipeline, WASM-sandboxed plugin execution, NLP-powered PII detection, and a real-time Security Operations Center UI.
 
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)
@@ -26,13 +26,18 @@ Security-first proxy for Large Language Models with a ring-based plugin pipeline
 
 ## Architecture Overview
 
-LLMProxy is a security-focused LLM proxy with a layered defense pipeline:
+LLMProxy is a security-focused LLM gateway with a layered defense pipeline:
 
-1. **ASGI Firewall** — Byte-level L7 request filtering
-2. **SecurityShield** — Injection scoring, PII masking (Presidio NLP + regex fallback), trajectory detection
-3. **Ring Plugin Pipeline** — 5-ring plugin engine (INGRESS → PRE_FLIGHT → ROUTING → POST_FLIGHT → BACKGROUND)
-4. **WASM Sandbox** — Extism-based sandboxed plugin execution for untrusted code
-5. **Rate Limiter** — Per-IP/per-key token bucket ASGI middleware
+1. **Multi-Provider Translation** — 15 providers (OpenAI, Anthropic, Google, Azure, Ollama, Groq, Together, Mistral, DeepSeek, xAI, Perplexity, Fireworks, OpenRouter, SambaNova) with automatic request/response format translation
+2. **Cross-Provider Fallback** — Configurable fallback chains (e.g. GPT-4o fails → Claude Sonnet → Gemini Pro)
+3. **Smart Routing** — EMA-weighted endpoint selection based on latency and success rate (replaces blind round-robin)
+4. **ASGI Firewall** — Byte-level L7 request filtering
+5. **SecurityShield** — Injection scoring, PII masking (Presidio NLP + regex), trajectory detection
+6. **Ring Plugin Pipeline** — 5-ring plugin engine (INGRESS → PRE_FLIGHT → ROUTING → POST_FLIGHT → BACKGROUND)
+7. **WASM Sandbox** — Extism-based sandboxed plugin execution for untrusted code
+8. **Per-Model Pricing** — Accurate cost tracking for 30+ models with verified provider pricing
+9. **Active Health Probing** — Background endpoint liveness checks with circuit breaker integration
+10. **Request Deduplication** — X-Idempotency-Key support to prevent duplicate upstream calls
 
 ### Route Architecture
 The `RotatorAgent` orchestrates 9 route modules under `proxy/routes/`, each a factory function (`create_router(agent) -> APIRouter`):
@@ -345,10 +350,12 @@ Security Operations Center UI — vanilla JS SPA (`ui/`) with Tailwind CSS, Char
 |------|-------------|
 | **Threats** | KPI cards (requests/blocked/PII masked/pass rate), Chart.js threat timeline, SSE security event feed |
 | **Guards** | Master proxy toggle, per-guard enable/disable (Injection, Language, Link Sanitizer) with descriptions |
-| **Plugins** | Ring-based security plugin pipeline grid, hot-swap reload |
+| **Plugins** | Ring-based security plugin pipeline grid, hot-swap reload, per-plugin version/stats |
+| **Models** | Aggregated model registry from all providers, KPI cards (active models, providers, embedding models) |
+| **Analytics** | Spend breakdown by model and provider, KPI cards (requests, total spend, prompt/completion tokens) |
 | **Endpoints** | LLM endpoint registry table with toggle/delete actions |
-| **Audit Log** | xterm.js terminal with WebGL rendering, JSON syntax highlighting, security event filtering |
-| **Settings** | Identity & Access, rate limiting config, system info |
+| **Live Logs** | xterm.js terminal with WebGL rendering, JSON syntax highlighting, real-time SSE log stream |
+| **Settings** | Identity & Access, RBAC role matrix, webhooks, data export |
 
 ### Interactions
 - **Command Palette**: `Cmd+K` with fuzzy search across all views.
@@ -377,6 +384,36 @@ identity:
       client_id_env: "OIDC_MICROSOFT_CLIENT_ID"
   role_mappings: {}
   session_ttl: 3600
+
+endpoints:
+  openai:
+    provider: "openai"
+    base_url: "https://api.openai.com/v1"
+    api_key_env: "OPENAI_API_KEY"
+    models: ["gpt-4o", "gpt-4o-mini", "text-embedding-3-small"]
+  anthropic:
+    provider: "anthropic"
+    base_url: "https://api.anthropic.com/v1"
+    api_key_env: "ANTHROPIC_API_KEY"
+    models: ["claude-sonnet-4-20250514", "claude-haiku-4-5-20251001"]
+  # ... google, azure, ollama, groq, together, mistral, deepseek, xai, perplexity, openrouter, fireworks, sambanova
+
+fallback_chains:
+  "gpt-4o":
+    - { provider: anthropic, model: "claude-sonnet-4-20250514" }
+    - { provider: google, model: "gemini-2.5-pro" }
+
+model_aliases:
+  "gpt4": "gpt-4o"
+  "claude": "claude-sonnet-4-20250514"
+  "fast": "gpt-4o-mini"
+
+model_groups:
+  "auto":
+    strategy: "cheapest"  # cheapest, fastest, weighted, random
+    models:
+      - { model: "gpt-4o-mini", provider: "openai" }
+      - { model: "gemini-2.5-flash", provider: "google" }
 
 rotation:
   strategy: "round_robin"  # weighted, least_used, random
@@ -454,9 +491,18 @@ python -m pytest tests/test_e2e.py -v
 | `test_identity.py` | 7 | OIDC verify, proxy JWT gen/verify/expire, role mapping |
 | `test_rbac.py` | 7 | Admin/user/viewer permissions, multi-role, quota, user CRUD |
 | `test_webhooks.py` | 6 | Slack/Teams/Discord/Generic format, severity mapping |
+| `test_adapters.py` | 74 | Multi-provider translation: OpenAI, Anthropic, Google, Azure, Ollama, OpenAI-compat, model auto-detection |
+| `test_fallback.py` | 17 | Cross-provider fallback, circuit breaker integration, connection errors, status code triggers |
+| `test_embeddings.py` | 22 | Embedding provider detection, translation (OpenAI/Google/Azure/Ollama), Anthropic rejection |
+| `test_multimodal.py` | 22 | Image URL translation: Anthropic (base64/URL), Google (inlineData/fileData), MIME detection |
+| `test_smart_routing.py` | 13 | EMA stats tracking, score computation, strategy selection |
+| `test_pricing.py` | 19 | Per-model pricing, prefix matching, config overrides, cost estimation |
+| `test_tokenizer.py` | 11 | Tiktoken counting, multimodal tokens, model hints, fallback |
+| `test_round1_round2.py` | 32 | O-series models, model aliases/groups, request dedup, streaming completions translation |
+| `test_metrics.py` | 5 | Prometheus counters, budget gauges |
 
 ### E2E Test Architecture
-The E2E suite (`test_e2e.py`) uses a `LightweightAgent` that mounts the **real route modules** (`proxy/routes/`) against an `InMemoryRepository`, without importing the full `RotatorAgent` or its 20+ transitive dependencies (OpenTelemetry, Sentry, ChromaDB, etc.). This gives true HTTP-level coverage with sub-second execution and zero external services.
+The E2E suite (`test_e2e.py`) uses a `LightweightAgent` that mounts the **real route modules** (`proxy/routes/`) against an `InMemoryRepository`, without importing the full `RotatorAgent` or its 20+ transitive dependencies. This gives true HTTP-level coverage with sub-second execution and zero external services.
 
 ---
 
@@ -517,6 +563,9 @@ The `docker-compose.yml` includes:
 
 ### Optional Dependencies
 ```bash
+# Accurate token counting (recommended — 200-300% more accurate than char heuristic)
+pip install tiktoken
+
 # NLP-powered PII detection (Presidio)
 pip install presidio-analyzer presidio-anonymizer
 

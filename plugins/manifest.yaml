@@ -3,18 +3,21 @@ plugins:
     hook: "ingress"
     priority: 10
     enabled: true
+    version: "1.0.0"
     entrypoint: "default.ingress_auth:verify"
 
   - name: "PII Neural Masker"
     hook: "pre_flight"
     priority: 20
     enabled: true
+    version: "1.0.0"
     entrypoint: "default.pii_masker:mask"
 
   - name: "WAF-Aware Cache Lookup"
     hook: "pre_flight"
     priority: 30
     enabled: true
+    version: "1.0.0"
     entrypoint: "default.cache_check:lookup"
     timeout_ms: 10
 
@@ -22,36 +25,42 @@ plugins:
     hook: "routing"
     priority: 50
     enabled: true
+    version: "1.2.0"
     entrypoint: "default.neural_router:select_endpoint"
 
   - name: "Post-Flight Sanitizer"
     hook: "post_flight"
     priority: 80
     enabled: true
+    version: "1.0.0"
     entrypoint: "default.shield_sanitizer:cleanse"
 
   - name: "Unified Telemetry & FinOps"
     hook: "background"
     priority: 100
     enabled: true
+    version: "1.1.0"
     entrypoint: "default.telemetry_ops:record"
 
   - name: "Aider Context Minifier"
     hook: "pre_flight"
     priority: 15
     enabled: true
+    version: "1.0.0"
     entrypoint: "default.context_minifier:compress"
 
   - name: "Speculative Kill-Switch"
     hook: "post_flight"
     priority: 70
     enabled: true
+    version: "1.0.0"
     entrypoint: "default.kill_switch:analyze"
 
   - name: "JSON Auto-Healer"
     hook: "post_flight"
     priority: 90
     enabled: true
+    version: "1.0.0"
     entrypoint: "default.json_healer:repair"
 
   # ── Marketplace Plugins (BasePlugin class mode) ──
