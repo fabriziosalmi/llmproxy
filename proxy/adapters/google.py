@@ -113,13 +113,7 @@ class GoogleAdapter(BaseModelAdapter):
 
             # Handle multimodal content
             if isinstance(content, list):
-                parts = []
-                for part in content:
-                    if part.get("type") == "text":
-                        parts.append({"text": part["text"]})
-                    elif part.get("type") == "image_url":
-                        parts.append({"text": f"[image: {part['image_url']['url']}]"})
-                parts = parts or [{"text": ""}]
+                parts = _translate_multimodal_parts(content)
             else:
                 parts = [{"text": content}]
 
@@ -305,6 +299,56 @@ class GoogleAdapter(BaseModelAdapter):
                 translated = self.translate_stream_chunk(chunk)
                 if translated:
                     yield translated
+
+
+def _translate_multimodal_parts(content_list: list) -> list:
+    """Translate OpenAI multimodal content array to Gemini parts.
+
+    Handles:
+      - text parts → {"text": "..."}
+      - image_url with data: URI → {"inlineData": {"mimeType": ..., "data": ...}}
+      - image_url with http(s): URL → {"fileData": {"mimeType": "image/...", "fileUri": ...}}
+    """
+    parts = []
+    for part in content_list:
+        part_type = part.get("type", "")
+        if part_type == "text":
+            parts.append({"text": part.get("text", "")})
+        elif part_type == "image_url":
+            url = part.get("image_url", {}).get("url", "")
+            if url.startswith("data:"):
+                # Base64 inline: data:image/png;base64,iVBOR...
+                try:
+                    header, data = url[5:].split(";base64,", 1)
+                    parts.append({
+                        "inlineData": {
+                            "mimeType": header,
+                            "data": data,
+                        },
+                    })
+                except ValueError:
+                    parts.append({"text": f"[image: {url[:100]}]"})
+            else:
+                # URL reference — Gemini uses fileData for URLs
+                # Infer MIME type from extension
+                mime = "image/jpeg"
+                lower_url = url.lower()
+                if ".png" in lower_url:
+                    mime = "image/png"
+                elif ".gif" in lower_url:
+                    mime = "image/gif"
+                elif ".webp" in lower_url:
+                    mime = "image/webp"
+                parts.append({
+                    "fileData": {
+                        "mimeType": mime,
+                        "fileUri": url,
+                    },
+                })
+        else:
+            parts.append({"text": str(part)})
+
+    return parts or [{"text": ""}]
 
 
 def _translate_tools(openai_tools: list) -> list:

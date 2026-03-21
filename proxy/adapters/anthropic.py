@@ -31,7 +31,7 @@ class AnthropicAdapter(BaseModelAdapter):
     ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
         url = f"{base_url.rstrip('/')}/messages"
 
-        # Extract system message from messages array
+        # Extract system message and translate multimodal content
         messages = list(body.get("messages", []))
         system_text = None
         filtered = []
@@ -40,7 +40,9 @@ class AnthropicAdapter(BaseModelAdapter):
                 # Anthropic takes system as a top-level param
                 system_text = msg.get("content", "")
             else:
-                filtered.append(msg)
+                translated_msg = {"role": msg.get("role", "user")}
+                translated_msg["content"] = _translate_content(msg.get("content", ""))
+                filtered.append(translated_msg)
 
         anthropic_body = {
             "model": body.get("model", "claude-sonnet-4-20250514"),
@@ -229,6 +231,57 @@ class AnthropicAdapter(BaseModelAdapter):
                 translated = self.translate_stream_chunk(chunk)
                 if translated:
                     yield translated
+
+
+def _translate_content(content):
+    """Translate OpenAI message content to Anthropic content blocks.
+
+    Handles:
+      - String content → string passthrough (Anthropic accepts both)
+      - List content with text/image_url parts → Anthropic content blocks
+        - image_url with data: URI → base64 source
+        - image_url with http(s): URL → url source
+    """
+    if isinstance(content, str):
+        return content
+
+    if not isinstance(content, list):
+        return str(content)
+
+    blocks = []
+    for part in content:
+        part_type = part.get("type", "")
+        if part_type == "text":
+            blocks.append({"type": "text", "text": part.get("text", "")})
+        elif part_type == "image_url":
+            url = part.get("image_url", {}).get("url", "")
+            if url.startswith("data:"):
+                # Base64 inline: data:image/png;base64,iVBOR...
+                try:
+                    header, data = url[5:].split(";base64,", 1)
+                    media_type = header  # e.g. "image/png"
+                    blocks.append({
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": media_type,
+                            "data": data,
+                        },
+                    })
+                except ValueError:
+                    # Malformed data URI — pass as text fallback
+                    blocks.append({"type": "text", "text": f"[image: {url[:100]}]"})
+            else:
+                # URL reference
+                blocks.append({
+                    "type": "image",
+                    "source": {"type": "url", "url": url},
+                })
+        else:
+            # Unknown part type — pass as text
+            blocks.append({"type": "text", "text": str(part)})
+
+    return blocks or [{"type": "text", "text": ""}]
 
 
 def _translate_tools(openai_tools: list) -> list:

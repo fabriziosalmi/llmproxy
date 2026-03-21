@@ -495,6 +495,15 @@ class RotatorAgent(BaseAgent):
 
             ctx.metadata["duration"] = time.time() - start_req
 
+            # Update endpoint performance stats for smart routing
+            from plugins.default.neural_router import update_endpoint_stats
+            routed_endpoint_id = getattr(
+                ctx.metadata.get("target_endpoint"), 'id',
+                ctx.metadata.get("_provider", "unknown"),
+            )
+            success = ctx.response and hasattr(ctx.response, "status_code") and ctx.response.status_code < 400
+            update_endpoint_stats(routed_endpoint_id, ctx.metadata["duration"] * 1000, bool(success))
+
             # RING 4: POST-FLIGHT (response sanitization, watermarking)
             r4_start = time.perf_counter()
             await self.plugin_manager.execute_ring(PluginHook.POST_FLIGHT, ctx)
