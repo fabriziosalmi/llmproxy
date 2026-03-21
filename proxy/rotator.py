@@ -66,9 +66,10 @@ def create_app(agent) -> FastAPI:
     from .routes import (
         admin_router, registry_router, identity_router,
         plugins_router, telemetry_router, chat_router,
-        models_router,
+        models_router, embeddings_router,
     )
     app.include_router(chat_router(agent))
+    app.include_router(embeddings_router(agent))
     app.include_router(models_router(agent))
     app.include_router(admin_router(agent))
     app.include_router(registry_router(agent))

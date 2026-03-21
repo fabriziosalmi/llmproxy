@@ -102,7 +102,7 @@ endpoints:
     provider: "openai"
     base_url: "https://api.openai.com/v1"
     api_key_env: "OPENAI_API_KEY"
-    models: ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "o3-mini"]
+    models: ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "o3-mini", "text-embedding-3-small", "text-embedding-3-large"]
     rate_limit: { rpm: 3500, tpm: 60000 }
 
   anthropic:
@@ -116,7 +116,7 @@ endpoints:
     provider: "google"
     base_url: "https://generativelanguage.googleapis.com/v1beta"
     api_key_env: "GOOGLE_API_KEY"
-    models: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash"]
+    models: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash", "text-embedding-004"]
 
   azure:
     provider: "azure"
@@ -128,7 +128,7 @@ endpoints:
     provider: "ollama"
     base_url: "http://localhost:11434"
     auth_type: "none"
-    models: ["llama3.3", "qwen3", "phi-4", "gemma3"]
+    models: ["llama3.3", "qwen3", "phi-4", "gemma3", "nomic-embed-text", "mxbai-embed-large"]
 
   groq:
     provider: "groq"

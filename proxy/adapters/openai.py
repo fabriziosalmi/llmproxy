@@ -30,6 +30,12 @@ class OpenAIAdapter(BaseModelAdapter):
         # Already in OpenAI format
         return response_data
 
+    def translate_embedding_request(
+        self, base_url: str, body: Dict[str, Any], headers: Dict[str, str],
+    ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
+        url = f"{base_url.rstrip('/')}/embeddings"
+        return url, body, headers
+
     async def request(
         self,
         url: str,

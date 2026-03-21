@@ -63,6 +63,15 @@ MODEL_PRICING: Dict[str, Dict[str, float]] = {
     "qwen3":                      {"input": 0.0,   "output": 0.0},
     "phi-4":                      {"input": 0.0,   "output": 0.0},
     "gemma3":                     {"input": 0.0,   "output": 0.0},
+
+    # ── Embedding models ──
+    "text-embedding-3-small":     {"input": 0.02,  "output": 0.0},
+    "text-embedding-3-large":     {"input": 0.13,  "output": 0.0},
+    "text-embedding-ada-002":     {"input": 0.10,  "output": 0.0},
+    "text-embedding-004":         {"input": 0.00,  "output": 0.0},  # Google free tier
+    "mistral-embed":              {"input": 0.10,  "output": 0.0},
+    "nomic-embed-text":           {"input": 0.0,   "output": 0.0},  # local
+    "mxbai-embed-large":          {"input": 0.0,   "output": 0.0},  # local
 }
 
 # Default fallback for unknown models

@@ -9,6 +9,7 @@ from .plugins import create_router as plugins_router
 from .telemetry import create_router as telemetry_router
 from .chat import create_router as chat_router
 from .models import create_router as models_router
+from .embeddings import create_router as embeddings_router
 
 __all__ = [
     "admin_router",
@@ -18,4 +19,5 @@ __all__ = [
     "telemetry_router",
     "chat_router",
     "models_router",
+    "embeddings_router",
 ]

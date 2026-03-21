@@ -23,6 +23,7 @@ class AnthropicAdapter(BaseModelAdapter):
     """Adapter for Anthropic Messages API."""
 
     provider_name = "anthropic"
+    supports_embeddings = False  # Anthropic has no embeddings API
     API_VERSION = "2023-06-01"
 
     def translate_request(

@@ -95,9 +95,10 @@ class LightweightAgent:
         from proxy.routes import (
             admin_router, registry_router, identity_router,
             plugins_router, telemetry_router, chat_router,
-            models_router,
+            models_router, embeddings_router,
         )
         self.app.include_router(chat_router(self))
+        self.app.include_router(embeddings_router(self))
         self.app.include_router(models_router(self))
         self.app.include_router(admin_router(self))
         self.app.include_router(registry_router(self))

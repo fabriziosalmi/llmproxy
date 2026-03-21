@@ -19,6 +19,21 @@ class AzureAdapter(BaseModelAdapter):
     provider_name = "azure"
     DEFAULT_API_VERSION = "2024-10-21"
 
+    def translate_embedding_request(
+        self, base_url: str, body: Dict[str, Any], headers: Dict[str, str],
+    ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
+        base = base_url.rstrip("/")
+        if "/embeddings" not in base:
+            url = f"{base}/embeddings?api-version={self.DEFAULT_API_VERSION}"
+        else:
+            url = base
+        azure_headers = dict(headers)
+        auth = azure_headers.pop("Authorization", "")
+        if auth.startswith("Bearer "):
+            azure_headers["api-key"] = auth[7:]
+        azure_headers["content-type"] = "application/json"
+        return url, body, azure_headers
+
     def translate_request(
         self, base_url: str, body: Dict[str, Any], headers: Dict[str, str],
     ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:

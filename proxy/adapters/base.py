@@ -32,6 +32,26 @@ class BaseModelAdapter(ABC):
         """
         return response_data
 
+    supports_embeddings: bool = True
+
+    def translate_embedding_request(
+        self, base_url: str, body: Dict[str, Any], headers: Dict[str, str],
+    ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
+        """Transform OpenAI-format embedding request to provider-native format.
+
+        Returns (full_url, transformed_body, transformed_headers).
+        Default: OpenAI /v1/embeddings format.
+        """
+        url = f"{base_url.rstrip('/')}/embeddings"
+        return url, body, headers
+
+    def translate_embedding_response(self, response_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Transform provider embedding response back to OpenAI format.
+
+        Default: identity transform.
+        """
+        return response_data
+
     def translate_stream_chunk(self, chunk: bytes) -> bytes:
         """Transform a single SSE chunk from provider format to OpenAI SSE format.
 

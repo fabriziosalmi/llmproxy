@@ -25,6 +25,56 @@ class GoogleAdapter(BaseModelAdapter):
 
     provider_name = "google"
 
+    def translate_embedding_request(
+        self, base_url: str, body: Dict[str, Any], headers: Dict[str, str],
+    ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
+        """OpenAI /v1/embeddings → Gemini embedContent."""
+        model = body.get("model", "text-embedding-004")
+        url = f"{base_url.rstrip('/')}/models/{model}:embedContent"
+
+        # Move API key from auth header to query param
+        google_headers = dict(headers)
+        auth = google_headers.pop("Authorization", "")
+        if auth.startswith("Bearer "):
+            url += f"?key={auth[7:]}"
+        google_headers["content-type"] = "application/json"
+
+        # Translate input — OpenAI sends string or list of strings
+        text_input = body.get("input", "")
+        if isinstance(text_input, list):
+            # Gemini embedContent handles one text at a time; use first for single call
+            # For batch, caller should loop (or use batchEmbedContents)
+            text_input = text_input[0] if text_input else ""
+
+        gemini_body = {
+            "model": f"models/{model}",
+            "content": {"parts": [{"text": text_input}]},
+        }
+
+        return url, gemini_body, google_headers
+
+    def translate_embedding_response(self, response_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Gemini embedContent response → OpenAI format."""
+        if "error" in response_data:
+            return response_data
+
+        embedding = response_data.get("embedding", {})
+        values = embedding.get("values", [])
+
+        return {
+            "object": "list",
+            "data": [{
+                "object": "embedding",
+                "index": 0,
+                "embedding": values,
+            }],
+            "model": response_data.get("model", ""),
+            "usage": {
+                "prompt_tokens": 0,  # Gemini doesn't report token counts for embeddings
+                "total_tokens": 0,
+            },
+        }
+
     def translate_request(
         self, base_url: str, body: Dict[str, Any], headers: Dict[str, str],
     ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
