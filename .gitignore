@@ -59,4 +59,5 @@ FEATURES.md
 # Runtime artifacts
 .proxy.pid
 distillation_data.jsonl
-test_ui/ROADMAP.md
+test_ui/
+ROADMAP.md
