@@ -469,8 +469,18 @@
                         <p id="kpi-embedding-models" class="text-2xl font-black text-violet-400 font-mono">--</p>
                     </div>
                 </div>
-                <div id="models-table" class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6">
-                    <p class="text-[9px] text-slate-600 font-mono">Loading models...</p>
+                <div id="models-table" class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 relative overflow-hidden">
+                    <div class="space-y-3">
+                        <div class="flex gap-4 border-b border-white/[0.06] pb-3">
+                            <div class="skeleton-bar h-3 w-24"></div>
+                            <div class="skeleton-bar h-3 w-16"></div>
+                        </div>
+                        <div class="flex gap-4"><div class="skeleton-bar h-3 w-40"></div><div class="skeleton-bar h-3 w-14"></div></div>
+                        <div class="flex gap-4"><div class="skeleton-bar h-3 w-52"></div><div class="skeleton-bar h-3 w-16"></div></div>
+                        <div class="flex gap-4"><div class="skeleton-bar h-3 w-36"></div><div class="skeleton-bar h-3 w-14"></div></div>
+                        <div class="flex gap-4"><div class="skeleton-bar h-3 w-44"></div><div class="skeleton-bar h-3 w-12"></div></div>
+                        <div class="flex gap-4"><div class="skeleton-bar h-3 w-32"></div><div class="skeleton-bar h-3 w-16"></div></div>
+                    </div>
                 </div>
             </div>
 
@@ -495,13 +505,21 @@
                     </div>
                 </div>
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    <div id="analytics-by-model" class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6">
+                    <div id="analytics-by-model" class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 relative overflow-hidden">
                         <h3 class="text-xs font-bold text-white mb-4">Spend by Model</h3>
-                        <p class="text-[9px] text-slate-600 font-mono">Loading...</p>
+                        <div class="space-y-3">
+                            <div class="flex justify-between"><div class="skeleton-bar h-3 w-32"></div><div class="skeleton-bar h-3 w-16"></div></div>
+                            <div class="flex justify-between"><div class="skeleton-bar h-3 w-40"></div><div class="skeleton-bar h-3 w-12"></div></div>
+                            <div class="flex justify-between"><div class="skeleton-bar h-3 w-28"></div><div class="skeleton-bar h-3 w-14"></div></div>
+                        </div>
                     </div>
-                    <div id="analytics-by-provider" class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6">
+                    <div id="analytics-by-provider" class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 relative overflow-hidden">
                         <h3 class="text-xs font-bold text-white mb-4">Spend by Provider</h3>
-                        <p class="text-[9px] text-slate-600 font-mono">Loading...</p>
+                        <div class="space-y-3">
+                            <div class="flex justify-between"><div class="skeleton-bar h-3 w-24"></div><div class="skeleton-bar h-3 w-16"></div></div>
+                            <div class="flex justify-between"><div class="skeleton-bar h-3 w-20"></div><div class="skeleton-bar h-3 w-12"></div></div>
+                            <div class="flex justify-between"><div class="skeleton-bar h-3 w-28"></div><div class="skeleton-bar h-3 w-14"></div></div>
+                        </div>
                     </div>
                 </div>
             </div>
