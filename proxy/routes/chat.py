@@ -127,8 +127,8 @@ def create_router(agent) -> APIRouter:
             daily_limit = budget_cfg.get("daily_limit", 50.0)
             soft_limit = budget_cfg.get("soft_limit", 40.0)
             MetricsTracker.set_budget(agent.total_cost_today, daily_limit)
-            # Persist daily budget to SQLite (async, non-blocking)
-            asyncio.create_task(agent.store.set_state("budget:daily_total", agent.total_cost_today))
+            # Persist daily budget to SQLite (batched, graceful-shutdown safe)
+            agent.enqueue_write("budget:daily_total", agent.total_cost_today)
             if agent.total_cost_today >= soft_limit:
                 asyncio.create_task(agent.webhooks.dispatch(EventType.BUDGET_THRESHOLD, {"consumed": agent.total_cost_today, "limit": daily_limit}))
 

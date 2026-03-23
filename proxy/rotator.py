@@ -52,6 +52,25 @@ def create_app(agent) -> FastAPI:
     app = FastAPI(title="LLMPROXY")
     TraceManager.instrument_app(app)
 
+    # Security response headers (CSP, anti-clickjack, MIME sniff protection)
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        if request.url.path.startswith("/ui"):
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                "font-src 'self' https://fonts.gstatic.com; "
+                "img-src 'self' data:; "
+                "connect-src 'self'; "
+                "frame-ancestors 'none'"
+            )
+        return response
+
     cors_origins = agent.config.get("server", {}).get("cors_origins", ["*"])
     app.add_middleware(
         CORSMiddleware,
@@ -84,6 +103,7 @@ def create_app(agent) -> FastAPI:
 
     @app.on_event("shutdown")
     async def _shutdown():
+        await agent._drain_pending_writes()
         await agent.cache_backend.close()
 
     return app
@@ -99,7 +119,7 @@ class RotatorAgent(BaseAgent):
         self.config_path = config_path
         self.model_adapter = get_adapter("openai")  # default, overridden per-request
         self.config = self._load_config()
-        self._config_hash = self._compute_config_hash()
+        self._config_hash = self._compute_config_hash_sync()
 
         # Security subsystems
         self.security = SecurityShield(self.config, assistant=assistant)
@@ -120,6 +140,7 @@ class RotatorAgent(BaseAgent):
         # Budget tracking (hydrated from SQLite in setup())
         self.total_cost_today = 0.0
         self._budget_date = None
+        self._pending_writes: asyncio.Queue = asyncio.Queue(maxsize=500)
 
         # Gateway state
         self.proxy_enabled = True
@@ -171,7 +192,8 @@ class RotatorAgent(BaseAgent):
                 return yaml.safe_load(f)
         return {"server": {"auth": {"enabled": False}}}
 
-    def _compute_config_hash(self) -> str:
+    def _compute_config_hash_sync(self) -> str:
+        """Blocking hash — must run via to_thread() from async context."""
         import hashlib
         if os.path.exists(self.config_path):
             with open(self.config_path, 'rb') as f:
@@ -183,7 +205,7 @@ class RotatorAgent(BaseAgent):
         while True:
             await asyncio.sleep(interval)
             try:
-                new_hash = self._compute_config_hash()
+                new_hash = await asyncio.to_thread(self._compute_config_hash_sync)
                 if new_hash and new_hash != self._config_hash:
                     self.config = self._load_config()
                     self._config_hash = new_hash
@@ -192,6 +214,33 @@ class RotatorAgent(BaseAgent):
                     self.logger.info("Config hot-reloaded (file change detected)")
             except Exception as e:
                 self.logger.warning(f"Config watch error: {e}")
+
+    async def _write_flush_loop(self, interval: float = 1.0):
+        """Background loop: flush pending state writes to SQLite periodically."""
+        while True:
+            await asyncio.sleep(interval)
+            await self._drain_pending_writes()
+
+    async def _drain_pending_writes(self):
+        """Drain all pending writes from the queue to the store."""
+        writes: list[tuple[str, Any]] = []
+        while not self._pending_writes.empty():
+            try:
+                writes.append(self._pending_writes.get_nowait())
+            except asyncio.QueueEmpty:
+                break
+        for key, value in writes:
+            try:
+                await self.store.set_state(key, value)
+            except Exception as e:
+                self.logger.warning(f"Failed to flush state write {key}: {e}")
+
+    def enqueue_write(self, key: str, value: Any):
+        """Non-blocking enqueue of a state write. Drops silently if queue is full."""
+        try:
+            self._pending_writes.put_nowait((key, value))
+        except asyncio.QueueFull:
+            self.logger.warning("Pending writes queue full, dropping write")
 
     def _get_api_keys(self) -> list[str]:
         env_var = self.config.get("server", {}).get("auth", {}).get("api_keys_env", "LLM_PROXY_API_KEYS")
@@ -271,6 +320,9 @@ class RotatorAgent(BaseAgent):
 
         # Background config watcher (hot-reload)
         asyncio.create_task(self._config_watch_loop(30))
+
+        # Background write flusher (budget persistence, graceful shutdown safe)
+        asyncio.create_task(self._write_flush_loop(1.0))
 
         # Active health probing (background endpoint liveness checks)
         from core.health_prober import EndpointHealthProber

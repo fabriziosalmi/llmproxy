@@ -77,6 +77,7 @@ class LightweightAgent:
         # Queues
         self.log_queue = asyncio.Queue(maxsize=100)
         self.telemetry_queue = asyncio.Queue(maxsize=100)
+        self._pending_writes: asyncio.Queue = asyncio.Queue(maxsize=500)
 
         # proxy_request mock (for chat tests)
         self.proxy_request = AsyncMock(
@@ -110,6 +111,10 @@ class LightweightAgent:
         self.app.include_router(identity_router(self))
         self.app.include_router(plugins_router(self))
         self.app.include_router(telemetry_router(self))
+
+    def enqueue_write(self, key: str, value):
+        """Test-mode: direct write via create_task (no batching needed in tests)."""
+        asyncio.create_task(self.store.set_state(key, value))
 
     def _get_api_keys(self):
         return []

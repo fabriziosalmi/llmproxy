@@ -76,3 +76,5 @@ exports/
 .pytest_cache/
 .ruff_cache/
 demo/
+
+# temp files

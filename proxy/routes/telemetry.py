@@ -1,8 +1,25 @@
 """Telemetry routes: health, metrics, logs SSE stream."""
+import re
 import json
 
 from fastapi import APIRouter
 from fastapi.responses import Response, StreamingResponse
+
+# Strip ANSI escape sequences and control chars to prevent terminal injection via xterm.js
+_ANSI_RE = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?\x07')
+_CTRL_RE = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
+
+def _sanitize_log(log: dict) -> dict:
+    """Strip terminal escape sequences from log string values."""
+    sanitized = {}
+    for k, v in log.items():
+        if isinstance(v, str):
+            v = _ANSI_RE.sub('', v)
+            v = _CTRL_RE.sub('', v)
+        elif isinstance(v, dict):
+            v = _sanitize_log(v)
+        sanitized[k] = v
+    return sanitized
 
 def create_router(agent) -> APIRouter:
     router = APIRouter()
@@ -27,7 +44,7 @@ def create_router(agent) -> APIRouter:
         async def log_generator():
             while True:
                 log = await agent.log_queue.get()
-                yield f"data: {json.dumps(log)}\n\n"
+                yield f"data: {json.dumps(_sanitize_log(log) if isinstance(log, dict) else log)}\n\n"
         return StreamingResponse(log_generator(), media_type="text/event-stream")
 
     return router
