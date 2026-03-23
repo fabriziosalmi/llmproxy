@@ -4,7 +4,7 @@
 
 ## Pre-Flight Ring
 
-### Max Tokens Enforcer
+### Max Tokens Enforcer {#max-tokens-enforcer}
 
 Clamps `max_tokens` to a hard ceiling. Clients cannot exceed it. Optional default injection when the field is absent.
 
@@ -14,7 +14,7 @@ Clamps `max_tokens` to a hard ceiling. Clients cannot exceed it. Optional defaul
 | `inject_default` | false | Inject ceiling when client omits max_tokens |
 | `log_clamp` | true | Log warning on clamp events |
 
-### System Prompt Enforcer
+### System Prompt Enforcer {#system-prompt-enforcer}
 
 Injects, prepends, appends, or replaces the system prompt in every request. Clients cannot bypass it.
 
@@ -34,7 +34,7 @@ Per-session and per-team budget enforcement with SQLite persistence and cost est
 | `team_budget_usd` | 100.0 | Max spend per team/API key |
 | `warn_threshold` | 0.8 | Warning at this % of budget |
 
-### Agentic Loop Breaker
+### Agentic Loop Breaker {#agentic-loop-breaker}
 
 Detects AI agents stuck in retry loops via SHA-256 prompt hashing with sliding window.
 
@@ -44,7 +44,7 @@ Detects AI agents stuck in retry loops via SHA-256 prompt hashing with sliding w
 | `window_seconds` | 120 | Sliding window duration |
 | `hash_messages` | 3 | Trailing messages to fingerprint |
 
-### Per-Model Rate Limiter
+### Per-Model Rate Limiter {#per-model-rate-limiter}
 
 Granular rate limiting per (tenant, model) pair with sliding window counters.
 
@@ -65,7 +65,7 @@ Blocks requests containing forbidden topics via keyword, whole-word, or regex ma
 | `case_sensitive` | false | Case-sensitive matching |
 | `scan_roles` | `["user"]` | Message roles to scan |
 
-### Prompt Complexity Scorer
+### Prompt Complexity Scorer {#prompt-complexity-scorer}
 
 Scores prompt complexity (0-1) on 4 signals for intelligent model routing.
 
@@ -76,7 +76,7 @@ Scores prompt complexity (0-1) on 4 signals for intelligent model routing.
 | `code_weight` | 0.25 | Weight for code block density |
 | `instruction_weight` | 0.25 | Weight for instruction density |
 
-### Model Downgrader
+### Model Downgrader {#model-downgrader}
 
 Automatically downgrades expensive models for simple prompts (10-20x cost savings). Works with the Complexity Scorer.
 
@@ -84,7 +84,7 @@ Automatically downgrades expensive models for simple prompts (10-20x cost saving
 |--------|---------|-------------|
 | `complexity_threshold` | 0.3 | Downgrade when complexity is below this score |
 
-### Context Window Guard
+### Context Window Guard {#context-window-guard}
 
 Blocks requests exceeding the target model's context window (returns clear 413 instead of cryptic upstream 400).
 
@@ -94,7 +94,7 @@ Blocks requests exceeding the target model's context window (returns clear 413 i
 
 ## Routing Ring
 
-### A/B Model Router
+### A/B Model Router {#ab-model-router}
 
 Routes a configurable percentage of traffic to a variant model for live A/B experimentation. Supports sticky sessions.
 
@@ -108,7 +108,7 @@ Routes a configurable percentage of traffic to a variant model for live A/B expe
 
 ## Post-Flight Ring
 
-### Response Quality Gate
+### Response Quality Gate {#response-quality-gate}
 
 Detects empty, refused ("I cannot..."), apology-only, and truncated LLM responses.
 
@@ -118,7 +118,7 @@ Detects empty, refused ("I cannot..."), apology-only, and truncated LLM response
 | `refusal_threshold` | 2 | Refusal patterns to flag |
 | `check_truncation` | true | Detect mid-sentence cutoff |
 
-### Latency SLA Guard
+### Latency SLA Guard {#latency-sla-guard}
 
 Measures TTFT and total latency with rolling percentiles, flags SLA violations.
 
@@ -129,7 +129,7 @@ Measures TTFT and total latency with rolling percentiles, flags SLA violations.
 | `hard_limit_ms` | 10000 | Hard SLA breach threshold |
 | `window_size` | 500 | Rolling window size |
 
-### Canary Detector
+### Canary Detector {#canary-detector}
 
 Detects system prompt leakage in responses (data exfiltration protection). Optional auto-block mode.
 
@@ -141,7 +141,7 @@ Detects system prompt leakage in responses (data exfiltration protection). Optio
 
 ## Background Ring
 
-### Token Counter
+### Token Counter {#token-counter}
 
 Extracts real token counts from API responses and corrects budget heuristic estimates with actual data.
 

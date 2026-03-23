@@ -2,6 +2,7 @@ import { defineConfig } from 'vitepress'
 
 export default defineConfig({
   base: '/llmproxy/',
+  srcExclude: ['**/node_modules/**', '**/venv/**', '**/dist/**'],
   title: 'LLMProxy',
   description: 'LLM Security Gateway — Security-first proxy for Large Language Models',
   head: [
@@ -96,7 +97,9 @@ export default defineConfig({
             { text: 'Threats', link: '/soc/threats' },
             { text: 'Guards', link: '/soc/guards' },
             { text: 'Plugins Panel', link: '/soc/plugins' },
+            { text: 'Models', link: '/soc/models' },
             { text: 'Analytics', link: '/soc/analytics' },
+            { text: 'Endpoints', link: '/soc/endpoints' },
             { text: 'Live Logs', link: '/soc/logs' },
           ]
         }

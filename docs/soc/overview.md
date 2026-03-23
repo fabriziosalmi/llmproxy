@@ -11,9 +11,9 @@ The Security Operations Center is a real-time monitoring dashboard built with va
 | [Threats](/soc/threats) | KPI cards, threat timeline chart, real-time security event feed |
 | [Guards](/soc/guards) | Master proxy toggle, per-guard enable/disable controls |
 | [Plugins](/soc/plugins) | Ring-based plugin pipeline grid, hot-swap, per-plugin stats |
-| Models | Aggregated model registry, provider counts |
+| [Models](/soc/models) | Aggregated model registry, provider counts |
 | [Analytics](/soc/analytics) | Spend breakdown by model and provider |
-| Endpoints | LLM endpoint registry with toggle/delete actions |
+| [Endpoints](/soc/endpoints) | LLM endpoint registry with toggle/delete actions |
 | [Live Logs](/soc/logs) | xterm.js terminal with real-time SSE log stream |
 | Settings | Identity, RBAC, webhooks, data export configuration |
 

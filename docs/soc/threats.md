@@ -1,6 +1,6 @@
 # Threats View
 
-The default view showing real-time security monitoring.
+The Threats view provides real-time security monitoring with KPI cards, threat timeline charts, and a live security event feed. This is the default view when opening the SOC dashboard.
 
 ![Threats View](/screenshots/soc-threats.png)
 

@@ -2,10 +2,10 @@
 
 :root {
   /* Rose accent to match SOC UI */
-  --vp-c-brand-1: #f43f5e;
-  --vp-c-brand-2: #e11d48;
-  --vp-c-brand-3: #be123c;
-  --vp-c-brand-soft: rgba(244, 63, 94, 0.14);
+  --vp-c-brand-1: #e11d48;
+  --vp-c-brand-2: #be123c;
+  --vp-c-brand-3: #9f1239;
+  --vp-c-brand-soft: rgba(225, 29, 72, 0.12);
 
   /* Typography */
   --vp-font-family-base: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
@@ -67,7 +67,7 @@
   padding: 12px 28px !important;
 }
 
-/* ── Feature Cards — Glassmorphism ── */
+/* ── Feature Cards — Clean ── */
 
 .VPFeatures .VPFeature {
   border-radius: 16px !important;
@@ -85,7 +85,7 @@
 .VPFeatures .VPFeature:hover {
   transform: translateY(-2px) !important;
   border-color: var(--vp-c-brand-1) !important;
-  box-shadow: 0 8px 30px rgba(244, 63, 94, 0.1) !important;
+  box-shadow: 0 8px 30px rgba(244, 63, 94, 0.08) !important;
 }
 
 .VPFeature .title {
@@ -133,6 +133,19 @@
   border: 1px solid rgba(255, 255, 255, 0.06) !important;
 }
 
+/* ── Screenshots — polished frames ── */
+
+.vp-doc img {
+  border-radius: 12px !important;
+  border: 1px solid var(--vp-c-divider) !important;
+  margin: 24px 0 !important;
+}
+
+.dark .vp-doc img {
+  border-color: rgba(255, 255, 255, 0.06) !important;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4) !important;
+}
+
 /* ── Sidebar Polish ── */
 
 .VPSidebar .group .title {
@@ -147,29 +160,6 @@
 .dark .VPNav .VPNavBar {
   backdrop-filter: blur(12px) !important;
   background: rgba(15, 15, 15, 0.8) !important;
-}
-
-/* ── Screenshot Placeholders ── */
-
-.screenshot-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 320px;
-  border-radius: 16px;
-  border: 2px dashed var(--vp-c-divider);
-  background: var(--vp-c-bg-soft);
-  color: var(--vp-c-text-3);
-  font-size: 0.9rem;
-  font-weight: 500;
-  margin: 24px 0;
-  padding: 24px;
-  text-align: center;
-}
-
-.dark .screenshot-placeholder {
-  background: rgba(255, 255, 255, 0.02);
-  border-color: rgba(255, 255, 255, 0.06);
 }
 
 /* ── Custom containers ── */

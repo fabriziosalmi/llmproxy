@@ -29,27 +29,26 @@ features:
 ---
 
 <style>
-.vp-doc .architecture-section {
+.architecture-section {
   margin-top: 80px;
-  padding: 48px 0;
+  padding: 48px 24px;
   text-align: center;
 }
-.vp-doc .architecture-section h2 {
-  border: none !important;
-  margin-top: 0 !important;
-  padding-top: 0 !important;
-  font-size: 2rem !important;
+.architecture-section .section-title {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--vp-c-text-1);
+  margin: 0 0 40px 0;
 }
-.vp-doc .stats-grid {
+.stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: 24px;
-  margin-top: 40px;
   max-width: 800px;
-  margin-left: auto;
-  margin-right: auto;
+  margin: 0 auto;
 }
-.vp-doc .stat-card {
+.stat-card {
   padding: 24px;
   border-radius: 16px;
   border: 1px solid var(--vp-c-divider);
@@ -59,41 +58,39 @@ features:
   background: rgba(255,255,255,0.03);
   border-color: rgba(255,255,255,0.06);
 }
-.vp-doc .stat-card .number {
+.stat-card .number {
   font-size: 2.5rem;
   font-weight: 800;
-  background: linear-gradient(135deg, #f43f5e, #8b5cf6);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--vp-c-brand-1);
 }
-.vp-doc .stat-card .label {
+.stat-card .label {
   font-size: 0.85rem;
   color: var(--vp-c-text-2);
   margin-top: 4px;
 }
+@media (max-width: 640px) {
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
 </style>
 
 <div class="architecture-section">
-
-## Built for Security at Scale
-
-<div class="stats-grid">
-  <div class="stat-card">
-    <div class="number">15</div>
-    <div class="label">LLM Providers</div>
+  <div class="section-title">Built for Security at Scale</div>
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="number">15</div>
+      <div class="label">LLM Providers</div>
+    </div>
+    <div class="stat-card">
+      <div class="number">5</div>
+      <div class="label">Security Rings</div>
+    </div>
+    <div class="stat-card">
+      <div class="number">14</div>
+      <div class="label">Marketplace Plugins</div>
+    </div>
+    <div class="stat-card">
+      <div class="number">449</div>
+      <div class="label">Tests Passing</div>
+    </div>
   </div>
-  <div class="stat-card">
-    <div class="number">5</div>
-    <div class="label">Security Rings</div>
-  </div>
-  <div class="stat-card">
-    <div class="number">14</div>
-    <div class="label">Marketplace Plugins</div>
-  </div>
-  <div class="stat-card">
-    <div class="number">449</div>
-    <div class="label">Tests Passing</div>
-  </div>
-</div>
-
 </div>
