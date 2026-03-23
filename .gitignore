@@ -61,3 +61,5 @@ FEATURES.md
 distillation_data.jsonl
 test_ui/
 ROADMAP.md
+cache.db-shm
+cache.db-wal
