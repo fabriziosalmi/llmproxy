@@ -7,12 +7,23 @@ from typing import Dict, List, Any, Optional
 
 logger = logging.getLogger(__name__)
 
-# cachetools opt-in: TTL-based eviction for pii_vault (prevents unbounded growth)
-try:
-    from cachetools import TTLCache as _TTLCache  # type: ignore[import-untyped]
-    _CACHETOOLS_AVAILABLE = True
-except ImportError:
-    _CACHETOOLS_AVAILABLE = False
+
+def _luhn_check(number: str) -> bool:
+    """Validate a credit card number using the Luhn algorithm."""
+    digits = [int(d) for d in number if d.isdigit()]
+    if len(digits) < 13 or len(digits) > 19:
+        return False
+    checksum = 0
+    for i, d in enumerate(reversed(digits)):
+        if i % 2 == 1:
+            d *= 2
+            if d > 9:
+                d -= 9
+        checksum += d
+    return checksum % 10 == 0
+
+# cachetools: TTL-based eviction for pii_vault (REQUIRED -- prevents OOM from unbounded growth)
+from cachetools import TTLCache as _TTLCache  # type: ignore[import-untyped]
 
 # Presidio opt-in: NLP-based PII detection when available, regex fallback otherwise
 try:
@@ -42,10 +53,7 @@ class SecurityShield:
 
         # PII vault: maps token → original value. TTLCache prevents unbounded
         # growth in long-running deployments (tokens expire after 1 hour).
-        if _CACHETOOLS_AVAILABLE:
-            self.pii_vault = _TTLCache(maxsize=10_000, ttl=3600)
-        else:
-            self.pii_vault = {}
+        self.pii_vault: _TTLCache = _TTLCache(maxsize=10_000, ttl=3600)
 
         # Session memory: {session_id: {"scores": [(score, ts), ...], "last_seen": ts}}
         # Plain dict — eviction handled in check_session_trajectory via timestamps.
@@ -151,6 +159,9 @@ class SecurityShield:
         for pattern, label in self._REGEX_PII_PATTERNS:
             for match in re.finditer(pattern, masked):
                 original = match.group()
+                # Luhn validation for credit card matches (reduces false positives)
+                if label == "CREDIT_CARD" and not _luhn_check(original):
+                    continue
                 token = f"[PII_{label}_{uuid.uuid4().hex[:8]}]"
                 self.pii_vault[token] = original
                 masked = masked.replace(original, token, 1)
@@ -371,7 +382,7 @@ class SecurityShield:
         # 5. Bidirectional De-masking
         sanitized = self.demask_pii(sanitized)
 
-        # 6. Cryptographic Watermarking (Olimpo)
+        # 6. Steganographic Marker (lightweight, not cryptographic — trivially removable)
         sanitized = self.apply_watermark(sanitized)
 
         return sanitized
@@ -454,7 +465,7 @@ class SecurityShield:
             return False
 
     def apply_watermark(self, text: str) -> str:
-        """Injects invisible zero-width spaces to 'sign' the response origin."""
+        """Injects zero-width spaces as a steganographic marker (NOT cryptographic -- trivially removable)."""
         if not text:
             return text
         # Simple pattern: inject U+200B after every 5th word

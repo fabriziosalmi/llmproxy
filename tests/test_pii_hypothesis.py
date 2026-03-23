@@ -38,9 +38,14 @@ ssn_strategy = st.from_regex(
     r"[1-8]\d{2}-\d{2}-\d{4}", fullmatch=True
 )
 
-credit_card_strategy = st.from_regex(
-    r"4\d{3} \d{4} \d{4} \d{4}", fullmatch=True
-)
+# Known Luhn-valid test card numbers (required after Luhn validation was added to PII masking)
+_LUHN_VALID_CARDS = [
+    "4111 1111 1111 1111",  # Visa test
+    "5500 0000 0000 0004",  # Mastercard test
+    "4242 4242 4242 4242",  # Stripe test
+    "5105 1051 0510 5100",  # Mastercard test
+]
+credit_card_strategy = st.sampled_from(_LUHN_VALID_CARDS)
 
 iban_strategy = st.from_regex(
     r"DE\d{2} \d{4} \d{4} \d{4} \d{4} \d{2}", fullmatch=True

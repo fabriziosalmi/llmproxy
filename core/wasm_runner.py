@@ -62,11 +62,19 @@ def _check_extism() -> bool:
     return _extism_available
 
 
+# Dedicated thread pool for WASM execution — prevents starvation of the
+# default executor used by other asyncio.to_thread() calls.
+import concurrent.futures
+_WASM_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=8, thread_name_prefix="wasm"
+)
+
+
 class WasmRunner:
     """
     Executes a single WASM plugin file with JSON I/O protocol.
 
-    Thread-safe: all WASM calls are delegated to asyncio.to_thread(),
+    Thread-safe: all WASM calls are delegated to a dedicated thread pool,
     releasing the GIL and keeping the event loop free.
     """
 
@@ -88,7 +96,8 @@ class WasmRunner:
 
         try:
             # Load in thread to avoid blocking during file I/O + compilation
-            plugin: Any = await asyncio.to_thread(self._sync_load)  # type: ignore[func-returns-value]
+            loop = asyncio.get_event_loop()
+            plugin: Any = await loop.run_in_executor(_WASM_EXECUTOR, self._sync_load)  # type: ignore[func-returns-value]
             self._plugin = plugin
             self._loaded = True
             self.logger.info(f"WASM plugin loaded: {self.wasm_path}")
@@ -128,8 +137,9 @@ class WasmRunner:
 
         try:
             # Execute in thread pool — releases GIL, doesn't block event loop
-            result_bytes = await asyncio.to_thread(
-                self._sync_call, input_json
+            loop = asyncio.get_event_loop()
+            result_bytes = await loop.run_in_executor(
+                _WASM_EXECUTOR, self._sync_call, input_json
             )
             return self._parse_result(result_bytes)
 

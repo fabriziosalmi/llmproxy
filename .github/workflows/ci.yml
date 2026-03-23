@@ -93,7 +93,7 @@ jobs:
           SIZE=$(docker image inspect llmproxy:ci --format='{{.Size}}')
           SIZE_MB=$((SIZE / 1024 / 1024))
           echo "Image size: ${SIZE_MB}MB"
-          if [ "$SIZE_MB" -gt 2000 ]; then
-            echo "WARNING: Docker image exceeds 2GB (${SIZE_MB}MB)"
+          if [ "$SIZE_MB" -gt 500 ]; then
+            echo "WARNING: Docker image exceeds 500MB (${SIZE_MB}MB)"
             exit 1
           fi

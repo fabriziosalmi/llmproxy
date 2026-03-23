@@ -108,6 +108,13 @@ def create_app(agent) -> FastAPI:
     @app.on_event("shutdown")
     async def _shutdown():
         await agent._drain_pending_writes()
+        # Force SQLite WAL checkpoint before container receives SIGKILL
+        try:
+            import aiosqlite
+            async with aiosqlite.connect(agent.store.db_path) as conn:
+                await conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except Exception:
+            pass
         await agent.cache_backend.close()
 
     return app
@@ -265,7 +272,11 @@ class RotatorAgent(BaseAgent):
                 enable_cleanup_closed=True,
             )
             self._session = aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=timeout_s),
+                timeout=aiohttp.ClientTimeout(
+                    total=timeout_s,
+                    sock_connect=10,   # TCP connect timeout (detect half-open)
+                    sock_read=timeout_s,  # Socket read timeout
+                ),
                 connector=connector,
             )
         return self._session

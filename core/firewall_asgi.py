@@ -42,7 +42,17 @@ class ByteLevelFirewallMiddleware:
             nonlocal flagged
             message = await receive()
             if message["type"] == "http.request" and not flagged:
-                chunk = message.get("body", b"").lower()
+                raw = message.get("body", b"")
+                # Normalize: lowercase, strip whitespace collapsing, decode URL encoding
+                chunk = raw.lower()
+                # Collapse repeated whitespace (catches "i g n o r e" evasion)
+                chunk = b" ".join(chunk.split())
+                # Decode %XX URL encoding (catches %69gnore = ignore)
+                try:
+                    from urllib.parse import unquote_to_bytes
+                    chunk = unquote_to_bytes(chunk.decode("utf-8", errors="replace")).lower()
+                except Exception:
+                    pass
                 ByteLevelFirewallMiddleware.total_scanned += 1
                 for sig in self.BANNED_SIGNATURES:
                     if sig in chunk:

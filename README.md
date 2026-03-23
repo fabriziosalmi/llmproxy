@@ -467,7 +467,7 @@ All sensitive values are loaded via **Infisical SDK** with environment variable 
 
 ## Testing
 
-449 tests across 16 modules, all passing. Unit tests for every subsystem + HTTP-level E2E integration tests.
+546 tests across 19 modules, all passing. Unit tests for every subsystem + HTTP integration tests + property-based fuzz tests (Hypothesis).
 
 ```bash
 # Run full suite (449 tests)
@@ -505,8 +505,14 @@ python -m pytest tests/test_e2e.py -v
 | `test_round1_round2.py` | 32 | O-series models, model aliases/groups, request dedup, streaming completions translation |
 | `test_metrics.py` | 5 | Prometheus counters, budget gauges |
 
-### E2E Test Architecture
-The E2E suite (`test_e2e.py`) uses a `LightweightAgent` that mounts the **real route modules** (`proxy/routes/`) against an `InMemoryRepository`, without importing the full `RotatorAgent` or its 20+ transitive dependencies. This gives true HTTP-level coverage with sub-second execution and zero external services.
+### HTTP Integration Test Architecture
+The integration suite (`test_e2e.py`) uses a `LightweightAgent` that mounts the **real route modules** (`proxy/routes/`) against an `InMemoryRepository`, without importing the full `RotatorAgent` or its 20+ transitive dependencies. This gives true HTTP-level coverage with sub-second execution and zero external services. Note: these are HTTP integration tests, not full end-to-end tests — they bypass the real SQLite database and upstream network calls.
+
+### Design Constraints
+LLMProxy is designed as a **single-node gateway**. In-memory state (rate limiter buckets, negative cache, request deduplication, EMA routing scores) is per-process and not shared across replicas. For multi-node deployments, a distributed state backend (Redis/DragonflyDB) is required — the `StateBackend` protocol in `store/base.py` enables drop-in replacement without modifying the proxy logic.
+
+### Token Counting Accuracy
+If `tiktoken` is not installed, token counts are estimated via `len(text) // 4`. This heuristic can produce 2-3x errors for non-English languages, code, and structured data. **Install `tiktoken` for accurate budget tracking** (`pip install tiktoken`).
 
 ---
 
