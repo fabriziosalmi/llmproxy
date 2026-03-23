@@ -562,3 +562,134 @@ plugins:
         default: 0.015
         min: 0.0001
         max: 1.0
+
+  # ── v1.6.0 Marketplace Plugins ──
+
+  - name: "Tool Guard"
+    hook: "pre_flight"
+    priority: 6
+    enabled: false
+    type: "python"
+    entrypoint: "marketplace.tool_guard:ToolGuard"
+    version: "1.0.0"
+    author: "llmproxy"
+    description: "Strips or blocks restricted tools/functions based on user role (agentic safety)"
+    timeout_ms: 2
+    config:
+      restricted_tools: ["execute_bash", "drop_table", "delete_database"]
+      action: "strip"
+      admin_roles: ["admin"]
+    ui_schema:
+      - key: "restricted_tools"
+        type: "array"
+        label: "Restricted Tools"
+        description: "Tool/function names that require admin role"
+        default: ["execute_bash", "drop_table", "delete_database"]
+      - key: "action"
+        type: "select"
+        label: "Action"
+        description: "What to do when restricted tools are found"
+        default: "strip"
+        options: ["strip", "block"]
+      - key: "admin_roles"
+        type: "array"
+        label: "Admin Roles"
+        description: "Roles allowed to use restricted tools"
+        default: ["admin"]
+
+  - name: "Tenant QoS Router"
+    hook: "routing"
+    priority: 44
+    enabled: false
+    type: "python"
+    entrypoint: "marketplace.tenant_qos_router:TenantQoSRouter"
+    version: "1.0.0"
+    author: "llmproxy"
+    description: "Routes requests to models based on tenant tier (free/basic/premium)"
+    timeout_ms: 2
+    config:
+      tier_mapping:
+        free: "gpt-4o-mini"
+        basic: "gpt-4o-mini"
+        premium: ""
+      default_tier: "free"
+      force_downgrade: true
+    ui_schema:
+      - key: "default_tier"
+        type: "select"
+        label: "Default Tier"
+        description: "Tier for users with no explicit mapping"
+        default: "free"
+        options: ["free", "basic", "premium"]
+      - key: "force_downgrade"
+        type: "boolean"
+        label: "Force Downgrade"
+        description: "Always downgrade non-premium users"
+        default: true
+
+  - name: "Schema Enforcer"
+    hook: "post_flight"
+    priority: 78
+    enabled: false
+    type: "python"
+    entrypoint: "marketplace.schema_enforcer:SchemaEnforcer"
+    version: "1.0.0"
+    author: "llmproxy"
+    description: "Validates LLM JSON responses against client-provided JSON schema"
+    timeout_ms: 5
+    config:
+      action: "warn"
+      max_schema_size: 8192
+    ui_schema:
+      - key: "action"
+        type: "select"
+        label: "Action on Failure"
+        description: "What to do when schema validation fails"
+        default: "warn"
+        options: ["warn", "block"]
+      - key: "max_schema_size"
+        type: "number"
+        label: "Max Schema Size"
+        description: "Maximum schema size in bytes (prevent abuse)"
+        default: 8192
+        min: 256
+        max: 65536
+
+  - name: "Shadow Traffic"
+    hook: "background"
+    priority: 96
+    enabled: false
+    type: "python"
+    entrypoint: "marketplace.shadow_traffic:ShadowTraffic"
+    version: "1.0.0"
+    author: "llmproxy"
+    description: "Sends sampled traffic to a shadow model for A/B comparison (dark launch)"
+    timeout_ms: 50
+    config:
+      shadow_model: ""
+      shadow_provider: ""
+      sample_rate: 0.05
+      store_responses: true
+    ui_schema:
+      - key: "shadow_model"
+        type: "text"
+        label: "Shadow Model"
+        description: "Model to send shadow traffic to (e.g. claude-sonnet-4-20250514)"
+        default: ""
+      - key: "shadow_provider"
+        type: "text"
+        label: "Shadow Provider"
+        description: "Provider for shadow model (leave empty for auto-detect)"
+        default: ""
+      - key: "sample_rate"
+        type: "number"
+        label: "Sample Rate"
+        description: "Fraction of requests to shadow (0.0 = none, 1.0 = all)"
+        default: 0.05
+        min: 0.01
+        max: 1.0
+      - key: "store_responses"
+        type: "boolean"
+        label: "Store Responses"
+        description: "Persist shadow comparison data to SQLite"
+        default: true
