@@ -61,5 +61,13 @@ FEATURES.md
 distillation_data.jsonl
 test_ui/
 ROADMAP.md
-cache.db-shm
-cache.db-wal
+
+# SQLite WAL/SHM sidecars (any DB, any path)
+*.db-shm
+*.db-wal
+
+# Export dataset files
+exports/
+
+# pytest cache
+.pytest_cache/

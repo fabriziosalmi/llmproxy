@@ -245,12 +245,16 @@ All marketplace plugins use the `BasePlugin` SDK with `ui_schema` for dynamic SO
 
 | Plugin | Ring | Default | Description |
 |--------|------|---------|-------------|
+| **Max Tokens Enforcer** | Pre-Flight | Disabled | Clamps `max_tokens` to a hard ceiling — clients cannot exceed it. Optional default injection when field is absent. |
+| **System Prompt Enforcer** | Pre-Flight | Disabled | Injects, prepends, appends, or replaces the system prompt in every request. Clients cannot bypass it. |
 | **Smart Budget Guard** | Pre-Flight | Enabled | Per-session/team budget enforcement with SQLite persistence and cost estimation. |
 | **Agentic Loop Breaker** | Pre-Flight | Enabled | Detects AI agents stuck in retry loops via SHA-256 prompt hashing with sliding window. |
 | **Per-Model Rate Limiter** | Pre-Flight | Disabled | Granular rate limiting per (tenant, model) pair with sliding window counters. |
+| **Topic Blocklist** | Pre-Flight | Disabled | Blocks requests containing forbidden topics via keyword, whole-word, or regex matching. block/warn/log actions. |
 | **Prompt Complexity Scorer** | Pre-Flight | Disabled | Scores prompt complexity (0-1) on 4 signals (depth, turns, code, instructions) for intelligent model routing. |
 | **Model Downgrader** | Pre-Flight | Disabled | Automatically downgrades expensive models for simple prompts (10-20x cost savings). Works with Complexity Scorer. |
 | **Context Window Guard** | Pre-Flight | Disabled | Blocks requests exceeding the target model's context window (returns clear 413 instead of cryptic upstream 400). |
+| **A/B Model Router** | Routing | Disabled | Routes a configurable % of traffic to a variant model for live A/B experimentation. Sticky session support. |
 | **Response Quality Gate** | Post-Flight | Disabled | Detects empty, refused ("I cannot..."), apology-only, and truncated LLM responses. |
 | **Latency SLA Guard** | Post-Flight | Disabled | Measures TTFT and total latency with rolling percentiles, flags SLA violations (warning/breach). |
 | **Canary Detector** | Post-Flight | Disabled | Detects system prompt leakage in responses (data exfiltration protection). Optional auto-block mode. |
