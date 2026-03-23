@@ -1,7 +1,8 @@
 # AUDIT -- Improvement Tracker
 
-**Baseline**: 81/100 (Brutal Audit, Gemini Pro)
-**Target**: 90+/100
+**v1 Baseline**: 81/100 (Brutal Audit, Gemini Pro)
+**v2 Score**: 91/100 (after P0+P1+P2)
+**Target**: 95+/100
 
 All items verified against the actual codebase. Grouped by audit category, ordered by impact-to-effort ratio.
 
@@ -78,49 +79,73 @@ All items verified against the actual codebase. Grouped by audit category, order
 
 ---
 
-## P3: Advanced (nice-to-have, evaluate later)
+## P3: Advanced (v2 audit PHASE 3 + v1 carryover)
 
-### Chaos Engineering
+### Quick Wins (can do now)
 
-- [ ] Add Toxiproxy or equivalent chaos tests to CI proving circuit breakers and fallback chains work under network degradation
+- [ ] Add Dependabot config for automated dependency updates (`.github/dependabot.yml`)
+- [ ] Fix remaining 48 mypy errors (mostly `implicit Optional` -> `X | None` syntax)
+- [ ] Add `py.typed` marker file
+- [ ] Audit and remove unused optional dependencies from requirements.txt
+
+### Observability & Tracing
+
+- [ ] Add W3C Trace Context (`traceparent`) header propagation to SOC UI requests for full-stack OpenTelemetry visibility
+- [ ] Add distributed trace correlation IDs in SSE log stream entries
+
+### Chaos Engineering & Testing
+
+- [ ] Add Toxiproxy chaos tests in CI proving circuit breakers and fallback chains work under network partitions
 - [ ] Add integration test: SIGTERM during in-flight streaming request (verify graceful shutdown)
-
-### HTTP Client
-
-- [ ] Evaluate aiohttp -> httpx migration for HTTP/2 multiplexing to upstream providers
-- [ ] Benchmark HTTP/2 vs HTTP/1.1 for OpenAI/Anthropic/Google (quantify actual benefit)
-
-### Testing
-
 - [ ] Add property-based tests (Hypothesis) for PII detection edge cases
 - [ ] Add fuzz testing for the ASGI firewall byte scanner
-- [ ] Add Docker image size tracking in CI (alert on bloat)
+- [ ] Add k6 load test script with baseline latency + throughput assertions
+
+### Scale (when load demands it)
+
+- [ ] Migrate state from SQLite to PostgreSQL/Redis for horizontal scalability
+- [ ] Implement distributed Token Bucket rate limiter via Redis (multi-node deployments)
+- [ ] Configure Litestream/LiteFS for SQLite WAL replication to S3 (if staying with SQLite)
+- [ ] Add Dead-Letter Queue for telemetry/audit export queues (prevent data loss during storage outages)
+
+### Security (research)
+
+- [ ] Evaluate lightweight ONNX model for semantic injection detection (supplement regex firewall)
+- [ ] Profile ASGI firewall under load, evaluate PyO3 Rust extension if it is the bottleneck
+
+### Performance
+
+- [ ] Profile full 5-ring pipeline under load with `py-spy` -- identify actual P99 bottleneck
+- [ ] Benchmark audit log write throughput under concurrent load -- quantify SQLite ceiling
+- [ ] Evaluate aiohttp -> httpx migration for HTTP/2 multiplexing
+- [ ] Add Docker image size tracking in CI
 
 ---
 
-## Conscious Trade-offs (not doing)
+## Conscious Trade-offs (not doing now)
 
 | Item | Reason |
 |------|--------|
 | Rewrite core in Rust (PyO3) | Only justified at >10K req/s sustained. Profile first. |
-| Redis migration now | SQLite + WAL handles current scale. Abstract the interface (P1), migrate when needed. |
+| Redis migration now | SQLite + WAL handles current scale. `StateBackend` protocol ready for swap. |
 | aiohttp -> httpx now | Benchmark HTTP/2 benefit first. Don't migrate for theoretical gains. |
-| Dedicated pub/sub for SSE | Connection limit + eviction (P2) solves the practical problem without adding infra. |
+| ONNX injection model now | Requires training data, latency budget analysis, and model validation. Research phase. |
+| DLQ for telemetry | Bounded queues with FIFO eviction handle current scale. DLQ adds complexity without current need. |
 
 ---
 
 ## Scorecard
 
-| Category | Audit | Target | Items |
-|----------|-------|--------|-------|
-| Concurrency & Event Loop | 3/5 | 5/5 | 3 |
-| SOC UI Hardening | --/5 | 5/5 | 3 |
-| Type Safety | 4/5 | 5/5 | 3 |
-| CI/CD Pipeline | 4/5 | 5/5 | 3 |
-| State Management | 4/5 | 5/5 | 3 |
-| Dependency Management | 4/5 | 5/5 | 3 |
-| Latency Overhead | 3/5 | 4/5 | 3 |
-| Database Bottlenecks | 3/5 | 4/5 | 3 |
-| Routing Intelligence | 3/5 | 4/5 | 2 |
-| Observability | 3/5 | 5/5 | 3 |
-| **Total** | **81** | **90+** | **32 items** |
+| Category | v1 Audit | v2 Audit | Target | Status |
+|----------|----------|----------|--------|--------|
+| Concurrency & Event Loop | 3/5 | 5/5 | 5/5 | Done (P0) |
+| SOC UI Hardening | --/5 | 5/5 | 5/5 | Done (P0) |
+| Type Safety | 4/5 | 4/5 | 5/5 | mypy in CI, 48 errors remaining |
+| CI/CD Pipeline | 4/5 | 5/5 | 5/5 | Done (P1) |
+| State Management | 4/5 | 4/5 | 5/5 | Protocol ready, WAL tuned |
+| Dependency Management | 4/5 | 4/5 | 5/5 | Pinned, pip-audit in CI |
+| Latency Overhead | 3/5 | 4/5 | 5/5 | Pool tuned, profile pending |
+| Database Bottlenecks | 3/5 | 4/5 | 5/5 | WAL tuned, benchmark pending |
+| Routing Intelligence | 3/5 | 5/5 | 5/5 | Done (already optimal) |
+| Observability | 3/5 | 4/5 | 5/5 | SSE limits done, trace IDs pending |
+| **Score** | **81** | **91** | **95+** | **20 P3 items remaining** |
