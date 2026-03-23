@@ -8,7 +8,7 @@ async def test_proxy():
         print("Set LLM_PROXY_TEST_KEY env var before running smoke tests.")
         return
 
-    url = "http://localhost:8080/v1/chat/completions"
+    url = "http://localhost:8090/v1/chat/completions"
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}"
@@ -25,8 +25,9 @@ async def test_proxy():
             async with session.post(url, json=payload, timeout=10) as resp:
                 print(f"Status: {resp.status}")
                 if resp.status == 200:
-                    data = await resp.status
-                    print(f"Response: {data}")
+                    data = await resp.json()
+                    content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                    print(f"Response: {content}")
     except Exception as e:
         print(f"Light Prompt Error: {e}")
 
@@ -45,16 +46,17 @@ async def test_proxy():
     except Exception as e:
         print(f"Security Test Error: {e}")
 
-    # 3. Test Local Assistant (Direct Consultation)
-    print("\n--- Testing Local Assistant (LM Studio) ---")
-    # This requires LM Studio running at http://localhost:1234
+    # 3. Test health endpoint
+    print("\n--- Testing Health Endpoint ---")
+    health_url = "http://localhost:8090/health"
     try:
-        from core.local_assistant import LocalAssistant
-        assistant = LocalAssistant(host="http://localhost:1234", model="smollm-360m-instruct-mlx")
-        response = await assistant.consult("Explain quantum entanglement to a 5 year old.")
-        print(f"Local Assistant Response: {response}")
+        async with aiohttp.ClientSession() as session:
+            async with session.get(health_url, timeout=5) as resp:
+                print(f"Health Status: {resp.status}")
+                data = await resp.json()
+                print(f"Health: {data}")
     except Exception as e:
-        print(f"Local Assistant Test Error: {e}")
+        print(f"Health Test Error: {e}")
 
 if __name__ == "__main__":
     print("Ensure the main system is running (python3 main.py) before testing.")

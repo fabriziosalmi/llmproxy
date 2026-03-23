@@ -71,3 +71,5 @@ exports/
 
 # pytest cache
 .pytest_cache/
+.ruff_cache/
+demo/

@@ -1,1 +1,0 @@
-{"rustc":12211934750107851607,"features":"[]","declared_features":"[]","target":15796751668680979503,"profile":2040997289075261528,"path":16338740993779279760,"deps":[],"local":[{"CheckDepInfo":{"dep_info":"release/.fingerprint/unindent-a14103122a7a28e3/dep-lib-unindent","checksum":false}}],"rustflags":["-C","split-debuginfo=packed"],"config":2069994364910194474,"compile_kind":0}
