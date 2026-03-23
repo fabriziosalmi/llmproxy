@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
+  base: '/llmproxy/',
   title: 'LLMProxy',
   description: 'LLM Security Gateway — Security-first proxy for Large Language Models',
   head: [
