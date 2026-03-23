@@ -4,7 +4,7 @@ Security-first proxy for Large Language Models with multi-provider support (15 p
 
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-449%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-564%20passing-brightgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 [![CI](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml/badge.svg)](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml)
 
@@ -258,7 +258,11 @@ All marketplace plugins use the `BasePlugin` SDK with `ui_schema` for dynamic SO
 | **Response Quality Gate** | Post-Flight | Disabled | Detects empty, refused ("I cannot..."), apology-only, and truncated LLM responses. |
 | **Latency SLA Guard** | Post-Flight | Disabled | Measures TTFT and total latency with rolling percentiles, flags SLA violations (warning/breach). |
 | **Canary Detector** | Post-Flight | Disabled | Detects system prompt leakage in responses (data exfiltration protection). Optional auto-block mode. |
+| **Schema Enforcer** | Post-Flight | Disabled | Validates LLM JSON responses against client-provided JSON schema. Catches missing fields, wrong types. |
+| **Tool Guard** | Pre-Flight | Disabled | Strips or blocks restricted tools/functions from agentic AI requests based on user RBAC roles. |
+| **Tenant QoS Router** | Routing | Disabled | Routes requests to models based on tenant tier (free/basic/premium). SaaS B2B cost control. |
 | **Token Counter** | Background | Disabled | Extracts real token counts from API responses, corrects budget heuristic estimates with actual data. |
+| **Shadow Traffic** | Background | Disabled | Dark launch: sends sampled production traffic to a shadow model for A/B comparison. |
 
 See [`plugins/marketplace/README.md`](plugins/marketplace/README.md) for the full plugin development guide.
 
@@ -467,10 +471,10 @@ All sensitive values are loaded via **Infisical SDK** with environment variable 
 
 ## Testing
 
-546 tests across 19 modules, all passing. Unit tests for every subsystem + HTTP integration tests + property-based fuzz tests (Hypothesis).
+564 tests across 21 modules, all passing. Unit tests for every subsystem + HTTP integration tests + property-based fuzz tests (Hypothesis).
 
 ```bash
-# Run full suite (449 tests)
+# Run full suite (564 tests)
 python -m pytest tests/ -v --ignore=tests/test_store.py --ignore=tests/integrated_test.py --ignore=tests/test_export.py
 
 # Run a specific module

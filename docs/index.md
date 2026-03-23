@@ -17,7 +17,7 @@ features:
   - title: Security Pipeline
     details: 10-layer defense with ASGI firewall, injection scoring, PII masking (Presidio NLP + regex), and multi-turn trajectory detection.
   - title: Ring Plugin Engine
-    details: 5-ring pipeline (Ingress, Pre-Flight, Routing, Post-Flight, Background) with 14 marketplace plugins and WASM sandbox support.
+    details: 5-ring pipeline (Ingress, Pre-Flight, Routing, Post-Flight, Background) with 18 marketplace plugins and WASM sandbox support.
   - title: 15 Providers
     details: OpenAI, Anthropic, Google, Azure, Ollama, Groq, Together, Mistral, DeepSeek, xAI, Perplexity, OpenRouter, Fireworks, SambaNova.
   - title: SOC Dashboard
@@ -85,11 +85,11 @@ features:
       <div class="label">Security Rings</div>
     </div>
     <div class="stat-card">
-      <div class="number">14</div>
+      <div class="number">18</div>
       <div class="label">Marketplace Plugins</div>
     </div>
     <div class="stat-card">
-      <div class="number">449</div>
+      <div class="number">564</div>
       <div class="label">Tests Passing</div>
     </div>
   </div>

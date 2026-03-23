@@ -8,9 +8,7 @@ Uses Hypothesis to verify that:
 - demask_pii(mask_pii(text)) roundtrips correctly
 """
 
-import re
-import pytest
-from hypothesis import given, strategies as st, settings, assume
+from hypothesis import given, strategies as st, settings
 
 from core.security import SecurityShield
 

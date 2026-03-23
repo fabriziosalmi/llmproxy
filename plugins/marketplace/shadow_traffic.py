@@ -68,14 +68,7 @@ class ShadowTraffic(BasePlugin):
     async def _shadow_request(self, rotator: Any, messages: list, original_model: str, session_id: str):
         """Send the shadow request and store results for comparison."""
         try:
-            shadow_body = {
-                "model": self.shadow_model,
-                "messages": messages,
-                "max_tokens": 256,  # Cap shadow responses to control cost
-            }
-
             t0 = time.time()
-            session = await rotator._get_session()
 
             # Find the shadow provider endpoint
             pool = await rotator.store.get_pool()

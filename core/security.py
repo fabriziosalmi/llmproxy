@@ -5,6 +5,8 @@ import unicodedata
 import uuid
 from typing import Dict, List, Any, Optional
 
+from cachetools import TTLCache as _TTLCache  # type: ignore[import-untyped]
+
 logger = logging.getLogger(__name__)
 
 
@@ -22,8 +24,6 @@ def _luhn_check(number: str) -> bool:
         checksum += d
     return checksum % 10 == 0
 
-# cachetools: TTL-based eviction for pii_vault (REQUIRED -- prevents OOM from unbounded growth)
-from cachetools import TTLCache as _TTLCache  # type: ignore[import-untyped]
 
 # Presidio opt-in: NLP-based PII detection when available, regex fallback otherwise
 try:

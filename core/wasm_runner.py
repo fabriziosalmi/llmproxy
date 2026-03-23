@@ -40,6 +40,7 @@ Usage:
 import json
 import asyncio
 import logging
+import concurrent.futures
 from typing import Dict, Any, Optional
 
 from core.plugin_sdk import PluginResponse, PluginAction
@@ -48,6 +49,12 @@ logger = logging.getLogger("wasm_runner")
 
 # Flag: is extism available?
 _extism_available = None
+
+# Dedicated thread pool for WASM execution -- prevents starvation of the
+# default executor used by other asyncio.to_thread() calls.
+_WASM_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=8, thread_name_prefix="wasm"
+)
 
 
 def _check_extism() -> bool:
@@ -60,14 +67,6 @@ def _check_extism() -> bool:
         except ImportError:
             _extism_available = False
     return _extism_available
-
-
-# Dedicated thread pool for WASM execution — prevents starvation of the
-# default executor used by other asyncio.to_thread() calls.
-import concurrent.futures
-_WASM_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
-    max_workers=8, thread_name_prefix="wasm"
-)
 
 
 class WasmRunner:

@@ -10,7 +10,6 @@ Uses Hypothesis property-based testing to verify that:
 - Empty bodies pass through cleanly
 """
 
-import asyncio
 import json
 import pytest
 from hypothesis import given, strategies as st, settings

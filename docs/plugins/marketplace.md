@@ -1,6 +1,6 @@
 # Marketplace Plugins
 
-14 optional plugins using the BasePlugin SDK. All are disabled by default — enable via `manifest.yaml` or the SOC UI.
+18 optional plugins using the BasePlugin SDK. All are disabled by default -- enable via `manifest.yaml` or the SOC UI.
 
 ## Pre-Flight Ring
 
@@ -84,6 +84,16 @@ Automatically downgrades expensive models for simple prompts (10-20x cost saving
 |--------|---------|-------------|
 | `complexity_threshold` | 0.3 | Downgrade when complexity is below this score |
 
+### Tool Guard {#tool-guard}
+
+Strips or blocks restricted tools/functions from agentic AI requests based on user RBAC roles. Prevents tool injection attacks in autonomous agent workflows.
+
+| Config | Default | Description |
+|--------|---------|-------------|
+| `restricted_tools` | `[]` | Tool/function names that require admin role |
+| `action` | `"strip"` | `strip` (remove silently) or `block` (reject request) |
+| `admin_roles` | `["admin"]` | Roles allowed to use restricted tools |
+
 ### Context Window Guard {#context-window-guard}
 
 Blocks requests exceeding the target model's context window (returns clear 413 instead of cryptic upstream 400).
@@ -105,6 +115,16 @@ Routes a configurable percentage of traffic to a variant model for live A/B expe
 | `split_pct` | 0.1 | Fraction routed to variant |
 | `sticky` | true | Pin sessions to the same arm |
 | `experiment_id` | `"ab_test"` | Tag for audit log tracking |
+
+### Tenant QoS Router {#tenant-qos-router}
+
+Routes requests to different models based on user/tenant tier. Free-tier users get redirected to cheaper models, premium users get the model they requested. SaaS B2B cost control.
+
+| Config | Default | Description |
+|--------|---------|-------------|
+| `tier_mapping` | `{free: gpt-4o-mini, premium: ""}` | Maps tier name to target model (empty = use requested) |
+| `default_tier` | `"free"` | Tier for users with no explicit mapping |
+| `force_downgrade` | true | Always downgrade non-premium users |
 
 ## Post-Flight Ring
 
@@ -139,6 +159,15 @@ Detects system prompt leakage in responses (data exfiltration protection). Optio
 | `similarity_threshold` | 0.6 | Fraction of system prompt found |
 | `block_on_leak` | false | Auto-block leaked responses |
 
+### Schema Enforcer {#schema-enforcer}
+
+Validates LLM JSON responses against a client-provided JSON schema. Catches semantically invalid responses (missing required fields, wrong types) before they reach the client application. Supports `warn` (pass through with log) and `block` (return 422) modes.
+
+| Config | Default | Description |
+|--------|---------|-------------|
+| `action` | `"warn"` | `warn` (pass through) or `block` (return 422) |
+| `max_schema_size` | 8192 | Maximum schema size in bytes |
+
 ## Background Ring
 
 ### Token Counter {#token-counter}
@@ -149,3 +178,14 @@ Extracts real token counts from API responses and corrects budget heuristic esti
 |--------|---------|-------------|
 | `cost_per_1k_input` | 0.003 | USD per 1K input tokens |
 | `cost_per_1k_output` | 0.015 | USD per 1K output tokens |
+
+### Shadow Traffic {#shadow-traffic}
+
+Dark launch / A/B model comparison. After the primary response is returned to the user, asynchronously sends the same prompt to a "shadow" model for comparison. Results are stored in SQLite for SOC dashboard analysis. Enables safe model migration evaluation with real production traffic.
+
+| Config | Default | Description |
+|--------|---------|-------------|
+| `shadow_model` | `""` | Model to send shadow traffic to |
+| `shadow_provider` | `""` | Provider for shadow model (empty = auto-detect) |
+| `sample_rate` | 0.05 | Fraction of requests to shadow (0.0-1.0) |
+| `store_responses` | true | Persist comparison data to SQLite |
