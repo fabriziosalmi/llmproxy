@@ -204,6 +204,14 @@ endpoints:
     api_key_env: "SAMBANOVA_API_KEY"
     models: ["Meta-Llama-3.3-70B-Instruct"]
 
+  # ── Community / OpenAI-compatible providers (uncomment to enable) ──
+  # infercom:
+  #   provider: "openai-compatible"
+  #   base_url: "https://api.infercom.ai/v1"
+  #   api_key_env: "INFERCOM_API_KEY"
+  #   models: ["MiniMax-M2.5", "DeepSeek-R1", "Meta-Llama-3.3-70B-Instruct"]
+  #   notes: "EU-sovereign hosting (Germany). OpenAI-compatible."
+
 # Monitoring and Logging
 logging:
   level: "info"
