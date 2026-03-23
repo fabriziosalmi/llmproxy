@@ -55,6 +55,7 @@ class ZeroTrustManager:
             "role": "trusted-aggregator"
         }
 
+        assert self.secret is not None
         token = jwt.encode(payload, self.secret, algorithm="HS256")
         return {
             "X-Proxy-Identity": token,

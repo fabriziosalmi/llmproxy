@@ -112,7 +112,7 @@ class AnthropicAdapter(BaseModelAdapter):
                     },
                 })
 
-        message = {
+        message: Dict[str, Any] = {
             "role": "assistant",
             "content": "\n".join(text_parts) if text_parts else None,
         }

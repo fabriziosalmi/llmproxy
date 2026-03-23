@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 # cachetools opt-in: TTL-based eviction for pii_vault (prevents unbounded growth)
 try:
-    from cachetools import TTLCache as _TTLCache
+    from cachetools import TTLCache as _TTLCache  # type: ignore[import-untyped]
     _CACHETOOLS_AVAILABLE = True
 except ImportError:
     _CACHETOOLS_AVAILABLE = False
@@ -242,7 +242,7 @@ class SecurityShield:
 
         return None
 
-    def _calculate_threat_score(self, prompt: str) -> (float, List[str]):
+    def _calculate_threat_score(self, prompt: str) -> tuple[float, List[str]]:
         """Internal helper to calculate injection threat score."""
         normalized = unicodedata.normalize("NFKC", prompt).lower()
         threats = [
@@ -299,8 +299,8 @@ class SecurityShield:
     def _extract_prompt(self, body: Dict[str, Any]) -> str:
         messages = body.get("messages", [])
         if messages:
-            return messages[-1].get("content", "")
-        return body.get("prompt", "")
+            return str(messages[-1].get("content", ""))
+        return str(body.get("prompt", ""))
 
     def _check_payload_flooding(self, body: Dict[str, Any]) -> Optional[str]:
         max_size = self.config.get("max_payload_size_kb", 512) * 1024
@@ -423,7 +423,7 @@ class SecurityShield:
         # high Shannon entropy values and would generate false positives.
         if len(text) > 100:
             import math
-            counts = {}
+            counts: dict[str, int] = {}
             for c in text:
                 counts[c] = counts.get(c, 0) + 1
             entropy = -sum((count / len(text)) * math.log2(count / len(text)) for count in counts.values())

@@ -29,9 +29,7 @@ jobs:
           cache: pip
       - run: pip install mypy
       - name: mypy (core + proxy)
-        run: python -m mypy core/ proxy/ || true
-        # Non-blocking for now — tracking error count regression.
-        # TODO: remove `|| true` once all errors are fixed.
+        run: python -m mypy core/ proxy/
 
   security:
     name: Dependency Audit

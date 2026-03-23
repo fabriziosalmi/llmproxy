@@ -11,6 +11,7 @@ Latency and success_rate are updated after each request via _update_endpoint_sta
 """
 
 import logging
+from typing import Any
 from core.plugin_engine import PluginContext
 
 logger = logging.getLogger("plugin.neural_router")
@@ -44,16 +45,17 @@ def update_endpoint_stats(endpoint_id: str, latency_ms: float, success: bool):
     stats["request_count"] += 1
 
 
-def get_endpoint_stats(endpoint_id: str) -> dict:
+def get_endpoint_stats(endpoint_id: str) -> dict[str, Any]:
     """Get current stats for an endpoint (for API/dashboard)."""
-    return _endpoint_stats.get(endpoint_id, {
+    result: dict[str, Any] = _endpoint_stats.get(endpoint_id, {
         "latency_ms": 0.0,
         "success_rate": 1.0,
         "request_count": 0,
     })
+    return result
 
 
-def _compute_score(endpoint, stats: dict) -> float:
+def _compute_score(endpoint: Any, stats: dict[str, Any]) -> float:
     """Compute routing score: higher = better endpoint.
 
     score = success_rate^2 / max(latency_ms, 1)
@@ -62,8 +64,8 @@ def _compute_score(endpoint, stats: dict) -> float:
     - latency_ms in denominator favors faster endpoints
     - Minimum latency of 1ms to avoid division by zero
     """
-    success = stats.get("success_rate", 1.0)
-    latency = max(stats.get("latency_ms", 500.0), 1.0)  # default 500ms for unknown
+    success: float = stats.get("success_rate", 1.0)
+    latency: float = max(stats.get("latency_ms", 500.0), 1.0)  # default 500ms for unknown
     return (success ** 2) / latency
 
 
@@ -72,6 +74,7 @@ async def select_endpoint(ctx: PluginContext):
     global _rr_index
 
     rotator = ctx.metadata.get("rotator")
+    assert rotator is not None
 
     # Fetch verified pool from store
     pool = await rotator.store.get_pool()

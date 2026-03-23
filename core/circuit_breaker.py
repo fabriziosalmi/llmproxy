@@ -20,7 +20,7 @@ class CircuitBreaker:
         self.recovery_timeout = recovery_timeout
         self.failure_count = 0
         self.state = CircuitState.CLOSED
-        self.last_failure_time = 0
+        self.last_failure_time: float = 0
         self._on_state_change = on_state_change  # callback(name, old_state, new_state)
 
     def can_execute(self) -> bool:

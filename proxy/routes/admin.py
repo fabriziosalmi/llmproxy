@@ -51,7 +51,7 @@ def create_router(agent) -> APIRouter:
         return {
             "host": request.client.host if request.client else "0.0.0.0",
             "port": port,
-            "url": f"http://{request.client.host or 'localhost'}:{port}/v1"
+            "url": f"http://{request.client.host if request.client else 'localhost'}:{port}/v1"
         }
 
     @router.get("/api/v1/features")

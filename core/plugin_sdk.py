@@ -20,10 +20,15 @@ Example:
             return PluginResponse.passthrough()
 """
 
+from __future__ import annotations
+
 import logging
 from enum import Enum
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, TYPE_CHECKING
 from dataclasses import dataclass
+
+if TYPE_CHECKING:
+    from core.plugin_engine import PluginContext
 
 logger = logging.getLogger("plugin_sdk")
 
@@ -100,7 +105,7 @@ class PluginResponse:
         return cls(action="passthrough")
 
     @classmethod
-    def modify(cls, body: Dict[str, Any] = None, message: str = None) -> "PluginResponse":
+    def modify(cls, body: Dict[str, Any] | None = None, message: str | None = None) -> "PluginResponse":
         """Request body was modified, continue pipeline."""
         return cls(action="modify", body=body, message=message)
 
@@ -143,7 +148,7 @@ class BasePlugin:
     description: str = ""
     timeout_ms: int = 50  # Default timeout: 50ms (strict)
 
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: Dict[str, Any] | None = None):
         """
         Initialize with optional config dict (from manifest ui_schema defaults
         merged with user overrides).
@@ -158,7 +163,7 @@ class BasePlugin:
             "total_latency_ms": 0.0,
         }
 
-    async def execute(self, ctx: "PluginContext") -> PluginResponse:  # noqa: F821
+    async def execute(self, ctx: PluginContext) -> PluginResponse:
         """
         Main execution method. Override this in your plugin.
 

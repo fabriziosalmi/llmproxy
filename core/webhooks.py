@@ -176,12 +176,12 @@ class WebhookDispatcher:
                 "sections": [{"activityTitle": title, "text": details}],
             }
         elif target == WebhookTarget.DISCORD:
-            color = {"critical": 0xFF0000, "warning": 0xFFA500, "info": 0x00FF00}.get(severity, 0x808080)
+            discord_color = {"critical": 0xFF0000, "warning": 0xFFA500, "info": 0x00FF00}.get(severity, 0x808080)
             return {
                 "embeds": [{
                     "title": title,
                     "description": details,
-                    "color": color,
+                    "color": discord_color,
                 }]
             }
         else:

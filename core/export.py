@@ -17,7 +17,7 @@ import json
 import gzip
 import logging
 import asyncio
-import aiofiles
+import aiofiles  # type: ignore[import-untyped]
 from datetime import datetime, date
 from typing import Dict, Any, Optional, List
 from pathlib import Path
@@ -43,7 +43,7 @@ def scrub_pii(text: str) -> str:
 
 def scrub_dict(d: Dict[str, Any]) -> Dict[str, Any]:
     """Recursively scrub PII from a dictionary."""
-    result = {}
+    result: Dict[str, Any] = {}
     for k, v in d.items():
         # Skip known sensitive fields entirely
         if k.lower() in ('authorization', 'api_key', 'token', 'password', 'secret'):
@@ -145,6 +145,7 @@ class DatasetExporter:
                 entry = scrub_dict(entry)
 
             line = json.dumps(entry, ensure_ascii=False, separators=(',', ':'))
+            assert self._file_handle is not None
             await self._file_handle.write(line + '\n')
             await self._file_handle.flush()
 

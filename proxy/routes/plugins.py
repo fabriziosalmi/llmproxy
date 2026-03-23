@@ -1,5 +1,5 @@
 """Plugin routes: list, toggle, install, uninstall, hot-swap, rollback."""
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 from fastapi import APIRouter, Request, HTTPException
 

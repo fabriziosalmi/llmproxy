@@ -11,7 +11,7 @@ class ByteLevelFirewallMiddleware:
     # Class-level counters (shared across instances for metrics)
     total_scanned = 0
     total_blocked = 0
-    block_by_signature = {}
+    block_by_signature: dict[str, int] = {}
 
     # Injection detection patterns (class-level so admin can read count without instantiation)
     # Specific enough to avoid false positives on legitimate queries like "what is a system prompt?"
@@ -50,7 +50,7 @@ class ByteLevelFirewallMiddleware:
                         ByteLevelFirewallMiddleware.total_blocked += 1
                         sig_key = sig.decode('utf-8', errors='replace')
                         ByteLevelFirewallMiddleware.block_by_signature[sig_key] = ByteLevelFirewallMiddleware.block_by_signature.get(sig_key, 0) + 1
-                        logger.critical(f"FIREWALL TRIGGERED: Fatal byte signature detected [{sig}]. Tearing down socket.")
+                        logger.critical(f"FIREWALL TRIGGERED: Fatal byte signature detected [{sig.decode('utf-8', errors='replace')}]. Tearing down socket.")
                         break
             # Proceed yielding the message even if flagged, so the upstream logic can abort naturally
             # However, our custom send logic will intercept the outgoing payload.

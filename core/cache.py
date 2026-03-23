@@ -26,10 +26,10 @@ from typing import Optional, Dict, Any
 try:
     import aiosqlite
 except ImportError:
-    aiosqlite = None
+    aiosqlite = None  # type: ignore[assignment]
 
 try:
-    from cachetools import TTLCache
+    from cachetools import TTLCache  # type: ignore[import-untyped]
 except ImportError:
     TTLCache = None
 
@@ -89,7 +89,7 @@ class NegativeCache:
         reason = self._store.get(h)
         if reason:
             self._drops += 1
-            return reason
+            return str(reason)
         return None
 
     def add(self, body: Dict[str, Any], reason: str):
@@ -205,7 +205,8 @@ class CacheBackend:
             self._hits += 1
             logger.debug(f"Cache HIT: {key[:12]}...")
             try:
-                return json.loads(row[0])
+                result: Dict[str, Any] = json.loads(row[0])
+                return result
             except (json.JSONDecodeError, TypeError):
                 logger.warning(f"Cache corruption for key {key[:12]}, ignoring")
                 return None
@@ -255,7 +256,7 @@ class CacheBackend:
         cursor = await self._conn.execute(
             "DELETE FROM response_cache WHERE created_at < ?", (cutoff,)
         )
-        deleted = cursor.rowcount
+        deleted: int = cursor.rowcount
         # Reclaim up to 100 pages of freed space
         await self._conn.execute("PRAGMA incremental_vacuum(100)")
         await self._conn.commit()

@@ -78,3 +78,5 @@ exports/
 demo/
 
 # temp files
+.vitepress/cache/
+.mypy_cache/

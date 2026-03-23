@@ -245,7 +245,7 @@ class IdentityManager:
         """
         # Check config-based email → role mapping
         if email and email in self.role_mappings:
-            return self.role_mappings[email]
+            return list(self.role_mappings[email])
 
         # Check JWT roles claim (e.g., Azure AD `roles` or `groups`)
         jwt_roles = claims.get(provider.roles_claim)
@@ -260,6 +260,7 @@ class IdentityManager:
         Used for session management after initial OIDC verification.
         """
         secret = get_secret("LLM_PROXY_IDENTITY_SECRET", required=True)
+        assert secret is not None
         payload = {
             "iss": "llmproxy",
             "sub": identity.subject,

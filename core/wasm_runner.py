@@ -70,7 +70,7 @@ class WasmRunner:
     releasing the GIL and keeping the event loop free.
     """
 
-    def __init__(self, wasm_path: str, config: Dict[str, Any] = None):
+    def __init__(self, wasm_path: str, config: Dict[str, Any] | None = None):
         self.wasm_path = wasm_path
         self.config = config or {}
         self._plugin = None  # Extism Plugin instance
@@ -88,7 +88,8 @@ class WasmRunner:
 
         try:
             # Load in thread to avoid blocking during file I/O + compilation
-            self._plugin = await asyncio.to_thread(self._sync_load)
+            plugin: Any = await asyncio.to_thread(self._sync_load)  # type: ignore[func-returns-value]
+            self._plugin = plugin
             self._loaded = True
             self.logger.info(f"WASM plugin loaded: {self.wasm_path}")
             return True
@@ -96,14 +97,14 @@ class WasmRunner:
             self.logger.error(f"Failed to load WASM plugin {self.wasm_path}: {e}")
             return False
 
-    def _sync_load(self):
+    def _sync_load(self) -> Any:
         """Synchronous WASM load (runs in thread pool)."""
         import extism
         with open(self.wasm_path, "rb") as f:
             wasm_bytes = f.read()
         return extism.Plugin(wasm_bytes, wasi=True)
 
-    async def execute(self, body: Dict[str, Any], metadata: Dict[str, Any] = None,
+    async def execute(self, body: Dict[str, Any], metadata: Dict[str, Any] | None = None,
                       session_id: str = "default") -> PluginResponse:
         """
         Execute the WASM plugin with the given context.
@@ -138,6 +139,7 @@ class WasmRunner:
 
     def _sync_call(self, input_json: str) -> Optional[bytes]:
         """Synchronous WASM call (runs in thread pool)."""
+        assert self._plugin is not None
         return self._plugin.call("handle", input_json.encode("utf-8"))
 
     def _parse_result(self, result_bytes: Optional[bytes]) -> PluginResponse:

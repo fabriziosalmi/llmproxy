@@ -3,7 +3,7 @@ layout: home
 
 hero:
   name: "LLMProxy"
-  text: "LLM Security Gateway"
+  text: "AI Security Gateway"
   tagline: Security-first proxy for Large Language Models with multi-provider routing, ring-based plugin pipeline, and real-time threat monitoring.
   actions:
     - theme: brand

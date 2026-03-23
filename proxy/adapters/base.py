@@ -70,3 +70,4 @@ class BaseModelAdapter(ABC):
         self, url: str, body: Dict[str, Any], headers: Dict[str, str], session: Any,
     ) -> AsyncGenerator[bytes, None]:
         """Sends a streaming request."""
+        yield b""  # pragma: no cover

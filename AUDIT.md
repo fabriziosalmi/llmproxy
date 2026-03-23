@@ -29,8 +29,8 @@ All items verified against the actual codebase. Grouped by audit category, order
 ### Type Safety [4/5]
 
 - [x] Add `mypy` step to `.github/workflows/ci.yml` (non-blocking, 48 errors tracked — tighten incrementally)
-- [ ] Fix all mypy errors (48 remaining, mostly implicit Optional)
-- [ ] Add `py.typed` marker file for type-checking consumers
+- [x] Fix all mypy errors (0 remaining -- fully clean)
+- [x] Add `py.typed` marker file for type-checking consumers
 
 ### CI/CD Pipeline [4/5]
 
@@ -47,7 +47,7 @@ All items verified against the actual codebase. Grouped by audit category, order
 ### Dependency Management [4/5]
 
 - [x] Pin all dependency versions in requirements.txt (core deps pinned to exact versions)
-- [ ] Audit and remove unused optional dependencies
+- [x] Audit and remove unused deps (pydantic, pydantic-settings, python-dotenv, python-multipart, alembic)
 - [x] Add `pip-audit` output to CI artifacts
 
 ---
@@ -83,10 +83,10 @@ All items verified against the actual codebase. Grouped by audit category, order
 
 ### Quick Wins (can do now)
 
-- [ ] Add Dependabot config for automated dependency updates (`.github/dependabot.yml`)
-- [ ] Fix remaining 48 mypy errors (mostly `implicit Optional` -> `X | None` syntax)
-- [ ] Add `py.typed` marker file
-- [ ] Audit and remove unused optional dependencies from requirements.txt
+- [x] Add Dependabot config for automated dependency updates (`.github/dependabot.yml`)
+- [x] Fix all 48 mypy errors -- 0 errors remaining, `mypy --strict` clean
+- [x] Add `py.typed` marker file
+- [x] Audit and remove unused deps: pydantic, pydantic-settings, python-dotenv, python-multipart, alembic
 
 ### Observability & Tracing
 

@@ -24,6 +24,7 @@ class SecretManager:
             return cls._fernet
 
         master_key = get_secret("LLM_PROXY_MASTER_KEY", required=True)
+        assert master_key is not None
 
         # Per-instance salt stored alongside the app data.
         # Generated once, persisted to disk so existing encrypted values remain decryptable.

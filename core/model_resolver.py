@@ -35,7 +35,7 @@ def resolve_model(config: Dict[str, Any], requested_model: str) -> str:
     # 1. Check aliases
     aliases = config.get("model_aliases", {})
     if requested_model in aliases:
-        resolved = aliases[requested_model]
+        resolved = str(aliases[requested_model])
         logger.debug(f"Alias resolved: {requested_model} → {resolved}")
         return resolved
 
@@ -43,10 +43,10 @@ def resolve_model(config: Dict[str, Any], requested_model: str) -> str:
     groups = config.get("model_groups", {})
     if requested_model in groups:
         group = groups[requested_model]
-        resolved = _pick_from_group(group)
-        if resolved:
-            logger.debug(f"Group resolved: {requested_model} → {resolved}")
-            return resolved
+        group_resolved = _pick_from_group(group)
+        if group_resolved:
+            logger.debug(f"Group resolved: {requested_model} → {group_resolved}")
+            return group_resolved
 
     # 3. Pass-through
     return requested_model
@@ -62,7 +62,7 @@ def _pick_from_group(group: Dict[str, Any]) -> Optional[str]:
 
     if strategy == "cheapest":
         from core.pricing import get_pricing
-        return min(models, key=lambda m: get_pricing(m["model"])["input"])["model"]
+        return str(min(models, key=lambda m: get_pricing(m["model"])["input"])["model"])
 
     elif strategy == "fastest":
         try:
@@ -70,17 +70,17 @@ def _pick_from_group(group: Dict[str, Any]) -> Optional[str]:
         except ImportError:
             # Plugin not loaded — degrade to random
             logger.debug("neural_router not available for 'fastest' strategy, falling back to random")
-            return random.choice(models)["model"]
+            return str(random.choice(models)["model"])
 
         def _latency(m):
             stats = get_endpoint_stats(m.get("provider", ""))
             return stats.get("latency_ms", 999.0)
-        return min(models, key=_latency)["model"]
+        return str(min(models, key=_latency)["model"])
 
     elif strategy == "weighted":
         weights = [m.get("weight", 1.0) for m in models]
         chosen = random.choices(models, weights=weights, k=1)[0]
-        return chosen["model"]
+        return str(chosen["model"])
 
     else:  # "random"
-        return random.choice(models)["model"]
+        return str(random.choice(models)["model"])

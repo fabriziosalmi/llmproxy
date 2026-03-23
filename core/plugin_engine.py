@@ -16,13 +16,13 @@ import os
 import ast
 import time
 import importlib.util
-import yaml
+import yaml  # type: ignore[import-untyped]
 import asyncio
 import logging
 import inspect
 from collections import deque
 from enum import Enum
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Sequence
 from dataclasses import dataclass, field
 
 from core.plugin_sdk import BasePlugin, PluginResponse, PluginResponseError
@@ -189,7 +189,7 @@ class PluginManager:
             self._latency_window[name] = deque(maxlen=self._latency_window_size)
 
     @staticmethod
-    def _percentiles(samples: list) -> Dict[str, float]:
+    def _percentiles(samples: Sequence[float]) -> Dict[str, float]:
         """Compute P50/P95/P99 from a list of latency samples."""
         if not samples:
             return {"p50": 0, "p95": 0, "p99": 0}
@@ -201,7 +201,7 @@ class PluginManager:
             "p99": round(s[min(int(n * 0.99), n - 1)], 2),
         }
 
-    def get_plugin_stats(self, name: str = None) -> Any:
+    def get_plugin_stats(self, name: str | None = None) -> Any:
         """Get per-plugin metrics with P50/P95/P99 latency. If name is None, return all."""
         if name:
             stats = self._plugin_stats.get(name, {})
@@ -317,6 +317,7 @@ class PluginManager:
             ast_scan(source, name)
 
             spec = importlib.util.spec_from_file_location(name, file_path)
+            assert spec is not None and spec.loader is not None
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
 
@@ -375,7 +376,7 @@ class PluginManager:
         Uses per-plugin fail_policy, falling back to ring defaults.
         """
         policy = plugin.get("fail_policy", FAIL_CLOSED if hook in FAIL_CLOSED_RINGS else FAIL_OPEN)
-        return policy == FAIL_CLOSED
+        return bool(policy == FAIL_CLOSED)
 
     async def execute_ring(self, hook: PluginHook, context: PluginContext):
         """

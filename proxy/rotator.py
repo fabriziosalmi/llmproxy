@@ -9,7 +9,7 @@ through the 5-ring plugin system with SecurityShield pre-inspection.
 import os
 import json
 import uuid
-import yaml
+import yaml  # type: ignore[import-untyped]
 import asyncio
 import logging
 import uvicorn
@@ -139,7 +139,7 @@ class RotatorAgent(BaseAgent):
 
         # Budget tracking (hydrated from SQLite in setup())
         self.total_cost_today = 0.0
-        self._budget_date = None
+        self._budget_date: str | None = None
         self._pending_writes: asyncio.Queue = asyncio.Queue(maxsize=500)
 
         # Gateway state
@@ -150,8 +150,8 @@ class RotatorAgent(BaseAgent):
             "injection_guard": True,
             "link_sanitizer": True,
         }
-        self.log_queue = asyncio.Queue(maxsize=100)
-        self.telemetry_queue = asyncio.Queue(maxsize=1000)
+        self.log_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=100)
+        self.telemetry_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=1000)
 
         # L1: Negative cache (in-memory WAF drop)
         neg_cfg = self.config.get("caching", {}).get("negative_cache", {})
@@ -244,7 +244,7 @@ class RotatorAgent(BaseAgent):
 
     def _get_api_keys(self) -> list[str]:
         env_var = self.config.get("server", {}).get("auth", {}).get("api_keys_env", "LLM_PROXY_API_KEYS")
-        raw = SecretManager.get_secret(env_var, "")
+        raw = SecretManager.get_secret(env_var, "") or ""
         return [k.strip() for k in raw.split(",") if k.strip()]
 
     # ── HTTP Session ──
@@ -281,7 +281,7 @@ class RotatorAgent(BaseAgent):
 
     # ── Logging & Telemetry ──
 
-    async def _add_log(self, message: str, level: str = "INFO", metadata: dict = None):
+    async def _add_log(self, message: str, level: str = "INFO", metadata: dict | None = None):
         entry = {
             "timestamp": time.strftime("%H:%M:%S"),
             "level": level,
@@ -343,7 +343,7 @@ class RotatorAgent(BaseAgent):
 
         self.logger.info("Security gateway ready.")
 
-    async def run(self, port: int = None):
+    async def run(self, port: int | None = None):
         if port is None:
             port = self.config.get("server", {}).get("port", 8090)
         host = self.config.get("server", {}).get("host", "0.0.0.0")
@@ -428,7 +428,7 @@ class RotatorAgent(BaseAgent):
                     "is_fallback": True,
                 })
 
-        last_error = None
+        last_error: Exception | None = None
         for i, attempt in enumerate(attempts):
             a_target = attempt["target"]
             a_adapter = attempt["adapter"]
@@ -537,7 +537,7 @@ class RotatorAgent(BaseAgent):
 
     # ── Core Proxy Pipeline ──
 
-    async def proxy_request(self, request: Request, body: Dict[str, Any] = None, session_id: str = "default"):
+    async def proxy_request(self, request: Request, body: Dict[str, Any] | None = None, session_id: str = "default"):
         start_total = time.time()
         if body is None:
             body = await request.json()
