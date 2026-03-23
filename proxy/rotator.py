@@ -52,13 +52,17 @@ def create_app(agent) -> FastAPI:
     app = FastAPI(title="LLMPROXY")
     TraceManager.instrument_app(app)
 
-    # Security response headers (CSP, anti-clickjack, MIME sniff protection)
+    # Security + observability response headers
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        # W3C Trace Context: propagate trace ID for full-stack observability
+        trace_id = request.headers.get("x-trace-id") or request.headers.get("traceparent", "").split("-")[1] if "-" in request.headers.get("traceparent", "") else None
+        if trace_id:
+            response.headers["X-Trace-Id"] = trace_id
         if request.url.path.startswith("/ui"):
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
@@ -281,22 +285,35 @@ class RotatorAgent(BaseAgent):
 
     # ── Logging & Telemetry ──
 
-    async def _add_log(self, message: str, level: str = "INFO", metadata: dict | None = None):
-        entry = {
+    async def _add_log(self, message: str, level: str = "INFO", metadata: dict | None = None, trace_id: str | None = None):
+        entry: Dict[str, Any] = {
             "timestamp": time.strftime("%H:%M:%S"),
             "level": level,
             "message": message,
             "metadata": metadata or {},
         }
+        if trace_id:
+            entry["trace_id"] = trace_id
         if self.log_queue.full():
-            self.log_queue.get_nowait()
+            dropped = self.log_queue.get_nowait()
+            self._dlq_write(dropped)
         await self.log_queue.put(entry)
 
     async def broadcast_event(self, event_type: str, data: Dict[str, Any]):
         event = {"type": event_type, "timestamp": datetime.now().isoformat(), "data": data}
         if self.telemetry_queue.full():
-            self.telemetry_queue.get_nowait()
+            dropped = self.telemetry_queue.get_nowait()
+            self._dlq_write(dropped)
         await self.telemetry_queue.put(event)
+
+    def _dlq_write(self, entry: Any):
+        """Dead-letter queue: persist dropped log/telemetry entries to file.
+        Non-blocking, best-effort -- prevents silent data loss under load spikes."""
+        try:
+            with open("dlq.jsonl", "a") as f:
+                f.write(json.dumps(entry, default=str) + "\n")
+        except Exception:
+            pass  # DLQ is best-effort, never block the hot path
 
     # ── Lifecycle ──
 

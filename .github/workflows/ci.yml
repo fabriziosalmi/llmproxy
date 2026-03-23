@@ -80,3 +80,20 @@ jobs:
       - name: Compile all Python files
         run: |
           python -m compileall core/ proxy/ store/ plugins/ -q
+
+  docker-size:
+    name: Docker Image Size
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: docker build -t llmproxy:ci .
+      - name: Check image size
+        run: |
+          SIZE=$(docker image inspect llmproxy:ci --format='{{.Size}}')
+          SIZE_MB=$((SIZE / 1024 / 1024))
+          echo "Image size: ${SIZE_MB}MB"
+          if [ "$SIZE_MB" -gt 2000 ]; then
+            echo "WARNING: Docker image exceeds 2GB (${SIZE_MB}MB)"
+            exit 1
+          fi

@@ -77,6 +77,10 @@ exports/
 .ruff_cache/
 demo/
 
+# Runtime
+dlq.jsonl
+
 # temp files
 .vitepress/cache/
 .mypy_cache/
+.hypothesis/
