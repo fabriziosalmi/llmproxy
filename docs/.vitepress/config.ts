@@ -117,8 +117,8 @@ export default defineConfig({
     ],
 
     footer: {
-      message: 'Released under the MIT License.',
-      copyright: 'Copyright 2024-present LLMProxy Contributors'
+      message: 'MIT License',
+      copyright: 'Copyright 2026 Fabrizio Salmi'
     },
 
     search: {
