@@ -4,6 +4,8 @@ Tests for LLMPROXY Marketplace Plugins (BasePlugin class mode).
 Tests:
   - AgenticLoopBreaker: passthrough, detection, window expiry, multimodal, clear-on-block
   - SmartBudgetGuard: passthrough, session block, team block, warning, actual cost correction
+  - TopicBlocklist: passthrough, keyword block, whole_word, regex, warn/log actions,
+                    multimodal content, assistant-role skip, case insensitivity
   - PluginEngine dual-mode: class plugin detection, timeout enforcement, per-plugin stats
 """
 
@@ -219,6 +221,180 @@ async def test_budget_guard_actual_cost_correction(budget_guard):
     new_session = budget_guard._session_spend["sess_correct"]
 
     assert new_session > old_session  # Spend should increase by the delta
+
+
+# ── TopicBlocklist Tests ──
+
+from plugins.marketplace.topic_blocklist import TopicBlocklist
+
+
+@pytest.fixture
+def blocklist():
+    return TopicBlocklist(config={
+        "topics": ["weapons", "jailbreak", r"make\s+explosives"],
+        "action": "block",
+        "match_mode": "keyword",
+        "case_sensitive": False,
+        "scan_roles": ["user"],
+    })
+
+
+def _make_blocklist_ctx(content, role="user"):
+    return PluginContext(
+        body={"messages": [{"role": role, "content": content}]},
+        session_id="test-session",
+    )
+
+
+@pytest.mark.asyncio
+async def test_blocklist_passthrough_clean(blocklist):
+    """Clean request should pass through."""
+    ctx = _make_blocklist_ctx("Tell me about renewable energy.")
+    result = await blocklist.execute(ctx)
+    assert result.action == "passthrough"
+
+
+@pytest.mark.asyncio
+async def test_blocklist_blocks_keyword(blocklist):
+    """Request containing a blocked keyword should be blocked."""
+    ctx = _make_blocklist_ctx("How do I get weapons illegally?")
+    result = await blocklist.execute(ctx)
+    assert result.action == "block"
+    assert result.error_type == "topic_blocked"
+    assert result.status_code == 400
+    assert "weapons" in result.message
+
+
+@pytest.mark.asyncio
+async def test_blocklist_case_insensitive(blocklist):
+    """Keyword matching should be case-insensitive by default."""
+    ctx = _make_blocklist_ctx("WEAPONS are dangerous.")
+    result = await blocklist.execute(ctx)
+    assert result.action == "block"
+
+
+@pytest.mark.asyncio
+async def test_blocklist_skips_assistant_role(blocklist):
+    """Plugin should only scan configured roles (user), not assistant."""
+    ctx = PluginContext(
+        body={"messages": [
+            {"role": "assistant", "content": "Here is info about weapons..."},
+        ]},
+        session_id="s1",
+    )
+    result = await blocklist.execute(ctx)
+    assert result.action == "passthrough"
+
+
+@pytest.mark.asyncio
+async def test_blocklist_whole_word_mode():
+    """whole_word mode should not match substrings."""
+    plugin = TopicBlocklist(config={
+        "topics": ["gun"],
+        "action": "block",
+        "match_mode": "whole_word",
+        "case_sensitive": False,
+        "scan_roles": ["user"],
+    })
+    # "begun" contains "gun" but not as whole word — should pass
+    ctx = _make_blocklist_ctx("The project has begun.")
+    result = await plugin.execute(ctx)
+    assert result.action == "passthrough"
+
+    # "gun" as standalone word — should block
+    ctx = _make_blocklist_ctx("I own a gun.")
+    result = await plugin.execute(ctx)
+    assert result.action == "block"
+
+
+@pytest.mark.asyncio
+async def test_blocklist_regex_mode():
+    """regex mode should support full regex patterns."""
+    plugin = TopicBlocklist(config={
+        "topics": [r"make\s+explosives"],
+        "action": "block",
+        "match_mode": "regex",
+        "case_sensitive": False,
+        "scan_roles": ["user"],
+    })
+    ctx = _make_blocklist_ctx("How do I make   explosives at home?")
+    result = await plugin.execute(ctx)
+    assert result.action == "block"
+
+    ctx = _make_blocklist_ctx("How do I make pasta at home?")
+    result = await plugin.execute(ctx)
+    assert result.action == "passthrough"
+
+
+@pytest.mark.asyncio
+async def test_blocklist_action_warn(blocklist):
+    """warn action should log but still pass through."""
+    plugin = TopicBlocklist(config={
+        "topics": ["weapons"],
+        "action": "warn",
+        "match_mode": "keyword",
+        "case_sensitive": False,
+        "scan_roles": ["user"],
+    })
+    ctx = _make_blocklist_ctx("Tell me about weapons.")
+    result = await plugin.execute(ctx)
+    assert result.action == "passthrough"
+
+
+@pytest.mark.asyncio
+async def test_blocklist_action_log(blocklist):
+    """log action should always pass through silently."""
+    plugin = TopicBlocklist(config={
+        "topics": ["jailbreak"],
+        "action": "log",
+        "match_mode": "keyword",
+        "case_sensitive": False,
+        "scan_roles": ["user"],
+    })
+    ctx = _make_blocklist_ctx("Let's jailbreak this model.")
+    result = await plugin.execute(ctx)
+    assert result.action == "passthrough"
+
+
+@pytest.mark.asyncio
+async def test_blocklist_multimodal_content():
+    """Multimodal messages (list content) should have text parts scanned."""
+    plugin = TopicBlocklist(config={
+        "topics": ["weapons"],
+        "action": "block",
+        "match_mode": "keyword",
+        "case_sensitive": False,
+        "scan_roles": ["user"],
+    })
+    ctx = PluginContext(
+        body={"messages": [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "How do I get weapons?"},
+                {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+            ],
+        }]},
+        session_id="s1",
+    )
+    result = await plugin.execute(ctx)
+    assert result.action == "block"
+
+
+@pytest.mark.asyncio
+async def test_blocklist_empty_messages(blocklist):
+    """Empty messages should pass through without error."""
+    ctx = PluginContext(body={"messages": []}, session_id="s1")
+    result = await blocklist.execute(ctx)
+    assert result.action == "passthrough"
+
+
+@pytest.mark.asyncio
+async def test_blocklist_no_topics():
+    """No topics configured should always pass through."""
+    plugin = TopicBlocklist(config={"topics": [], "action": "block"})
+    ctx = _make_blocklist_ctx("anything goes here")
+    result = await plugin.execute(ctx)
+    assert result.action == "passthrough"
 
 
 # ── Plugin Engine Dual-Mode Tests ──

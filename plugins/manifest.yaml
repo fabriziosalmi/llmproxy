@@ -375,6 +375,55 @@ plugins:
         description: "Automatically block responses containing leaked system prompts"
         default: false
 
+  - name: "Topic Blocklist"
+    hook: "pre_flight"
+    priority: 9
+    enabled: false
+    type: "python"
+    entrypoint: "marketplace.topic_blocklist:TopicBlocklist"
+    version: "1.0.0"
+    author: "llmproxy"
+    description: "Blocks requests containing forbidden topics via keyword/regex matching"
+    timeout_ms: 5
+    config:
+      topics:
+        - "how to make a bomb"
+        - "how to make explosives"
+        - "csam"
+      action: "block"
+      match_mode: "keyword"
+      case_sensitive: false
+      scan_roles:
+        - "user"
+    ui_schema:
+      - key: "topics"
+        type: "array"
+        label: "Blocked Topics"
+        description: "Keywords or regex patterns to block (one per line)"
+        default: ["how to make a bomb", "how to make explosives", "csam"]
+      - key: "action"
+        type: "select"
+        label: "Action on Match"
+        description: "What to do when a topic is detected"
+        default: "block"
+        options: ["block", "warn", "log"]
+      - key: "match_mode"
+        type: "select"
+        label: "Match Mode"
+        description: "How to match topics against request content"
+        default: "keyword"
+        options: ["keyword", "whole_word", "regex"]
+      - key: "case_sensitive"
+        type: "boolean"
+        label: "Case Sensitive"
+        description: "Enable case-sensitive matching"
+        default: false
+      - key: "scan_roles"
+        type: "array"
+        label: "Scan Roles"
+        description: "Message roles to scan (user, system, assistant)"
+        default: ["user"]
+
   - name: "Token Counter"
     hook: "background"
     priority: 95
