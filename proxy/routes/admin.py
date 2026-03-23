@@ -221,7 +221,8 @@ def create_router(agent) -> APIRouter:
             # Reinitialize config-dependent subsystems
             from core.webhooks import WebhookDispatcher
             agent.webhooks = WebhookDispatcher(agent.config)
-            agent.security = __import__('core.security', fromlist=['SecurityShield']).SecurityShield(agent.config)
+            from core.security import SecurityShield
+            agent.security = SecurityShield(agent.config)
             await agent._add_log("Config reloaded via admin API", level="SYSTEM")
             return {"status": "reloaded", "changed": old_hash != new_hash}
         except Exception as e:

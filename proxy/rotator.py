@@ -31,7 +31,6 @@ from core.rbac import RBACManager
 from core.circuit_breaker import CircuitManager
 from core.security import SecurityShield
 from core.secrets import SecretManager
-from core.trajectory import TrajectoryBuffer
 from core.firewall_asgi import ByteLevelFirewallMiddleware
 from core.plugin_engine import PluginManager, PluginHook, PluginContext, PluginState
 from core.identity import IdentityManager
@@ -108,7 +107,6 @@ class RotatorAgent(BaseAgent):
         self.rbac = RBACManager()
         self.identity = IdentityManager(self.config)
         self.circuit_manager = CircuitManager(on_state_change=self._on_circuit_state_change)
-        self.trajectory = TrajectoryBuffer()
 
         # Alerting & compliance
         self.webhooks = WebhookDispatcher(self.config)
