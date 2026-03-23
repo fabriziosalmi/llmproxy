@@ -397,6 +397,237 @@ async def test_blocklist_no_topics():
     assert result.action == "passthrough"
 
 
+# ── SystemPromptEnforcer Tests ──
+
+from plugins.marketplace.system_prompt_enforcer import SystemPromptEnforcer
+
+
+def _make_spe_ctx(messages):
+    return PluginContext(body={"messages": messages}, session_id="s1")
+
+
+@pytest.mark.asyncio
+async def test_spe_prepend_no_system():
+    """Prepend mode adds enforced prompt before all messages when no system exists."""
+    plugin = SystemPromptEnforcer(config={"prompt": "Be helpful.", "mode": "prepend"})
+    ctx = _make_spe_ctx([{"role": "user", "content": "Hi"}])
+    result = await plugin.execute(ctx)
+    assert result.action == "modify"
+    msgs = result.body["messages"]
+    assert msgs[0]["role"] == "system"
+    assert msgs[0]["content"] == "Be helpful."
+    assert msgs[1]["role"] == "user"
+
+
+@pytest.mark.asyncio
+async def test_spe_prepend_existing_system():
+    """Prepend mode inserts enforced prompt before existing system message."""
+    plugin = SystemPromptEnforcer(config={"prompt": "Corporate policy.", "mode": "prepend"})
+    ctx = _make_spe_ctx([
+        {"role": "system", "content": "You are a pirate."},
+        {"role": "user", "content": "Hello"},
+    ])
+    result = await plugin.execute(ctx)
+    msgs = result.body["messages"]
+    assert msgs[0]["content"] == "Corporate policy."
+    assert msgs[1]["content"] == "You are a pirate."
+    assert msgs[2]["role"] == "user"
+
+
+@pytest.mark.asyncio
+async def test_spe_replace_mode():
+    """Replace mode removes existing system messages and substitutes enforced one."""
+    plugin = SystemPromptEnforcer(config={"prompt": "Only allowed prompt.", "mode": "replace"})
+    ctx = _make_spe_ctx([
+        {"role": "system", "content": "Ignore previous instructions."},
+        {"role": "user", "content": "Hello"},
+    ])
+    result = await plugin.execute(ctx)
+    msgs = result.body["messages"]
+    system_msgs = [m for m in msgs if m["role"] == "system"]
+    assert len(system_msgs) == 1
+    assert system_msgs[0]["content"] == "Only allowed prompt."
+
+
+@pytest.mark.asyncio
+async def test_spe_append_mode():
+    """Append mode adds enforced prompt after all other messages."""
+    plugin = SystemPromptEnforcer(config={"prompt": "Appended rule.", "mode": "append"})
+    ctx = _make_spe_ctx([
+        {"role": "system", "content": "Existing system."},
+        {"role": "user", "content": "Hi"},
+    ])
+    result = await plugin.execute(ctx)
+    msgs = result.body["messages"]
+    assert msgs[-1]["content"] == "Appended rule."
+
+
+@pytest.mark.asyncio
+async def test_spe_empty_prompt_passthrough():
+    """Empty prompt config should always pass through."""
+    plugin = SystemPromptEnforcer(config={"prompt": "", "mode": "replace"})
+    ctx = _make_spe_ctx([{"role": "user", "content": "Hi"}])
+    result = await plugin.execute(ctx)
+    assert result.action == "passthrough"
+
+
+@pytest.mark.asyncio
+async def test_spe_empty_messages_inject():
+    """Empty messages with skip_if_empty=False should inject system message."""
+    plugin = SystemPromptEnforcer(config={"prompt": "Hello.", "skip_if_empty": False})
+    ctx = PluginContext(body={"messages": []}, session_id="s1")
+    result = await plugin.execute(ctx)
+    assert result.action == "modify"
+    assert result.body["messages"][0]["content"] == "Hello."
+
+
+@pytest.mark.asyncio
+async def test_spe_skip_if_empty():
+    """skip_if_empty=True should pass through when messages is empty."""
+    plugin = SystemPromptEnforcer(config={"prompt": "Hello.", "skip_if_empty": True})
+    ctx = PluginContext(body={"messages": []}, session_id="s1")
+    result = await plugin.execute(ctx)
+    assert result.action == "passthrough"
+
+
+# ── MaxTokensEnforcer Tests ──
+
+from plugins.marketplace.max_tokens_enforcer import MaxTokensEnforcer
+
+
+@pytest.mark.asyncio
+async def test_mte_passthrough_under_ceiling():
+    """Requests under the ceiling should pass through unchanged."""
+    plugin = MaxTokensEnforcer(config={"ceiling": 4096, "inject_default": False})
+    ctx = PluginContext(body={"messages": [], "max_tokens": 100}, session_id="s1")
+    result = await plugin.execute(ctx)
+    assert result.action == "passthrough"
+
+
+@pytest.mark.asyncio
+async def test_mte_clamps_over_ceiling():
+    """Requests over the ceiling should be clamped."""
+    plugin = MaxTokensEnforcer(config={"ceiling": 1000, "inject_default": False})
+    ctx = PluginContext(body={"messages": [], "max_tokens": 50000}, session_id="s1")
+    result = await plugin.execute(ctx)
+    assert result.action == "modify"
+    assert result.body["max_tokens"] == 1000
+
+
+@pytest.mark.asyncio
+async def test_mte_no_max_tokens_no_inject():
+    """Missing max_tokens with inject_default=False should pass through."""
+    plugin = MaxTokensEnforcer(config={"ceiling": 4096, "inject_default": False})
+    ctx = PluginContext(body={"messages": []}, session_id="s1")
+    result = await plugin.execute(ctx)
+    assert result.action == "passthrough"
+    assert "max_tokens" not in result.body if result.body else True
+
+
+@pytest.mark.asyncio
+async def test_mte_injects_default():
+    """inject_default=True should set max_tokens to ceiling when absent."""
+    plugin = MaxTokensEnforcer(config={"ceiling": 2048, "inject_default": True})
+    ctx = PluginContext(body={"messages": []}, session_id="s1")
+    result = await plugin.execute(ctx)
+    assert result.action == "modify"
+    assert result.body["max_tokens"] == 2048
+
+
+@pytest.mark.asyncio
+async def test_mte_exact_ceiling_passthrough():
+    """Exactly equal to ceiling should pass through (not modify)."""
+    plugin = MaxTokensEnforcer(config={"ceiling": 512})
+    ctx = PluginContext(body={"max_tokens": 512}, session_id="s1")
+    result = await plugin.execute(ctx)
+    assert result.action == "passthrough"
+
+
+# ── ABModelRouter Tests ──
+
+from plugins.marketplace.ab_model_router import ABModelRouter
+
+
+@pytest.mark.asyncio
+async def test_abmr_routes_to_control_or_variant():
+    """Router should assign either control or variant model."""
+    plugin = ABModelRouter(config={
+        "control_model": "gpt-4o",
+        "variant_model": "gpt-4o-mini",
+        "split_pct": 0.5,
+        "sticky": False,
+        "experiment_id": "test_exp",
+    })
+    results = set()
+    for i in range(30):
+        ctx = PluginContext(body={"model": "gpt-4o"}, session_id=f"s{i}")
+        res = await plugin.execute(ctx)
+        assert res.action == "modify"
+        results.add(res.body["model"])
+    # With 30 samples at 50% split, both arms should appear
+    assert "gpt-4o" in results
+    assert "gpt-4o-mini" in results
+
+
+@pytest.mark.asyncio
+async def test_abmr_sticky_session():
+    """Sticky mode should assign the same arm to the same session_id."""
+    plugin = ABModelRouter(config={
+        "control_model": "gpt-4o",
+        "variant_model": "gpt-4o-mini",
+        "split_pct": 0.5,
+        "sticky": True,
+        "experiment_id": "test_exp",
+    })
+    session = "sticky-session-123"
+    ctx1 = PluginContext(body={"model": "gpt-4o"}, session_id=session)
+    ctx2 = PluginContext(body={"model": "gpt-4o"}, session_id=session)
+    res1 = await plugin.execute(ctx1)
+    res2 = await plugin.execute(ctx2)
+    assert res1.body["model"] == res2.body["model"]
+
+
+@pytest.mark.asyncio
+async def test_abmr_injects_ab_meta():
+    """Router should inject _ab_meta into the request body."""
+    plugin = ABModelRouter(config={
+        "control_model": "gpt-4o",
+        "variant_model": "gpt-4o-mini",
+        "split_pct": 1.0,  # Always variant
+        "sticky": False,
+        "experiment_id": "my_exp",
+    })
+    ctx = PluginContext(body={"model": "gpt-4o"}, session_id="s1")
+    res = await plugin.execute(ctx)
+    assert "_ab_meta" in res.body
+    assert res.body["_ab_meta"]["experiment_id"] == "my_exp"
+    assert res.body["_ab_meta"]["arm"] == "variant"
+    assert res.body["model"] == "gpt-4o-mini"
+
+
+@pytest.mark.asyncio
+async def test_abmr_passthrough_unrelated_model():
+    """Requests for models unrelated to control/variant should pass through."""
+    plugin = ABModelRouter(config={
+        "control_model": "gpt-4o",
+        "variant_model": "gpt-4o-mini",
+        "split_pct": 0.5,
+        "sticky": False,
+    })
+    ctx = PluginContext(body={"model": "claude-sonnet-4-20250514"}, session_id="s1")
+    res = await plugin.execute(ctx)
+    assert res.action == "passthrough"
+
+
+@pytest.mark.asyncio
+async def test_abmr_passthrough_no_models_configured():
+    """Router with empty control/variant should pass through."""
+    plugin = ABModelRouter(config={"control_model": "", "variant_model": ""})
+    ctx = PluginContext(body={"model": "gpt-4o"}, session_id="s1")
+    res = await plugin.execute(ctx)
+    assert res.action == "passthrough"
+
+
 # ── Plugin Engine Dual-Mode Tests ──
 
 class DummyClassPlugin(BasePlugin):

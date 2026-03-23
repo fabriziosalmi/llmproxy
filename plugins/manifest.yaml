@@ -375,6 +375,116 @@ plugins:
         description: "Automatically block responses containing leaked system prompts"
         default: false
 
+  - name: "System Prompt Enforcer"
+    hook: "pre_flight"
+    priority: 8
+    enabled: false
+    type: "python"
+    entrypoint: "marketplace.system_prompt_enforcer:SystemPromptEnforcer"
+    version: "1.0.0"
+    author: "llmproxy"
+    description: "Injects or overrides the system prompt in every request — clients cannot bypass it"
+    timeout_ms: 2
+    config:
+      prompt: ""
+      mode: "prepend"
+      skip_if_empty: false
+    ui_schema:
+      - key: "prompt"
+        type: "textarea"
+        label: "Enforced System Prompt"
+        description: "The system prompt to inject into every request"
+        default: ""
+      - key: "mode"
+        type: "select"
+        label: "Injection Mode"
+        description: "How to apply the enforced prompt relative to the client's system message"
+        default: "prepend"
+        options: ["prepend", "append", "replace"]
+      - key: "skip_if_empty"
+        type: "boolean"
+        label: "Skip if No Messages"
+        description: "Skip enforcement when the request contains no messages"
+        default: false
+
+  - name: "Max Tokens Enforcer"
+    hook: "pre_flight"
+    priority: 7
+    enabled: false
+    type: "python"
+    entrypoint: "marketplace.max_tokens_enforcer:MaxTokensEnforcer"
+    version: "1.0.0"
+    author: "llmproxy"
+    description: "Clamps max_tokens to a configured ceiling — clients cannot exceed it"
+    timeout_ms: 1
+    config:
+      ceiling: 4096
+      inject_default: false
+      log_clamp: true
+    ui_schema:
+      - key: "ceiling"
+        type: "number"
+        label: "Max Tokens Ceiling"
+        description: "Hard upper bound on max_tokens regardless of client request"
+        default: 4096
+        min: 64
+        max: 200000
+      - key: "inject_default"
+        type: "boolean"
+        label: "Inject Default"
+        description: "Inject ceiling as max_tokens when client omits it"
+        default: false
+      - key: "log_clamp"
+        type: "boolean"
+        label: "Log Clamp Events"
+        description: "Log a warning when a request is clamped"
+        default: true
+
+  - name: "A/B Model Router"
+    hook: "routing"
+    priority: 45
+    enabled: false
+    type: "python"
+    entrypoint: "marketplace.ab_model_router:ABModelRouter"
+    version: "1.0.0"
+    author: "llmproxy"
+    description: "Routes a configurable % of traffic to a variant model for A/B experimentation"
+    timeout_ms: 2
+    config:
+      control_model: "gpt-4o"
+      variant_model: "gpt-4o-mini"
+      split_pct: 0.1
+      sticky: true
+      experiment_id: "ab_test"
+    ui_schema:
+      - key: "control_model"
+        type: "text"
+        label: "Control Model"
+        description: "Primary model (receives 100% - split_pct of traffic)"
+        default: "gpt-4o"
+      - key: "variant_model"
+        type: "text"
+        label: "Variant Model"
+        description: "Model under test (receives split_pct of traffic)"
+        default: "gpt-4o-mini"
+      - key: "split_pct"
+        type: "number"
+        label: "Variant Split (%)"
+        description: "Fraction of traffic routed to variant (0.0 = 0%, 1.0 = 100%)"
+        default: 0.1
+        min: 0.01
+        max: 1.0
+      - key: "sticky"
+        type: "boolean"
+        label: "Sticky Sessions"
+        description: "Pin each session_id to the same arm for consistent multi-turn conversations"
+        default: true
+      - key: "experiment_id"
+        type: "text"
+        label: "Experiment ID"
+        description: "Tag injected into request metadata for tracking in audit log"
+        default: "ab_test"
+
   - name: "Topic Blocklist"
     hook: "pre_flight"
     priority: 9
