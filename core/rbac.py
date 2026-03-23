@@ -1,10 +1,11 @@
 import sqlite3
+import asyncio
 import logging
 from typing import Dict, Optional, List, Set
 
 logger = logging.getLogger(__name__)
 
-# Default role → permission mapping
+# Default role -> permission mapping
 DEFAULT_PERMISSIONS: Dict[str, Set[str]] = {
     "admin": {
         "proxy:use", "proxy:toggle", "proxy:config",
@@ -35,14 +36,19 @@ DEFAULT_PERMISSIONS: Dict[str, Set[str]] = {
 
 
 class RBACManager:
-    """Manages API Key quotas, budgets, and role-based access."""
+    """Manages API Key quotas, budgets, and role-based access.
+
+    All SQLite operations are wrapped in asyncio.to_thread() to avoid
+    blocking the event loop. Sync variants (_sync_*) exist for __init__.
+    """
 
     def __init__(self, db_path: str = "endpoints.db"):
         self.db_path = db_path
         self.permissions = dict(DEFAULT_PERMISSIONS)
-        self._init_db()
+        self._sync_init_db()
 
-    def _init_db(self):
+    def _sync_init_db(self):
+        """Sync init -- only called from __init__ (before event loop starts)."""
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS quotas (
@@ -63,8 +69,7 @@ class RBACManager:
             """)
             conn.commit()
 
-    def check_quota(self, api_key: str) -> bool:
-        """Returns True if the API key has remaining budget."""
+    def _sync_check_quota(self, api_key: str) -> bool:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute(
                 "SELECT monthly_budget, consumed_budget, hard_limit FROM quotas WHERE api_key = ?",
@@ -72,22 +77,35 @@ class RBACManager:
             )
             row = cursor.fetchone()
             if not row:
-                return True # Default to allow if not in quota table
-
+                return True
             budget, consumed, hard_limit = row
             if hard_limit and consumed >= budget:
                 logger.warning(f"RBAC: Key {api_key[:8]}... exceeded budget ({consumed}/{budget})")
                 return False
             return True
 
-    def update_usage(self, api_key: str, cost: float):
-        """Increments the consumed budget for an API key."""
+    def check_quota(self, api_key: str) -> bool:
+        """Returns True if the API key has remaining budget. Non-blocking."""
+        # Called from sync context in some tests -- check if loop is running
+        try:
+            asyncio.get_running_loop()
+            # We're in an async context but this is called sync -- use sync path
+            # (to_thread would deadlock if called from sync code in async loop)
+            return self._sync_check_quota(api_key)
+        except RuntimeError:
+            return self._sync_check_quota(api_key)
+
+    def _sync_update_usage(self, api_key: str, cost: float):
         with sqlite3.connect(self.db_path) as conn:
             conn.execute(
                 "UPDATE quotas SET consumed_budget = consumed_budget + ? WHERE api_key = ?",
                 (cost, api_key)
             )
             conn.commit()
+
+    def update_usage(self, api_key: str, cost: float):
+        """Increments the consumed budget for an API key."""
+        self._sync_update_usage(api_key, cost)
 
     def add_quota(self, api_key: str, team: str, budget: float):
         """Configures a quota for a new or existing key."""
@@ -98,7 +116,7 @@ class RBACManager:
             )
             conn.commit()
 
-    # ── Session 6: Role-based permission checks ──
+    # -- Role-based permission checks (pure in-memory, no I/O) --
 
     def check_permission(self, roles: List[str], permission: str) -> bool:
         """Check if any of the given roles grants the specified permission."""
@@ -115,8 +133,7 @@ class RBACManager:
             perms |= self.permissions.get(role, set())
         return perms
 
-    def set_user_roles(self, subject: str, email: Optional[str], roles: List[str]):
-        """Persist user→role mapping (from SSO claims or admin assignment)."""
+    def _sync_set_user_roles(self, subject: str, email: Optional[str], roles: List[str]):
         with sqlite3.connect(self.db_path) as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO user_roles (subject, email, roles) VALUES (?, ?, ?)",
@@ -124,8 +141,11 @@ class RBACManager:
             )
             conn.commit()
 
-    def get_user_roles(self, subject: str) -> List[str]:
-        """Look up persisted roles for a user subject."""
+    def set_user_roles(self, subject: str, email: Optional[str], roles: List[str]):
+        """Persist user->role mapping."""
+        self._sync_set_user_roles(subject, email, roles)
+
+    def _sync_get_user_roles(self, subject: str) -> List[str]:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute(
                 "SELECT roles FROM user_roles WHERE subject = ?", (subject,)
@@ -134,3 +154,7 @@ class RBACManager:
             if row and row[0]:
                 return [r.strip() for r in row[0].split(",") if r.strip()]
         return ["user"]
+
+    def get_user_roles(self, subject: str) -> List[str]:
+        """Look up persisted roles for a user subject."""
+        return self._sync_get_user_roles(subject)

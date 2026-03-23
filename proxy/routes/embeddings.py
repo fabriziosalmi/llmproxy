@@ -164,7 +164,8 @@ def create_router(agent) -> APIRouter:
                 usage = json.loads(response.body.decode()).get("usage", {})
                 tokens = usage.get("total_tokens", 0) or usage.get("prompt_tokens", 0)
                 cost_usd = estimate_cost(model, tokens, 0)
-                agent.total_cost_today += cost_usd
+                async with agent._budget_lock:
+                    agent.total_cost_today += cost_usd
         except Exception:
             pass
 

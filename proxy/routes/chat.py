@@ -122,15 +122,15 @@ def create_router(agent) -> APIRouter:
                     cost_usd = estimate_cost_pre_flight(model_name, est_tokens)
             except Exception:
                 pass
-            agent.total_cost_today += cost_usd
-            budget_cfg = agent.config.get("budget", {})
-            daily_limit = budget_cfg.get("daily_limit", 50.0)
-            soft_limit = budget_cfg.get("soft_limit", 40.0)
-            MetricsTracker.set_budget(agent.total_cost_today, daily_limit)
-            # Persist daily budget to SQLite (batched, graceful-shutdown safe)
-            agent.enqueue_write("budget:daily_total", agent.total_cost_today)
-            if agent.total_cost_today >= soft_limit:
-                asyncio.create_task(agent.webhooks.dispatch(EventType.BUDGET_THRESHOLD, {"consumed": agent.total_cost_today, "limit": daily_limit}))
+            async with agent._budget_lock:
+                agent.total_cost_today += cost_usd
+                budget_cfg = agent.config.get("budget", {})
+                daily_limit = budget_cfg.get("daily_limit", 50.0)
+                soft_limit = budget_cfg.get("soft_limit", 40.0)
+                MetricsTracker.set_budget(agent.total_cost_today, daily_limit)
+                agent.enqueue_write("budget:daily_total", agent.total_cost_today)
+                if agent.total_cost_today >= soft_limit:
+                    asyncio.create_task(agent.webhooks.dispatch(EventType.BUDGET_THRESHOLD, {"consumed": agent.total_cost_today, "limit": daily_limit}))
 
             # Log spend + audit (async, non-blocking)
             import datetime as _dt
@@ -169,7 +169,11 @@ def create_router(agent) -> APIRouter:
                     )
                 except Exception:
                     pass
-            asyncio.create_task(_persist_logs())
+            def _on_audit_error(task: asyncio.Task) -> None:
+                if task.exception():
+                    logger.warning(f"Audit log persistence failed: {task.exception()}")
+            task = asyncio.create_task(_persist_logs())
+            task.add_done_callback(_on_audit_error)
 
             return response
         except Exception as e:

@@ -543,11 +543,26 @@ class PluginManager:
             self.logger.debug(f"WASM runner not initialized for {plugin['name']}")
             return
 
-        result: PluginResponse = await runner.execute(
-            body=context.body,
-            metadata=context.metadata,
-            session_id=context.session_id,
-        )
+        timeout_ms = plugin.get("timeout_ms", 500)
+        timeout_s = timeout_ms / 1000.0
+
+        try:
+            result: PluginResponse = await asyncio.wait_for(
+                runner.execute(
+                    body=context.body,
+                    metadata=context.metadata,
+                    session_id=context.session_id,
+                ),
+                timeout=timeout_s,
+            )
+        except asyncio.TimeoutError:
+            name = plugin.get("name", "wasm_unknown")
+            self.logger.warning(f"WASM plugin {name} TIMEOUT ({timeout_ms}ms)")
+            stats = self._plugin_stats.get(name)
+            if stats:
+                stats["timeouts"] += 1
+                stats["errors"] += 1
+            return
 
         # Apply PluginResponse to context (same logic as class plugins)
         if result and result.action != "passthrough":

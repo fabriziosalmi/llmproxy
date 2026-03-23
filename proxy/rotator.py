@@ -151,6 +151,7 @@ class RotatorAgent(BaseAgent):
         # Budget tracking (hydrated from SQLite in setup())
         self.total_cost_today = 0.0
         self._budget_date: str | None = None
+        self._budget_lock = asyncio.Lock()
         self._pending_writes: asyncio.Queue = asyncio.Queue(maxsize=500)
 
         # Gateway state
@@ -369,7 +370,19 @@ class RotatorAgent(BaseAgent):
         self._health_prober = EndpointHealthProber(self.config, self.circuit_manager, self._get_session)
         asyncio.create_task(self._health_prober.start())
 
+        # Background deduplicator cleanup (prevent memory leak from expired entries)
+        asyncio.create_task(self._dedup_cleanup_loop(60))
+
         self.logger.info("Security gateway ready.")
+
+    async def _dedup_cleanup_loop(self, interval: int = 60):
+        """Periodically clean expired entries from the request deduplicator."""
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                self.deduplicator.cleanup_expired()
+            except Exception as e:
+                self.logger.debug(f"Dedup cleanup error: {e}")
 
     async def run(self, port: int | None = None):
         if port is None:
@@ -529,16 +542,19 @@ class RotatorAgent(BaseAgent):
                             if not circuit_success_reported:
                                 _cb.report_failure()
                             raise e
-                        # Post-stream: update budget with real token cost
-                        if stream_usage:
-                            from core.pricing import estimate_cost
-                            p_tok = stream_usage.get("prompt_tokens") or stream_usage.get("promptTokenCount", 0)
-                            c_tok = stream_usage.get("completion_tokens") or stream_usage.get("candidatesTokenCount", 0)
-                            model_name = ctx.body.get("model", "")
-                            real_cost = estimate_cost(model_name, p_tok, c_tok)
-                            self.total_cost_today += real_cost
-                            ctx.metadata["_stream_usage"] = {"prompt_tokens": p_tok, "completion_tokens": c_tok}
-                            ctx.metadata["_stream_cost_usd"] = round(real_cost, 6)
+                        finally:
+                            # Post-stream: update budget with real token cost
+                            # In finally block to charge even on client disconnect
+                            if stream_usage:
+                                from core.pricing import estimate_cost
+                                p_tok = stream_usage.get("prompt_tokens") or stream_usage.get("promptTokenCount", 0)
+                                c_tok = stream_usage.get("completion_tokens") or stream_usage.get("candidatesTokenCount", 0)
+                                model_name = ctx.body.get("model", "")
+                                real_cost = estimate_cost(model_name, p_tok, c_tok)
+                                async with self._budget_lock:
+                                    self.total_cost_today += real_cost
+                                ctx.metadata["_stream_usage"] = {"prompt_tokens": p_tok, "completion_tokens": c_tok}
+                                ctx.metadata["_stream_cost_usd"] = round(real_cost, 6)
 
                     ctx.response = StreamingResponse(stream_generator(), media_type="text/event-stream")
                     return ctx.response

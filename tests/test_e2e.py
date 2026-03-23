@@ -78,6 +78,7 @@ class LightweightAgent:
         self.log_queue = asyncio.Queue(maxsize=100)
         self.telemetry_queue = asyncio.Queue(maxsize=100)
         self._pending_writes: asyncio.Queue = asyncio.Queue(maxsize=500)
+        self._budget_lock = asyncio.Lock()
 
         # proxy_request mock (for chat tests)
         self.proxy_request = AsyncMock(
