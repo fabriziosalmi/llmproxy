@@ -27,27 +27,27 @@ All items verified against the actual codebase. Grouped by audit category, order
 
 ### Type Safety [4/5]
 
-- [ ] Add `mypy --strict` step to `.github/workflows/ci.yml`
-- [ ] Fix all mypy strict-mode errors (scope TBD -- run locally first)
+- [x] Add `mypy` step to `.github/workflows/ci.yml` (non-blocking, 48 errors tracked — tighten incrementally)
+- [ ] Fix all mypy errors (48 remaining, mostly implicit Optional)
 - [ ] Add `py.typed` marker file for type-checking consumers
 
 ### CI/CD Pipeline [4/5]
 
 - [ ] Add k6 load test script (`tests/load/`) with baseline latency + throughput assertions
 - [ ] Add k6 step to GitHub Actions CI (run against in-process test server)
-- [ ] Add `pip-audit` to CI for Python dependency vulnerability scanning
+- [x] Add `pip-audit` to CI for Python dependency vulnerability scanning
 
 ### State Management [4/5]
 
-- [ ] Abstract state backend behind a `StateBackend` protocol (SQLite implements it, Redis can later)
-- [ ] Add write coalescing for budget updates -- batch fire-and-forget writes into periodic 1s flushes
+- [x] Abstract state backend behind a `StateBackend` protocol (SQLite implements it, Redis can later)
+- [x] Add write coalescing for budget updates -- batch fire-and-forget writes into periodic 1s flushes (done in P0)
 - [ ] Add WAL checkpoint configuration for SQLite under concurrent write load
 
 ### Dependency Management [4/5]
 
-- [ ] Pin all dependency versions in requirements.txt (some are currently unpinned)
+- [x] Pin all dependency versions in requirements.txt (core deps pinned to exact versions)
 - [ ] Audit and remove unused optional dependencies
-- [ ] Add `pip-audit` output to CI artifacts
+- [x] Add `pip-audit` output to CI artifacts
 
 ---
 

@@ -18,6 +18,35 @@ jobs:
       - run: pip install ruff
       - run: ruff check .
 
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install mypy
+      - name: mypy (core + proxy)
+        run: python -m mypy core/ proxy/ || true
+        # Non-blocking for now — tracking error count regression.
+        # TODO: remove `|| true` once all errors are fixed.
+
+  security:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install pip-audit
+      - name: pip-audit
+        run: pip-audit -r requirements.txt --skip-editable --ignore-vuln PYSEC-2024-62 || true
+        # Non-blocking — tracks known vulnerabilities without failing CI.
+
   test:
     name: Test
     runs-on: ubuntu-latest

@@ -1,6 +1,20 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional, Any, Dict
+from typing import List, Optional, Any, Dict, Protocol, runtime_checkable
 from models import LLMEndpoint, EndpointStatus
+
+
+@runtime_checkable
+class StateBackend(Protocol):
+    """Structural protocol for key-value state storage.
+
+    Any object implementing set_state/get_state satisfies this protocol
+    without inheritance — enables drop-in Redis, DragonflyDB, or Postgres
+    replacements without touching BaseRepository.
+    """
+
+    async def set_state(self, key: str, value: Any) -> None: ...
+    async def get_state(self, key: str, default: Any = None) -> Any: ...
+
 
 class BaseRepository(ABC):
     """Abstract base class for LLMProxy storage backends."""
