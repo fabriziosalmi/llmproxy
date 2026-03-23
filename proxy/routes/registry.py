@@ -18,22 +18,34 @@ def create_router(agent) -> APIRouter:
         await agent._add_log(f"ENDPOINT: {endpoint_id} set to {new_status.value}")
         return {"id": endpoint_id, "status": new_status.value}
 
+    # SSE connection limit — prevents resource exhaustion
+    _MAX_TELEMETRY_STREAMS = 20
+    _active_telemetry = {"count": 0}
+
     @router.get("/api/v1/telemetry/stream")
     async def telemetry_stream(request: Request):
-        """Real-time SSE stream for the 'Shadow-ops' HUD."""
+        """Real-time SSE stream for the SOC dashboard."""
         import asyncio
         import json
         from fastapi.responses import StreamingResponse
 
+        if _active_telemetry["count"] >= _MAX_TELEMETRY_STREAMS:
+            raise HTTPException(status_code=503, detail="Too many SSE connections")
+
         async def event_generator():
-            while True:
-                if await request.is_disconnected():
-                    break
-                try:
-                    event = await asyncio.wait_for(agent.telemetry_queue.get(), timeout=1.0)
-                    yield f"data: {json.dumps(event)}\n\n"
-                except asyncio.TimeoutError:
-                    yield ": keep-alive\n\n"
+            _active_telemetry["count"] += 1
+            try:
+                while True:
+                    if await request.is_disconnected():
+                        break
+                    try:
+                        event = await asyncio.wait_for(agent.telemetry_queue.get(), timeout=1.0)
+                        yield f"data: {json.dumps(event)}\n\n"
+                    except asyncio.TimeoutError:
+                        yield ": keep-alive\n\n"
+            finally:
+                _active_telemetry["count"] -= 1
+
         return StreamingResponse(event_generator(), media_type="text/event-stream")
 
     @router.delete("/api/v1/registry/{endpoint_id}")

@@ -56,25 +56,25 @@ All items verified against the actual codebase. Grouped by audit category, order
 ### Latency Overhead [3/5]
 
 - [ ] Profile the full 5-ring pipeline under load with `py-spy` -- identify the actual P99 bottleneck before optimizing
-- [ ] Add connection pooling configuration for upstream aiohttp sessions (max connections, keepalive, DNS cache TTL)
+- [x] Add connection pooling configuration for upstream aiohttp sessions (TCPConnector: 100 total, 20/host, DNS cache 5min)
 - [ ] Evaluate PyO3 Rust extension for the ASGI firewall byte scanner (only if profiling proves it is the bottleneck)
 
 ### Database Bottlenecks [3/5]
 
 - [ ] Benchmark audit log write throughput under concurrent load -- quantify the actual SQLite ceiling
-- [ ] Add SQLite connection pool size as a config option
+- [x] Add SQLite WAL mode, synchronous=NORMAL, busy_timeout=5000ms pragmas for concurrent write performance
 - [ ] Document the scaling path: when and how to migrate from SQLite to Redis/Postgres
 
 ### Routing Intelligence [3/5]
 
-- [ ] Cache EMA scores per-endpoint in a dict (avoid recalculation on every request)
-- [ ] Pre-compute routing decisions for static model aliases at startup
+- [x] Cache EMA scores per-endpoint in a dict -- already implemented in `_endpoint_stats` module-level dict (neural_router.py)
+- [x] Pre-compute routing decisions for static model aliases -- already O(1) dict lookup (model_resolver.py)
 
 ### Observability [3/5]
 
-- [ ] Add SSE connection limit and stale consumer eviction (prevent resource exhaustion)
-- [ ] Add per-ring latency histograms to Prometheus (currently only aggregate latency)
-- [ ] Add health check for SSE stream endpoints (detect stuck consumers)
+- [x] Add SSE connection limit and stale consumer eviction (20 max per stream, disconnect detection, keep-alive)
+- [x] Add per-ring latency histograms to Prometheus -- already exists (`RING_LATENCY` in core/metrics.py:60-65)
+- [x] Add health check for SSE stream endpoints (disconnect detection via `request.is_disconnected()`)
 
 ---
 

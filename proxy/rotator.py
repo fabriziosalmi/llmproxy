@@ -251,7 +251,19 @@ class RotatorAgent(BaseAgent):
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30))
+            # Configurable connection pooling for upstream providers
+            http_cfg = self.config.get("server", {})
+            timeout_s = int(http_cfg.get("timeout", "30s").rstrip("s"))
+            connector = aiohttp.TCPConnector(
+                limit=100,           # max total connections
+                limit_per_host=20,   # max per upstream provider
+                ttl_dns_cache=300,   # DNS cache TTL (5 min)
+                enable_cleanup_closed=True,
+            )
+            self._session = aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=timeout_s),
+                connector=connector,
+            )
         return self._session
 
     # ── Circuit Breaker Callbacks ──

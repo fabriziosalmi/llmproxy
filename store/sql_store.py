@@ -14,6 +14,10 @@ class SQLiteStore:
 
     async def init_db(self):
         async with aiosqlite.connect(self.db_path) as conn:
+            # WAL mode for concurrent read/write performance
+            await conn.execute("PRAGMA journal_mode=WAL")
+            await conn.execute("PRAGMA synchronous=NORMAL")
+            await conn.execute("PRAGMA busy_timeout=5000")
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS endpoints (
                     id TEXT PRIMARY KEY,

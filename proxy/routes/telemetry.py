@@ -1,13 +1,18 @@
 """Telemetry routes: health, metrics, logs SSE stream."""
 import re
 import json
+import asyncio
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import Response, StreamingResponse
 
 # Strip ANSI escape sequences and control chars to prevent terminal injection via xterm.js
 _ANSI_RE = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?\x07')
 _CTRL_RE = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
+
+# SSE connection limit — prevents resource exhaustion from stale consumers
+_MAX_SSE_CONNECTIONS = 20
+_active_log_streams = 0
 
 def _sanitize_log(log: dict) -> dict:
     """Strip terminal escape sequences from log string values."""
@@ -40,11 +45,26 @@ def create_router(agent) -> APIRouter:
         return Response(content=body, media_type=content_type)
 
     @router.get("/api/v1/logs")
-    async def stream_logs():
+    async def stream_logs(request: Request):
+        global _active_log_streams
+        if _active_log_streams >= _MAX_SSE_CONNECTIONS:
+            raise HTTPException(status_code=503, detail="Too many SSE connections")
+
         async def log_generator():
-            while True:
-                log = await agent.log_queue.get()
-                yield f"data: {json.dumps(_sanitize_log(log) if isinstance(log, dict) else log)}\n\n"
+            global _active_log_streams
+            _active_log_streams += 1
+            try:
+                while True:
+                    if await request.is_disconnected():
+                        break
+                    try:
+                        log = await asyncio.wait_for(agent.log_queue.get(), timeout=1.0)
+                        yield f"data: {json.dumps(_sanitize_log(log) if isinstance(log, dict) else log)}\n\n"
+                    except asyncio.TimeoutError:
+                        yield ": keep-alive\n\n"
+            finally:
+                _active_log_streams -= 1
+
         return StreamingResponse(log_generator(), media_type="text/event-stream")
 
     return router
