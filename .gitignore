@@ -43,10 +43,13 @@ Thumbs.db
 .vscode/
 .idea/
 
-# UI
+# UI & Docs
 node_modules/
 .npm/
 dist/
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+.vitepress/cache/
 
 demo/
 
