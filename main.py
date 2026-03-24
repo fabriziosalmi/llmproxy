@@ -21,6 +21,12 @@ logger = logging.getLogger("llmproxy")
 
 
 async def main():
+    # Supply chain integrity check (pre-startup)
+    from scripts.verify_deps import verify_all
+    if not verify_all(strict=False):
+        logger.critical("Supply chain integrity check FAILED. Aborting startup.")
+        return
+
     with open("config.yaml", 'r') as f:
         config = yaml.safe_load(f)
 
