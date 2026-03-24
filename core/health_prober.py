@@ -9,6 +9,7 @@ any real traffic hits them.
 """
 
 import time
+import random
 import asyncio
 import logging
 from typing import Dict, Any
@@ -29,14 +30,18 @@ class EndpointHealthProber:
         self._running = False
 
     async def start(self, interval: int = PROBE_INTERVAL):
-        """Start the background probe loop."""
+        """Start the background probe loop with jitter to prevent thundering herd."""
         self._running = True
+        # Initial jitter: stagger first probe 0-50% of interval
+        await asyncio.sleep(random.uniform(0, interval * 0.5))
         while self._running:
-            await asyncio.sleep(interval)
             try:
                 await self._probe_all()
             except Exception as e:
                 logger.warning(f"Health probe round failed: {e}")
+            # Per-round jitter: ±20% of interval to avoid lock-step with other instances
+            jittered = interval * random.uniform(0.8, 1.2)
+            await asyncio.sleep(jittered)
 
     def stop(self):
         self._running = False
@@ -59,10 +64,15 @@ class EndpointHealthProber:
             if not probe_local and ("localhost" in base_url or "127.0.0.1" in base_url):
                 continue
 
-            tasks.append(self._probe_one(ep_name, provider, base_url, models[0]))
+            tasks.append(self._probe_one_jittered(ep_name, provider, base_url, models[0]))
 
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _probe_one_jittered(self, ep_name: str, provider: str, base_url: str, model: str):
+        """Add per-probe jitter (0-5s) to spread requests across time."""
+        await asyncio.sleep(random.uniform(0, 5.0))
+        await self._probe_one(ep_name, provider, base_url, model)
 
     async def _probe_one(self, ep_name: str, provider: str, base_url: str, model: str):
         """Probe a single endpoint with a minimal request."""

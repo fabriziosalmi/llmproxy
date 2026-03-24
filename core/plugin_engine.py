@@ -184,6 +184,10 @@ class PluginManager:
         self._ring_traces_index: Dict[str, dict] = {}  # req_id → trace dict (O(1) lookup)
         self._ring_traces_max = 100
 
+    # Plugin circuit breaker: auto-quarantine after consecutive failures
+    PLUGIN_CB_THRESHOLD = 10   # consecutive errors to trip
+    PLUGIN_CB_COOLDOWN = 60.0  # seconds before retry
+
     def _init_stats(self, name: str):
         """Initialize per-plugin stats tracker."""
         if name not in self._plugin_stats:
@@ -193,9 +197,44 @@ class PluginManager:
                 "blocks": 0,
                 "timeouts": 0,
                 "total_latency_ms": 0.0,
+                "consecutive_errors": 0,
+                "quarantined_until": 0.0,  # timestamp
             }
         if name not in self._latency_window:
             self._latency_window[name] = deque(maxlen=self._latency_window_size)
+
+    def _plugin_quarantined(self, name: str) -> bool:
+        """Check if a plugin is quarantined (circuit breaker open)."""
+        stats = self._plugin_stats.get(name)
+        if not stats:
+            return False
+        if stats["quarantined_until"] > 0:
+            if time.perf_counter() < stats["quarantined_until"]:
+                return True
+            # Cooldown expired — half-open: reset and allow retry
+            stats["quarantined_until"] = 0.0
+            stats["consecutive_errors"] = 0
+            self.logger.info(f"Plugin {name} circuit breaker: half-open (retry)")
+        return False
+
+    def _plugin_success(self, name: str):
+        """Record a plugin success — resets consecutive error counter."""
+        stats = self._plugin_stats.get(name)
+        if stats:
+            stats["consecutive_errors"] = 0
+
+    def _plugin_failure(self, name: str):
+        """Record a plugin failure — trips circuit breaker if threshold reached."""
+        stats = self._plugin_stats.get(name)
+        if not stats:
+            return
+        stats["consecutive_errors"] += 1
+        if stats["consecutive_errors"] >= self.PLUGIN_CB_THRESHOLD:
+            stats["quarantined_until"] = time.perf_counter() + self.PLUGIN_CB_COOLDOWN
+            self.logger.warning(
+                f"Plugin {name} QUARANTINED: {stats['consecutive_errors']} consecutive errors. "
+                f"Will retry in {self.PLUGIN_CB_COOLDOWN}s"
+            )
 
     @staticmethod
     def _percentiles(samples: Sequence[float]) -> Dict[str, float]:
@@ -433,7 +472,13 @@ class PluginManager:
             stats = self._plugin_stats.get(name)
             fail_closed = self._should_stop_on_failure(p, hook)
 
+            # Plugin circuit breaker — skip quarantined plugins
+            if self._plugin_quarantined(name):
+                self.logger.debug(f"Plugin {name} skipped (quarantined)")
+                continue
+
             t0 = time.perf_counter()
+            errors_before = stats["errors"] if stats else 0
 
             try:
                 if p["type"] == "class":
@@ -535,6 +580,11 @@ class PluginManager:
                 if stats:
                     stats["invocations"] += 1
                     stats["total_latency_ms"] += elapsed_ms
+                    # Plugin circuit breaker: track consecutive error streaks
+                    if stats["errors"] > errors_before:
+                        self._plugin_failure(name)
+                    else:
+                        self._plugin_success(name)
                 # Rolling latency window for percentile calculation
                 # deque(maxlen=N) auto-evicts oldest entry — no manual trimming needed
                 window = self._latency_window.get(name)

@@ -195,19 +195,25 @@ class RotatorAgent(BaseAgent):
         if self._session is None or self._session.closed:
             http_cfg = self.config.get("server", {})
             timeout_s = int(http_cfg.get("timeout", "30s").rstrip("s"))
+            pool_cfg = self.config.get("connection_pool", {})
             connector = aiohttp.TCPConnector(
-                limit=100,
-                limit_per_host=20,
-                ttl_dns_cache=300,
+                limit=pool_cfg.get("max_connections", 100),
+                limit_per_host=pool_cfg.get("max_per_host", 30),
+                ttl_dns_cache=pool_cfg.get("dns_cache_ttl", 300),
                 enable_cleanup_closed=True,
+                keepalive_timeout=pool_cfg.get("keepalive_timeout", 30),
             )
             self._session = aiohttp.ClientSession(
                 timeout=aiohttp.ClientTimeout(
                     total=timeout_s,
-                    sock_connect=10,
+                    sock_connect=pool_cfg.get("connect_timeout", 10),
                     sock_read=timeout_s,
                 ),
                 connector=connector,
+            )
+            self.logger.info(
+                f"HTTP pool: max={connector.limit} per_host={connector.limit_per_host} "
+                f"keepalive={pool_cfg.get('keepalive_timeout', 30)}s"
             )
         return self._session
 
