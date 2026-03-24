@@ -327,6 +327,19 @@ class SecurityShield:
             if injection_error_msg:
                 return injection_error_msg
 
+            # 2b. Semantic Injection Detector (paraphrase-resistant)
+            if self.config.get("semantic_analysis", {}).get("enabled", True):
+                from core.semantic_analyzer import semantic_scan
+                threshold = self.config.get("semantic_analysis", {}).get("threshold", 0.35)
+                result = semantic_scan(prompt, threshold=threshold)
+                if result:
+                    sim_score, category, matched = result
+                    logger.warning(
+                        f"SEMANTIC INJECTION: category={category} score={sim_score} "
+                        f"matched='{matched[:50]}'"
+                    )
+                    return f"Semantic injection detected ({category})"
+
             # 3. Link Sanitizer
             link_error = self._check_links(prompt)
             if link_error:

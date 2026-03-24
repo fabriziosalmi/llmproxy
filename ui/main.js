@@ -13,6 +13,7 @@ import { initLogs } from './components/logs.js';
 import { initPlugins } from './components/plugins.js';
 import { initModels } from './components/models.js';
 import { initAnalytics } from './components/analytics.js';
+import { renderSecurity } from './components/security.js';
 import { auth } from './services/auth.js';
 
 // Global state listener for UI updates
@@ -23,6 +24,7 @@ store.subscribe((state) => {
     renderGuards();
     renderThreats();
     renderSettings();
+    if (state.currentTab === 'security') renderSecurity();
 });
 
 // Helper function for navigation (assuming it's defined elsewhere or will be added)
@@ -184,6 +186,7 @@ function initHUD() {
             { id: 'view-endpoints', name: 'Nav: Endpoints', desc: 'LLM endpoint registry' },
             { id: 'view-models', name: 'Nav: Models', desc: 'LLM model registry across all providers' },
             { id: 'view-analytics', name: 'Nav: Analytics', desc: 'Spend breakdown by model and provider' },
+            { id: 'view-security', name: 'Nav: Security Events', desc: 'Threat ledger, audit chain, GDPR, semantic corpus' },
             { id: 'view-logs', name: 'Nav: Live Logs', desc: 'Real-time SSE log stream' },
             { id: 'view-settings', name: 'Nav: Settings', desc: 'Identity, rate limits, system info' },
             { id: 'toggle-proxy', name: 'System: Kill Switch', desc: 'Emergency halt all traffic' },
@@ -235,6 +238,7 @@ function initHUD() {
             'view-endpoints': 'nav-endpoints',
             'view-models': 'nav-models',
             'view-analytics': 'nav-analytics',
+            'view-security': 'nav-security',
             'view-logs': 'nav-logs',
             'view-settings': 'nav-settings',
         };
