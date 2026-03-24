@@ -41,6 +41,7 @@ class ShadowTraffic(BasePlugin):
         self.sample_rate: float = self.config.get("sample_rate", 0.05)
         self.store_responses: bool = self.config.get("store_responses", True)
         self._comparisons: int = 0
+        self._background_tasks: set[asyncio.Task] = set()
 
     async def execute(self, ctx: PluginContext) -> PluginResponse:
         if not self.shadow_model:
@@ -59,9 +60,11 @@ class ShadowTraffic(BasePlugin):
         # Schedule shadow request asynchronously (don't block the pipeline)
         rotator = ctx.metadata.get("rotator")
         if rotator:
-            asyncio.create_task(
+            task = asyncio.create_task(
                 self._shadow_request(rotator, messages, original_model, ctx.session_id)
             )
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
 
         return PluginResponse.passthrough()
 

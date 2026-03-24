@@ -51,6 +51,7 @@ class SmartBudgetGuard(BasePlugin):
         self._team_spend: Dict[str, float] = defaultdict(float)
         # J.5: Lazy hydration flag
         self._hydrated = False
+        self._background_tasks: set[asyncio.Task] = set()
 
     def _estimate_tokens(self, body: Dict[str, Any]) -> int:
         """Estimate input token count from messages using tiktoken or heuristic."""
@@ -148,7 +149,9 @@ class SmartBudgetGuard(BasePlugin):
 
         # J.5: Persist updated budget (async, non-blocking)
         if store:
-            asyncio.create_task(self._persist(store))
+            task = asyncio.create_task(self._persist(store))
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
 
         # Warn if approaching threshold
         session_usage_pct = (self._session_spend[session_id] / self.session_budget_usd)

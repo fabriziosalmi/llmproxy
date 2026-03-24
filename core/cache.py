@@ -29,7 +29,7 @@ except ImportError:
     aiosqlite = None  # type: ignore[assignment]
 
 try:
-    from cachetools import TTLCache  # type: ignore[import-untyped]
+    from cachetools import TTLCache
 except ImportError:
     TTLCache = None
 

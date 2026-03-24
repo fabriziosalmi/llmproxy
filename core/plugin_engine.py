@@ -3,7 +3,7 @@ LLMPROXY — Plugin Engine (Dual-Mode)
 
 Ring-based plugin pipeline with:
   - Dual-mode: raw async functions (legacy) + BasePlugin classes (marketplace)
-  - AST security scanning pre-load
+  - AST lint scanning pre-load (NOT a security sandbox — use WASM for untrusted code)
   - Strict per-plugin timeout enforcement (asyncio.wait_for)
   - Per-plugin metrics (invocations, errors, blocks, avg latency)
   - Zero-downtime RCU (Read-Copy-Update) hot-swap
@@ -16,7 +16,7 @@ import os
 import ast
 import time
 import importlib.util
-import yaml  # type: ignore[import-untyped]
+import yaml
 import asyncio
 import logging
 import inspect
@@ -77,16 +77,20 @@ FAIL_CLOSED = "closed"  # Plugin failure → request blocked (default for Ingres
 # Rings that default to fail-closed (errors stop the chain)
 FAIL_CLOSED_RINGS = {PluginHook.INGRESS, PluginHook.ROUTING}
 
-# 9.2: Forbidden AST node types for security scanning
+# ── AST Lint Scanner ──
+# NOTE: This is a LINT CHECK, not a security boundary. It catches accidental
+# use of forbidden imports/calls in marketplace plugins but is trivially
+# bypassable (getattr, importlib, ctypes, etc.). For true sandboxing of
+# untrusted third-party plugins, use the WASM runtime (core/wasm_runner.py).
 FORBIDDEN_AST_NODES = {
-    ast.Import, ast.ImportFrom,  # Checked selectively below
+    ast.Import, ast.ImportFrom,
 }
 FORBIDDEN_MODULES = {
     "os", "subprocess", "shutil", "socket", "ctypes",
     "multiprocessing", "signal", "sys", "builtins", "__builtins__",
-    # Blocking I/O libraries (Principle 2: Zero-Blocking Event Loop)
-    "requests", "urllib",  # sync HTTP — use aiohttp/httpx instead
-    "sqlite3",             # sync DB — use aiosqlite instead
+    # Blocking I/O libraries — use async alternatives instead
+    "requests", "urllib",  # sync HTTP — use aiohttp/httpx
+    "sqlite3",             # sync DB — use aiosqlite
 }
 ALLOWED_MODULES = {
     "json", "re", "math", "datetime", "hashlib", "base64",
@@ -97,21 +101,24 @@ ALLOWED_MODULES = {
 
 
 class PluginSecurityError(Exception):
-    """Raised when a plugin fails AST security scan."""
+    """Raised when a plugin fails AST lint scan."""
     pass
 
 
 def ast_scan(source: str, plugin_name: str) -> bool:
     """
-    9.2: AST scanning for plugin security validation.
+    AST lint scanner for marketplace plugins.
 
-    Checks for:
+    Catches accidental use of:
       - Forbidden module imports (os, subprocess, socket, etc.)
-      - exec/eval calls
-      - __import__ usage
-      - Attribute access on forbidden globals
+      - exec/eval/compile calls
+      - Blocking time.sleep() calls
 
-    Returns True if safe, raises PluginSecurityError if not.
+    WARNING: This is NOT a security sandbox. It is trivially bypassable
+    via getattr(), importlib, or ctypes. For untrusted plugin isolation,
+    use the WASM runtime (core/wasm_runner.py).
+
+    Returns True if clean, raises PluginSecurityError on violations.
     """
     try:
         tree = ast.parse(source)
@@ -159,6 +166,8 @@ def ast_scan(source: str, plugin_name: str) -> bool:
 class PluginManager:
     def __init__(self, plugins_dir: str = "plugins"):
         self.plugins_dir = plugins_dir
+        # Writable dir for runtime-installed plugins (Docker: separate volume)
+        self.installed_dir = os.path.join(plugins_dir, "installed")
         self.rings: Dict[PluginHook, List[Dict[str, Any]]] = {hook: [] for hook in PluginHook}
         self._previous_rings: Optional[Dict[PluginHook, List[Dict[str, Any]]]] = None
         self.logger = logging.getLogger("plugin_engine")
@@ -243,13 +252,32 @@ class PluginManager:
         }
 
     async def load_plugins(self):
-        """Discovers and loads plugins based on manifest.yaml."""
+        """Discovers and loads plugins from bundled + installed manifests."""
         if not os.path.exists(self.manifest_path):
             self.logger.warning(f"Plugin manifest not found at {self.manifest_path}")
             return
 
         with open(self.manifest_path, 'r') as f:
             manifest = yaml.safe_load(f) or {}
+
+        # Merge installed plugins manifest (writable volume in Docker)
+        installed_manifest = os.path.join(self.installed_dir, "manifest.yaml")
+        if os.path.exists(installed_manifest):
+            with open(installed_manifest, 'r') as f:
+                installed = yaml.safe_load(f) or {}
+            installed_plugins = installed.get("plugins", [])
+            if installed_plugins:
+                bundled_names = {p.get("name") for p in manifest.get("plugins", [])}
+                for ip in installed_plugins:
+                    if ip.get("name") not in bundled_names:
+                        manifest.setdefault("plugins", []).append(ip)
+                    else:
+                        self.logger.info(f"Installed plugin '{ip.get('name')}' overrides bundled")
+                        manifest["plugins"] = [
+                            p for p in manifest["plugins"]
+                            if p.get("name") != ip.get("name")
+                        ]
+                        manifest["plugins"].append(ip)
 
         # Unload existing BasePlugin instances
         for name, instance in self._plugin_instances.items():
@@ -311,7 +339,7 @@ class PluginManager:
             if not os.path.exists(file_path):
                 raise FileNotFoundError(f"Plugin file not found: {file_path}")
 
-            # AST security scan before loading
+            # AST lint scan (catches accidental forbidden imports, not a sandbox)
             with open(file_path, 'r') as f:
                 source = f.read()
             ast_scan(source, name)
@@ -646,14 +674,20 @@ class PluginManager:
 
     async def install_plugin(self, manifest_entry: Dict[str, Any]) -> bool:
         """
-        Install a new plugin by adding it to the manifest and hot-swapping.
+        Install a new plugin by adding it to the installed dir and hot-swapping.
+        Uses self.installed_dir (writable) to avoid conflicts with read-only
+        bundled plugin volumes in Docker.
         Returns True on success.
         """
-        if not os.path.exists(self.manifest_path):
-            with open(self.manifest_path, 'w') as f:
+        # Ensure writable installed dir exists
+        os.makedirs(self.installed_dir, exist_ok=True)
+        installed_manifest = os.path.join(self.installed_dir, "manifest.yaml")
+
+        if not os.path.exists(installed_manifest):
+            with open(installed_manifest, 'w') as f:
                 yaml.safe_dump({"plugins": []}, f)
 
-        with open(self.manifest_path, 'r') as f:
+        with open(installed_manifest, 'r') as f:
             manifest = yaml.safe_load(f) or {"plugins": []}
 
         # Check for duplicates
@@ -664,18 +698,19 @@ class PluginManager:
 
         manifest["plugins"].append(manifest_entry)
 
-        with open(self.manifest_path, 'w') as f:
+        with open(installed_manifest, 'w') as f:
             yaml.safe_dump(manifest, f, default_flow_style=False)
 
         await self.hot_swap()
         return True
 
     async def uninstall_plugin(self, name: str) -> bool:
-        """Remove a plugin from the manifest and hot-swap."""
-        if not os.path.exists(self.manifest_path):
+        """Remove a plugin from the installed manifest and hot-swap."""
+        installed_manifest = os.path.join(self.installed_dir, "manifest.yaml")
+        if not os.path.exists(installed_manifest):
             return False
 
-        with open(self.manifest_path, 'r') as f:
+        with open(installed_manifest, 'r') as f:
             manifest = yaml.safe_load(f) or {"plugins": []}
 
         original_count = len(manifest["plugins"])
@@ -684,7 +719,7 @@ class PluginManager:
         if len(manifest["plugins"]) == original_count:
             return False
 
-        with open(self.manifest_path, 'w') as f:
+        with open(installed_manifest, 'w') as f:
             yaml.safe_dump(manifest, f, default_flow_style=False)
 
         self._plugin_meta.pop(name, None)

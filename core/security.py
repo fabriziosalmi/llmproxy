@@ -5,7 +5,7 @@ import unicodedata
 import uuid
 from typing import Dict, List, Any, Optional
 
-from cachetools import TTLCache as _TTLCache  # type: ignore[import-untyped]
+from cachetools import TTLCache as _TTLCache
 
 logger = logging.getLogger(__name__)
 

@@ -9,7 +9,7 @@ through the 5-ring plugin system with SecurityShield pre-inspection.
 import os
 import json
 import uuid
-import yaml  # type: ignore[import-untyped]
+import yaml
 import asyncio
 import logging
 import uvicorn
@@ -154,6 +154,9 @@ class RotatorAgent(BaseAgent):
         self._budget_lock = asyncio.Lock()
         self._pending_writes: asyncio.Queue = asyncio.Queue(maxsize=500)
 
+        # Strong references for background tasks (prevents GC in Python 3.12+)
+        self._background_tasks: set[asyncio.Task] = set()
+
         # Gateway state
         self.proxy_enabled = True
         self.priority_mode = False
@@ -197,6 +200,13 @@ class RotatorAgent(BaseAgent):
         self.app = create_app(self)
 
     # ── Config & Secrets ──
+
+    def _spawn_task(self, coro) -> asyncio.Task:
+        """Create a background task with a strong reference to prevent GC."""
+        task = asyncio.create_task(coro)
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+        return task
 
     def _load_config(self):
         if os.path.exists(self.config_path):
@@ -287,11 +297,11 @@ class RotatorAgent(BaseAgent):
     def _on_circuit_state_change(self, endpoint: str, old_state: str, new_state: str):
         MetricsTracker.set_circuit_state(endpoint, new_state == "open")
         if new_state == "open":
-            asyncio.create_task(self.webhooks.dispatch(
+            self._spawn_task(self.webhooks.dispatch(
                 EventType.CIRCUIT_OPEN, {"endpoint": endpoint, "from": old_state, "to": new_state}
             ))
         elif old_state == "open" and new_state == "closed":
-            asyncio.create_task(self.webhooks.dispatch(
+            self._spawn_task(self.webhooks.dispatch(
                 EventType.ENDPOINT_RECOVERED, {"endpoint": endpoint}
             ))
 
@@ -357,21 +367,21 @@ class RotatorAgent(BaseAgent):
         # Background cache eviction loop
         eviction_interval = self.config.get("caching", {}).get("eviction_interval", 3600)
         if self.cache_backend._enabled:
-            asyncio.create_task(self._cache_eviction_loop(eviction_interval))
+            self._spawn_task(self._cache_eviction_loop(eviction_interval))
 
         # Background config watcher (hot-reload)
-        asyncio.create_task(self._config_watch_loop(30))
+        self._spawn_task(self._config_watch_loop(30))
 
         # Background write flusher (budget persistence, graceful shutdown safe)
-        asyncio.create_task(self._write_flush_loop(1.0))
+        self._spawn_task(self._write_flush_loop(1.0))
 
         # Active health probing (background endpoint liveness checks)
         from core.health_prober import EndpointHealthProber
         self._health_prober = EndpointHealthProber(self.config, self.circuit_manager, self._get_session)
-        asyncio.create_task(self._health_prober.start())
+        self._spawn_task(self._health_prober.start())
 
         # Background deduplicator cleanup (prevent memory leak from expired entries)
-        asyncio.create_task(self._dedup_cleanup_loop(60))
+        self._spawn_task(self._dedup_cleanup_loop(60))
 
         self.logger.info("Security gateway ready.")
 
@@ -621,7 +631,7 @@ class RotatorAgent(BaseAgent):
             MetricsTracker.track_ring_latency("ingress", time.perf_counter() - r1_start)
             if ctx.stop_chain:
                 MetricsTracker.track_injection_blocked()
-                asyncio.create_task(self.webhooks.dispatch(
+                self._spawn_task(self.webhooks.dispatch(
                     EventType.INJECTION_BLOCKED, {"reason": ctx.error or "Ingress Blocked", "session": session_id[:8]}
                 ))
                 raise HTTPException(status_code=403, detail=ctx.error or "Ingress Blocked")
@@ -718,7 +728,7 @@ class RotatorAgent(BaseAgent):
                     except Exception as e:
                         logger.debug(f"Cache write skipped: {e}")
 
-            asyncio.create_task(_bg_ring())
+            self._spawn_task(_bg_ring())
 
             # Inject proxy metadata headers on responses
             if ctx.response and hasattr(ctx.response, "headers"):

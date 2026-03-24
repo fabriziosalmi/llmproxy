@@ -24,7 +24,7 @@ def create_router(agent) -> APIRouter:
         if agent.config["server"]["auth"]["enabled"]:
             if not api_key:
                 MetricsTracker.track_auth_failure("missing_key")
-                asyncio.create_task(agent.webhooks.dispatch(EventType.AUTH_FAILURE, {"reason": "missing_key", "ip": request.client.host if request.client else "unknown"}))
+                agent._spawn_task(agent.webhooks.dispatch(EventType.AUTH_FAILURE, {"reason": "missing_key", "ip": request.client.host if request.client else "unknown"}))
                 raise HTTPException(status_code=401, detail="Unauthorized: Missing API key")
             token = api_key.replace("Bearer ", "").strip()
             if not token:
@@ -40,7 +40,7 @@ def create_router(agent) -> APIRouter:
                         identity = await agent.identity.verify_token(token)
                 except ValueError as e:
                     MetricsTracker.track_auth_failure("jwt_invalid")
-                    asyncio.create_task(agent.webhooks.dispatch(EventType.AUTH_FAILURE, {"reason": "jwt_invalid", "error": str(e)}))
+                    agent._spawn_task(agent.webhooks.dispatch(EventType.AUTH_FAILURE, {"reason": "jwt_invalid", "error": str(e)}))
                     raise HTTPException(status_code=401, detail=f"Identity: {e}")
 
             if identity and identity.verified:
@@ -58,11 +58,11 @@ def create_router(agent) -> APIRouter:
                 valid_keys = agent._get_api_keys()
                 if token not in valid_keys:
                     MetricsTracker.track_auth_failure("invalid_key")
-                    asyncio.create_task(agent.webhooks.dispatch(EventType.AUTH_FAILURE, {"reason": "invalid_api_key", "ip": request.client.host if request.client else "unknown"}))
+                    agent._spawn_task(agent.webhooks.dispatch(EventType.AUTH_FAILURE, {"reason": "invalid_api_key", "ip": request.client.host if request.client else "unknown"}))
                     raise HTTPException(status_code=401, detail="Unauthorized: Invalid API key or JWT")
 
                 if not agent.rbac.check_quota(token):
-                    asyncio.create_task(agent.webhooks.dispatch(EventType.BUDGET_THRESHOLD, {"reason": "quota_exceeded", "key_prefix": token[:8] + "..."}))
+                    agent._spawn_task(agent.webhooks.dispatch(EventType.BUDGET_THRESHOLD, {"reason": "quota_exceeded", "key_prefix": token[:8] + "..."}))
                     raise HTTPException(status_code=402, detail="Enterprise Quota Exceeded for this API Key.")
 
             client_host = request.client.host if request.client else "0.0.0.0"
@@ -95,7 +95,7 @@ def create_router(agent) -> APIRouter:
             duration = time.time() - start_time
             MetricsTracker.track_request("POST", "/v1/chat/completions", response.status_code, duration)
             if agent.exporter:
-                asyncio.create_task(agent.exporter.record({
+                agent._spawn_task(agent.exporter.record({
                     "messages": body.get("messages", []),
                     "model": body.get("model", "auto"),
                     "latency_ms": round(duration * 1000, 1),
@@ -130,7 +130,7 @@ def create_router(agent) -> APIRouter:
                 MetricsTracker.set_budget(agent.total_cost_today, daily_limit)
                 agent.enqueue_write("budget:daily_total", agent.total_cost_today)
                 if agent.total_cost_today >= soft_limit:
-                    asyncio.create_task(agent.webhooks.dispatch(EventType.BUDGET_THRESHOLD, {"consumed": agent.total_cost_today, "limit": daily_limit}))
+                    agent._spawn_task(agent.webhooks.dispatch(EventType.BUDGET_THRESHOLD, {"consumed": agent.total_cost_today, "limit": daily_limit}))
 
             # Log spend + audit (async, non-blocking)
             import datetime as _dt
@@ -169,10 +169,10 @@ def create_router(agent) -> APIRouter:
                     )
                 except Exception:
                     pass
-            def _on_audit_error(task: asyncio.Task) -> None:
-                if task.exception():
-                    logger.warning(f"Audit log persistence failed: {task.exception()}")
-            task = asyncio.create_task(_persist_logs())
+            task = agent._spawn_task(_persist_logs())
+            def _on_audit_error(t: asyncio.Task) -> None:
+                if t.exception():
+                    logger.warning(f"Audit log persistence failed: {t.exception()}")
             task.add_done_callback(_on_audit_error)
 
             return response

@@ -17,7 +17,7 @@ import json
 import gzip
 import logging
 import asyncio
-import aiofiles  # type: ignore[import-untyped]
+import aiofiles
 from datetime import datetime, date
 from typing import Dict, Any, Optional, List
 from pathlib import Path

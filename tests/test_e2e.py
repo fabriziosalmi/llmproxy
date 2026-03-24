@@ -74,6 +74,9 @@ class LightweightAgent:
         self.plugin_manager.install_plugin = AsyncMock()
         self.plugin_manager.uninstall_plugin = AsyncMock(return_value=True)
 
+        # Strong references for background tasks (mirrors RotatorAgent._spawn_task)
+        self._background_tasks: set[asyncio.Task] = set()
+
         # Queues
         self.log_queue = asyncio.Queue(maxsize=100)
         self.telemetry_queue = asyncio.Queue(maxsize=100)
@@ -113,9 +116,16 @@ class LightweightAgent:
         self.app.include_router(plugins_router(self))
         self.app.include_router(telemetry_router(self))
 
+    def _spawn_task(self, coro) -> asyncio.Task:
+        """Create a background task with a strong reference to prevent GC."""
+        task = asyncio.create_task(coro)
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+        return task
+
     def enqueue_write(self, key: str, value):
         """Test-mode: direct write via create_task (no batching needed in tests)."""
-        asyncio.create_task(self.store.set_state(key, value))
+        self._spawn_task(self.store.set_state(key, value))
 
     def _get_api_keys(self):
         return []
