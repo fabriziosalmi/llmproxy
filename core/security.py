@@ -59,6 +59,16 @@ class SecurityShield:
         # Plain dict — eviction handled in check_session_trajectory via timestamps.
         self.session_memory: Dict[str, Any] = {}
 
+        # Cross-session threat intelligence (S1: ThreatLedger)
+        from core.threat_ledger import ThreatLedger
+        ledger_cfg = self.config.get("threat_ledger", {})
+        self.threat_ledger: Optional[ThreatLedger] = ThreatLedger(
+            max_actors=ledger_cfg.get("max_actors", 50_000),
+            window_seconds=ledger_cfg.get("window_seconds", 600),
+            threshold=ledger_cfg.get("threshold", 3.0),
+            min_events=ledger_cfg.get("min_events", 3),
+        ) if self.config.get("threat_ledger", {}).get("enabled", True) else None
+
     async def analyze_speculative(self, prompt: str, stream_chunks: List[str], kill_event: Any):
         """Asynchronously monitors a response stream for security violations."""
         if not self.enabled:
@@ -274,9 +284,16 @@ class SecurityShield:
                 matched.append(pattern)
         return score, matched
 
-    def inspect(self, body: Dict[str, Any], session_id: str = "default") -> Optional[str]:
+    def inspect(self, body: Dict[str, Any], session_id: str = "default",
+                ip: str = "", key_prefix: str = "") -> Optional[str]:
         """
         Inspects the request body and session context for security violations.
+
+        Args:
+            body: Request body (messages, model, etc.)
+            session_id: Session identifier for trajectory analysis
+            ip: Client IP for cross-session threat ledger
+            key_prefix: API key prefix for cross-session threat ledger
         """
         if not self.enabled:
             return None
@@ -287,6 +304,16 @@ class SecurityShield:
             session_error = self.check_session_trajectory(session_id, prompt)
             if session_error:
                 return session_error
+
+            # 0b. Cross-session threat check (ThreatLedger)
+            if self.threat_ledger and (ip or key_prefix):
+                score, _ = self._calculate_threat_score(prompt)
+                if score > 0.0:
+                    ledger_error = self.threat_ledger.record(
+                        ip=ip, key_prefix=key_prefix, score=score,
+                    )
+                    if ledger_error:
+                        return ledger_error
 
         # 1. Payload Guard (Flooding/Size)
         flood_error = self._check_payload_flooding(body)

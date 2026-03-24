@@ -130,6 +130,12 @@ class RotatorAgent(BaseAgent):
             extra={"store": self.store},
         )
 
+        # Response signing (S2: cryptographic provenance)
+        from core.response_signer import ResponseSigner
+        signing_cfg = self.config.get("security", {}).get("response_signing", {})
+        signing_key = signing_cfg.get("secret") or os.environ.get("LLM_PROXY_SIGNING_KEY", "")
+        self.response_signer = ResponseSigner(signing_key)
+
         # Request forwarder (extracted to proxy/forwarder.py)
         self.forwarder = RequestForwarder(
             config=self.config,
@@ -320,8 +326,12 @@ class RotatorAgent(BaseAgent):
                 MetricsTracker.track_injection_blocked()
                 raise HTTPException(status_code=403, detail=neg_reason)
 
-            # Pre-ring: SecurityShield (injection scoring + trajectory analysis)
-            security_error = self.security.inspect(ctx.body, session_id)
+            # Pre-ring: SecurityShield (injection scoring + trajectory + cross-session)
+            client_ip = request.client.host if hasattr(request, 'client') and request.client else ""
+            key_prefix = session_id[:8] if session_id != "default" else ""
+            security_error = self.security.inspect(
+                ctx.body, session_id, ip=client_ip, key_prefix=key_prefix,
+            )
             if security_error:
                 logger.warning(f"SecurityShield blocked: {security_error}")
                 MetricsTracker.track_injection_blocked()
@@ -451,6 +461,17 @@ class RotatorAgent(BaseAgent):
                     ctx.response.headers["X-LLMProxy-Cache"] = cache_status
                 ctx.response.headers["X-LLMProxy-Provider"] = ctx.metadata.get("_provider", "")
                 ctx.response.headers["X-LLMProxy-Request-Id"] = ctx.metadata.get("req_id", "")
+
+                # S2: Cryptographic response signing
+                if self.response_signer.enabled and hasattr(ctx.response, "body"):
+                    sig_headers = self.response_signer.sign_response(
+                        response_body=ctx.response.body,
+                        model=ctx.body.get("model", ""),
+                        provider=ctx.metadata.get("_provider", ""),
+                        request_id=ctx.metadata.get("req_id", ""),
+                    )
+                    for k, v in sig_headers.items():
+                        ctx.response.headers[k] = v
 
             # Store total pipeline latency in trace (O(1) via index dict)
             total_ms = (time.time() - start_total) * 1000
