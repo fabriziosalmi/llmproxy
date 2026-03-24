@@ -11,6 +11,7 @@
 | 5 | **Wildbox** | SOC/SIEM command center | Next.js, FastAPI, 10 services | v0.5.5 |
 | 6 | **TLS fingerprinter** | JA3/JA4 bot detection | — | Library |
 | 7 | **ASN API** | Network intelligence | — | Library |
+| 8 | **HPWM** | Offensive security research (WAF/CAPTCHA bypass) | Python (PyTorch), Rust (WASM) | HackerOne disclosed |
 
 ## Architecture
 
@@ -78,6 +79,21 @@
 | Multi-cloud CSPM 120+ controls | ✅ Wildbox | Competitors ($$$) |
 | Full self-hosted, MIT licensed | ✅ All | ❌ |
 | **All integrated, one operator** | ✅ | ❌ |
+
+## Offense ↔ Defense Feedback Loop
+
+HPWM (offensive research) directly informs defensive improvements:
+
+| HPWM Finding | Defensive Response |
+|---|---|
+| JA3 fingerprints are spoofable (6 TLS profiles) | SecBeat: multi-signal detection (JA3 + JA4 + HTTP/2 frames) |
+| CDP `isTrusted=true` defeats behavioral heuristics | llmproxy: don't rely on client-side trust signals |
+| GNN can parse any site topology in <15ms | Wildbox: use same tech for defensive scanning |
+| Biomechanical simulation fools timing analysis | SecBeat: need server-side challenge, not just timing |
+| Continuous learning adapts to WAF updates | All: defense must also auto-adapt (llmproxy ThreatLedger) |
+
+This dual perspective (builder + breaker) is what makes the stack credible.
+Responsible disclosure via HackerOne (#3619496) demonstrates ethical commitment.
 
 ## Session Plan: Full Integration
 
