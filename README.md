@@ -1,10 +1,10 @@
 # LLMProxy — LLM Security Gateway
 
-Security-first proxy for Large Language Models with multi-provider support (15 providers), cross-provider fallback, per-model pricing, cost-aware smart routing, ring-based plugin pipeline, WASM-sandboxed plugin execution, NLP-powered PII detection, cross-session threat intelligence, HMAC response signing, GDPR compliance (right to erasure, DSAR), immutable audit ledger, and a real-time Security Operations Center UI.
+Security-first proxy for Large Language Models with multi-provider support (15 providers), cross-provider fallback, per-model pricing, cost-aware smart routing, ring-based plugin pipeline, WASM-sandboxed plugin execution, NLP-powered PII detection, cross-session threat intelligence, HMAC response signing, semantic injection detection (60-pattern multilingual corpus), GDPR compliance (right to erasure, DSAR), immutable audit ledger, and a real-time Security Operations Center UI.
 
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-626%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-654%20passing-brightgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 [![CI](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml/badge.svg)](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml)
 
@@ -155,6 +155,7 @@ Deep inspection layer wired pre-INGRESS in the request chain:
 - **Cross-session threat intelligence** (`core/threat_ledger.py`): Aggregates threat scores by IP and API key across sessions. Detects coordinated attacks where the same actor rotates session IDs. Configurable threshold, window, and min_events.
 - **Injection scoring**: Regex-based threat scoring with configurable threshold.
 - **PII detection & masking**: Dual-mode — Presidio NLP (opt-in, 18 entity types) with regex fallback (email, phone, SSN, credit card, IBAN). `mask_pii()` replaces PII with vault tokens; `demask_pii()` restores originals.
+- **Semantic injection detection** (`core/semantic_analyzer.py`): Paraphrase-resistant attack detection using character trigram Jaccard similarity against 60 known injection patterns. Catches synonym substitution, multilingual injection (IT/DE/FR/ES/JA/KO/AR), verbose wrapping. 8 categories: override, extraction, hijack, bypass, multilingual, delimiter, social, exfiltration. Zero external deps, <1ms latency.
 - **Response signing** (`core/response_signer.py`): HMAC-SHA256 cryptographic provenance. Each response is signed with `model|provider|timestamp|request_id|body`. Verifiable by clients via `X-LLMProxy-Signature` header. Constant-time comparison prevents timing attacks.
 - **Wired in `RotatorAgent.proxy_request()`**: Runs before the plugin INGRESS ring — blocked requests return 403 with diagnostic message.
 
@@ -384,6 +385,7 @@ Security Operations Center UI — vanilla JS SPA (`ui/`) with Tailwind CSS, Char
 | **Plugins** | Ring-based security plugin pipeline grid, hot-swap reload, per-plugin version/stats |
 | **Models** | Aggregated model registry from all providers, KPI cards (active models, providers, embedding models) |
 | **Analytics** | Spend breakdown by model and provider, KPI cards (requests, total spend, prompt/completion tokens) |
+| **Security** | Threat ledger KPIs, audit chain verification, GDPR controls (DSAR export, retention), semantic corpus breakdown |
 | **Endpoints** | LLM endpoint registry table with toggle/delete actions |
 | **Live Logs** | xterm.js terminal with WebGL rendering, JSON syntax highlighting, real-time SSE log stream |
 | **Settings** | Identity & Access, RBAC role matrix, webhooks, data export |
