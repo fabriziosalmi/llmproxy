@@ -83,9 +83,9 @@ def _compute_score(endpoint: Any, stats: dict[str, Any],
         return base_score
 
     pricing = get_pricing(model)
-    input_price = pricing.get("input", 1.0)
-    cost_factor = 1.0 / (input_price + 0.01)
-    return base_score * (cost_factor ** cost_weight)
+    input_price: float = pricing.get("input", 1.0)
+    cost_factor: float = 1.0 / (input_price + 0.01)
+    return float(base_score * (cost_factor ** cost_weight))
 
 
 async def select_endpoint(ctx: PluginContext):

@@ -24,8 +24,6 @@ import hmac
 import hashlib
 import time
 import logging
-from typing import Optional
-
 logger = logging.getLogger("llmproxy.response_signer")
 
 

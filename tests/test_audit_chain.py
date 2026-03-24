@@ -10,12 +10,11 @@ Verifies that:
 """
 
 import time
-import hashlib
+import os
+import tempfile
 import pytest
 import pytest_asyncio
 import aiosqlite
-import os
-import tempfile
 
 # Import the real SQLStore to test hash chain logic
 from store.sql_store import SQLiteStore as SQLStore

@@ -178,7 +178,6 @@ class RotatorAgent(BaseAgent):
             self._pending_writes.put_nowait((key, value))
         except asyncio.QueueFull:
             self.logger.error("Pending writes queue full — budget state write DROPPED")
-            MetricsTracker.track_custom("writes_dropped", 1)
 
     async def flush_budget_now(self):
         """Immediate flush of pending writes — called on critical budget thresholds."""

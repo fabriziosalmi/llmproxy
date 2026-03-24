@@ -9,14 +9,12 @@ Tests for:
 """
 
 import time
-import asyncio
 import pytest
 import pytest_asyncio
 import httpx
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from unittest.mock import AsyncMock, MagicMock
 
 from proxy.routes.gdpr import create_router as gdpr_router
 

@@ -3,7 +3,6 @@ Tests for ThreatLedger (cross-session threat intelligence)
 and ResponseSigner (HMAC provenance).
 """
 
-import time
 import pytest
 
 from core.threat_ledger import ThreatLedger
@@ -197,8 +196,7 @@ class TestResponseSigner:
 
     def test_constant_time_comparison(self):
         """Verify uses hmac.compare_digest (constant-time) to prevent timing attacks."""
-        import hmac as _hmac
-        # This is a design assertion — verify() uses hmac.compare_digest internally
+        # Design assertion: verify() uses hmac.compare_digest internally
         # We test by checking that wrong signatures don't short-circuit
         signer = ResponseSigner(secret="key")
         body = b'test'

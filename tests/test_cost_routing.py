@@ -3,12 +3,8 @@ Tests for cost-aware routing: neural router scoring + budget downgrade.
 """
 
 import pytest
-from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
 
-from plugins.default.neural_router import (
-    _compute_score, update_endpoint_stats, get_endpoint_stats, _endpoint_stats,
-)
+from plugins.default.neural_router import _compute_score, _endpoint_stats
 
 
 # ══════════════════════════════════════════════════════════

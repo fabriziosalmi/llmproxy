@@ -9,7 +9,7 @@ import json
 import time
 import asyncio
 import logging
-from typing import Any, Dict, Callable, Awaitable, Optional
+from typing import Any, Callable, Awaitable
 
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse

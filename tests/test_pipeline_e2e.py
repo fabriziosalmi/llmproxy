@@ -15,9 +15,7 @@ import time
 import pytest
 import pytest_asyncio
 import httpx
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
-from collections import defaultdict
+from unittest.mock import AsyncMock, MagicMock
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -25,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import Response
 
 from core.security import SecurityShield
-from core.cache import NegativeCache, CacheBackend
+from core.cache import NegativeCache
 from core.plugin_engine import PluginManager, PluginHook, PluginContext, PluginState
 from core.metrics import MetricsTracker
 
@@ -165,7 +163,6 @@ class PipelineAgent:
         """REAL pipeline logic — copied from RotatorAgent.proxy_request."""
         import uuid
         from fastapi import HTTPException
-        from fastapi.responses import StreamingResponse
 
         start_total = time.time()
         if body is None:
@@ -253,7 +250,7 @@ class PipelineAgent:
 
         except HTTPException:
             raise
-        except Exception as e:
+        except Exception:
             raise HTTPException(status_code=502, detail="Upstream request failed")
 
 

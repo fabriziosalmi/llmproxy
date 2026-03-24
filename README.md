@@ -1,10 +1,10 @@
 # LLMProxy — LLM Security Gateway
 
-Security-first proxy for Large Language Models with multi-provider support (15 providers), cross-provider fallback, per-model pricing, smart latency-based routing, ring-based plugin pipeline, WASM-sandboxed plugin execution, NLP-powered PII detection, and a real-time Security Operations Center UI.
+Security-first proxy for Large Language Models with multi-provider support (15 providers), cross-provider fallback, per-model pricing, cost-aware smart routing, ring-based plugin pipeline, WASM-sandboxed plugin execution, NLP-powered PII detection, cross-session threat intelligence, HMAC response signing, GDPR compliance (right to erasure, DSAR), immutable audit ledger, and a real-time Security Operations Center UI.
 
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-564%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-626%20passing-brightgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 [![CI](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml/badge.svg)](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml)
 
@@ -30,9 +30,9 @@ LLMProxy is a security-focused LLM gateway with a layered defense pipeline:
 
 1. **Multi-Provider Translation** — 15 providers (OpenAI, Anthropic, Google, Azure, Ollama, Groq, Together, Mistral, DeepSeek, xAI, Perplexity, Fireworks, OpenRouter, SambaNova) with automatic request/response format translation
 2. **Cross-Provider Fallback** — Configurable fallback chains (e.g. GPT-4o fails → Claude Sonnet → Gemini Pro)
-3. **Smart Routing** — EMA-weighted endpoint selection based on latency and success rate (replaces blind round-robin)
+3. **Smart Routing** — Cost-aware EMA-weighted endpoint selection: `score = (success²/latency) × cost_factor^w` with configurable cost_weight. Budget-triggered auto-downgrade to local models.
 4. **ASGI Firewall** — Byte-level L7 request filtering
-5. **SecurityShield** — Injection scoring, PII masking (Presidio NLP + regex), trajectory detection
+5. **SecurityShield** — Injection scoring, PII masking (Presidio NLP + regex), per-session trajectory detection, cross-session threat intelligence (ThreatLedger)
 6. **Ring Plugin Pipeline** — 5-ring plugin engine (INGRESS → PRE_FLIGHT → ROUTING → POST_FLIGHT → BACKGROUND)
 7. **WASM Sandbox** — Extism-based sandboxed plugin execution for untrusted code
 8. **Per-Model Pricing** — Accurate cost tracking for 30+ models with verified provider pricing
@@ -53,6 +53,7 @@ The `RotatorAgent` orchestrates 9 route modules under `proxy/routes/`, each a fa
 | `identity.py` | `/api/v1/identity/*` | SSO config, user info, token exchange |
 | `plugins.py` | `/api/v1/plugins/*` | Plugin lifecycle (install, uninstall, hot-swap, rollback) |
 | `telemetry.py` | `/health`, `/metrics`, `/api/v1/logs` | Health probes, Prometheus metrics, log SSE |
+| `gdpr.py` | `/api/v1/gdpr/*` | GDPR compliance: right to erasure, DSAR export, retention policy |
 
 Heavy dependencies (OpenTelemetry, Sentry) are lazily imported inside route handlers, not at module level — enabling test isolation without mocking the entire import chain.
 
@@ -120,7 +121,13 @@ Heavy dependencies (OpenTelemetry, Sentry) are lazily imported inside route hand
 | `/api/v1/admin/reload` | `POST` | Hot-reload config.yaml without restart. |
 | `/api/v1/analytics/spend` | `GET` | Spend breakdown by model/provider/key/date. Params: `from`, `to`, `group_by`, `limit`. |
 | `/api/v1/analytics/spend/topmodels` | `GET` | Top models by spend. |
+| `/api/v1/analytics/cost-efficiency` | `GET` | Per-model cost/request efficiency with cheapest/most expensive ranking. |
 | `/api/v1/audit` | `GET` | Persistent audit log query. Params: `from`, `to`, `model`, `key_prefix`, `status`, `blocked`. |
+| `/api/v1/audit/verify` | `GET` | Verify integrity of audit log hash chain (tamper detection). |
+| `/api/v1/gdpr/erase/{subject}` | `POST` | Right to erasure (Article 17): delete all data for a subject. |
+| `/api/v1/gdpr/export/{subject}` | `GET` | DSAR (Article 15): export all subject data with PII scrubbing. |
+| `/api/v1/gdpr/retention` | `GET` | View data retention policy. |
+| `/api/v1/gdpr/purge` | `POST` | Manual trigger: purge records older than retention period. |
 | `/api/v1/version` | `GET` | Current version. |
 | `/api/v1/service-info` | `GET` | Host, port, URL. |
 | `/api/v1/network/info` | `GET` | Network and Tailscale status. |
@@ -145,8 +152,10 @@ ASGI middleware scanning request body bytes for injection patterns:
 ### SecurityShield (`core/security.py`)
 Deep inspection layer wired pre-INGRESS in the request chain:
 - **Multi-turn trajectory detection**: Tracks prompt score history per session, detects escalating jailbreak attempts via sliding window analysis.
+- **Cross-session threat intelligence** (`core/threat_ledger.py`): Aggregates threat scores by IP and API key across sessions. Detects coordinated attacks where the same actor rotates session IDs. Configurable threshold, window, and min_events.
 - **Injection scoring**: Regex-based threat scoring with configurable threshold.
 - **PII detection & masking**: Dual-mode — Presidio NLP (opt-in, 18 entity types) with regex fallback (email, phone, SSN, credit card, IBAN). `mask_pii()` replaces PII with vault tokens; `demask_pii()` restores originals.
+- **Response signing** (`core/response_signer.py`): HMAC-SHA256 cryptographic provenance. Each response is signed with `model|provider|timestamp|request_id|body`. Verifiable by clients via `X-LLMProxy-Signature` header. Constant-time comparison prevents timing attacks.
 - **Wired in `RotatorAgent.proxy_request()`**: Runs before the plugin INGRESS ring — blocked requests return 403 with diagnostic message.
 
 ### Identity & SSO (`core/identity.py`)
@@ -182,6 +191,20 @@ Four built-in roles with granular permissions:
 ### Zero-Trust
 - **Tailscale LocalAPI**: Verifies machine/user identity via Unix socket (`whois` API).
 - **URL injection prevention**: All user-supplied IPs/URLs are escaped via `urllib.parse.quote()`.
+
+### GDPR Compliance (`proxy/routes/gdpr.py`)
+Data subject rights implemented as REST endpoints:
+- **Right to erasure** (Article 17): `POST /api/v1/gdpr/erase/{subject}` — deletes all audit, spend, and identity records. The erasure itself is logged immutably.
+- **Data Subject Access Request** (Article 15): `GET /api/v1/gdpr/export/{subject}` — exports all subject data with PII scrubbing.
+- **Data retention**: Configurable TTL (default 90 days) with automatic background purge loop. Manual purge via `POST /api/v1/gdpr/purge`.
+- **Retention policy**: `GET /api/v1/gdpr/retention` — returns configured retention period, legal basis, and data categories.
+
+### Immutable Audit Ledger
+Tamper-evident audit log with SHA256 hash chain:
+- Each audit entry includes `entry_hash = SHA256(prev_hash|ts|req_id|...all fields...)`.
+- `prev_hash` links to the previous entry's hash (first entry links to `GENESIS`).
+- **Tamper detection**: `GET /api/v1/audit/verify` walks the chain and detects modifications, deletions, or insertions.
+- Backward-compatible: legacy entries without hashes are skipped during verification.
 
 ---
 
@@ -274,7 +297,7 @@ See [`plugins/marketplace/README.md`](plugins/marketplace/README.md) for the ful
 See [`plugins/default/README.md`](plugins/default/README.md) for the priority map and plugin details.
 
 ### Security Scanning
-All Python plugins are **AST-scanned** before loading:
+All Python plugins are **AST lint-scanned** before loading (catches accidental forbidden imports — NOT a security sandbox; use WASM for untrusted code):
 - Blocks: `os`, `subprocess`, `socket`, `ctypes`, `sys` imports.
 - Blocks: `exec()`, `eval()`, `__import__()`, `.system()`, `.popen()` calls.
 - Raises `PluginSecurityError` on violation — plugin is never loaded.
