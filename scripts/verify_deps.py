@@ -123,19 +123,72 @@ def scan_pth_files() -> list[str]:
                 suspicious = False
                 reasons = []
 
+                # Pattern match against known malware signatures
+                # Based on litellm 1.82.8 payload analysis (2026-03-24):
+                #   - .pth spawns child via subprocess.Popen
+                #   - Harvests SSH keys, .env, cloud creds, crypto wallets
+                #   - Exfiltrates via RSA-encrypted POST to lookalike domain
+                #   - Creates persistence via systemd user service
+                EXEC_PATTERNS = [
+                    "exec(", "eval(", "compile(", "subprocess",
+                    "__import__", "importlib",
+                ]
+                NETWORK_PATTERNS = [
+                    "urllib", "requests", "http.client", "socket",
+                    "urlopen", ".post(", ".get(",
+                ]
+                PERSISTENCE_PATTERNS = [
+                    "systemd", "crontab", "sysmon",
+                    "/root/", "/.config/", "launchd",
+                ]
+                EXFIL_PATTERNS = [
+                    "base64", ".ssh/", ".env", ".aws/",
+                    "credentials", "wallet", ".kube/config",
+                    "IMDS", "metadata.google", "169.254.169.254",
+                ]
+                SPAWN_PATTERNS = [
+                    "Popen", "os.system", "os.popen",
+                    "fork(", "spawn",
+                ]
+
                 for line in content.splitlines():
                     line = line.strip()
                     if not line or line.startswith("#"):
                         continue
+                    # Any import statement in a .pth is suspicious
                     if line.startswith("import ") or line.startswith("import\t"):
                         suspicious = True
                         reasons.append(f"import statement: {line[:80]}")
-                    if "exec(" in line or "eval(" in line or "subprocess" in line:
-                        suspicious = True
-                        reasons.append(f"code execution: {line[:80]}")
-                    if "__import__" in line:
-                        suspicious = True
-                        reasons.append(f"dynamic import: {line[:80]}")
+                    # Code execution
+                    for pat in EXEC_PATTERNS:
+                        if pat in line:
+                            suspicious = True
+                            reasons.append(f"code execution ({pat}): {line[:80]}")
+                            break
+                    # Network access (exfiltration vector)
+                    for pat in NETWORK_PATTERNS:
+                        if pat in line:
+                            suspicious = True
+                            reasons.append(f"network access ({pat}): {line[:80]}")
+                            break
+                    # Persistence mechanisms
+                    for pat in PERSISTENCE_PATTERNS:
+                        if pat in line:
+                            suspicious = True
+                            reasons.append(f"persistence ({pat}): {line[:80]}")
+                            break
+                    # Credential/data exfiltration targets
+                    for pat in EXFIL_PATTERNS:
+                        if pat in line:
+                            suspicious = True
+                            reasons.append(f"exfil target ({pat}): {line[:80]}")
+                            break
+                    # Process spawning
+                    for pat in SPAWN_PATTERNS:
+                        if pat in line:
+                            suspicious = True
+                            reasons.append(f"process spawn ({pat}): {line[:80]}")
+                            break
 
                 if suspicious:
                     issues.append(

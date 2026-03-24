@@ -9,6 +9,16 @@ RUN groupadd -r llmproxy && useradd -r -g llmproxy llmproxy
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Supply chain verification: scan for malicious .pth files post-install
+# Defense against litellm-style attacks (2026-03-24)
+RUN echo "=== .pth file audit ===" && \
+    SITE_DIR=$(python -c 'import site; print(site.getsitepackages()[0])') && \
+    if find "$SITE_DIR" -name "*.pth" -exec grep -lE "(exec\(|eval\(|subprocess|Popen|__import__|urllib|socket)" {} \; | grep -q .; then \
+        echo "CRITICAL: Suspicious .pth file detected!" && exit 1; \
+    else \
+        echo "Clean: no malicious .pth files found"; \
+    fi
+
 # Copy application source
 COPY . .
 RUN chown -R llmproxy:llmproxy /app

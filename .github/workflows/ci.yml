@@ -55,8 +55,27 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
-      - name: Verify dependency integrity
+      - name: Verify dependency integrity + .pth scan
         run: python scripts/verify_deps.py --strict
+      - name: Explicit .pth file audit
+        run: |
+          echo "Scanning for .pth files in site-packages..."
+          PTH_FILES=$(find "$(python -c 'import site; print(site.getsitepackages()[0])')" -name "*.pth" 2>/dev/null || true)
+          if [ -n "$PTH_FILES" ]; then
+            echo "Found .pth files:"
+            echo "$PTH_FILES"
+            for f in $PTH_FILES; do
+              if grep -qE "(exec\(|eval\(|subprocess|Popen|__import__|urllib|socket|base64|\.ssh|\.env|\.aws)" "$f" 2>/dev/null; then
+                echo "CRITICAL: Suspicious .pth file detected: $f"
+                echo "Contents:"
+                cat "$f"
+                exit 1
+              fi
+            done
+            echo "All .pth files clean."
+          else
+            echo "No .pth files found (good)."
+          fi
       - name: Check for blocked packages
         run: |
           for pkg in litellm openai-proxy llm-proxy; do
