@@ -60,9 +60,13 @@ MODEL_PRICING: Dict[str, Dict[str, float]] = {
 
     # Ollama / local — zero cost
     "llama3.3":                   {"input": 0.0,   "output": 0.0},
+    "ollama/llama3.3":            {"input": 0.0,   "output": 0.0},
     "qwen3":                      {"input": 0.0,   "output": 0.0},
+    "ollama/qwen3":               {"input": 0.0,   "output": 0.0},
     "phi-4":                      {"input": 0.0,   "output": 0.0},
+    "ollama/phi-4":               {"input": 0.0,   "output": 0.0},
     "gemma3":                     {"input": 0.0,   "output": 0.0},
+    "ollama/gemma3":              {"input": 0.0,   "output": 0.0},
 
     # ── Embedding models ──
     "text-embedding-3-small":     {"input": 0.02,  "output": 0.0},

@@ -265,6 +265,44 @@ def create_router(agent) -> APIRouter:
         )
         return result
 
+    @router.get("/api/v1/analytics/cost-efficiency")
+    async def analytics_cost_efficiency(request: Request):
+        """Cost efficiency: avg cost/request and cost savings from routing."""
+        params = request.query_params
+        by_model = await agent.store.query_spend(
+            date_from=params.get("from", ""),
+            date_to=params.get("to", ""),
+            group_by="model",
+            limit=100,
+        )
+        total = await agent.store.get_spend_total(
+            date_from=params.get("from", ""),
+            date_to=params.get("to", ""),
+        )
+        # Compute per-model efficiency
+        efficiency = []
+        for row in by_model:
+            reqs = row.get("request_count", 0) or row.get("count", 1)
+            cost = row.get("total_cost", 0.0)
+            avg_cost = cost / max(reqs, 1)
+            efficiency.append({
+                "model": row.get("model", "unknown"),
+                "requests": reqs,
+                "total_cost_usd": round(cost, 4),
+                "avg_cost_per_request_usd": round(avg_cost, 6),
+                "avg_tokens_per_request": round(
+                    (row.get("total_tokens", 0) or 0) / max(reqs, 1)
+                ),
+            })
+        efficiency.sort(key=lambda x: x["avg_cost_per_request_usd"])
+
+        return {
+            "period_total_usd": total,
+            "models": efficiency,
+            "cheapest_model": efficiency[0]["model"] if efficiency else None,
+            "most_expensive_model": efficiency[-1]["model"] if efficiency else None,
+        }
+
     # ── Audit Log (R2.10) ──
 
     @router.get("/api/v1/audit")

@@ -354,6 +354,21 @@ class RotatorAgent(BaseAgent):
                 ctx.body["model"] = resolved_model
                 ctx.metadata["_model_alias"] = original_model
 
+            # Budget-aware model downgrade: if over hard limit, fall back to local
+            budget_cfg = self.config.get("budget", {})
+            if budget_cfg.get("fallback_to_local_on_limit"):
+                daily_limit = budget_cfg.get("daily_limit", 50.0)
+                if self.total_cost_today >= daily_limit:
+                    local_model = budget_cfg.get("local_model", "ollama/llama3.3")
+                    ctx.metadata["_budget_downgrade"] = True
+                    ctx.metadata["_original_model_pre_downgrade"] = ctx.body.get("model", "")
+                    ctx.body["model"] = local_model
+                    await self._add_log(
+                        f"BUDGET DOWNGRADE: {ctx.body.get('model')} → {local_model} "
+                        f"(${self.total_cost_today:.2f}/${daily_limit:.2f})",
+                        level="PROXY",
+                    )
+
             # RING 3: ROUTING
             r3_start = time.perf_counter()
             await self.plugin_manager.execute_ring(PluginHook.ROUTING, ctx)

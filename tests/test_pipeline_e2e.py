@@ -209,6 +209,15 @@ class PipelineAgent:
             if ctx.stop_chain:
                 return ctx.response
 
+            # Budget-aware model downgrade (mirrors RotatorAgent)
+            budget_cfg = self.config.get("budget", {})
+            if budget_cfg.get("fallback_to_local_on_limit"):
+                daily_limit = budget_cfg.get("daily_limit", 50.0)
+                if self.total_cost_today >= daily_limit:
+                    local_model = budget_cfg.get("local_model", "ollama/llama3.3")
+                    ctx.metadata["_budget_downgrade"] = True
+                    ctx.body["model"] = local_model
+
             # RING 3: ROUTING
             self.rings_executed.append("ROUTING")
             await self.plugin_manager.execute_ring(PluginHook.ROUTING, ctx)
