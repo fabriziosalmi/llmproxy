@@ -167,11 +167,17 @@ class RotatorAgent(BaseAgent):
         return ""
 
     def enqueue_write(self, key: str, value: Any):
-        """Non-blocking enqueue of a state write. Drops silently if queue is full."""
+        """Non-blocking enqueue of a state write. Logs error if queue is full."""
         try:
             self._pending_writes.put_nowait((key, value))
         except asyncio.QueueFull:
-            self.logger.warning("Pending writes queue full, dropping write")
+            self.logger.error("Pending writes queue full — budget state write DROPPED")
+            MetricsTracker.track_custom("writes_dropped", 1)
+
+    async def flush_budget_now(self):
+        """Immediate flush of pending writes — called on critical budget thresholds."""
+        from .background import drain_pending_writes
+        await drain_pending_writes(self)
 
     def _get_api_keys(self) -> list[str]:
         env_var = self.config.get("server", {}).get("auth", {}).get("api_keys_env", "LLM_PROXY_API_KEYS")
@@ -259,7 +265,7 @@ class RotatorAgent(BaseAgent):
         if self.cache_backend._enabled:
             self._spawn_task(cache_eviction_loop(self.cache_backend, eviction_interval))
         self._spawn_task(config_watch_loop(self, 30))
-        self._spawn_task(write_flush_loop(self, 1.0))
+        self._spawn_task(write_flush_loop(self, 0.25))
 
         # Active health probing
         from core.health_prober import EndpointHealthProber

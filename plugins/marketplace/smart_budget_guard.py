@@ -51,6 +51,7 @@ class SmartBudgetGuard(BasePlugin):
         self._team_spend: Dict[str, float] = defaultdict(float)
         # J.5: Lazy hydration flag
         self._hydrated = False
+        self._last_store = None  # Track store ref for on_unload persistence
         self._background_tasks: set[asyncio.Task] = set()
 
     def _estimate_tokens(self, body: Dict[str, Any]) -> int:
@@ -71,29 +72,48 @@ class SmartBudgetGuard(BasePlugin):
         return None
 
     async def _hydrate(self, store):
-        """J.5: Load persisted budget dicts from SQLite on first execute."""
+        """J.5: Load persisted budget dicts from SQLite on first execute.
+
+        Checks if persisted data is from today (daily reset). Stale data
+        from a previous day is discarded, not restored.
+        """
         if self._hydrated or store is None:
             return
         try:
-            saved_sessions = await store.get_state("budget:sessions", {})
-            saved_teams = await store.get_state("budget:teams", {})
-            if saved_sessions:
-                self._session_spend.update(saved_sessions)
-            if saved_teams:
-                self._team_spend.update(saved_teams)
+            import datetime as _dt
+            today = _dt.date.today().isoformat()
+            saved_date = await store.get_state("budget:guard_date", None)
+
+            if saved_date == today:
+                saved_sessions = await store.get_state("budget:sessions", {})
+                saved_teams = await store.get_state("budget:teams", {})
+                if saved_sessions:
+                    self._session_spend.update(saved_sessions)
+                if saved_teams:
+                    self._team_spend.update(saved_teams)
+                self.logger.info(
+                    f"Budget hydrated: {len(saved_sessions)} sessions, {len(saved_teams)} teams"
+                )
+            else:
+                # Daily reset: clear persisted stale data
+                await store.set_state("budget:guard_date", today)
+                await store.set_state("budget:sessions", {})
+                await store.set_state("budget:teams", {})
+                self.logger.info("Budget daily reset (new day detected)")
+
             self._hydrated = True
-            self.logger.info(
-                f"Budget hydrated: {len(saved_sessions)} sessions, {len(saved_teams)} teams"
-            )
         except Exception as e:
             self.logger.warning(f"Budget hydration failed (non-fatal): {e}")
             self._hydrated = True  # Don't retry on error
 
     async def _persist(self, store):
-        """J.5: Save budget dicts to SQLite (fire-and-forget)."""
+        """J.5: Save budget dicts to SQLite (fire-and-forget).
+        Also stamps the date so hydration can detect daily reset."""
         if store is None:
             return
         try:
+            import datetime as _dt
+            await store.set_state("budget:guard_date", _dt.date.today().isoformat())
             await store.set_state("budget:sessions", dict(self._session_spend))
             await store.set_state("budget:teams", dict(self._team_spend))
         except Exception as e:
@@ -106,6 +126,7 @@ class SmartBudgetGuard(BasePlugin):
 
         # J.5: Lazy hydration on first execute
         store = self._get_store(ctx)
+        self._last_store = store  # Keep ref for on_unload persistence
         if not self._hydrated:
             await self._hydrate(store)
 
@@ -187,7 +208,11 @@ class SmartBudgetGuard(BasePlugin):
         )
 
     async def on_unload(self):
+        """Persist budget state before unloading (hot-swap / shutdown safety)."""
+        if self._last_store and self._hydrated:
+            await self._persist(self._last_store)
         self._session_spend.clear()
         self._team_spend.clear()
+        self._hydrated = False
         self._hydrated = False
         self.logger.info("SmartBudgetGuard unloaded, spend trackers cleared")

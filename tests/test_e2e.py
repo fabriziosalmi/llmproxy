@@ -127,6 +127,10 @@ class LightweightAgent:
         """Test-mode: direct write via create_task (no batching needed in tests)."""
         self._spawn_task(self.store.set_state(key, value))
 
+    async def flush_budget_now(self):
+        """No-op in tests — enqueue_write already writes directly."""
+        pass
+
     def _get_api_keys(self):
         return []
 

@@ -131,6 +131,8 @@ def create_router(agent) -> APIRouter:
                 agent.enqueue_write("budget:daily_total", agent.total_cost_today)
                 if agent.total_cost_today >= soft_limit:
                     agent._spawn_task(agent.webhooks.dispatch(EventType.BUDGET_THRESHOLD, {"consumed": agent.total_cost_today, "limit": daily_limit}))
+                    # Immediate flush on critical threshold — don't risk losing budget state
+                    agent._spawn_task(agent.flush_budget_now())
 
             # Log spend + audit (async, non-blocking)
             import datetime as _dt

@@ -81,8 +81,15 @@ def create_app(agent) -> FastAPI:
     @app.on_event("shutdown")
     async def _shutdown():
         from proxy.background import drain_pending_writes
+        # 1. Flush plugin state (SmartBudgetGuard persists on_unload)
+        for name, instance in agent.plugin_manager._plugin_instances.items():
+            try:
+                await instance.on_unload()
+            except Exception:
+                pass
+        # 2. Drain pending write queue to SQLite
         await drain_pending_writes(agent)
-        # Force SQLite WAL checkpoint before container receives SIGKILL
+        # 3. Force SQLite WAL checkpoint before container receives SIGKILL
         try:
             import aiosqlite
             async with aiosqlite.connect(agent.store.db_path) as conn:
