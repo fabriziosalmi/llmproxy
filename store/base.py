@@ -107,3 +107,8 @@ class BaseRepository(ABC):
     async def export_subject_data(self, subject: str) -> dict:
         """DSAR (Article 15): export all data for a subject."""
         return {"audit": [], "spend": [], "roles": []}
+
+    async def verify_audit_chain(self) -> dict:
+        """Verify the integrity of the audit log hash chain.
+        Returns {"valid": bool, "total": int, "verified": int, "broken_at": int|None}."""
+        return {"valid": True, "total": 0, "verified": 0, "broken_at": None}

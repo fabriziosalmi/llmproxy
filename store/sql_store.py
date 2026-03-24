@@ -70,11 +70,19 @@ class SQLiteStore:
                     latency_ms REAL DEFAULT 0.0,
                     blocked INTEGER DEFAULT 0,
                     block_reason TEXT DEFAULT '',
-                    metadata TEXT DEFAULT '{}'
+                    metadata TEXT DEFAULT '{}',
+                    entry_hash TEXT DEFAULT '',
+                    prev_hash TEXT DEFAULT ''
                 )
             """)
             await conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts)")
             await conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_model ON audit_log(model)")
+            # Migration: add hash columns to existing tables (no-op if already present)
+            for col in ("entry_hash TEXT DEFAULT ''", "prev_hash TEXT DEFAULT ''"):
+                try:
+                    await conn.execute(f"ALTER TABLE audit_log ADD COLUMN {col}")
+                except Exception:
+                    pass  # Column already exists
             await conn.commit()
 
     async def add_endpoint(self, endpoint: LLMEndpoint):
@@ -242,13 +250,39 @@ class SQLiteStore:
                         cost_usd: float, latency_ms: float,
                         blocked: bool = False, block_reason: str = "",
                         metadata: str = "{}"):
-        """Record an audit entry for compliance."""
+        """Record an audit entry with hash chain for tamper detection.
+
+        Each entry's hash includes the previous entry's hash, forming an
+        append-only chain. If any entry is modified or deleted, the chain
+        breaks and verify_audit_chain() will detect it.
+        """
+        import hashlib
+        blocked_int = 1 if blocked else 0
+
         async with aiosqlite.connect(self.db_path) as conn:
+            # Get the hash of the last entry (chain link)
+            async with conn.execute(
+                "SELECT entry_hash FROM audit_log ORDER BY id DESC LIMIT 1"
+            ) as cursor:
+                row = await cursor.fetchone()
+                prev_hash = row[0] if row and row[0] else "GENESIS"
+
+            # Compute deterministic hash: SHA256(prev_hash|ts|req_id|session_id|...)
+            payload = (
+                f"{prev_hash}|{ts}|{req_id}|{session_id}|{key_prefix}|"
+                f"{model}|{provider}|{status}|{prompt_tokens}|{completion_tokens}|"
+                f"{cost_usd}|{latency_ms}|{blocked_int}|{block_reason}|{metadata}"
+            )
+            entry_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
             await conn.execute(
-                "INSERT INTO audit_log (ts, req_id, session_id, key_prefix, model, provider, status, prompt_tokens, completion_tokens, cost_usd, latency_ms, blocked, block_reason, metadata) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO audit_log (ts, req_id, session_id, key_prefix, model, provider, "
+                "status, prompt_tokens, completion_tokens, cost_usd, latency_ms, blocked, "
+                "block_reason, metadata, entry_hash, prev_hash) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (ts, req_id, session_id, key_prefix, model, provider, status,
                  prompt_tokens, completion_tokens, cost_usd, latency_ms,
-                 1 if blocked else 0, block_reason, metadata),
+                 blocked_int, block_reason, metadata, entry_hash, prev_hash),
             )
             await conn.commit()
 
@@ -376,3 +410,67 @@ class SQLiteStore:
                 roles = [dict(r) for r in await cursor.fetchall()]
 
         return {"audit": audit, "spend": spend, "roles": roles}
+
+    async def verify_audit_chain(self) -> dict:
+        """Verify the integrity of the audit log hash chain.
+
+        Walks every entry in order and recomputes its hash from the stored fields
+        + previous hash. If any recomputed hash doesn't match the stored hash,
+        the chain is broken (tamper detected).
+        """
+        import hashlib
+
+        async with aiosqlite.connect(self.db_path) as conn:
+            conn.row_factory = aiosqlite.Row
+            async with conn.execute(
+                "SELECT * FROM audit_log ORDER BY id ASC"
+            ) as cursor:
+                rows = [dict(r) for r in await cursor.fetchall()]
+
+        if not rows:
+            return {"valid": True, "total": 0, "verified": 0, "broken_at": None}
+
+        expected_prev = "GENESIS"
+        verified = 0
+
+        for row in rows:
+            stored_hash = row.get("entry_hash", "")
+            stored_prev = row.get("prev_hash", "")
+
+            # Skip legacy entries without hashes (pre-migration)
+            if not stored_hash:
+                expected_prev = "GENESIS"
+                continue
+
+            # Verify prev_hash link
+            if stored_prev != expected_prev:
+                return {
+                    "valid": False,
+                    "total": len(rows),
+                    "verified": verified,
+                    "broken_at": row.get("id"),
+                    "error": f"prev_hash mismatch at id={row.get('id')}",
+                }
+
+            # Recompute entry hash
+            payload = (
+                f"{stored_prev}|{row['ts']}|{row['req_id']}|{row['session_id']}|"
+                f"{row['key_prefix']}|{row['model']}|{row['provider']}|{row['status']}|"
+                f"{row['prompt_tokens']}|{row['completion_tokens']}|{row['cost_usd']}|"
+                f"{row['latency_ms']}|{row['blocked']}|{row['block_reason']}|{row['metadata']}"
+            )
+            recomputed = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+            if recomputed != stored_hash:
+                return {
+                    "valid": False,
+                    "total": len(rows),
+                    "verified": verified,
+                    "broken_at": row.get("id"),
+                    "error": f"entry_hash mismatch at id={row.get('id')} (tamper detected)",
+                }
+
+            expected_prev = stored_hash
+            verified += 1
+
+        return {"valid": True, "total": len(rows), "verified": verified, "broken_at": None}

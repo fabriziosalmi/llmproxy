@@ -305,6 +305,16 @@ def create_router(agent) -> APIRouter:
 
     # ── Audit Log (R2.10) ──
 
+    @router.get("/api/v1/audit/verify")
+    async def verify_audit_chain():
+        """Verify the integrity of the audit log hash chain.
+
+        Walks every entry and recomputes SHA256 hashes. If any entry was
+        modified, deleted, or inserted out of order, the chain breaks.
+        Returns {"valid": true/false, "total": N, "verified": N, "broken_at": id|null}.
+        """
+        return await agent.store.verify_audit_chain()
+
     @router.get("/api/v1/audit")
     async def query_audit_log(request: Request):
         """Query persistent audit log with filters."""
