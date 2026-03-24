@@ -235,6 +235,7 @@ class RotatorAgent(BaseAgent):
         from .background import (
             config_watch_loop, write_flush_loop,
             cache_eviction_loop, dedup_cleanup_loop,
+            retention_purge_loop,
         )
 
         await self.store.init()
@@ -274,6 +275,12 @@ class RotatorAgent(BaseAgent):
 
         # Dedup cleanup
         self._spawn_task(dedup_cleanup_loop(self.deduplicator, 60))
+
+        # GDPR: automatic data retention purge
+        gdpr_cfg = self.config.get("gdpr", {})
+        if gdpr_cfg.get("auto_purge", True):
+            retention_days = gdpr_cfg.get("retention_days", 90)
+            self._spawn_task(retention_purge_loop(self.store, retention_days))
 
         self.logger.info("Security gateway ready.")
 

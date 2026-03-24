@@ -74,3 +74,21 @@ async def dedup_cleanup_loop(deduplicator, interval: int = 60):
             deduplicator.cleanup_expired()
         except Exception as e:
             logger.debug(f"Dedup cleanup error: {e}")
+
+
+async def retention_purge_loop(store, retention_days: int = 90, interval: int = 86400):
+    """GDPR: periodically purge audit/spend records older than retention period.
+
+    Runs once per day (default). Configurable via gdpr.retention_days.
+    """
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            result = store.purge_expired(retention_days)
+            if asyncio.iscoroutine(result):
+                result = await result
+            total = result.get("audit_deleted", 0) + result.get("spend_deleted", 0)
+            if total > 0:
+                logger.info(f"GDPR retention purge: {result} (retention={retention_days}d)")
+        except Exception as e:
+            logger.warning(f"Retention purge error: {e}")

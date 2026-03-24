@@ -62,6 +62,7 @@ def create_app(agent) -> FastAPI:
         admin_router, registry_router, identity_router,
         plugins_router, telemetry_router, chat_router,
         models_router, embeddings_router, completions_router,
+        gdpr_router,
     )
     app.include_router(chat_router(agent))
     app.include_router(completions_router(agent))
@@ -72,6 +73,7 @@ def create_app(agent) -> FastAPI:
     app.include_router(identity_router(agent))
     app.include_router(plugins_router(agent))
     app.include_router(telemetry_router(agent))
+    app.include_router(gdpr_router(agent))
 
     # Serve frontend
     ui_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ui")

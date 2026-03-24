@@ -297,3 +297,82 @@ class SQLiteStore:
                 items = [dict(r) for r in rows]
 
         return {"total": total, "items": items}
+
+    # ── GDPR: Data Subject Rights ──
+
+    async def purge_expired(self, retention_days: int = 90) -> dict:
+        """Delete audit/spend records older than retention_days."""
+        import time
+        cutoff_ts = int(time.time()) - (retention_days * 86400)
+
+        async with aiosqlite.connect(self.db_path) as conn:
+            cursor = await conn.execute(
+                "DELETE FROM audit_log WHERE ts < ?", (cutoff_ts,)
+            )
+            audit_deleted = cursor.rowcount
+
+            cursor = await conn.execute(
+                "DELETE FROM spend_log WHERE ts < ?", (cutoff_ts,)
+            )
+            spend_deleted = cursor.rowcount
+
+            await conn.commit()
+
+        return {"audit_deleted": audit_deleted, "spend_deleted": spend_deleted}
+
+    async def delete_subject_data(self, subject: str) -> dict:
+        """Right to erasure: delete all data for a subject.
+
+        Matches on session_id, key_prefix (audit/spend), and subject/email (user_roles).
+        """
+        async with aiosqlite.connect(self.db_path) as conn:
+            cursor = await conn.execute(
+                "DELETE FROM audit_log WHERE session_id = ? OR key_prefix = ?",
+                (subject, subject),
+            )
+            audit_deleted = cursor.rowcount
+
+            cursor = await conn.execute(
+                "DELETE FROM spend_log WHERE key_prefix = ?",
+                (subject,),
+            )
+            spend_deleted = cursor.rowcount
+
+            cursor = await conn.execute(
+                "DELETE FROM user_roles WHERE subject = ? OR email = ?",
+                (subject, subject),
+            )
+            roles_deleted = cursor.rowcount
+
+            await conn.commit()
+
+        return {
+            "audit_deleted": audit_deleted,
+            "spend_deleted": spend_deleted,
+            "roles_deleted": roles_deleted,
+        }
+
+    async def export_subject_data(self, subject: str) -> dict:
+        """DSAR: export all data associated with a subject."""
+        async with aiosqlite.connect(self.db_path) as conn:
+            conn.row_factory = aiosqlite.Row
+
+            async with conn.execute(
+                "SELECT * FROM audit_log WHERE session_id = ? OR key_prefix = ? ORDER BY ts DESC",
+                (subject, subject),
+            ) as cursor:
+                audit = [dict(r) for r in await cursor.fetchall()]
+
+            async with conn.execute(
+                "SELECT * FROM spend_log WHERE key_prefix = ? ORDER BY ts DESC",
+                (subject,),
+            ) as cursor:
+                spend = [dict(r) for r in await cursor.fetchall()]
+
+            async with conn.execute(
+                "SELECT * FROM user_roles WHERE subject = ? OR email = ?",
+                (subject, subject),
+            ) as cursor:
+                roles = [dict(r) for r in await cursor.fetchall()]
+
+        return {"audit": audit, "spend": spend, "roles": roles}

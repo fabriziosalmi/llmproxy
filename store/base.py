@@ -91,3 +91,19 @@ class BaseRepository(ABC):
     async def query_audit(self, **kwargs) -> dict:
         """Query audit log. Returns empty without persistent storage."""
         return {"total": 0, "items": []}
+
+    # ── GDPR: Data Subject Rights ──
+
+    async def purge_expired(self, retention_days: int = 90) -> dict:
+        """Delete audit/spend records older than retention_days. Returns counts."""
+        return {"audit_deleted": 0, "spend_deleted": 0}
+
+    async def delete_subject_data(self, subject: str) -> dict:
+        """Right to erasure (Article 17): delete all data for a subject.
+        Subject matches on session_id or key_prefix in audit/spend logs,
+        and on subject/email in user_roles."""
+        return {"audit_deleted": 0, "spend_deleted": 0, "roles_deleted": 0}
+
+    async def export_subject_data(self, subject: str) -> dict:
+        """DSAR (Article 15): export all data for a subject."""
+        return {"audit": [], "spend": [], "roles": []}
