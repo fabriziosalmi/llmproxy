@@ -2,6 +2,26 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.7.1] — 2026-03-24
+
+### Added
+- **Supply chain .pth scanner hardened** — 5 detection categories (code execution, network access, persistence, credential exfiltration, process spawning) based on litellm 1.82.8 malware analysis. Scans at boot, in CI post pip-install, and during Docker build.
+- **Plugin circuit breaker** — auto-quarantines plugins after 10 consecutive errors (60s cooldown, half-open retry).
+- **Health prober jitter** — startup jitter (0-50% interval), per-round jitter (±20%), per-probe jitter (0-5s) to prevent thundering herd.
+- **Connection pool config** — `connection_pool` section in config.yaml for max_connections, max_per_host, dns_cache_ttl, keepalive_timeout, connect_timeout.
+- **Dockerfile .pth audit** — build-time scan for malicious .pth files post pip-install.
+- **CI explicit .pth audit** — grep-based .pth scan step in Supply Chain Integrity job.
+
+### Changed
+- **Lexical analyzer hardened** — sliding window comparison for length-independent detection, dual-gate system (overlap + Jaccard), adaptive thresholds for short patterns, 3 overly-generic corpus patterns made more specific. 14 adversarial false-positive tests added.
+- **Response signer docs** — renamed "provenance" → "attestation". Explicit threat model (✅ proxy→client tamper, ❌ LLM→proxy integrity). Honest about limitations.
+- **ASGI firewall hardened** — added base64/hex/unicode escape decoding layer, zero-width character stripping, nested encoding detection.
+
+### Stats
+- Tests: 654 → 687 (+33)
+- CI: 7/7 jobs green
+- Supply chain: 6-layer defense in depth
+
 ## [1.7.0] — 2026-03-24
 
 ### Added

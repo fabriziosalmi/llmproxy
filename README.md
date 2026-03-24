@@ -4,7 +4,7 @@ Security-first proxy for Large Language Models with multi-provider support (15 p
 
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-654%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-687%20passing-brightgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 [![CI](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml/badge.svg)](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml)
 
@@ -155,8 +155,8 @@ Deep inspection layer wired pre-INGRESS in the request chain:
 - **Cross-session threat intelligence** (`core/threat_ledger.py`): Aggregates threat scores by IP and API key across sessions. Detects coordinated attacks where the same actor rotates session IDs. Configurable threshold, window, and min_events.
 - **Injection scoring**: Regex-based threat scoring with configurable threshold.
 - **PII detection & masking**: Dual-mode — Presidio NLP (opt-in, 18 entity types) with regex fallback (email, phone, SSN, credit card, IBAN). `mask_pii()` replaces PII with vault tokens; `demask_pii()` restores originals.
-- **Semantic injection detection** (`core/semantic_analyzer.py`): Paraphrase-resistant attack detection using character trigram Jaccard similarity against 60 known injection patterns. Catches synonym substitution, multilingual injection (IT/DE/FR/ES/JA/KO/AR), verbose wrapping. 8 categories: override, extraction, hijack, bypass, multilingual, delimiter, social, exfiltration. Zero external deps, <1ms latency.
-- **Response signing** (`core/response_signer.py`): HMAC-SHA256 cryptographic provenance. Each response is signed with `model|provider|timestamp|request_id|body`. Verifiable by clients via `X-LLMProxy-Signature` header. Constant-time comparison prevents timing attacks.
+- **Lexical injection detection** (`core/semantic_analyzer.py`): Sliding-window trigram Jaccard similarity with dual-gate system (overlap + similarity thresholds) against 60 known injection patterns. This is a lexical method (not ML-based) — catches synonym substitution, multilingual injection (IT/DE/FR/ES/JA/KO/AR), verbose wrapping, and injections embedded in long prompts. 8 categories. Adaptive thresholds reduce false positives on common English words. Zero external deps, <1ms latency.
+- **Response signing** (`core/response_signer.py`): HMAC-SHA256 attestation (proxy→client tamper detection). Signs `model|provider|timestamp|request_id|body`. Verifiable via `X-LLMProxy-Signature` header. Constant-time comparison prevents timing attacks. Note: this proves the response wasn't modified after leaving the proxy — it does not prove which LLM generated it (no provider signs responses today).
 - **Wired in `RotatorAgent.proxy_request()`**: Runs before the plugin INGRESS ring — blocked requests return 403 with diagnostic message.
 
 ### Identity & SSO (`core/identity.py`)
@@ -206,6 +206,22 @@ Tamper-evident audit log with SHA256 hash chain:
 - `prev_hash` links to the previous entry's hash (first entry links to `GENESIS`).
 - **Tamper detection**: `GET /api/v1/audit/verify` walks the chain and detects modifications, deletions, or insertions.
 - Backward-compatible: legacy entries without hashes are skipped during verification.
+
+### Supply Chain Defense (`scripts/verify_deps.py`)
+Six-layer defense against dependency supply chain attacks (inspired by the litellm 1.82.8 credential stealer, 2026-03-24):
+1. **Minimal surface**: 11 pinned direct dependencies (vs 100+ in comparable proxies).
+2. **Version pinning**: all deps pinned to exact versions; mismatch detected at boot.
+3. **`.pth` malware scanner**: scans site-packages for malicious `.pth` files (code execution, network access, persistence, credential exfiltration, process spawning). Runs at boot, in CI, and during Docker build.
+4. **Blocked package list**: known-compromised packages (`litellm`, typosquats) detected and blocked.
+5. **CI integrity check**: `scripts/verify_deps.py --strict` in GitHub Actions post pip-install.
+6. **Docker build audit**: `.pth` scan as a build step — compromised packages fail the image build.
+
+### Plugin Circuit Breaker
+Per-plugin circuit breaker auto-quarantines misbehaving plugins:
+- After 10 consecutive errors → plugin quarantined for 60 seconds.
+- Half-open retry: after cooldown, plugin gets one chance to recover.
+- Success resets the error streak counter.
+- Quarantined plugins are skipped (logged at DEBUG level).
 
 ---
 
@@ -498,10 +514,10 @@ All sensitive values are loaded via **Infisical SDK** with environment variable 
 
 ## Testing
 
-654 tests across 27 modules, all passing. Unit tests for every subsystem + HTTP integration tests + pipeline E2E tests + property-based fuzz tests (Hypothesis).
+687 tests across 27 modules, all passing. Unit tests for every subsystem + HTTP integration tests + pipeline E2E tests + property-based fuzz tests (Hypothesis).
 
 ```bash
-# Run full suite (654 tests)
+# Run full suite (687 tests)
 python -m pytest tests/ -v --ignore=tests/test_store.py --ignore=tests/integrated_test.py --ignore=tests/test_export.py
 
 # Run a specific module
