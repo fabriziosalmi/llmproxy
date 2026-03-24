@@ -613,6 +613,56 @@ The `docker-compose.yml` includes:
 - Resource limits: 2GB memory limit, 512MB reservation.
 - Ports: 8090 (API) + 9091 (Prometheus).
 
+### Hardened Deployment with Egress Filtering
+
+For production deployments handling sensitive data, pair LLMProxy with [secure-proxy-manager](https://github.com/fabriziosalmi/secure-proxy-manager) — a Squid-based network proxy with egress filtering, domain whitelisting, and direct IP blocking.
+
+This creates a **two-layer defense** that stops supply chain attacks (like the [litellm 1.82.8 credential stealer](https://www.futuresearch.ai/blog/supply-chain-attack-litellm)) even when malicious code executes before the application layer:
+
+```
+Internet ← secure-proxy-manager (network) ← llmproxy (application) ← Clients
+                    │                              │
+        ✅ Domain whitelist only          ✅ .pth malware detection
+        ✅ Block direct IP exfil          ✅ Injection detection
+        ✅ HTTPS inspection               ✅ HMAC attestation
+        ✅ File type blocking             ✅ Cross-session threat intel
+        ✅ Connection audit log           ✅ Immutable audit ledger
+```
+
+**Setup**: route all LLMProxy outbound traffic through the Squid proxy:
+
+```yaml
+# In llmproxy docker-compose.yml — add to environment:
+environment:
+  - HTTP_PROXY=http://secure-proxy:3128
+  - HTTPS_PROXY=http://secure-proxy:3128
+  - NO_PROXY=localhost,127.0.0.1
+```
+
+**Recommended secure-proxy-manager settings**:
+
+| Setting | Value | Why |
+|---------|-------|-----|
+| `block_direct_ip` | `true` | Prevents exfiltration to raw IPs (litellm attack vector) |
+| `enable_domain_blacklist` | `true` | Block known malicious domains |
+| Domain whitelist | Provider APIs only | Only `api.openai.com`, `api.anthropic.com`, `generativelanguage.googleapis.com`, etc. |
+| `enable_https_filtering` | `true` | Inspect encrypted payloads for credential leaks |
+| `blocked_file_types` | `.tar,.zip,.gz` | Prevent bulk data exfiltration archives |
+| IMDS blocking | `169.254.169.254` in IP blacklist | Stops cloud metadata theft (AWS/GCP/Azure credential harvesting) |
+| `enable_content_filtering` | `true` | Block suspicious content types in responses |
+
+**What this stops that LLMProxy alone cannot**:
+
+| Attack | LLMProxy only | + secure-proxy-manager |
+|--------|--------------|----------------------|
+| `.pth` exfil to lookalike domain | ⚠️ Detects but can't block network | ✅ Domain not in whitelist → blocked |
+| POST credentials to raw IP | ❌ Runs before proxy code | ✅ `block_direct_ip` → blocked |
+| Bulk `.tar` exfil of SSH keys | ❌ Not network layer | ✅ File type blocking |
+| Cloud IMDS metadata theft | ❌ Not network layer | ✅ `169.254.169.254` blacklisted |
+| K8s secret exfil to external | ❌ Not network layer | ✅ Egress restricted to whitelist |
+
+Both projects are MIT-licensed, single-node, Docker-ready, and designed for minimal operational complexity.
+
 ### CI/CD (GitHub Actions)
 
 **`.github/workflows/ci.yml`** — Runs on every push/PR:
