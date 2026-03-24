@@ -20,11 +20,9 @@ Usage:
 """
 
 import sys
-import hashlib
 import importlib.metadata
 import pathlib
 import logging
-import os
 
 logger = logging.getLogger("llmproxy.verify_deps")
 
