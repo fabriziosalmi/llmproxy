@@ -4,6 +4,12 @@ LLMProxy — Security Gateway Orchestrator.
 RotatorAgent is the core orchestrator: initializes the security pipeline,
 wires route modules via the app factory, and handles the proxy request chain
 through the 5-ring plugin system with SecurityShield pre-inspection.
+
+Extracted modules:
+  - proxy/app_factory.py   — FastAPI app + middleware + routes
+  - proxy/event_log.py     — Log/telemetry queues + DLQ
+  - proxy/background.py    — Background loops (config watch, write flush, cache eviction)
+  - proxy/forwarder.py     — Upstream forwarding + fallback chain
 """
 
 import os
@@ -15,13 +21,10 @@ import logging
 import uvicorn
 import aiohttp
 import time
-from datetime import datetime
 from typing import Optional, Dict, Any
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 from core.base_agent import BaseAgent
 from core.metrics import MetricsTracker
@@ -31,7 +34,6 @@ from core.rbac import RBACManager
 from core.circuit_breaker import CircuitManager
 from core.security import SecurityShield
 from core.secrets import SecretManager
-from core.firewall_asgi import ByteLevelFirewallMiddleware
 from core.plugin_engine import PluginManager, PluginHook, PluginContext, PluginState
 from core.identity import IdentityManager
 from core.webhooks import WebhookDispatcher, EventType
@@ -41,83 +43,11 @@ from core.stream_faker import fake_stream
 
 from store.base import BaseRepository
 from .adapters.registry import get_adapter
+from .app_factory import create_app
+from .event_log import EventLogger
+from .forwarder import RequestForwarder
 
 logger = logging.getLogger("llmproxy.rotator")
-
-
-def create_app(agent) -> FastAPI:
-    """App factory: builds the FastAPI application with middleware and routes."""
-    from core.rate_limiter import RateLimitMiddleware
-
-    app = FastAPI(title="LLMPROXY")
-    TraceManager.instrument_app(app)
-
-    # Security + observability response headers
-    @app.middleware("http")
-    async def security_headers(request: Request, call_next):
-        response = await call_next(request)
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        # W3C Trace Context: propagate trace ID for full-stack observability
-        trace_id = request.headers.get("x-trace-id") or request.headers.get("traceparent", "").split("-")[1] if "-" in request.headers.get("traceparent", "") else None
-        if trace_id:
-            response.headers["X-Trace-Id"] = trace_id
-        if request.url.path.startswith("/ui"):
-            response.headers["Content-Security-Policy"] = (
-                "default-src 'self'; "
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
-                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-                "font-src 'self' https://fonts.gstatic.com; "
-                "img-src 'self' data:; "
-                "connect-src 'self'; "
-                "frame-ancestors 'none'"
-            )
-        return response
-
-    cors_origins = agent.config.get("server", {}).get("cors_origins", ["*"])
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=cors_origins,
-        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
-    )
-    app.add_middleware(ByteLevelFirewallMiddleware)
-    app.add_middleware(RateLimitMiddleware, config=agent.config)
-
-    from .routes import (
-        admin_router, registry_router, identity_router,
-        plugins_router, telemetry_router, chat_router,
-        models_router, embeddings_router, completions_router,
-    )
-    app.include_router(chat_router(agent))
-    app.include_router(completions_router(agent))
-    app.include_router(embeddings_router(agent))
-    app.include_router(models_router(agent))
-    app.include_router(admin_router(agent))
-    app.include_router(registry_router(agent))
-    app.include_router(identity_router(agent))
-    app.include_router(plugins_router(agent))
-    app.include_router(telemetry_router(agent))
-
-    # Serve frontend
-    ui_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ui")
-    if os.path.exists(ui_path):
-        app.mount("/ui", StaticFiles(directory=ui_path, html=True), name="ui")
-
-    @app.on_event("shutdown")
-    async def _shutdown():
-        await agent._drain_pending_writes()
-        # Force SQLite WAL checkpoint before container receives SIGKILL
-        try:
-            import aiosqlite
-            async with aiosqlite.connect(agent.store.db_path) as conn:
-                await conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        except Exception:
-            pass
-        await agent.cache_backend.close()
-
-    return app
 
 
 class RotatorAgent(BaseAgent):
@@ -165,8 +95,11 @@ class RotatorAgent(BaseAgent):
             "injection_guard": True,
             "link_sanitizer": True,
         }
-        self.log_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=100)
-        self.telemetry_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=1000)
+
+        # Event logging (extracted to proxy/event_log.py)
+        self._event_logger = EventLogger()
+        self.log_queue = self._event_logger.log_queue          # backward compat
+        self.telemetry_queue = self._event_logger.telemetry_queue  # backward compat
 
         # L1: Negative cache (in-memory WAF drop)
         neg_cfg = self.config.get("caching", {}).get("negative_cache", {})
@@ -197,9 +130,18 @@ class RotatorAgent(BaseAgent):
             extra={"store": self.store},
         )
 
+        # Request forwarder (extracted to proxy/forwarder.py)
+        self.forwarder = RequestForwarder(
+            config=self.config,
+            circuit_manager=self.circuit_manager,
+            budget_lock=self._budget_lock,
+            get_session=self._get_session,
+            add_log=self._add_log,
+        )
+
         self.app = create_app(self)
 
-    # ── Config & Secrets ──
+    # ── Task Management ──
 
     def _spawn_task(self, coro) -> asyncio.Task:
         """Create a background task with a strong reference to prevent GC."""
@@ -207,6 +149,8 @@ class RotatorAgent(BaseAgent):
         self._background_tasks.add(task)
         task.add_done_callback(self._background_tasks.discard)
         return task
+
+    # ── Config & Secrets ──
 
     def _load_config(self):
         if os.path.exists(self.config_path):
@@ -221,41 +165,6 @@ class RotatorAgent(BaseAgent):
             with open(self.config_path, 'rb') as f:
                 return hashlib.md5(f.read()).hexdigest()
         return ""
-
-    async def _config_watch_loop(self, interval: int = 30):
-        """Background loop: detect config.yaml changes and hot-reload."""
-        while True:
-            await asyncio.sleep(interval)
-            try:
-                new_hash = await asyncio.to_thread(self._compute_config_hash_sync)
-                if new_hash and new_hash != self._config_hash:
-                    self.config = self._load_config()
-                    self._config_hash = new_hash
-                    self.webhooks = WebhookDispatcher(self.config)
-                    self.security = SecurityShield(self.config)
-                    self.logger.info("Config hot-reloaded (file change detected)")
-            except Exception as e:
-                self.logger.warning(f"Config watch error: {e}")
-
-    async def _write_flush_loop(self, interval: float = 1.0):
-        """Background loop: flush pending state writes to SQLite periodically."""
-        while True:
-            await asyncio.sleep(interval)
-            await self._drain_pending_writes()
-
-    async def _drain_pending_writes(self):
-        """Drain all pending writes from the queue to the store."""
-        writes: list[tuple[str, Any]] = []
-        while not self._pending_writes.empty():
-            try:
-                writes.append(self._pending_writes.get_nowait())
-            except asyncio.QueueEmpty:
-                break
-        for key, value in writes:
-            try:
-                await self.store.set_state(key, value)
-            except Exception as e:
-                self.logger.warning(f"Failed to flush state write {key}: {e}")
 
     def enqueue_write(self, key: str, value: Any):
         """Non-blocking enqueue of a state write. Drops silently if queue is full."""
@@ -273,20 +182,19 @@ class RotatorAgent(BaseAgent):
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
-            # Configurable connection pooling for upstream providers
             http_cfg = self.config.get("server", {})
             timeout_s = int(http_cfg.get("timeout", "30s").rstrip("s"))
             connector = aiohttp.TCPConnector(
-                limit=100,           # max total connections
-                limit_per_host=20,   # max per upstream provider
-                ttl_dns_cache=300,   # DNS cache TTL (5 min)
+                limit=100,
+                limit_per_host=20,
+                ttl_dns_cache=300,
                 enable_cleanup_closed=True,
             )
             self._session = aiohttp.ClientSession(
                 timeout=aiohttp.ClientTimeout(
                     total=timeout_s,
-                    sock_connect=10,   # TCP connect timeout (detect half-open)
-                    sock_read=timeout_s,  # Socket read timeout
+                    sock_connect=10,
+                    sock_read=timeout_s,
                 ),
                 connector=connector,
             )
@@ -305,42 +213,24 @@ class RotatorAgent(BaseAgent):
                 EventType.ENDPOINT_RECOVERED, {"endpoint": endpoint}
             ))
 
-    # ── Logging & Telemetry ──
+    # ── Logging (delegates to EventLogger) ──
 
-    async def _add_log(self, message: str, level: str = "INFO", metadata: dict | None = None, trace_id: str | None = None):
-        entry: Dict[str, Any] = {
-            "timestamp": time.strftime("%H:%M:%S"),
-            "level": level,
-            "message": message,
-            "metadata": metadata or {},
-        }
-        if trace_id:
-            entry["trace_id"] = trace_id
-        if self.log_queue.full():
-            dropped = self.log_queue.get_nowait()
-            self._dlq_write(dropped)
-        await self.log_queue.put(entry)
+    async def _add_log(self, message: str, level: str = "INFO",
+                       metadata: dict | None = None, trace_id: str | None = None):
+        await self._event_logger.add_log(message, level, metadata, trace_id)
 
     async def broadcast_event(self, event_type: str, data: Dict[str, Any]):
-        event = {"type": event_type, "timestamp": datetime.now().isoformat(), "data": data}
-        if self.telemetry_queue.full():
-            dropped = self.telemetry_queue.get_nowait()
-            self._dlq_write(dropped)
-        await self.telemetry_queue.put(event)
-
-    def _dlq_write(self, entry: Any):
-        """Dead-letter queue: persist dropped log/telemetry entries to file.
-        Non-blocking, best-effort -- prevents silent data loss under load spikes."""
-        try:
-            with open("dlq.jsonl", "a") as f:
-                f.write(json.dumps(entry, default=str) + "\n")
-        except Exception:
-            pass  # DLQ is best-effort, never block the hot path
+        await self._event_logger.broadcast_event(event_type, data)
 
     # ── Lifecycle ──
 
     async def setup(self):
         """Pre-flight: DB init, plugin load, state hydration, cache init."""
+        from .background import (
+            config_watch_loop, write_flush_loop,
+            cache_eviction_loop, dedup_cleanup_loop,
+        )
+
         await self.store.init()
         await self.cache_backend.init()
         await self.plugin_manager.load_plugins()
@@ -364,35 +254,22 @@ class RotatorAgent(BaseAgent):
             await self.store.set_state("budget:daily_total", 0.0)
         self._budget_date = today
 
-        # Background cache eviction loop
+        # Background loops (extracted to proxy/background.py)
         eviction_interval = self.config.get("caching", {}).get("eviction_interval", 3600)
         if self.cache_backend._enabled:
-            self._spawn_task(self._cache_eviction_loop(eviction_interval))
+            self._spawn_task(cache_eviction_loop(self.cache_backend, eviction_interval))
+        self._spawn_task(config_watch_loop(self, 30))
+        self._spawn_task(write_flush_loop(self, 1.0))
 
-        # Background config watcher (hot-reload)
-        self._spawn_task(self._config_watch_loop(30))
-
-        # Background write flusher (budget persistence, graceful shutdown safe)
-        self._spawn_task(self._write_flush_loop(1.0))
-
-        # Active health probing (background endpoint liveness checks)
+        # Active health probing
         from core.health_prober import EndpointHealthProber
         self._health_prober = EndpointHealthProber(self.config, self.circuit_manager, self._get_session)
         self._spawn_task(self._health_prober.start())
 
-        # Background deduplicator cleanup (prevent memory leak from expired entries)
-        self._spawn_task(self._dedup_cleanup_loop(60))
+        # Dedup cleanup
+        self._spawn_task(dedup_cleanup_loop(self.deduplicator, 60))
 
         self.logger.info("Security gateway ready.")
-
-    async def _dedup_cleanup_loop(self, interval: int = 60):
-        """Periodically clean expired entries from the request deduplicator."""
-        while True:
-            await asyncio.sleep(interval)
-            try:
-                self.deduplicator.cleanup_expired()
-            except Exception as e:
-                self.logger.debug(f"Dedup cleanup error: {e}")
 
     async def run(self, port: int | None = None):
         if port is None:
@@ -403,195 +280,9 @@ class RotatorAgent(BaseAgent):
         server = uvicorn.Server(config)
         await server.serve()
 
-    # ── Cache Eviction ──
-
-    async def _cache_eviction_loop(self, interval: int = 3600):
-        """Background loop: evict expired cache entries periodically."""
-        while True:
-            await asyncio.sleep(interval)
-            try:
-                deleted = await self.cache_backend.evict_expired()
-                if deleted > 0:
-                    self.logger.info(f"Cache eviction: {deleted} entries purged")
-            except Exception as e:
-                self.logger.error(f"Cache eviction error: {e}")
-
-    # ── Forwarding with cross-provider fallback ──
-
-    def _resolve_endpoint_for_provider(self, provider: str) -> Any:
-        """Resolve the configured endpoint URL for a provider."""
-        endpoints_cfg = self.config.get("endpoints", {})
-        for ep_name, ep_config in endpoints_cfg.items():
-            if ep_config.get("provider") == provider or ep_name == provider:
-                base_url = ep_config.get("base_url", "")
-                # Build a lightweight endpoint-like object
-                from types import SimpleNamespace
-                return SimpleNamespace(
-                    id=ep_name,
-                    url=base_url,
-                    provider=provider,
-                    provider_type=provider,
-                )
-        return None
-
-    async def _forward_request(self, ctx, adapter, target_url, translated_body, translated_headers, session, cb, endpoint_id):
-        """Forward a single request (non-streaming) with circuit breaker tracking."""
-        response = await adapter.request(target_url, translated_body, translated_headers, session)
-        # Check for HTTP-level errors that should trigger fallback
-        if response.status_code in (429, 500, 502, 503, 504):
-            cb.report_failure()
-            raise HTTPException(status_code=response.status_code, detail=f"Upstream {endpoint_id} returned {response.status_code}")
-        cb.report_success()
-        return response
-
-    async def _forward_with_fallback(self, ctx, target, headers, session):
-        """Forward request with cross-provider fallback on failure.
-
-        Tries the primary endpoint first. On failure (circuit open, HTTP error,
-        connection error), walks the fallback_chain for the requested model.
-        """
-        original_model = ctx.body.get("model", "")
-        original_body = dict(ctx.body)  # shallow copy for fallback restoration
-        attempts = []
-
-        # Build attempt list: primary + fallback chain
-        primary_provider = getattr(target, 'provider', None) or getattr(target, 'provider_type', None)
-        primary_adapter = get_adapter(primary_provider, original_model)
-        attempts.append({
-            "target": target,
-            "adapter": primary_adapter,
-            "model": original_model,
-            "provider": primary_adapter.provider_name,
-            "is_fallback": False,
-        })
-
-        # Add fallback chain entries
-        chain = self.config.get("fallback_chains", {}).get(original_model, [])
-        for fb in chain:
-            fb_target = self._resolve_endpoint_for_provider(fb["provider"])
-            if fb_target:
-                fb_adapter = get_adapter(fb["provider"])
-                attempts.append({
-                    "target": fb_target,
-                    "adapter": fb_adapter,
-                    "model": fb["model"],
-                    "provider": fb["provider"],
-                    "is_fallback": True,
-                })
-
-        last_error: Exception | None = None
-        for i, attempt in enumerate(attempts):
-            a_target = attempt["target"]
-            a_adapter = attempt["adapter"]
-            a_model = attempt["model"]
-            endpoint_id = getattr(a_target, 'id', str(a_target.url)) if a_target else 'unknown'
-
-            # Circuit breaker check
-            cb = self.circuit_manager.get_breaker(endpoint_id)
-            if not cb.can_execute():
-                if attempt["is_fallback"]:
-                    continue  # skip this fallback, try next
-                # Primary circuit open — fall through to fallbacks
-                last_error = HTTPException(
-                    status_code=503,
-                    detail=f"Circuit open for endpoint '{endpoint_id}'",
-                )
-                continue
-
-            # Set model for this attempt
-            ctx.body["model"] = a_model
-            ctx.metadata["_provider"] = a_adapter.provider_name
-            if attempt["is_fallback"]:
-                ctx.metadata["_fallback_used"] = attempt["provider"]
-                ctx.metadata["_fallback_model"] = a_model
-                ctx.metadata["_original_model"] = original_model
-                await self._add_log(
-                    f"FALLBACK: {original_model} → {a_model} ({attempt['provider']})",
-                    level="PROXY",
-                )
-
-            # Translate request for this provider
-            target_url, translated_body, translated_headers = a_adapter.translate_request(
-                str(a_target.url), ctx.body, headers,
-            )
-
-            try:
-                if ctx.body.get("stream") or original_body.get("stream"):
-                    # Streaming: return generator (no fallback mid-stream)
-                    ttft_start = time.perf_counter()
-                    first_chunk_seen = False
-                    circuit_success_reported = False
-
-                    async def stream_generator(_adapter=a_adapter, _url=target_url,
-                                               _body=translated_body, _headers=translated_headers,
-                                               _cb=cb, _eid=endpoint_id):
-                        nonlocal first_chunk_seen, circuit_success_reported
-                        stream_usage = {}
-                        try:
-                            async for chunk in _adapter.stream(_url, _body, _headers, session):
-                                if not first_chunk_seen:
-                                    first_chunk_seen = True
-                                    _cb.report_success()
-                                    circuit_success_reported = True
-                                    ttft = time.perf_counter() - ttft_start
-                                    MetricsTracker.track_ttft(_eid, ttft)
-                                    ctx.metadata["ttft_ms"] = round(ttft * 1000, 2)
-                                # Extract usage from final SSE chunks (OpenAI/Anthropic/Google)
-                                if b'"usage"' in chunk or b'"usageMetadata"' in chunk:
-                                    try:
-                                        for line in chunk.decode("utf-8", errors="replace").split("\n"):
-                                            if line.startswith("data: ") and line[6:].strip() != "[DONE]":
-                                                d = json.loads(line[6:])
-                                                u = d.get("usage") or d.get("usageMetadata", {})
-                                                if u:
-                                                    stream_usage = u
-                                    except Exception:
-                                        pass
-                                yield chunk
-                        except Exception as e:
-                            if not circuit_success_reported:
-                                _cb.report_failure()
-                            raise e
-                        finally:
-                            # Post-stream: update budget with real token cost
-                            # In finally block to charge even on client disconnect
-                            if stream_usage:
-                                from core.pricing import estimate_cost
-                                p_tok = stream_usage.get("prompt_tokens") or stream_usage.get("promptTokenCount", 0)
-                                c_tok = stream_usage.get("completion_tokens") or stream_usage.get("candidatesTokenCount", 0)
-                                model_name = ctx.body.get("model", "")
-                                real_cost = estimate_cost(model_name, p_tok, c_tok)
-                                async with self._budget_lock:
-                                    self.total_cost_today += real_cost
-                                ctx.metadata["_stream_usage"] = {"prompt_tokens": p_tok, "completion_tokens": c_tok}
-                                ctx.metadata["_stream_cost_usd"] = round(real_cost, 6)
-
-                    ctx.response = StreamingResponse(stream_generator(), media_type="text/event-stream")
-                    return ctx.response
-                else:
-                    ctx.response = await self._forward_request(
-                        ctx, a_adapter, target_url, translated_body, translated_headers,
-                        session, cb, endpoint_id,
-                    )
-                    return ctx.response
-
-            except Exception as e:
-                last_error = e
-                if not attempt["is_fallback"]:
-                    await self._add_log(
-                        f"PRIMARY FAILED: {endpoint_id} — {e}", level="PROXY",
-                    )
-                continue
-
-        # All attempts exhausted
-        ctx.body["model"] = original_model  # restore original model
-        if last_error:
-            raise last_error
-        raise HTTPException(status_code=503, detail="All providers failed")
-
     # ── Core Proxy Pipeline ──
 
-    async def proxy_request(self, request: Request, body: Dict[str, Any] | None = None, session_id: str = "default"):
+    async def proxy_request(self, request, body: Dict[str, Any] | None = None, session_id: str = "default"):
         start_total = time.time()
         if body is None:
             body = await request.json()
@@ -621,7 +312,6 @@ class RotatorAgent(BaseAgent):
             if security_error:
                 logger.warning(f"SecurityShield blocked: {security_error}")
                 MetricsTracker.track_injection_blocked()
-                # Write to L1 negative cache for future instant drops
                 self.negative_cache.add(ctx.body, security_error)
                 raise HTTPException(status_code=403, detail=security_error)
 
@@ -641,7 +331,6 @@ class RotatorAgent(BaseAgent):
             await self.plugin_manager.execute_ring(PluginHook.PRE_FLIGHT, ctx)
             MetricsTracker.track_ring_latency("pre_flight", time.perf_counter() - r2_start)
             if ctx.stop_chain:
-                # Cache hit: if client wants streaming, convert cached response to SSE
                 if ctx.metadata.get("_cache_hit") and ctx.body.get("stream"):
                     cached_data = ctx.metadata.get("_cached_response_data")
                     if cached_data:
@@ -673,7 +362,11 @@ class RotatorAgent(BaseAgent):
             # Forward request with cross-provider fallback
             start_req = time.time()
             session = await self._get_session()
-            await self._forward_with_fallback(ctx, target, headers, session)
+            # Bind mutable cost reference so streaming can charge budget
+            self.forwarder._cost_ref = {"total": self.total_cost_today}
+            await self.forwarder.forward_with_fallback(ctx, target, headers, session)
+            # Sync back cost from streaming (if it was updated)
+            self.total_cost_today = self.forwarder._cost_ref.get("total", self.total_cost_today)
 
             ctx.metadata["duration"] = time.time() - start_req
 
@@ -699,12 +392,6 @@ class RotatorAgent(BaseAgent):
                 await self.plugin_manager.execute_ring(PluginHook.BACKGROUND, ctx)
                 MetricsTracker.track_ring_latency("background", time.perf_counter() - r5_start)
 
-                # Fase 3: Post-flight validated cache write
-                # Only cache if:
-                #   1. Cache key was computed (miss on lookup)
-                #   2. Response exists and is not a streaming response
-                #   3. POST_FLIGHT didn't block (no [SEC_ERR:])
-                #   4. Not a cache bypass request
                 cache_key = ctx.metadata.get("_cache_key")
                 if (
                     cache_key
@@ -716,7 +403,6 @@ class RotatorAgent(BaseAgent):
                 ):
                     try:
                         response_data = json.loads(ctx.response.body.decode())
-                        # Verify POST_FLIGHT didn't flag security issues
                         content = response_data.get("choices", [{}])[0].get("message", {}).get("content", "")
                         if "[SEC_ERR:" not in content:
                             await self.cache_backend.put(

@@ -1,0 +1,94 @@
+"""
+LLMPROXY — FastAPI App Factory.
+
+Builds the FastAPI application with middleware stack, route wiring,
+security headers, and graceful shutdown hook.
+"""
+
+import os
+import logging
+
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+
+from core.tracing import TraceManager
+from core.firewall_asgi import ByteLevelFirewallMiddleware
+
+logger = logging.getLogger("llmproxy.app_factory")
+
+
+def create_app(agent) -> FastAPI:
+    """App factory: builds the FastAPI application with middleware and routes."""
+    from core.rate_limiter import RateLimitMiddleware
+
+    app = FastAPI(title="LLMPROXY")
+    TraceManager.instrument_app(app)
+
+    # Security + observability response headers
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        # W3C Trace Context: propagate trace ID for full-stack observability
+        trace_id = request.headers.get("x-trace-id") or request.headers.get("traceparent", "").split("-")[1] if "-" in request.headers.get("traceparent", "") else None
+        if trace_id:
+            response.headers["X-Trace-Id"] = trace_id
+        if request.url.path.startswith("/ui"):
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                "font-src 'self' https://fonts.gstatic.com; "
+                "img-src 'self' data:; "
+                "connect-src 'self'; "
+                "frame-ancestors 'none'"
+            )
+        return response
+
+    cors_origins = agent.config.get("server", {}).get("cors_origins", ["*"])
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+    )
+    app.add_middleware(ByteLevelFirewallMiddleware)
+    app.add_middleware(RateLimitMiddleware, config=agent.config)
+
+    from .routes import (
+        admin_router, registry_router, identity_router,
+        plugins_router, telemetry_router, chat_router,
+        models_router, embeddings_router, completions_router,
+    )
+    app.include_router(chat_router(agent))
+    app.include_router(completions_router(agent))
+    app.include_router(embeddings_router(agent))
+    app.include_router(models_router(agent))
+    app.include_router(admin_router(agent))
+    app.include_router(registry_router(agent))
+    app.include_router(identity_router(agent))
+    app.include_router(plugins_router(agent))
+    app.include_router(telemetry_router(agent))
+
+    # Serve frontend
+    ui_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ui")
+    if os.path.exists(ui_path):
+        app.mount("/ui", StaticFiles(directory=ui_path, html=True), name="ui")
+
+    @app.on_event("shutdown")
+    async def _shutdown():
+        from proxy.background import drain_pending_writes
+        await drain_pending_writes(agent)
+        # Force SQLite WAL checkpoint before container receives SIGKILL
+        try:
+            import aiosqlite
+            async with aiosqlite.connect(agent.store.db_path) as conn:
+                await conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except Exception:
+            pass
+        await agent.cache_backend.close()
+
+    return app

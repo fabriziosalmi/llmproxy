@@ -1,5 +1,5 @@
 """
-Tests for cross-provider fallback logic in RotatorAgent._forward_with_fallback.
+Tests for cross-provider fallback logic in RequestForwarder.
 
 Validates that when the primary provider fails (circuit open, HTTP error,
 connection error), the proxy automatically tries fallback providers from
@@ -14,31 +14,21 @@ from fastapi import HTTPException
 from starlette.responses import Response
 
 from core.circuit_breaker import CircuitManager
+from proxy.forwarder import RequestForwarder
 
 
-# ── Minimal RotatorAgent stub for fallback testing ──
+# ── Helpers ──
 
-class FallbackTestAgent:
-    """Minimal agent with just enough state to test _forward_with_fallback."""
-
-    def __init__(self, config=None):
-        self.config = config or {}
-        self.circuit_manager = CircuitManager()
-        self.logger = MagicMock()
-        self.log_queue = asyncio.Queue(maxsize=100)
-
-        from proxy.rotator import RotatorAgent
-        import types
-        self._forward_with_fallback = types.MethodType(
-            RotatorAgent._forward_with_fallback, self,
-        )
-        self._forward_request = types.MethodType(
-            RotatorAgent._forward_request, self,
-        )
-        self._resolve_endpoint_for_provider = types.MethodType(
-            RotatorAgent._resolve_endpoint_for_provider, self,
-        )
-        self._add_log = types.MethodType(RotatorAgent._add_log, self)
+def _make_forwarder(config=None):
+    """Create a RequestForwarder with test defaults."""
+    config = config or {}
+    return RequestForwarder(
+        config=config,
+        circuit_manager=CircuitManager(),
+        budget_lock=asyncio.Lock(),
+        get_session=AsyncMock(),
+        add_log=AsyncMock(),
+    )
 
 
 def _make_target(provider="openai", url="https://api.openai.com/v1"):
@@ -85,7 +75,7 @@ class TestFallbackBasic:
     @pytest.mark.asyncio
     async def test_primary_success_no_fallback(self):
         """When primary succeeds, no fallback is attempted."""
-        agent = FallbackTestAgent(config={
+        fwd = _make_forwarder(config={
             "endpoints": {"openai": {"provider": "openai", "base_url": "https://api.openai.com/v1"}},
             "fallback_chains": {"gpt-4o": [{"provider": "anthropic", "model": "claude-sonnet-4-20250514"}]},
         })
@@ -93,8 +83,8 @@ class TestFallbackBasic:
         target = _make_target("openai")
         mock_adapter = _make_mock_adapter("openai", _ok_response())
 
-        with patch("proxy.rotator.get_adapter", return_value=mock_adapter):
-            await agent._forward_with_fallback(ctx, target, {}, MagicMock())
+        with patch("proxy.adapters.registry.get_adapter", return_value=mock_adapter):
+            await fwd.forward_with_fallback(ctx, target, {}, MagicMock())
 
         assert ctx.response.status_code == 200
         assert "_fallback_used" not in ctx.metadata
@@ -102,7 +92,7 @@ class TestFallbackBasic:
     @pytest.mark.asyncio
     async def test_primary_fails_fallback_succeeds(self):
         """When primary returns 503, fallback provider is used."""
-        agent = FallbackTestAgent(config={
+        fwd = _make_forwarder(config={
             "endpoints": {
                 "openai": {"provider": "openai", "base_url": "https://api.openai.com/v1"},
                 "anthropic": {"provider": "anthropic", "base_url": "https://api.anthropic.com/v1"},
@@ -123,8 +113,8 @@ class TestFallbackBasic:
                 return primary
             return fallback
 
-        with patch("proxy.rotator.get_adapter", side_effect=get_adapter_side_effect):
-            await agent._forward_with_fallback(ctx, target, {}, MagicMock())
+        with patch("proxy.adapters.registry.get_adapter", side_effect=get_adapter_side_effect):
+            await fwd.forward_with_fallback(ctx, target, {}, MagicMock())
 
         assert ctx.response.status_code == 200
         assert ctx.metadata.get("_fallback_used") == "anthropic"
@@ -134,7 +124,7 @@ class TestFallbackBasic:
     @pytest.mark.asyncio
     async def test_all_providers_fail_raises(self):
         """When all providers fail, raise the last error."""
-        agent = FallbackTestAgent(config={
+        fwd = _make_forwarder(config={
             "endpoints": {
                 "openai": {"provider": "openai", "base_url": "https://api.openai.com/v1"},
                 "anthropic": {"provider": "anthropic", "base_url": "https://api.anthropic.com/v1"},
@@ -145,24 +135,24 @@ class TestFallbackBasic:
         target = _make_target("openai")
         mock = _make_mock_adapter("openai", _error_response(503))
 
-        with patch("proxy.rotator.get_adapter", return_value=mock):
+        with patch("proxy.adapters.registry.get_adapter", return_value=mock):
             with pytest.raises(HTTPException) as exc_info:
-                await agent._forward_with_fallback(ctx, target, {}, MagicMock())
+                await fwd.forward_with_fallback(ctx, target, {}, MagicMock())
             assert exc_info.value.status_code == 503
 
     @pytest.mark.asyncio
     async def test_no_fallback_chain_raises_directly(self):
         """Without a fallback chain, primary failure raises immediately."""
-        agent = FallbackTestAgent(config={
+        fwd = _make_forwarder(config={
             "endpoints": {"openai": {"provider": "openai", "base_url": "https://api.openai.com/v1"}},
         })
         ctx = _make_ctx("gpt-4o")
         target = _make_target("openai")
         mock = _make_mock_adapter("openai", _error_response(500))
 
-        with patch("proxy.rotator.get_adapter", return_value=mock):
+        with patch("proxy.adapters.registry.get_adapter", return_value=mock):
             with pytest.raises(HTTPException) as exc_info:
-                await agent._forward_with_fallback(ctx, target, {}, MagicMock())
+                await fwd.forward_with_fallback(ctx, target, {}, MagicMock())
             assert exc_info.value.status_code == 500
 
 
@@ -175,7 +165,7 @@ class TestFallbackCircuitBreaker:
     @pytest.mark.asyncio
     async def test_circuit_open_triggers_fallback(self):
         """When primary circuit is open, skip to fallback."""
-        agent = FallbackTestAgent(config={
+        fwd = _make_forwarder(config={
             "endpoints": {
                 "openai": {"provider": "openai", "base_url": "https://api.openai.com/v1"},
                 "anthropic": {"provider": "anthropic", "base_url": "https://api.anthropic.com/v1"},
@@ -186,7 +176,7 @@ class TestFallbackCircuitBreaker:
         target = _make_target("openai")
 
         # Open the primary circuit breaker
-        cb = agent.circuit_manager.get_breaker("openai-ep")
+        cb = fwd.circuit_manager.get_breaker("openai-ep")
         for _ in range(10):
             cb.report_failure()
         assert not cb.can_execute()
@@ -202,8 +192,8 @@ class TestFallbackCircuitBreaker:
                 return primary
             return fallback
 
-        with patch("proxy.rotator.get_adapter", side_effect=get_adapter_side_effect):
-            await agent._forward_with_fallback(ctx, target, {}, MagicMock())
+        with patch("proxy.adapters.registry.get_adapter", side_effect=get_adapter_side_effect):
+            await fwd.forward_with_fallback(ctx, target, {}, MagicMock())
 
         assert ctx.response.status_code == 200
         assert ctx.metadata.get("_fallback_used") == "anthropic"
@@ -213,7 +203,7 @@ class TestFallbackCircuitBreaker:
     @pytest.mark.asyncio
     async def test_all_circuits_open_raises_503(self):
         """When all circuits are open, raise 503."""
-        agent = FallbackTestAgent(config={
+        fwd = _make_forwarder(config={
             "endpoints": {
                 "openai": {"provider": "openai", "base_url": "https://api.openai.com/v1"},
                 "anthropic": {"provider": "anthropic", "base_url": "https://api.anthropic.com/v1"},
@@ -225,15 +215,15 @@ class TestFallbackCircuitBreaker:
 
         # Open both circuits
         for ep_id in ["openai-ep", "anthropic"]:
-            cb = agent.circuit_manager.get_breaker(ep_id)
+            cb = fwd.circuit_manager.get_breaker(ep_id)
             for _ in range(10):
                 cb.report_failure()
 
         mock = _make_mock_adapter("openai")
 
-        with patch("proxy.rotator.get_adapter", return_value=mock):
+        with patch("proxy.adapters.registry.get_adapter", return_value=mock):
             with pytest.raises(HTTPException) as exc_info:
-                await agent._forward_with_fallback(ctx, target, {}, MagicMock())
+                await fwd.forward_with_fallback(ctx, target, {}, MagicMock())
             assert exc_info.value.status_code == 503
 
 
@@ -248,7 +238,7 @@ class TestFallbackConnectionErrors:
         """aiohttp connection error on primary triggers fallback."""
         import aiohttp
 
-        agent = FallbackTestAgent(config={
+        fwd = _make_forwarder(config={
             "endpoints": {
                 "openai": {"provider": "openai", "base_url": "https://api.openai.com/v1"},
                 "google": {"provider": "google", "base_url": "https://generativelanguage.googleapis.com/v1beta"},
@@ -269,8 +259,8 @@ class TestFallbackConnectionErrors:
                 return primary
             return fallback
 
-        with patch("proxy.rotator.get_adapter", side_effect=get_adapter_side_effect):
-            await agent._forward_with_fallback(ctx, target, {}, MagicMock())
+        with patch("proxy.adapters.registry.get_adapter", side_effect=get_adapter_side_effect):
+            await fwd.forward_with_fallback(ctx, target, {}, MagicMock())
 
         assert ctx.response.status_code == 200
         assert ctx.metadata.get("_fallback_used") == "google"
@@ -285,7 +275,7 @@ class TestFallbackModelHandling:
     @pytest.mark.asyncio
     async def test_model_swapped_on_fallback(self):
         """Body model field is updated to fallback model on success."""
-        agent = FallbackTestAgent(config={
+        fwd = _make_forwarder(config={
             "endpoints": {
                 "openai": {"provider": "openai", "base_url": "https://api.openai.com/v1"},
                 "anthropic": {"provider": "anthropic", "base_url": "https://api.anthropic.com/v1"},
@@ -304,15 +294,15 @@ class TestFallbackModelHandling:
             call_count += 1
             return primary if call_count == 1 else fallback
 
-        with patch("proxy.rotator.get_adapter", side_effect=get_adapter_side_effect):
-            await agent._forward_with_fallback(ctx, target, {}, MagicMock())
+        with patch("proxy.adapters.registry.get_adapter", side_effect=get_adapter_side_effect):
+            await fwd.forward_with_fallback(ctx, target, {}, MagicMock())
 
         assert ctx.body["model"] == "claude-sonnet-4-20250514"
 
     @pytest.mark.asyncio
     async def test_model_restored_on_total_failure(self):
         """If all providers fail, original model is restored in body."""
-        agent = FallbackTestAgent(config={
+        fwd = _make_forwarder(config={
             "endpoints": {
                 "openai": {"provider": "openai", "base_url": "https://api.openai.com/v1"},
                 "anthropic": {"provider": "anthropic", "base_url": "https://api.anthropic.com/v1"},
@@ -323,9 +313,9 @@ class TestFallbackModelHandling:
         target = _make_target("openai")
         mock = _make_mock_adapter("openai", _error_response(503))
 
-        with patch("proxy.rotator.get_adapter", return_value=mock):
+        with patch("proxy.adapters.registry.get_adapter", return_value=mock):
             with pytest.raises(HTTPException):
-                await agent._forward_with_fallback(ctx, target, {}, MagicMock())
+                await fwd.forward_with_fallback(ctx, target, {}, MagicMock())
 
         assert ctx.body["model"] == "gpt-4o"
 
@@ -337,24 +327,24 @@ class TestFallbackModelHandling:
 class TestResolveEndpoint:
 
     def test_resolve_existing_provider(self):
-        agent = FallbackTestAgent(config={
+        fwd = _make_forwarder(config={
             "endpoints": {"anthropic": {"provider": "anthropic", "base_url": "https://api.anthropic.com/v1"}},
         })
-        ep = agent._resolve_endpoint_for_provider("anthropic")
+        ep = fwd.resolve_endpoint_for_provider("anthropic")
         assert ep is not None
         assert ep.provider == "anthropic"
         assert ep.url == "https://api.anthropic.com/v1"
 
     def test_resolve_missing_provider(self):
-        agent = FallbackTestAgent(config={"endpoints": {}})
-        ep = agent._resolve_endpoint_for_provider("nonexistent")
+        fwd = _make_forwarder(config={"endpoints": {}})
+        ep = fwd.resolve_endpoint_for_provider("nonexistent")
         assert ep is None
 
     def test_resolve_by_name(self):
-        agent = FallbackTestAgent(config={
+        fwd = _make_forwarder(config={
             "endpoints": {"my-openai": {"provider": "openai", "base_url": "https://api.openai.com/v1"}},
         })
-        ep = agent._resolve_endpoint_for_provider("openai")
+        ep = fwd.resolve_endpoint_for_provider("openai")
         assert ep is not None
 
 
@@ -368,7 +358,7 @@ class TestFallbackStatusCodes:
     @pytest.mark.parametrize("status", [429, 500, 502, 503, 504])
     async def test_error_status_triggers_fallback(self, status):
         """HTTP 429, 500, 502, 503, 504 all trigger fallback."""
-        agent = FallbackTestAgent(config={
+        fwd = _make_forwarder(config={
             "endpoints": {
                 "openai": {"provider": "openai", "base_url": "https://api.openai.com/v1"},
                 "anthropic": {"provider": "anthropic", "base_url": "https://api.anthropic.com/v1"},
@@ -387,8 +377,8 @@ class TestFallbackStatusCodes:
             call_count += 1
             return primary if call_count == 1 else fallback
 
-        with patch("proxy.rotator.get_adapter", side_effect=get_adapter_side_effect):
-            await agent._forward_with_fallback(ctx, target, {}, MagicMock())
+        with patch("proxy.adapters.registry.get_adapter", side_effect=get_adapter_side_effect):
+            await fwd.forward_with_fallback(ctx, target, {}, MagicMock())
 
         assert ctx.response.status_code == 200
         assert ctx.metadata.get("_fallback_used") == "anthropic"
