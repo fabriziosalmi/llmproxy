@@ -409,10 +409,10 @@ class SecurityShield:
                 return "[SEC_ERR: THREAT_DETECTED]"
 
         sanitized = content
-        # 3. Anti-Steganography (Olimpo)
+        # 3. Invisible character detection (zero-width, homoglyphs, Unicode tags)
         if self.detect_steganography(sanitized):
-            logger.warning("Anti-Steganography: Payload dropped due to anomalous entropy/patterns.")
-            return "[SEC_ERR: STEGANOGRAPHY_PROTECTION_TRIGGERED]"
+            logger.warning("Invisible char detection: Payload dropped due to smuggled characters.")
+            return "[SEC_ERR: INVISIBLE_CHAR_DETECTED]"
 
         # 4. Link Sanitizer
         blocked_domains = self.config.get("link_sanitization", {}).get("blocked_domains", [])
@@ -422,7 +422,7 @@ class SecurityShield:
         # 5. Bidirectional De-masking
         sanitized = self.demask_pii(sanitized)
 
-        # 6. Steganographic Marker (lightweight, not cryptographic — trivially removable)
+        # 6. Watermark (DEPRECATED — now a no-op, HMAC signing handles provenance)
         sanitized = self.apply_watermark(sanitized)
 
         return sanitized
@@ -505,33 +505,77 @@ class SecurityShield:
             return False
 
     def apply_watermark(self, text: str) -> str:
-        """Injects zero-width spaces as a steganographic marker (NOT cryptographic -- trivially removable)."""
-        if not text:
-            return text
-        # Simple pattern: inject U+200B after every 5th word
-        words = text.split(" ")
-        signed_words = []
-        for i, word in enumerate(words):
-            signed_words.append(word)
-            if (i + 1) % 5 == 0:
-                signed_words.append("\u200B") # Zero-width space
-        return " ".join(signed_words).replace(" \u200B ", "\u200B")
+        """DEPRECATED: Zero-width watermarking is superseded by HMAC response signing.
+
+        Previously injected U+200B after every 5th word as a naive watermark.
+        Problems: (1) trivially removable, (2) self-triggers our own invisible
+        char detector on cached responses, (3) HMAC signing (core/response_signer.py)
+        provides cryptographically verifiable provenance.
+
+        Now a no-op. Kept for interface compatibility.
+        """
+        return text
 
     def detect_steganography(self, text: str) -> bool:
-        """Detects entropy anomalies that suggest hidden data (e.g., Morse, binary in spaces)."""
+        """Detect invisible/smuggled characters used for prompt injection evasion.
+
+        This is NOT true steganographic analysis. It detects:
+          1. Zero-width Unicode chars (U+200B..U+200F, U+FEFF, U+2060..U+2064)
+          2. Anomalous whitespace patterns (double+ spaces used for binary encoding)
+          3. Homoglyph mixing (Cyrillic/Greek chars mixed with Latin — used to
+             evade keyword filters, e.g. Cyrillic 'а' looks identical to Latin 'a')
+          4. Unicode tag characters (U+E0001..U+E007F — invisible instruction channel)
+
+        For true watermarking, use HMAC response signing (core/response_signer.py).
+        """
         if not text:
             return False
 
-        # 1. Check for unusual zero-width characters (U+200B, U+200C, etc.)
-        # that weren't added by us.
-        zero_width_chars = len(re.findall(r"[\u200B-\u200F\uFEFF]", text))
-        if zero_width_chars > len(text) * 0.05: # More than 5% zero-width
-               logger.warning(f"STEGANOGRAPHY DETECTED: High density of zero-width characters ({zero_width_chars})")
-               return True
+        findings: list[str] = []
 
-        # 2. Check for whitespace patterns (Steganography often uses varying numbers of spaces)
-        if "  " in text and len(re.findall(r" {2,}", text)) > 10:
-            logger.warning("STEGANOGRAPHY DETECTED: Anomalous whitespace patterns.")
+        # 1. Zero-width characters: U+200B (ZWSP), U+200C (ZWNJ), U+200D (ZWJ),
+        #    U+200E/F (LRM/RLM), U+FEFF (BOM), U+2060-2064 (word joiners),
+        #    U+2066-2069 (bidi isolates), U+00AD (soft hyphen)
+        invisible_pattern = re.compile(
+            r'[\u200B-\u200F\uFEFF\u2060-\u2064\u2066-\u2069\u00AD'
+            r'\U000E0001-\U000E007F]'  # Unicode tag characters (invisible instruction channel)
+        )
+        invisible_chars = invisible_pattern.findall(text)
+        if len(invisible_chars) > max(3, len(text) * 0.01):  # >1% or >3 absolute
+            findings.append(f"invisible_chars={len(invisible_chars)}")
+
+        # 2. Whitespace anomalies (binary encoding via spaces)
+        double_spaces = len(re.findall(r' {2,}', text))
+        if double_spaces > 10:
+            findings.append(f"double_spaces={double_spaces}")
+
+        # 3. Homoglyph detection: Cyrillic/Greek chars mixed with Latin text.
+        #    Pure Cyrillic or pure Latin is fine — mixing is the red flag.
+        import unicodedata
+        scripts_seen: set[str] = set()
+        for ch in text:
+            if ch.isalpha():
+                name = unicodedata.name(ch, "")
+                if "CYRILLIC" in name:
+                    scripts_seen.add("cyrillic")
+                elif "GREEK" in name:
+                    scripts_seen.add("greek")
+                elif "LATIN" in name or name.startswith("LATIN"):
+                    scripts_seen.add("latin")
+        # Flag if Latin + Cyrillic mixed (classic homoglyph attack)
+        if "latin" in scripts_seen and "cyrillic" in scripts_seen:
+            # Count Cyrillic chars — if < 20% of alpha chars, it's smuggling not bilingual
+            cyrillic_count = sum(1 for ch in text if ch.isalpha() and "CYRILLIC" in unicodedata.name(ch, ""))
+            latin_count = sum(1 for ch in text if ch.isalpha() and "LATIN" in unicodedata.name(ch, ""))
+            total_alpha = cyrillic_count + latin_count
+            minority_ratio = min(cyrillic_count, latin_count) / total_alpha if total_alpha > 0 else 0
+            # If the minority script is < 20% of chars, likely homoglyph smuggling
+            # If ~50/50, it's probably legitimate bilingual content
+            if minority_ratio < 0.20:
+                findings.append(f"homoglyph_mix=latin+cyrillic(minority={minority_ratio:.0%})")
+
+        if findings:
+            logger.warning(f"INVISIBLE CHAR DETECTION: {', '.join(findings)}")
             return True
 
         return False
