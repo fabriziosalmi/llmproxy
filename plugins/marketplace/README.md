@@ -14,10 +14,18 @@ Marketplace plugins are **disabled by default** — users opt-in via `manifest.y
 | `prompt_complexity_scorer.py` | PRE_FLIGHT | 1.0.0 | Scores prompt complexity for intelligent routing |
 | `model_downgrader.py` | PRE_FLIGHT | 1.0.0 | Downgrades expensive models for simple prompts (synergy with Complexity Scorer) |
 | `context_window_guard.py` | PRE_FLIGHT | 1.0.0 | Blocks requests exceeding model context window |
+| `max_tokens_enforcer.py` | PRE_FLIGHT | 1.0.0 | Clamps max_tokens to a hard ceiling, optional default injection |
+| `system_prompt_enforcer.py` | PRE_FLIGHT | 1.0.0 | Injects/prepends/appends/replaces system prompt in every request |
+| `topic_blocklist.py` | PRE_FLIGHT | 1.0.0 | Blocks requests containing forbidden topics (keyword/regex/whole-word) |
+| `tool_guard.py` | PRE_FLIGHT | 1.0.0 | Strips or blocks restricted tools from agentic requests based on RBAC roles |
+| `ab_model_router.py` | ROUTING | 1.0.0 | Routes configurable % of traffic to variant model for A/B experiments |
+| `tenant_qos_router.py` | ROUTING | 1.0.0 | Routes requests to models based on tenant tier (free/basic/premium) |
 | `response_quality_gate.py` | POST_FLIGHT | 1.0.0 | Detects empty/refusal/truncated responses |
 | `latency_sla_guard.py` | POST_FLIGHT | 1.0.0 | Measures TTFT/total latency, flags SLA violations |
 | `canary_detector.py` | POST_FLIGHT | 1.0.0 | Detects system prompt leakage (data exfiltration protection) |
+| `schema_enforcer.py` | POST_FLIGHT | 1.0.0 | Validates LLM JSON responses against client-provided JSON schema |
 | `token_counter.py` | BACKGROUND | 1.0.0 | Extracts real token counts, corrects budget estimates |
+| `shadow_traffic.py` | BACKGROUND | 1.0.0 | Dark launch: sends sampled traffic to shadow model for A/B comparison |
 
 ## Creating a Marketplace Plugin
 

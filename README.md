@@ -478,7 +478,9 @@ budget:
 ### Budget Persistence
 Daily budget consumption is persisted to SQLite via the `app_state` key-value table:
 - **On startup**: Loads `budget:daily_total` and `budget:daily_date` — resets automatically on new day.
-- **On every request**: Fire-and-forget `asyncio.create_task(store.set_state(...))` — non-blocking, survives restarts.
+- **On every request**: GC-safe `_spawn_task()` with strong reference retention — non-blocking, survives restarts, immune to Python 3.12+ garbage collection of fire-and-forget tasks.
+- **Immediate flush**: When budget crosses `soft_limit`, an immediate flush is triggered (no 250ms wait).
+- **Shutdown safety**: `SmartBudgetGuard.on_unload()` persists state before WAL checkpoint.
 - **Plugin-level**: `SmartBudgetGuard` persists per-session and per-team spend via `PluginState.extra["store"]` DI.
 
 ### Secrets Management
@@ -496,10 +498,10 @@ All sensitive values are loaded via **Infisical SDK** with environment variable 
 
 ## Testing
 
-564 tests across 21 modules, all passing. Unit tests for every subsystem + HTTP integration tests + property-based fuzz tests (Hypothesis).
+654 tests across 27 modules, all passing. Unit tests for every subsystem + HTTP integration tests + pipeline E2E tests + property-based fuzz tests (Hypothesis).
 
 ```bash
-# Run full suite (564 tests)
+# Run full suite (654 tests)
 python -m pytest tests/ -v --ignore=tests/test_store.py --ignore=tests/integrated_test.py --ignore=tests/test_export.py
 
 # Run a specific module
@@ -533,6 +535,12 @@ python -m pytest tests/test_e2e.py -v
 | `test_tokenizer.py` | 11 | Tiktoken counting, multimodal tokens, model hints, fallback |
 | `test_round1_round2.py` | 32 | O-series models, model aliases/groups, request dedup, streaming completions translation |
 | `test_metrics.py` | 5 | Prometheus counters, budget gauges |
+| `test_pipeline_e2e.py` | 15 | Full 5-ring pipeline: ring execution order, SecurityShield blocking, negative cache, plugin stop_chain, budget enforcement, response headers, concurrency |
+| `test_semantic_analyzer.py` | 28 | Known attacks, paraphrases, multilingual injection (IT/DE/FR/ES/JA/KO/AR), false positives, category detection |
+| `test_cost_routing.py` | 11 | Cost-aware scoring, budget downgrade to local, cost efficiency analytics |
+| `test_gdpr.py` | 11 | Right to erasure, DSAR export, retention purge, immutability |
+| `test_audit_chain.py` | 9 | SHA256 hash chain integrity, tamper detection, deletion detection |
+| `test_threat_ledger.py` | 6 | Cross-session threat aggregation, IP/key scoring, decay, threshold |
 
 ### HTTP Integration Test Architecture
 The integration suite (`test_e2e.py`) uses a `LightweightAgent` that mounts the **real route modules** (`proxy/routes/`) against an `InMemoryRepository`, without importing the full `RotatorAgent` or its 20+ transitive dependencies. This gives true HTTP-level coverage with sub-second execution and zero external services. Note: these are HTTP integration tests, not full end-to-end tests — they bypass the real SQLite database and upstream network calls.
@@ -585,7 +593,7 @@ curl http://localhost:8090/health
 
 The `docker-compose.yml` includes:
 - Health check (30s interval, 3 retries, 15s start period).
-- Volume mounts: `llmproxy-data` for persistence, `config.yaml` and `plugins/` read-only.
+- Volume mounts: `llmproxy-data` for persistence, `config.yaml` read-only, `plugins/bundled` read-only, `llmproxy-plugins` writable for runtime-installed plugins.
 - Resource limits: 2GB memory limit, 512MB reservation.
 - Ports: 8090 (API) + 9091 (Prometheus).
 
