@@ -8,7 +8,6 @@ Covers:
   - Stats update from rotator pipeline
 """
 
-import asyncio
 import pytest
 
 from plugins.default.neural_router import (

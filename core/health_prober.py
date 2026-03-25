@@ -111,16 +111,16 @@ class EndpointHealthProber:
 
             if response.status_code < 500:
                 cb.report_success()
-                update_endpoint_stats(ep_name, latency_ms, True)
+                await update_endpoint_stats(ep_name, latency_ms, True)
                 logger.debug(f"Probe OK: {ep_name} ({latency_ms:.0f}ms)")
             else:
                 cb.report_failure()
-                update_endpoint_stats(ep_name, latency_ms, False)
+                await update_endpoint_stats(ep_name, latency_ms, False)
                 logger.warning(f"Probe FAIL: {ep_name} → {response.status_code}")
 
         except asyncio.TimeoutError:
             cb.report_failure()
-            update_endpoint_stats(ep_name, PROBE_TIMEOUT * 1000, False)
+            await update_endpoint_stats(ep_name, PROBE_TIMEOUT * 1000, False)
             logger.warning(f"Probe TIMEOUT: {ep_name} (>{PROBE_TIMEOUT}s)")
         except Exception as e:
             cb.report_failure()
