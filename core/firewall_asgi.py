@@ -1,4 +1,5 @@
 import base64
+import binascii
 import codecs
 import logging
 import re
@@ -82,7 +83,7 @@ class ByteLevelFirewallMiddleware:
                 if unicodedata.category(c) != "Mn"
             )
             return text.lower().encode("utf-8", errors="replace")
-        except Exception:
+        except (UnicodeDecodeError, UnicodeError):
             return data
 
     @staticmethod
@@ -92,7 +93,7 @@ class ByteLevelFirewallMiddleware:
             text = data.decode("utf-8", errors="replace")
             # \\uXXXX → actual chars
             text = text.encode("utf-8").decode("unicode_escape", errors="replace")
-        except Exception:
+        except (UnicodeDecodeError, UnicodeError, ValueError):
             text = data.decode("utf-8", errors="replace")
         # &#xHH; → chars
         text = re.sub(
@@ -120,7 +121,7 @@ class ByteLevelFirewallMiddleware:
                 printable = sum(1 for b in decoded if 32 <= b < 127)
                 if len(decoded) > 0 and printable / len(decoded) > 0.8:
                     decoded_parts.append(decoded.lower())
-            except Exception:
+            except (binascii.Error, ValueError):
                 continue
         return decoded_parts
 
@@ -137,7 +138,7 @@ class ByteLevelFirewallMiddleware:
                 printable = sum(1 for b in decoded if 32 <= b < 127)
                 if len(decoded) > 0 and printable / len(decoded) > 0.8:
                     decoded_parts.append(decoded.lower())
-            except Exception:
+            except (ValueError, UnicodeDecodeError):
                 continue
         return decoded_parts
 
@@ -161,7 +162,7 @@ class ByteLevelFirewallMiddleware:
         try:
             from urllib.parse import unquote_to_bytes
             chunk = unquote_to_bytes(chunk.decode("utf-8", errors="replace")).lower()
-        except Exception:
+        except (ValueError, UnicodeDecodeError):
             pass
 
         # Layer 3: Unicode NFKC normalization + diacritics strip

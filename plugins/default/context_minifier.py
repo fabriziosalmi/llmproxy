@@ -4,14 +4,15 @@ from core.plugin_engine import PluginContext
 async def compress(ctx: PluginContext):
     """Ring 2: Pre-Flight Context Minification."""
     body = ctx.body
-    if not body.get("messages"):
+    messages = body.get("messages")
+    if not messages:
         return
 
     rotator = ctx.metadata.get("rotator")
     modified = False
 
     # Process the last message (usually the prompt containing file context)
-    last_msg = body["messages"][-1]
+    last_msg = messages[-1]
     content = last_msg.get("content", "")
 
     if len(content) > 1000: # Only minify large payloads

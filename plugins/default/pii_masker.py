@@ -5,13 +5,14 @@ async def mask(ctx: PluginContext):
     rotator = ctx.metadata.get("rotator")
     body = ctx.body
 
-    if not body.get("messages"):
+    messages = body.get("messages")
+    if not messages:
         return
 
-    prompt = body["messages"][-1].get("content", "")
+    prompt = messages[-1].get("content", "")
     masked_prompt = rotator.security.mask_pii(prompt)
 
     if masked_prompt != prompt:
-        body["messages"][-1]["content"] = masked_prompt
+        messages[-1]["content"] = masked_prompt
         ctx.metadata["pii_masked"] = True
         await rotator._add_log("SHIELD: Neural PII Masking applied to prompt", level="SYSTEM")

@@ -22,15 +22,16 @@ async def cleanse(ctx: PluginContext):
 
     try:
         data = json.loads(ctx.response.body.decode())
-        if "choices" not in data:
+        choices = data.get("choices")
+        if not choices:
             return
 
-        raw_content = data["choices"][0].get("message", {}).get("content", "")
+        raw_content = choices[0].get("message", {}).get("content", "")
         if not raw_content:
             return
 
         sanitized = rotator.security.sanitize_response(raw_content)
-        data["choices"][0]["message"]["content"] = sanitized
+        choices[0].setdefault("message", {})["content"] = sanitized
 
         # JSONResponse.body is a read-only property — create a new Response
         new_body = json.dumps(data, separators=(",", ":")).encode()

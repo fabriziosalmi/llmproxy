@@ -18,12 +18,43 @@ from core.firewall_asgi import ByteLevelFirewallMiddleware
 logger = logging.getLogger("llmproxy.app_factory")
 
 
+def _read_version() -> str:
+    """Read version from VERSION file."""
+    try:
+        with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "VERSION")) as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        return "0.0.0"
+
+
 def create_app(agent) -> FastAPI:
     """App factory: builds the FastAPI application with middleware and routes."""
     from core.rate_limiter import RateLimitMiddleware
 
-    app = FastAPI(title="LLMPROXY")
+    _version = _read_version()
+    app = FastAPI(title="LLMProxy", version=_version, description="LLM Security Gateway")
+    agent._start_time = __import__("time").time()
+    agent._version = _version
     TraceManager.instrument_app(app)
+
+    # Payload size guard — reject oversized requests BEFORE JSON parsing (OOM protection)
+    max_payload_kb = agent.config.get("security", {}).get("max_payload_size_kb", 512)
+    max_payload_bytes = max_payload_kb * 1024
+
+    @app.middleware("http")
+    async def payload_size_guard(request: Request, call_next):
+        if request.method in ("POST", "PUT", "PATCH"):
+            content_length = request.headers.get("content-length")
+            if content_length and int(content_length) > max_payload_bytes:
+                from fastapi.responses import JSONResponse
+                return JSONResponse(
+                    status_code=413,
+                    content={
+                        "error": f"Payload too large. Max: {max_payload_kb} KB",
+                        "max_bytes": max_payload_bytes,
+                    },
+                )
+        return await call_next(request)
 
     # Security + observability response headers
     @app.middleware("http")
@@ -87,8 +118,8 @@ def create_app(agent) -> FastAPI:
         for name, instance in agent.plugin_manager._plugin_instances.items():
             try:
                 await instance.on_unload()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"Plugin '{name}' unload failed: {e}")
         # 2. Drain pending write queue to SQLite
         await drain_pending_writes(agent)
         # 3. Force SQLite WAL checkpoint before container receives SIGKILL
@@ -96,8 +127,8 @@ def create_app(agent) -> FastAPI:
             import aiosqlite
             async with aiosqlite.connect(agent.store.db_path) as conn:
                 await conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"WAL checkpoint failed on shutdown: {e}")
         await agent.cache_backend.close()
 
     return app

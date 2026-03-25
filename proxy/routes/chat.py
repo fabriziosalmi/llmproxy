@@ -1,4 +1,5 @@
 """Chat completion route: /v1/chat/completions — the core proxy endpoint."""
+import json
 import time
 import asyncio
 import logging
@@ -111,8 +112,7 @@ def create_router(agent) -> APIRouter:
             model_name = body.get("model", "")
             try:
                 if hasattr(response, "body"):
-                    import json as _json
-                    usage = _json.loads(response.body).get("usage", {})
+                    usage = json.loads(response.body).get("usage", {})
                     in_tok = usage.get("prompt_tokens") or count_messages_tokens(body.get("messages", []), model_name)
                     out_tok = usage.get("completion_tokens", 0)
                     cost_usd = estimate_cost(model_name, in_tok, out_tok)
@@ -120,7 +120,7 @@ def create_router(agent) -> APIRouter:
                     # Streaming: estimate from prompt using tiktoken
                     est_tokens = count_messages_tokens(body.get("messages", []), model_name)
                     cost_usd = estimate_cost_pre_flight(model_name, est_tokens)
-            except Exception:
+            except (json.JSONDecodeError, AttributeError, UnicodeDecodeError):
                 pass
             async with agent._budget_lock:
                 agent.total_cost_today += cost_usd
@@ -149,10 +149,10 @@ def create_router(agent) -> APIRouter:
                 _req_id = response.headers.get("X-LLMProxy-Request-Id", "")
             try:
                 if hasattr(response, "body"):
-                    _usage = __import__("json").loads(response.body).get("usage", {})
+                    _usage = json.loads(response.body).get("usage", {})
                     _in_tok = _usage.get("prompt_tokens", 0)
                     _out_tok = _usage.get("completion_tokens", 0)
-            except Exception:
+            except (json.JSONDecodeError, AttributeError, UnicodeDecodeError):
                 pass
             _status = response.status_code if response and hasattr(response, "status_code") else 200
 
@@ -169,8 +169,8 @@ def create_router(agent) -> APIRouter:
                         status=_status, prompt_tokens=_in_tok, completion_tokens=_out_tok,
                         cost_usd=cost_usd, latency_ms=round(duration * 1000, 1),
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Audit/spend log persistence failed: {e}")
             task = agent._spawn_task(_persist_logs())
             def _on_audit_error(t: asyncio.Task) -> None:
                 if t.exception():

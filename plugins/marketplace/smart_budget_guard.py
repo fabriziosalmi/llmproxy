@@ -49,6 +49,8 @@ class SmartBudgetGuard(BasePlugin):
         self._session_spend: Dict[str, float] = defaultdict(float)
         # team/api_key → accumulated cost in USD
         self._team_spend: Dict[str, float] = defaultdict(float)
+        # Lock protecting _session_spend and _team_spend from concurrent access
+        self._spend_lock = asyncio.Lock()
         # J.5: Lazy hydration flag
         self._hydrated = False
         self._last_store = None  # Track store ref for on_unload persistence
@@ -134,39 +136,41 @@ class SmartBudgetGuard(BasePlugin):
         model = body.get("model", "")
         estimated_cost = self._estimate_cost(model, input_tokens)
 
-        # Check session budget
-        session_spent = self._session_spend[session_id]
-        if session_spent + estimated_cost > self.session_budget_usd:
-            remaining = max(0, self.session_budget_usd - session_spent)
-            return PluginResponse.block(
-                status_code=429,
-                error_type="session_budget_exceeded",
-                message=(
-                    f"Session budget exceeded. Spent: ${session_spent:.4f}, "
-                    f"Estimated: ${estimated_cost:.4f}, "
-                    f"Remaining: ${remaining:.4f}, "
-                    f"Limit: ${self.session_budget_usd:.2f}"
-                ),
-            )
+        async with self._spend_lock:
+            # Check session budget
+            session_spent = self._session_spend[session_id]
+            if session_spent + estimated_cost > self.session_budget_usd:
+                remaining = max(0, self.session_budget_usd - session_spent)
+                return PluginResponse.block(
+                    status_code=429,
+                    error_type="session_budget_exceeded",
+                    message=(
+                        f"Session budget exceeded. Spent: ${session_spent:.4f}, "
+                        f"Estimated: ${estimated_cost:.4f}, "
+                        f"Remaining: ${remaining:.4f}, "
+                        f"Limit: ${self.session_budget_usd:.2f}"
+                    ),
+                )
 
-        # Check team budget
-        team_spent = self._team_spend[team_key]
-        if team_spent + estimated_cost > self.team_budget_usd:
-            remaining = max(0, self.team_budget_usd - team_spent)
-            return PluginResponse.block(
-                status_code=429,
-                error_type="team_budget_exceeded",
-                message=(
-                    f"Team budget exceeded. Spent: ${team_spent:.4f}, "
-                    f"Estimated: ${estimated_cost:.4f}, "
-                    f"Remaining: ${remaining:.4f}, "
-                    f"Limit: ${self.team_budget_usd:.2f}"
-                ),
-            )
+            # Check team budget
+            team_spent = self._team_spend[team_key]
+            if team_spent + estimated_cost > self.team_budget_usd:
+                remaining = max(0, self.team_budget_usd - team_spent)
+                return PluginResponse.block(
+                    status_code=429,
+                    error_type="team_budget_exceeded",
+                    message=(
+                        f"Team budget exceeded. Spent: ${team_spent:.4f}, "
+                        f"Estimated: ${estimated_cost:.4f}, "
+                        f"Remaining: ${remaining:.4f}, "
+                        f"Limit: ${self.team_budget_usd:.2f}"
+                    ),
+                )
 
-        # Record estimated spend (will be corrected post-flight with actual tokens)
-        self._session_spend[session_id] += estimated_cost
-        self._team_spend[team_key] += estimated_cost
+            # Record estimated spend (will be corrected post-flight with actual tokens)
+            self._session_spend[session_id] += estimated_cost
+            self._team_spend[team_key] += estimated_cost
+            session_usage_pct = (self._session_spend[session_id] / self.session_budget_usd)
 
         # J.5: Persist updated budget (async, non-blocking)
         if store:
@@ -175,7 +179,6 @@ class SmartBudgetGuard(BasePlugin):
             task.add_done_callback(self._background_tasks.discard)
 
         # Warn if approaching threshold
-        session_usage_pct = (self._session_spend[session_id] / self.session_budget_usd)
         if session_usage_pct >= self.warn_threshold:
             ctx.metadata["_budget_warning"] = (
                 f"Session at {session_usage_pct:.0%} of ${self.session_budget_usd:.2f} budget"
@@ -190,15 +193,16 @@ class SmartBudgetGuard(BasePlugin):
 
         return PluginResponse.passthrough()
 
-    def record_actual_cost(self, session_id: str, team_key: str,
-                           estimated: float, actual: float):
+    async def record_actual_cost(self, session_id: str, team_key: str,
+                                 estimated: float, actual: float):
         """
         Called post-flight to correct the estimate with actual token usage.
         Delta = actual - estimated is applied to running totals.
         """
         delta = actual - estimated
-        self._session_spend[session_id] += delta
-        self._team_spend[team_key] += delta
+        async with self._spend_lock:
+            self._session_spend[session_id] += delta
+            self._team_spend[team_key] += delta
 
     async def on_load(self):
         self.logger.info(

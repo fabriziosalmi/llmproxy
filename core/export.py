@@ -145,7 +145,8 @@ class DatasetExporter:
                 entry = scrub_dict(entry)
 
             line = json.dumps(entry, ensure_ascii=False, separators=(',', ':'))
-            assert self._file_handle is not None
+            if self._file_handle is None:
+                raise RuntimeError("Export file not opened — call open() first")
             await self._file_handle.write(line + '\n')
             await self._file_handle.flush()
 

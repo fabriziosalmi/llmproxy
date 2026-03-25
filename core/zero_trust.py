@@ -55,7 +55,8 @@ class ZeroTrustManager:
             "role": "trusted-aggregator"
         }
 
-        assert self.secret is not None
+        if self.secret is None:
+            raise ValueError("Zero-trust secret not configured")
         token = jwt.encode(payload, self.secret, algorithm="HS256")
         return {
             "X-Proxy-Identity": token,

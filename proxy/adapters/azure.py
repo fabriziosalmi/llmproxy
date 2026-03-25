@@ -63,6 +63,8 @@ class AzureAdapter(BaseModelAdapter):
         # Azure returns OpenAI-identical format
         return response_data
 
+    _REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=60, sock_read=55)
+
     async def request(
         self,
         url: str,
@@ -70,7 +72,7 @@ class AzureAdapter(BaseModelAdapter):
         headers: Dict[str, str],
         session: aiohttp.ClientSession,
     ) -> Response:
-        async with session.post(url, json=body, headers=headers) as resp:
+        async with session.post(url, json=body, headers=headers, timeout=self._REQUEST_TIMEOUT) as resp:
             content = await resp.read()
             status = resp.status
             content_type = resp.content_type or "application/json"
@@ -83,6 +85,6 @@ class AzureAdapter(BaseModelAdapter):
         headers: Dict[str, str],
         session: aiohttp.ClientSession,
     ) -> AsyncGenerator[bytes, None]:
-        async with session.post(url, json=body, headers=headers) as resp:
+        async with session.post(url, json=body, headers=headers, timeout=self._REQUEST_TIMEOUT) as resp:
             async for chunk in resp.content.iter_any():
                 yield chunk

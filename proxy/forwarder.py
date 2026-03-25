@@ -11,6 +11,8 @@ import asyncio
 import logging
 from typing import Any, Callable, Awaitable
 
+import aiohttp
+
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 
@@ -155,7 +157,7 @@ class RequestForwarder:
                     )
                     return ctx.response
 
-            except Exception as e:
+            except (HTTPException, asyncio.TimeoutError, aiohttp.ClientError, OSError, ValueError, RuntimeError) as e:
                 last_error = e
                 if not attempt["is_fallback"]:
                     await self._add_log(
@@ -199,10 +201,10 @@ class RequestForwarder:
                                     u = d.get("usage") or d.get("usageMetadata", {})
                                     if u:
                                         stream_usage = u
-                        except Exception:
+                        except (json.JSONDecodeError, KeyError, UnicodeDecodeError):
                             pass
                     yield chunk
-            except Exception as e:
+            except (asyncio.TimeoutError, OSError, RuntimeError) as e:
                 if not circuit_success_reported:
                     cb.report_failure()
                 raise e

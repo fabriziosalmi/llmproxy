@@ -8,6 +8,9 @@ Covers:
   - Stats update from rotator pipeline
 """
 
+import asyncio
+import pytest
+
 from plugins.default.neural_router import (
     update_endpoint_stats,
     get_endpoint_stats,
@@ -20,31 +23,35 @@ class TestEndpointStats:
     def setup_method(self):
         _endpoint_stats.clear()
 
-    def test_first_update_sets_values(self):
-        update_endpoint_stats("ep1", 100.0, True)
+    @pytest.mark.asyncio
+    async def test_first_update_sets_values(self):
+        await update_endpoint_stats("ep1", 100.0, True)
         stats = get_endpoint_stats("ep1")
         assert stats["latency_ms"] == 100.0
         assert stats["success_rate"] == 1.0
         assert stats["request_count"] == 1
 
-    def test_ema_smoothing(self):
-        update_endpoint_stats("ep1", 100.0, True)
-        update_endpoint_stats("ep1", 200.0, True)
+    @pytest.mark.asyncio
+    async def test_ema_smoothing(self):
+        await update_endpoint_stats("ep1", 100.0, True)
+        await update_endpoint_stats("ep1", 200.0, True)
         stats = get_endpoint_stats("ep1")
         # EMA with alpha=0.2: 0.2*200 + 0.8*100 = 120
         assert abs(stats["latency_ms"] - 120.0) < 0.01
 
-    def test_failure_reduces_success_rate(self):
-        update_endpoint_stats("ep1", 100.0, True)
-        update_endpoint_stats("ep1", 100.0, False)
+    @pytest.mark.asyncio
+    async def test_failure_reduces_success_rate(self):
+        await update_endpoint_stats("ep1", 100.0, True)
+        await update_endpoint_stats("ep1", 100.0, False)
         stats = get_endpoint_stats("ep1")
         # EMA: 0.2*0 + 0.8*1.0 = 0.8
         assert abs(stats["success_rate"] - 0.8) < 0.01
 
-    def test_request_count_increments(self):
-        update_endpoint_stats("ep1", 50.0, True)
-        update_endpoint_stats("ep1", 50.0, True)
-        update_endpoint_stats("ep1", 50.0, True)
+    @pytest.mark.asyncio
+    async def test_request_count_increments(self):
+        await update_endpoint_stats("ep1", 50.0, True)
+        await update_endpoint_stats("ep1", 50.0, True)
+        await update_endpoint_stats("ep1", 50.0, True)
         assert get_endpoint_stats("ep1")["request_count"] == 3
 
     def test_unknown_endpoint_returns_defaults(self):
@@ -53,9 +60,10 @@ class TestEndpointStats:
         assert stats["success_rate"] == 1.0
         assert stats["request_count"] == 0
 
-    def test_multiple_endpoints_isolated(self):
-        update_endpoint_stats("fast", 50.0, True)
-        update_endpoint_stats("slow", 500.0, True)
+    @pytest.mark.asyncio
+    async def test_multiple_endpoints_isolated(self):
+        await update_endpoint_stats("fast", 50.0, True)
+        await update_endpoint_stats("slow", 500.0, True)
         assert get_endpoint_stats("fast")["latency_ms"] == 50.0
         assert get_endpoint_stats("slow")["latency_ms"] == 500.0
 

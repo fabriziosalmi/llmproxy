@@ -1,3 +1,4 @@
+import asyncio
 import re
 import time
 import logging
@@ -205,7 +206,7 @@ class SecurityShield:
         try:
             judgment = await self.assistant.generate(check_prompt)
             return "SAFE" in judgment.upper()
-        except Exception as e:
+        except (RuntimeError, asyncio.TimeoutError, OSError, ValueError) as e:
             logger.error(f"AI Guard Error (fail-closed): {e}")
             return False  # Fail-closed: block on error rather than silently allow
 
@@ -500,7 +501,7 @@ class SecurityShield:
         try:
             judgment = await self.assistant.generate(anomaly_prompt)
             return "YES" in judgment.upper()
-        except Exception as e:
+        except (RuntimeError, asyncio.TimeoutError, OSError, ValueError) as e:
             logger.error(f"Anomaly Detection Error: {e}")
             return False
 

@@ -73,6 +73,11 @@ class OpenAIAdapter(BaseModelAdapter):
         url = f"{base_url.rstrip('/')}/embeddings"
         return url, body, headers
 
+    # Per-request timeout — prevents indefinite hangs on slow upstream providers.
+    # The session-level timeout from RotatorAgent._get_session() is the outer bound;
+    # this is a safety net for adapters used outside the main pipeline.
+    _REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=60, sock_read=55)
+
     async def request(
         self,
         url: str,
@@ -80,7 +85,7 @@ class OpenAIAdapter(BaseModelAdapter):
         headers: Dict[str, str],
         session: aiohttp.ClientSession,
     ) -> Response:
-        async with session.post(url, json=body, headers=headers) as resp:
+        async with session.post(url, json=body, headers=headers, timeout=self._REQUEST_TIMEOUT) as resp:
             content = await resp.read()
             status = resp.status
             content_type = resp.content_type or "application/json"
@@ -93,6 +98,6 @@ class OpenAIAdapter(BaseModelAdapter):
         headers: Dict[str, str],
         session: aiohttp.ClientSession,
     ) -> AsyncGenerator[bytes, None]:
-        async with session.post(url, json=body, headers=headers) as resp:
+        async with session.post(url, json=body, headers=headers, timeout=self._REQUEST_TIMEOUT) as resp:
             async for chunk in resp.content.iter_any():
                 yield chunk

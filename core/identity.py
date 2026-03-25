@@ -260,7 +260,8 @@ class IdentityManager:
         Used for session management after initial OIDC verification.
         """
         secret = get_secret("LLM_PROXY_IDENTITY_SECRET", required=True)
-        assert secret is not None
+        if secret is None:
+            raise ValueError("LLM_PROXY_IDENTITY_SECRET is required but not set")
         payload = {
             "iss": "llmproxy",
             "sub": identity.subject,

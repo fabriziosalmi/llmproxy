@@ -224,7 +224,8 @@ def semantic_scan(prompt: str, threshold: float = 0.35) -> Optional[tuple[float,
         None if clean, or (similarity_score, category, matched_pattern) if flagged.
     """
     _ensure_corpus()
-    assert _corpus_cache is not None
+    if _corpus_cache is None:
+        raise RuntimeError("Semantic corpus failed to initialize")
 
     if not prompt or not prompt.strip():
         return None

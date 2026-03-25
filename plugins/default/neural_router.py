@@ -15,6 +15,7 @@ Endpoints are filtered by circuit breaker state before selection.
 Latency and success_rate are updated after each request via update_endpoint_stats().
 """
 
+import asyncio
 import logging
 from typing import Any
 from core.plugin_engine import PluginContext
@@ -29,30 +30,37 @@ _rr_index = 0
 # Maps endpoint_id → {"latency_ms": float, "success_rate": float, "request_count": int}
 _endpoint_stats: dict = {}
 
+# Lock protecting _endpoint_stats and _rr_index from concurrent access
+_stats_lock = asyncio.Lock()
+
 # EMA smoothing factor (0.1 = slow adaptation, 0.3 = fast adaptation)
 _EMA_ALPHA = 0.2
 
 
-def update_endpoint_stats(endpoint_id: str, latency_ms: float, success: bool):
+async def update_endpoint_stats(endpoint_id: str, latency_ms: float, success: bool):
     """Update endpoint performance stats with exponential moving average.
 
     Called after each completed request from rotator.py.
     """
-    if endpoint_id not in _endpoint_stats:
-        _endpoint_stats[endpoint_id] = {
-            "latency_ms": latency_ms,
-            "success_rate": 1.0 if success else 0.0,
-            "request_count": 0,
-        }
+    async with _stats_lock:
+        if endpoint_id not in _endpoint_stats:
+            _endpoint_stats[endpoint_id] = {
+                "latency_ms": latency_ms,
+                "success_rate": 1.0 if success else 0.0,
+                "request_count": 0,
+            }
 
-    stats = _endpoint_stats[endpoint_id]
-    stats["latency_ms"] = _EMA_ALPHA * latency_ms + (1 - _EMA_ALPHA) * stats["latency_ms"]
-    stats["success_rate"] = _EMA_ALPHA * (1.0 if success else 0.0) + (1 - _EMA_ALPHA) * stats["success_rate"]
-    stats["request_count"] += 1
+        stats = _endpoint_stats[endpoint_id]
+        stats["latency_ms"] = _EMA_ALPHA * latency_ms + (1 - _EMA_ALPHA) * stats["latency_ms"]
+        stats["success_rate"] = _EMA_ALPHA * (1.0 if success else 0.0) + (1 - _EMA_ALPHA) * stats["success_rate"]
+        stats["request_count"] += 1
 
 
 def get_endpoint_stats(endpoint_id: str) -> dict[str, Any]:
-    """Get current stats for an endpoint (for API/dashboard)."""
+    """Get current stats for an endpoint (for API/dashboard).
+
+    Note: snapshot read — may see slightly stale data without lock, acceptable for dashboards.
+    """
     result: dict[str, Any] = _endpoint_stats.get(endpoint_id, {
         "latency_ms": 0.0,
         "success_rate": 1.0,
@@ -93,7 +101,8 @@ async def select_endpoint(ctx: PluginContext):
     global _rr_index
 
     rotator = ctx.metadata.get("rotator")
-    assert rotator is not None
+    if rotator is None:
+        raise RuntimeError("neural_router requires 'rotator' in plugin context metadata")
 
     # Fetch verified pool from store
     pool = await rotator.store.get_pool()
@@ -140,8 +149,9 @@ async def select_endpoint(ctx: PluginContext):
         ctx.metadata["_routing_cost_weight"] = cost_weight
     else:
         # Cold start: round-robin until we have performance data
-        target = healthy[_rr_index % len(healthy)]
-        _rr_index = (_rr_index + 1) % max(len(healthy), 1)
+        async with _stats_lock:
+            target = healthy[_rr_index % len(healthy)]
+            _rr_index = (_rr_index + 1) % max(len(healthy), 1)
         ctx.metadata["_routing_strategy"] = "round_robin"
 
     ctx.metadata["target_endpoint"] = target

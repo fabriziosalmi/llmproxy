@@ -148,7 +148,8 @@ class WasmRunner:
 
     def _sync_call(self, input_json: str) -> Optional[bytes]:
         """Synchronous WASM call (runs in thread pool)."""
-        assert self._plugin is not None
+        if self._plugin is None:
+            raise RuntimeError("WASM plugin not loaded — call load() first")
         return self._plugin.call("handle", input_json.encode("utf-8"))
 
     def _parse_result(self, result_bytes: Optional[bytes]) -> PluginResponse:
@@ -211,8 +212,8 @@ class WasmRunner:
             try:
                 # Extism plugins may need explicit cleanup
                 del self._plugin
-            except Exception:
-                pass
+            except Exception as e:
+                self.logger.warning(f"WASM plugin cleanup error: {e}")
             self._plugin = None
             self._loaded = False
             self.logger.info(f"WASM plugin unloaded: {self.wasm_path}")

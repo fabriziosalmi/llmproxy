@@ -1,0 +1,60 @@
+# LLMProxy Minimal Configuration
+#
+# This is a minimal config to get started in under 5 minutes.
+# For full options, see config.yaml or docs/reference/config.md
+#
+# Quick start:
+#   1. cp .env.example .env
+#   2. Edit .env — set LLM_PROXY_API_KEYS and at least one provider key
+#   3. python main.py  (or: docker compose up -d)
+#   4. curl http://localhost:8090/health
+
+server:
+  host: 0.0.0.0
+  port: 8090
+  auth:
+    enabled: true
+    api_keys_env: "LLM_PROXY_API_KEYS"
+
+# Enable at least one provider. Uncomment others as needed.
+endpoints:
+  openai:
+    provider: "openai"
+    base_url: "https://api.openai.com/v1"
+    api_key_env: "OPENAI_API_KEY"
+    models: ["gpt-4o", "gpt-4o-mini"]
+
+  # anthropic:
+  #   provider: "anthropic"
+  #   base_url: "https://api.anthropic.com/v1"
+  #   api_key_env: "ANTHROPIC_API_KEY"
+  #   models: ["claude-sonnet-4-20250514", "claude-haiku-4-5-20251001"]
+
+  # google:
+  #   provider: "google"
+  #   base_url: "https://generativelanguage.googleapis.com/v1beta"
+  #   api_key_env: "GOOGLE_API_KEY"
+  #   models: ["gemini-2.5-flash", "gemini-2.0-flash"]
+
+  # ollama:
+  #   provider: "ollama"
+  #   base_url: "http://localhost:11434"
+  #   auth_type: "none"
+  #   models: ["llama3.3", "qwen3"]
+
+# Handy shortcuts: use "fast" or "cheap" instead of full model names
+model_aliases:
+  "fast": "gpt-4o-mini"
+  "best": "gpt-4o"
+
+security:
+  enabled: true
+  max_payload_size_kb: 512
+
+logging:
+  level: "info"
+
+caching:
+  enabled: true
+  db_path: "cache.db"
+  ttl: 3600

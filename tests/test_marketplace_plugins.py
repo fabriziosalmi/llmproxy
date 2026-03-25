@@ -217,7 +217,7 @@ async def test_budget_guard_actual_cost_correction(budget_guard):
     actual = estimated * 2  # Actual was double the estimate
 
     old_session = budget_guard._session_spend["sess_correct"]
-    budget_guard.record_actual_cost("sess_correct", "sess_correct", estimated, actual)
+    await budget_guard.record_actual_cost("sess_correct", "sess_correct", estimated, actual)
     new_session = budget_guard._session_spend["sess_correct"]
 
     assert new_session > old_session  # Spend should increase by the delta

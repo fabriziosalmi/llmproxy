@@ -322,7 +322,7 @@ class PluginManager:
         for name, instance in self._plugin_instances.items():
             try:
                 await instance.on_unload()
-            except Exception as e:
+            except (AttributeError, RuntimeError, asyncio.CancelledError) as e:
                 self.logger.error(f"Error unloading plugin {name}: {e}")
         self._plugin_instances.clear()
 
@@ -340,7 +340,7 @@ class PluginManager:
 
             try:
                 await self._load_plugin(p_info)
-            except Exception as e:
+            except (FileNotFoundError, ImportError, SyntaxError, ValueError, RuntimeError) as e:
                 self.logger.error(f"Failed to load plugin {p_info.get('name')}: {e}")
 
     async def _load_plugin(self, p_info: Dict[str, Any]):
@@ -384,7 +384,8 @@ class PluginManager:
             ast_scan(source, name)
 
             spec = importlib.util.spec_from_file_location(name, file_path)
-            assert spec is not None and spec.loader is not None
+            if spec is None or spec.loader is None:
+                raise ImportError(f"Cannot load plugin module: {file_path}")
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
 
@@ -567,7 +568,7 @@ class PluginManager:
                     context.error = str(e)
                     context.stop_chain = True
 
-            except Exception as e:
+            except (asyncio.TimeoutError, AttributeError, TypeError, RuntimeError, ValueError) as e:
                 self.logger.error(f"Error executing plugin {name} in {hook.value}: {e}")
                 context.error = str(e)
                 if stats:

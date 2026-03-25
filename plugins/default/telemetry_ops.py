@@ -26,9 +26,11 @@ async def record(ctx: PluginContext):
         in_tokens = count_messages_tokens(ctx.body.get("messages", []), model_name)
     if not out_tokens and ctx.response and hasattr(ctx.response, 'body'):
         try:
-            content = json.loads(ctx.response.body.decode()).get("choices", [{}])[0].get("message", {}).get("content", "")
-            out_tokens = count_tokens(content, model_name)
-        except Exception:
+            choices = json.loads(ctx.response.body.decode()).get("choices", [])
+            if choices:
+                content = choices[0].get("message", {}).get("content", "")
+                out_tokens = count_tokens(content, model_name)
+        except (json.JSONDecodeError, AttributeError, UnicodeDecodeError):
             pass
 
     # 2. Cost calculation using per-model pricing table

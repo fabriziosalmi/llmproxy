@@ -1,6 +1,7 @@
 import aiosqlite
 import json
 import logging
+import sqlite3
 from typing import List, Dict, Any, Optional
 from models import LLMEndpoint, EndpointStatus
 
@@ -81,7 +82,7 @@ class SQLiteStore:
             for col in ("entry_hash TEXT DEFAULT ''", "prev_hash TEXT DEFAULT ''"):
                 try:
                     await conn.execute(f"ALTER TABLE audit_log ADD COLUMN {col}")
-                except Exception:
+                except sqlite3.OperationalError:
                     pass  # Column already exists
             await conn.commit()
 

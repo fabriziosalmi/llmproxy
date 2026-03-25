@@ -56,24 +56,27 @@ class RateLimiter:
         self.default_capacity = default_capacity
         self.default_rate = default_rate
         self._buckets: Dict[str, Tuple[TokenBucket, float]] = {}  # key -> (bucket, last_access)
+        self._lock = asyncio.Lock()
 
     async def check(self, key: str) -> Tuple[bool, float]:
         """Returns (allowed, retry_after_seconds)."""
-        if key not in self._buckets:
-            if len(self._buckets) >= self._MAX_BUCKETS:
-                self._evict_oldest()
-            self._buckets[key] = (
-                TokenBucket(self.default_capacity, self.default_rate),
-                time.monotonic(),
-            )
+        async with self._lock:
+            if key not in self._buckets:
+                if len(self._buckets) >= self._MAX_BUCKETS:
+                    self._evict_oldest()
+                self._buckets[key] = (
+                    TokenBucket(self.default_capacity, self.default_rate),
+                    time.monotonic(),
+                )
 
-        bucket, _ = self._buckets[key]
-        self._buckets[key] = (bucket, time.monotonic())
+            bucket, _ = self._buckets[key]
+            self._buckets[key] = (bucket, time.monotonic())
+
         allowed = await bucket.acquire()
         return allowed, bucket.retry_after
 
     def _evict_oldest(self):
-        """Remove least-recently-used bucket."""
+        """Remove least-recently-used bucket. Caller must hold self._lock."""
         if not self._buckets:
             return
         oldest_key = min(self._buckets, key=lambda k: self._buckets[k][1])

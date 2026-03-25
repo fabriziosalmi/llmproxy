@@ -22,6 +22,7 @@ class RequestDeduplicator:
         self._in_flight: Dict[str, asyncio.Future] = {}
         self._completed: Dict[str, tuple] = {}  # key → (response, expires_at)
         self._ttl = ttl_seconds
+        self._lock = asyncio.Lock()
 
     async def execute_or_wait(self, key: str, coro):
         """Execute coroutine or wait for identical in-flight request.
@@ -33,26 +34,44 @@ class RequestDeduplicator:
         Returns:
             The response (from execution or from the duplicate)
         """
-        # 1. Already completed? Return cached response.
-        if key in self._completed:
-            response, expires = self._completed[key]
-            if time.time() < expires:
-                logger.debug(f"Dedup HIT (cached): {key[:16]}...")
-                return response
-            else:
-                del self._completed[key]
+        async with self._lock:
+            # 1. Already completed? Return cached response.
+            if key in self._completed:
+                response, expires = self._completed[key]
+                if time.time() < expires:
+                    logger.debug(f"Dedup HIT (cached): {key[:16]}...")
+                    return response
+                else:
+                    del self._completed[key]
 
-        # 2. In-flight? Wait for the result.
-        if key in self._in_flight:
+            # 2. In-flight? Wait for the result (release lock while waiting).
+            if key in self._in_flight:
+                future = self._in_flight[key]
+                # Release lock before awaiting to avoid deadlock
+                pass
+            else:
+                future = None
+
+            if future is None:
+                # 3. First time: register in-flight future.
+                future = asyncio.get_running_loop().create_future()
+                self._in_flight[key] = future
+
+        # If we found an in-flight future, wait for it (lock released).
+        if key in self._in_flight and self._in_flight.get(key) is not future:
             logger.debug(f"Dedup WAIT (in-flight): {key[:16]}...")
             return await self._in_flight[key]
 
-        # 3. First time: execute and cache.
-        future: asyncio.Future = asyncio.get_running_loop().create_future()
-        self._in_flight[key] = future
+        # Check if we're the waiter (not the executor)
+        if future.done() or (key in self._in_flight and self._in_flight.get(key) is not future):
+            logger.debug(f"Dedup WAIT (in-flight): {key[:16]}...")
+            return await future
+
+        # We are the executor — run the coroutine outside the lock.
         try:
             result = await coro
-            self._completed[key] = (result, time.time() + self._ttl)
+            async with self._lock:
+                self._completed[key] = (result, time.time() + self._ttl)
             if not future.done():
                 future.set_result(result)
             return result
@@ -61,7 +80,8 @@ class RequestDeduplicator:
                 future.set_exception(e)
             raise
         finally:
-            self._in_flight.pop(key, None)
+            async with self._lock:
+                self._in_flight.pop(key, None)
 
     def cleanup_expired(self):
         """Remove expired entries from the completed cache."""

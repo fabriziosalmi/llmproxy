@@ -2,7 +2,7 @@ import os
 import base64
 import logging
 import secrets as stdlib_secrets
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from typing import Optional
@@ -24,7 +24,8 @@ class SecretManager:
             return cls._fernet
 
         master_key = get_secret("LLM_PROXY_MASTER_KEY", required=True)
-        assert master_key is not None
+        if master_key is None:
+            raise ValueError("LLM_PROXY_MASTER_KEY is required but not set")
 
         # Per-instance salt stored alongside the app data.
         # Generated once, persisted to disk so existing encrypted values remain decryptable.
@@ -64,7 +65,7 @@ class SecretManager:
             return ""
         try:
             return cls._get_fernet().decrypt(encrypted_secret.encode()).decode()
-        except Exception as e:
+        except (InvalidToken, ValueError, TypeError) as e:
             # Migration phase: value may not be encrypted yet
             logger.warning(f"Decryption failed for key (migration fallback): {type(e).__name__}")
             return encrypted_secret

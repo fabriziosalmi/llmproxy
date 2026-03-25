@@ -57,7 +57,7 @@ def _get_client():
             )
             logger.info("Infisical client authenticated successfully.")
             return _client
-        except Exception as e:
+        except (ConnectionError, ValueError, RuntimeError, OSError) as e:
             logger.error(f"Infisical authentication failed: {e}")
             return None
 

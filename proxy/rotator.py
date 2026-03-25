@@ -380,7 +380,9 @@ class RotatorAgent(BaseAgent):
             budget_cfg = self.config.get("budget", {})
             if budget_cfg.get("fallback_to_local_on_limit"):
                 daily_limit = budget_cfg.get("daily_limit", 50.0)
-                if self.total_cost_today >= daily_limit:
+                async with self._budget_lock:
+                    over_budget = self.total_cost_today >= daily_limit
+                if over_budget:
                     local_model = budget_cfg.get("local_model", "ollama/llama3.3")
                     ctx.metadata["_budget_downgrade"] = True
                     ctx.metadata["_original_model_pre_downgrade"] = ctx.body.get("model", "")
@@ -406,10 +408,12 @@ class RotatorAgent(BaseAgent):
             start_req = time.time()
             session = await self._get_session()
             # Bind mutable cost reference so streaming can charge budget
-            self.forwarder._cost_ref = {"total": self.total_cost_today}
+            async with self._budget_lock:
+                self.forwarder._cost_ref = {"total": self.total_cost_today}
             await self.forwarder.forward_with_fallback(ctx, target, headers, session)
             # Sync back cost from streaming (if it was updated)
-            self.total_cost_today = self.forwarder._cost_ref.get("total", self.total_cost_today)
+            async with self._budget_lock:
+                self.total_cost_today = self.forwarder._cost_ref.get("total", self.total_cost_today)
 
             ctx.metadata["duration"] = time.time() - start_req
 
@@ -420,7 +424,7 @@ class RotatorAgent(BaseAgent):
                 ctx.metadata.get("_provider", "unknown"),
             )
             success = ctx.response and hasattr(ctx.response, "status_code") and ctx.response.status_code < 400
-            update_endpoint_stats(routed_endpoint_id, ctx.metadata["duration"] * 1000, bool(success))
+            await update_endpoint_stats(routed_endpoint_id, ctx.metadata["duration"] * 1000, bool(success))
 
             # RING 4: POST-FLIGHT (response sanitization, watermarking)
             r4_start = time.perf_counter()

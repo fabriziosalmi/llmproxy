@@ -31,11 +31,21 @@ def create_router(agent) -> APIRouter:
 
     @router.get("/health")
     async def health():
+        import time as _time
         pool = await agent.store.get_pool()
+        healthy_count = sum(
+            1 for e in pool
+            if agent.circuit_manager.get_breaker(e.id).can_execute()
+        )
+        uptime = _time.time() - getattr(agent, "_start_time", _time.time())
         return {
             "status": "ok",
+            "version": getattr(agent, "_version", "unknown"),
+            "uptime_seconds": round(uptime),
             "pool_size": len(pool),
-            "session_active": agent._session is not None and not agent._session.closed
+            "pool_healthy": healthy_count,
+            "session_active": agent._session is not None and not agent._session.closed,
+            "budget_today_usd": round(agent.total_cost_today, 4),
         }
 
     @router.get("/metrics")

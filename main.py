@@ -27,8 +27,13 @@ async def main():
         logger.critical("Supply chain integrity check FAILED. Aborting startup.")
         return
 
-    with open("config.yaml", 'r') as f:
+    config_file = os.environ.get("CONFIG_FILE", "config.yaml")
+    with open(config_file, 'r') as f:
         config = yaml.safe_load(f)
+
+    # Validate configuration before proceeding
+    from core.startup_checks import run_startup_checks
+    run_startup_checks(config)
 
     # Bind to Tailscale interface if available
     ts_ip = get_tailscale_ip()
@@ -38,7 +43,7 @@ async def main():
 
     # Initialize store
     from store.factory import StorageFactory
-    store = StorageFactory.get_repository("config.yaml")
+    store = StorageFactory.get_repository(config_file)
     await store.init()
 
     # Initialize tracing (optional)

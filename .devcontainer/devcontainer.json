@@ -1,0 +1,29 @@
+{
+  "name": "LLMProxy Dev",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/node:1": { "version": "20" }
+  },
+  "postCreateCommand": "pip install -r requirements.txt && cp .env.example .env && echo '>>> Edit .env with your API keys, then: make run'",
+  "forwardPorts": [8090, 9091],
+  "portsAttributes": {
+    "8090": { "label": "LLMProxy API", "onAutoForward": "notify" },
+    "9091": { "label": "Prometheus Metrics", "onAutoForward": "silent" }
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.testing.pytestEnabled": true,
+        "python.testing.pytestArgs": ["tests/"]
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+        "ms-azuretools.vscode-docker"
+      ]
+    }
+  }
+}
