@@ -14,8 +14,6 @@ import json
 import time
 from unittest.mock import MagicMock
 
-import pytest
-
 
 # ── Helpers ──
 
@@ -282,7 +280,7 @@ class TestAuditChainBenchmarks:
         prev_hash = "a" * 64
 
         def compute_hash():
-            content = f"2026-03-24T12:00:00|gpt-4o|sk-abc***|200|150|80"
+            content = "2026-03-24T12:00:00|gpt-4o|sk-abc***|200|150|80"
             return hashlib.sha256(f"{prev_hash}{content}".encode()).hexdigest()
 
         result = benchmark(compute_hash)
