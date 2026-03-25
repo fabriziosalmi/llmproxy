@@ -4,9 +4,9 @@ Security-first proxy for Large Language Models with multi-provider support (15 p
 
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-595%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-716%20passing-brightgreen)
 ![Invariants](https://img.shields.io/badge/invariants-31%20proven-blueviolet)
-![Coverage](https://img.shields.io/badge/coverage-54%25-yellow)
+![Coverage](https://img.shields.io/badge/coverage-67%25-yellowgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 [![CI](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml/badge.svg)](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml)
 

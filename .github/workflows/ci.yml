@@ -105,7 +105,7 @@ jobs:
           python -m pytest tests/ -v --tb=short \
             --cov=core --cov=proxy --cov=plugins --cov=store \
             --cov-report=term-missing \
-            --cov-fail-under=50 \
+            --cov-fail-under=65 \
             --ignore=tests/test_store.py \
             --ignore=tests/integrated_test.py \
             --ignore=tests/test_e2e.py \
