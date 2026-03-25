@@ -146,7 +146,7 @@ class TestSecurityDeterminism:
         if high is not None:
             # If detected at high threshold, must also detect at lower
             assert low is not None, (
-                f"Threshold monotonicity violated: detected at 0.50 but not 0.30"
+                "Threshold monotonicity violated: detected at 0.50 but not 0.30"
             )
             assert low[0] >= high[0] - 0.01, "Score decreased with lower threshold"
 

@@ -19,7 +19,6 @@ Invariants tested:
   I11. Budget guard accounting: spend always ≤ budget after block
 """
 
-import asyncio
 import hashlib
 import json
 import math
@@ -260,7 +259,7 @@ class TestPricingInvariants:
                 violations.append(f"  {model}: output={output_price}")
 
         assert not violations, (
-            f"Negative pricing detected:\n" + "\n".join(violations)
+            "Negative pricing detected:\n" + "\n".join(violations)
         )
 
     @pytest.mark.invariant
