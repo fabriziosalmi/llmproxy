@@ -1,0 +1,38 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "invariant: Mathematical invariants — MUST NEVER fail",
+    "concurrency: Proves async safety under concurrent load",
+    "determinism: Proves pure functions produce identical output",
+    "security: Security-critical detection tests",
+    "benchmark: Performance regression tests",
+    "slow: Tests that take > 5s (deselect with -m 'not slow')",
+]
+filterwarnings = [
+    "ignore::ResourceWarning",
+    "ignore::DeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["core", "proxy", "plugins", "store"]
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+    "*/venv/*",
+]
+
+[tool.coverage.report]
+fail_under = 50
+show_missing = true
+skip_covered = true
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "pass",
+]
+
+[tool.coverage.html]
+directory = "htmlcov"
