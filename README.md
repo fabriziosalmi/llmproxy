@@ -4,7 +4,9 @@ Security-first proxy for Large Language Models with multi-provider support (15 p
 
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-687%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-595%20passing-brightgreen)
+![Invariants](https://img.shields.io/badge/invariants-31%20proven-blueviolet)
+![Coverage](https://img.shields.io/badge/coverage-54%25-yellow)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 [![CI](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml/badge.svg)](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml)
 
@@ -514,18 +516,38 @@ All sensitive values are loaded via **Infisical SDK** with environment variable 
 
 ## Testing
 
-687 tests across 27 modules, all passing. Unit tests for every subsystem + HTTP integration tests + pipeline E2E tests + property-based fuzz tests (Hypothesis).
+595+ tests across 30 modules, all passing. Unit tests + HTTP integration + pipeline E2E + property-based fuzz (Hypothesis) + **31 mathematical invariant proofs** + concurrency stress tests + performance benchmarks.
 
 ```bash
-# Run full suite (687 tests)
-python -m pytest tests/ -v --ignore=tests/test_store.py --ignore=tests/integrated_test.py --ignore=tests/test_export.py
+make test              # Fast: 595 tests, ~5s
+make test-all          # Full: includes e2e, fuzz, store
+make bench             # Benchmarks: 22 perf tests with pytest-benchmark
 
-# Run a specific module
-python -m pytest tests/test_marketplace_plugins.py -v
+# With coverage enforcement (minimum 50%)
+python -m pytest tests/ --cov=core --cov=proxy --cov=plugins --cov-fail-under=50
 
-# Run only E2E integration tests
-python -m pytest tests/test_e2e.py -v
+# Invariants only (fail-fast — blocks commit on violation)
+python -m pytest tests/test_invariants.py tests/test_determinism.py tests/test_concurrency_stress.py -x
 ```
+
+### Mathematical Invariant Suite (CI-enforced)
+
+31 property-based tests that **prove** correctness for every commit. A failure blocks merge.
+
+| Category | Tests | Method | What it proves |
+|----------|-------|--------|----------------|
+| **Injection corpus** | I1-I1c | Exhaustive (57 patterns) | Zero false negatives — every known attack self-detects with score ≥ 0.90 |
+| **Attack monotonicity** | I2 | Hypothesis | Appending attack to clean text always triggers detection |
+| **Jaccard axioms** | I3-I5 | Hypothesis (500 examples) | Symmetry J(A,B)=J(B,A), bounds [0,1], identity J(A,A)=1 |
+| **Normalize idempotence** | I6 | Hypothesis (200 examples) | f(f(x)) = f(x) for all Unicode input |
+| **Determinism** | I7-I8 | Hypothesis (400 examples) | Trigrams, cache keys, scan results are pure functions |
+| **Pricing invariants** | I9 | Exhaustive | All prices ≥ 0, no NaN/Inf, output ≥ input |
+| **Token conservation** | I10 | Stress (200 concurrent) | Rate limiter cannot over-dispense tokens |
+| **Budget accounting** | I11 | Stress (50 concurrent) | Spend never exceeds budget after block |
+| **Concurrency safety** | C1-C4 | Stress (500 concurrent) | Locks prevent race conditions in rate limiter, budget, router stats |
+| **Adapter determinism** | D1-D5 | Hypothesis (250 examples) | Request/response translation and cost calc are deterministic |
+
+~2,950 randomized test cases generated per CI run via Hypothesis.
 
 | Module | Tests | Coverage |
 |--------|-------|----------|
@@ -572,24 +594,23 @@ If `tiktoken` is not installed, token counts are estimated via `len(text) // 4`.
 ## Installation & Deployment
 
 ### Quick Start
+
 ```bash
-# Clone
-git clone https://github.com/fabriziosalmi/llmproxy
-cd llmproxy
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Copy env template and configure
-cp .env.example .env
-
-# Run
-python main.py
-
-# UI available at http://localhost:8090/ui
-# API available at http://localhost:8090/v1/chat/completions
-# Metrics at http://localhost:8090/metrics
+git clone https://github.com/fabriziosalmi/llmproxy && cd llmproxy
+make setup                          # Install deps + create .env
+# Edit .env — set LLM_PROXY_API_KEYS and at least one provider key
+make run                            # Start with full config
+# OR: make run-minimal              # Start with 1 provider (config.minimal.yaml)
+curl http://localhost:8090/health   # Verify
 ```
+
+**Makefile targets**: `make setup` | `make run` | `make test` | `make bench` | `make lint` | `make typecheck` | `make docker-up` | `make docker-down` | `make health` | `make clean`
+
+### GitHub Codespaces / DevContainer
+
+Open in Codespaces or VS Code Dev Containers — auto-installs deps, forwards ports 8090/9091:
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/fabriziosalmi/llmproxy)
 
 ### Docker Compose
 ```bash
@@ -663,16 +684,34 @@ environment:
 
 Both projects are MIT-licensed, single-node, Docker-ready, and designed for minimal operational complexity.
 
+### Monitoring
+
+Pre-built configs in `monitoring/`:
+- **Grafana dashboard** (`grafana-dashboard.json`) — 11 panels: req/s, error rate, latency P50/P95/P99, daily cost, tokens, circuit breakers, injection blocks, auth failures, cost by model, TTFT
+- **Prometheus alerts** (`prometheus-rules.yml`) — 8 alert rules (down, high error rate, high latency, circuit open, budget warning/exceeded, injection spike, auth failure spike) + 4 recording rules
+- **Prometheus scrape config** (`prometheus.yml`) — ready for Docker Compose
+
 ### CI/CD (GitHub Actions)
 
-**`.github/workflows/ci.yml`** — Runs on every push/PR:
-- **Lint**: ruff check (Python code quality).
-- **Test**: pytest with plugin/WASM test suite.
-- **Syntax**: AST parse of all Python files.
+**`.github/workflows/ci.yml`** — 8 jobs on every push/PR:
 
-**`.github/workflows/docker.yml`** — Runs on version tags (`v*`):
-- Builds Docker image and pushes to GitHub Container Registry (GHCR).
-- Tags: semver (`1.0.0`), minor (`1.0`), and commit SHA.
+| Job | What it checks |
+|-----|---------------|
+| **Lint** | `ruff check .` |
+| **Type Check** | `mypy core/ proxy/` |
+| **Dependency Audit** | `pip-audit` (non-blocking) |
+| **Supply Chain** | `verify_deps.py --strict` + `.pth` malware scan + blocked package check |
+| **Syntax** | `python -m compileall` on all modules |
+| **Test + Coverage** | 595+ tests, `--cov-fail-under=50` |
+| **Mathematical Invariants** | 31 invariant proofs with `-x` (fail-fast) |
+| **Docker Size** | Image < 500MB |
+
+**`.github/workflows/docker.yml`** — Builds and pushes to GHCR on `main` branch + version tags (`v*`).
+
+### Governance
+
+- [SECURITY.md](SECURITY.md) — Vulnerability disclosure policy, response timeline, security architecture
+- [CONTRIBUTING.md](CONTRIBUTING.md) — Contributor guide, PR checklist, code conventions
 
 ### Optional Dependencies
 ```bash

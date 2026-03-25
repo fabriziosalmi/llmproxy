@@ -87,3 +87,5 @@ dlq.jsonl
 .vitepress/cache/
 .mypy_cache/
 .hypothesis/
+.coverage
+htmlcov/
