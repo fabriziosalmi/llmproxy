@@ -5,7 +5,7 @@ import logging
 import unicodedata
 import uuid
 from collections import OrderedDict
-from typing import List, Any, Optional
+from typing import Dict, List, Any, Optional
 
 from cachetools import TTLCache as _TTLCache
 
