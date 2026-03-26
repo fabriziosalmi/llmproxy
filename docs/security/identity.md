@@ -2,9 +2,15 @@
 
 LLMProxy supports stateless multi-provider OIDC/JWT authentication with role-based access control.
 
+## Auth Model — Fail-Closed (v1.10.0)
+
+All paths under `/api/v1/*`, `/admin/*`, and `/metrics` are **denied by default** at the ASGI middleware layer in `proxy/app_factory.py` — before any route handler runs. Only paths in `_PUBLIC_EXACT` are reachable without credentials.
+
+See [Security Overview](/security/overview) for the full whitelist and pipeline diagram.
+
 ## Authentication Chain
 
-LLMProxy tries authentication methods in order:
+For requests that reach a route handler, LLMProxy tries authentication methods in order:
 
 1. **JWT** — Bearer token verified via OIDC JWKS
 2. **API Key** — Static key from `LLM_PROXY_API_KEYS`

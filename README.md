@@ -1,6 +1,6 @@
 # LLMProxy — LLM Security Gateway
 
-Security-first proxy for Large Language Models with multi-provider support (15 providers), cross-provider fallback, per-model pricing, cost-aware smart routing, ring-based plugin pipeline, WASM-sandboxed plugin execution, NLP-powered PII detection, cross-session threat intelligence, HMAC response signing, semantic injection detection (60-pattern multilingual corpus), GDPR compliance (right to erasure, DSAR), immutable audit ledger, and a real-time Security Operations Center UI.
+Security-first proxy for Large Language Models with multi-provider support (15 providers), cross-provider fallback, per-model pricing, cost-aware smart routing, ring-based plugin pipeline, WASM-sandboxed plugin execution, NLP-powered PII detection, cross-session threat intelligence, HMAC response signing, semantic injection detection (60-pattern multilingual corpus), GDPR compliance (right to erasure, DSAR), immutable audit ledger, global fail-closed auth middleware, and a real-time Security Operations Center UI.
 
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)
@@ -144,6 +144,24 @@ Heavy dependencies (OpenTelemetry, Sentry) are lazily imported inside route hand
 ---
 
 ## Security & Identity
+
+### Global Auth Middleware — Fail-Closed (`proxy/app_factory.py`) — v1.10.0
+
+The outermost security layer implements **deny-by-default** for all admin-class paths before any route handler runs.
+
+| Scope | Behaviour |
+|-------|-----------|
+| `/api/v1/*` | Denied unless in public whitelist |
+| `/admin/*` | Denied unless in public whitelist |
+| `/metrics` | Denied (timing/volume side-channel) |
+| `/docs`, `/redoc`, `/openapi.json` | Disabled when auth is enabled |
+| `/health` | Public (liveness probe) |
+| `/api/v1/identity/config` | Public (SSO discovery) |
+| `/api/v1/identity/exchange` | Public (JWT validated inside route) |
+| `/api/v1/identity/me` | Public (returns `{"authenticated":false}`) |
+| `/v1/*` | Public prefix (chat/embeddings/models do their own auth) |
+
+**Why this matters**: previous versions required developers to remember `_check_admin_auth()` on every new route — a per-route opt-in that guaranteed future CVEs (Rounds 7, 8, 9 each found unprotected endpoints). With the global middleware any new route under a protected prefix is automatically denied; the developer must explicitly whitelist it to make it public. Per-route `_check_admin_auth()` closures are retained as defence-in-depth.
 
 ### Byte-Level Firewall (`core/firewall_asgi.py`)
 ASGI middleware scanning request body bytes for injection patterns:

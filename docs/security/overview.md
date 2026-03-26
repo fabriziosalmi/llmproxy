@@ -5,16 +5,37 @@ LLMProxy implements defense-in-depth with multiple security layers. Every reques
 ## Security Pipeline
 
 ```
-Request → ASGI Firewall → SecurityShield → Plugin Rings → LLM Provider
-              │                  │               │
-              ├─ Pattern scan    ├─ Injection     ├─ Budget guard
-              └─ Instant 403     │  scoring       ├─ Loop breaker
-                                 ├─ PII masking   ├─ Rate limiter
-                                 └─ Trajectory    └─ Topic blocklist
-                                    detection
+Request → Global Auth Middleware → ASGI Firewall → SecurityShield → Plugin Rings → LLM Provider
+               │                       │                  │               │
+               ├─ Deny-all /api/v1/*   ├─ Pattern scan    ├─ Injection     ├─ Budget guard
+               ├─ Deny-all /admin/*    └─ Instant 403     │  scoring       ├─ Loop breaker
+               ├─ Deny /metrics                           ├─ PII masking   ├─ Rate limiter
+               └─ Whitelist: /health,                     └─ Trajectory    └─ Topic blocklist
+                  /api/v1/identity/*                         detection
 ```
 
 ## Layers
+
+### 0. Global Auth Middleware (Fail-Closed) — v1.10.0
+
+The outermost security layer in `proxy/app_factory.py`. Implements **deny-by-default** for all admin-class paths before any route handler executes.
+
+**Protected prefixes** (require valid Bearer token):
+- `/api/v1/*` — all API endpoints
+- `/admin/*` — all admin endpoints
+- `/metrics` — Prometheus endpoint (timing/volume side-channels)
+
+**Public whitelist** (`_PUBLIC_EXACT`, the complete list):
+- `/health` — liveness probe
+- `/api/v1/identity/config` — SSO provider discovery
+- `/api/v1/identity/exchange` — token exchange (JWT validated inside the route)
+- `/api/v1/identity/me` — identity check (returns `{"authenticated": false}` for unauthenticated callers)
+
+**API docs** (`/docs`, `/redoc`, `/openapi.json`) are disabled when auth is enabled — they would expose a full endpoint map before authentication.
+
+Any new route added under a protected prefix is **automatically denied** until explicitly whitelisted. This eliminates the structural failure mode where forgetting `_check_admin_auth()` produces an instant CVE.
+
+Per-route `_check_admin_auth()` closures are retained as defence-in-depth.
 
 ### 1. ASGI Firewall
 
