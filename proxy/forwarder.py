@@ -39,12 +39,6 @@ class RequestForwarder:
         self._get_session = get_session
         self._add_log = add_log
         self._security = security  # SecurityShield for mid-stream PII/injection monitoring
-        # Mutable reference to agent's total_cost_today — updated via charge_budget()
-        self._cost_ref: dict[str, float] = {}
-
-    def bind_cost_ref(self, ref: dict[str, float]):
-        """Bind a mutable dict {"total": float} so streaming can charge budget."""
-        self._cost_ref = ref
 
     def resolve_endpoint_for_provider(self, provider: str) -> Any:
         """Resolve the configured endpoint URL for a provider."""
@@ -74,7 +68,8 @@ class RequestForwarder:
         cb.report_success()
         return response
 
-    async def forward_with_fallback(self, ctx, target, headers, session):
+    async def forward_with_fallback(self, ctx, target, headers, session,
+                                    cost_ref: "dict[str, float] | None" = None):
         """Forward request with cross-provider fallback on failure.
 
         Tries the primary endpoint first. On failure (circuit open, HTTP error,
@@ -151,6 +146,7 @@ class RequestForwarder:
                     return await self._handle_streaming(
                         ctx, a_adapter, target_url, translated_body,
                         translated_headers, session, cb, endpoint_id,
+                        cost_ref=cost_ref,
                     )
                 else:
                     ctx.response = await self.forward_request(
@@ -174,13 +170,16 @@ class RequestForwarder:
         raise HTTPException(status_code=503, detail="All providers failed")
 
     async def _handle_streaming(self, ctx, adapter, target_url, translated_body,
-                                translated_headers, session, cb, endpoint_id):
+                                translated_headers, session, cb, endpoint_id,
+                                cost_ref: "dict[str, float] | None" = None):
         """Handle streaming response with TTFT tracking and post-stream budget charging."""
         ttft_start = time.perf_counter()
         first_chunk_seen = False
         circuit_success_reported = False
         budget_lock = self._budget_lock
-        cost_ref = self._cost_ref
+        # cost_ref is passed per-request — never shared across concurrent requests
+        if cost_ref is None:
+            cost_ref = {}
 
         # Mid-stream speculative guardrail: launch analyze_speculative() as a
         # background task that monitors the accumulating response text for PII

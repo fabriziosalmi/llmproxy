@@ -235,10 +235,10 @@ class ByteLevelFirewallMiddleware:
         while True:
             message = await receive()
             if message["type"] != "http.request":
-                # Disconnect or other non-body message — short-circuit
-                async def _replay(m=message):
-                    return m
-                await self.app(scope, _replay, send)
+                # Client disconnected before sending the full body (e.g.
+                # http.disconnect mid-accumulation).  Abort without forwarding —
+                # the inner app would receive no http.request message, causing a
+                # parse error, and there is nothing useful to respond to.
                 return
 
             chunk = message.get("body", b"")

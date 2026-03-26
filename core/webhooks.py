@@ -11,11 +11,16 @@ Features:
   - Rate-limited to prevent webhook flooding
 """
 
+import hmac
+import hashlib
+import ipaddress
 import json
+import socket
 import time
 import logging
 import asyncio
 import aiohttp
+import urllib.parse
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
 from enum import Enum
@@ -52,6 +57,68 @@ class WebhookConfig:
     secret: Optional[str] = None  # HMAC signing secret
 
 
+# SSRF — private/reserved CIDR ranges that webhook URLs must not target
+_PRIVATE_NETWORKS = [
+    ipaddress.ip_network("127.0.0.0/8"),      # loopback
+    ipaddress.ip_network("10.0.0.0/8"),        # RFC-1918
+    ipaddress.ip_network("172.16.0.0/12"),     # RFC-1918
+    ipaddress.ip_network("192.168.0.0/16"),    # RFC-1918
+    ipaddress.ip_network("169.254.0.0/16"),    # link-local / AWS IMDS
+    ipaddress.ip_network("::1/128"),           # IPv6 loopback
+    ipaddress.ip_network("fc00::/7"),          # IPv6 ULA
+    ipaddress.ip_network("fe80::/10"),         # IPv6 link-local
+]
+
+
+def _validate_webhook_url(url: str) -> None:
+    """Raise ValueError if url targets a private/internal network (SSRF guard).
+
+    Checks:
+      1. Scheme must be http or https — blocks file://, gopher://, etc.
+      2. Host must be present.
+      3. If host is an IP literal, it must not fall in a private/reserved range.
+      4. If host is a hostname, it is resolved synchronously (cached by the OS
+         resolver) and the resulting IP is checked.  DNS failure is fail-open to
+         avoid blocking legitimate webhooks on transient DNS errors.
+    """
+    try:
+        parsed = urllib.parse.urlparse(url)
+    except Exception as exc:
+        raise ValueError(f"Malformed webhook URL: {exc}") from exc
+
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"Webhook URL scheme '{parsed.scheme}' is not allowed (must be http/https)")
+
+    host = parsed.hostname or ""
+    if not host:
+        raise ValueError("Webhook URL has no host")
+
+    # Try host as an IP literal first (no DNS needed)
+    try:
+        ip = ipaddress.ip_address(host)
+        for net in _PRIVATE_NETWORKS:
+            if ip in net:
+                raise ValueError(f"Webhook URL targets private/reserved IP {ip}")
+        return
+    except ValueError as exc:
+        # Re-raise SSRF-specific errors; otherwise host is a hostname, continue
+        if "private/reserved" in str(exc):
+            raise
+
+    # Hostname — resolve to IP and validate (blocking; webhooks are rare events)
+    try:
+        resolved = socket.gethostbyname(host)
+        ip = ipaddress.ip_address(resolved)
+        for net in _PRIVATE_NETWORKS:
+            if ip in net:
+                raise ValueError(
+                    f"Webhook URL host '{host}' resolves to private/reserved IP {ip}"
+                )
+    except OSError:
+        # DNS failure — fail-open (don't block on transient resolver errors)
+        pass
+
+
 # Minimum interval between identical events (debounce)
 DEBOUNCE_SECONDS = 30
 
@@ -83,6 +150,12 @@ class WebhookDispatcher:
             url = get_secret(url_env, required=False) if url_env else ecfg.get("url", "")
             if not url:
                 logger.warning(f"Webhook '{name}': no URL configured, skipping")
+                continue
+
+            try:
+                _validate_webhook_url(url)
+            except ValueError as exc:
+                logger.error(f"Webhook '{name}': SSRF guard rejected URL — {exc}. Skipping.")
                 continue
 
             target = WebhookTarget(ecfg.get("target", "generic"))
@@ -137,9 +210,17 @@ class WebhookDispatcher:
         try:
             session = await self._get_session()
             payload = self._format_payload(endpoint.target, event, data)
+            # Serialize to bytes once so both the HMAC and the POST body are identical
+            payload_bytes = json.dumps(payload, separators=(",", ":")).encode("utf-8")
             headers = {"Content-Type": "application/json"}
+            # HMAC-SHA256 payload signing — authenticates the payload to the receiver
+            if endpoint.secret:
+                sig = hmac.new(
+                    endpoint.secret.encode("utf-8"), payload_bytes, hashlib.sha256
+                ).hexdigest()
+                headers["X-Webhook-Signature"] = f"sha256={sig}"
 
-            async with session.post(endpoint.url, json=payload, headers=headers) as resp:
+            async with session.post(endpoint.url, data=payload_bytes, headers=headers) as resp:
                 if resp.status >= 400:
                     body = await resp.text()
                     logger.warning(f"Webhook '{endpoint.name}': HTTP {resp.status} — {body[:200]}")
