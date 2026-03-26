@@ -1,7 +1,6 @@
 """Tests for core.rbac.RBACManager."""
 
 import pytest
-import pytest_asyncio
 from core.rbac import RBACManager
 
 
