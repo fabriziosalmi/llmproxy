@@ -45,8 +45,8 @@ async def test_quota_exceeded(rbac):
     assert await rbac.check_quota("team-a-key") is False
 
 
-def test_set_get_user_roles(rbac):
-    # set_user_roles(subject, email, roles)
-    rbac.set_user_roles("sub-123", "user@test.com", ["admin", "operator"])
-    roles = rbac.get_user_roles("sub-123")
+@pytest.mark.asyncio
+async def test_set_get_user_roles(rbac):
+    await rbac.set_user_roles("sub-123", "user@test.com", ["admin", "operator"])
+    roles = await rbac.get_user_roles("sub-123")
     assert set(roles) == {"admin", "operator"}
