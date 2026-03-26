@@ -7,8 +7,27 @@ from models import EndpointStatus
 def create_router(agent) -> APIRouter:
     router = APIRouter()
 
+    def _check_admin_auth(request: Request):
+        """Enforce API key auth on all registry mutating endpoints.
+
+        Toggle, delete, and priority changes directly affect which upstream
+        providers the proxy uses and are equivalent in impact to admin operations.
+        Without auth enforcement an unauthenticated attacker can disable all
+        endpoints (instant DoS) or redirect traffic to a malicious provider.
+        Mirrors the pattern in admin.py and plugins.py — skipped only when
+        auth is explicitly disabled (development mode).
+        """
+        if not agent.config.get("server", {}).get("auth", {}).get("enabled", False):
+            return
+        auth_header = request.headers.get("Authorization", "")
+        token = auth_header.replace("Bearer ", "").strip()
+        valid_keys = agent._get_api_keys()
+        if not token or token not in valid_keys:
+            raise HTTPException(status_code=401, detail="Registry: Unauthorized")
+
     @router.post("/api/v1/registry/{endpoint_id}/toggle")
-    async def toggle_endpoint(endpoint_id: str):
+    async def toggle_endpoint(endpoint_id: str, request: Request):
+        _check_admin_auth(request)
         all_endpoints = await agent.store.get_all()
         target = next((e for e in all_endpoints if e.id == endpoint_id), None)
         if not target:
@@ -24,6 +43,7 @@ def create_router(agent) -> APIRouter:
 
     @router.get("/api/v1/telemetry/stream")
     async def telemetry_stream(request: Request):
+        _check_admin_auth(request)
         """Real-time SSE stream for the SOC dashboard."""
         import asyncio
         import json
@@ -49,13 +69,15 @@ def create_router(agent) -> APIRouter:
         return StreamingResponse(event_generator(), media_type="text/event-stream")
 
     @router.delete("/api/v1/registry/{endpoint_id}")
-    async def delete_endpoint(endpoint_id: str):
+    async def delete_endpoint(endpoint_id: str, request: Request):
+        _check_admin_auth(request)
         await agent.store.remove_endpoint(endpoint_id)
         await agent._add_log(f"ENDPOINT: {endpoint_id} DELETED", level="WARNING")
         return {"status": "deleted"}
 
     @router.post("/api/v1/registry/{endpoint_id}/priority")
     async def set_priority(endpoint_id: str, request: Request):
+        _check_admin_auth(request)
         data = await request.json()
         priority = data.get("priority", 0)
         all_endpoints = await agent.store.get_all()

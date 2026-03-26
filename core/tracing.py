@@ -50,7 +50,12 @@ class TraceManager:
 
         # OTLP Exporter (If endpoint provided)
         if otlp_endpoint:
-            otlp_exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True)
+            # Use insecure (plaintext gRPC) only for local collectors.
+            # Remote OTLP endpoints receive span data that may include auth
+            # headers and user identifiers — enforce TLS for all non-local targets.
+            _local_prefixes = ("localhost:", "127.0.0.1:", "::1:")
+            _insecure = any(otlp_endpoint.startswith(p) for p in _local_prefixes)
+            otlp_exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=_insecure)
             provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
             logger.info(f"OTLP Exporter initialized for endpoint: {otlp_endpoint}")
 

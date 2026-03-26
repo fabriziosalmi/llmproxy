@@ -28,10 +28,23 @@ logger = logging.getLogger(__name__)
 PII_PATTERNS = [
     (re.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'), '<EMAIL>'),
     (re.compile(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b'), '<IP>'),
+    # API keys: OpenAI (sk-...), Anthropic (sk-ant-...), generic long secrets
+    (re.compile(r'sk-ant-[a-zA-Z0-9_\-]{20,}'), '<API_KEY>'),
     (re.compile(r'sk-[a-zA-Z0-9]{20,}'), '<API_KEY>'),
     (re.compile(r'Bearer\s+[a-zA-Z0-9._\-]+'), 'Bearer <REDACTED>'),
     (re.compile(r'eyJ[a-zA-Z0-9_\-]+\.eyJ[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+'), '<JWT>'),
 ]
+
+# Sensitive field names (matched case-insensitively in scrub_dict).
+# Covers common variations used by providers, frameworks, and reverse proxies.
+_SENSITIVE_FIELDS = frozenset({
+    'authorization', 'api_key', 'apikey', 'api-key',
+    'token', 'access_token', 'refresh_token', 'id_token',
+    'password', 'passwd',
+    'secret', 'client_secret', 'secret_key', 'signing_key', 'private_key',
+    'credentials', 'credential',
+    'x-api-key', 'x-auth-token', 'x-access-token',
+})
 
 
 def scrub_pii(text: str) -> str:
@@ -45,8 +58,8 @@ def scrub_dict(d: Dict[str, Any]) -> Dict[str, Any]:
     """Recursively scrub PII from a dictionary."""
     result: Dict[str, Any] = {}
     for k, v in d.items():
-        # Skip known sensitive fields entirely
-        if k.lower() in ('authorization', 'api_key', 'token', 'password', 'secret'):
+        # Redact known sensitive fields regardless of value type
+        if k.lower() in _SENSITIVE_FIELDS:
             result[k] = '<REDACTED>'
         elif isinstance(v, str):
             result[k] = scrub_pii(v)
