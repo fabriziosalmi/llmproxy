@@ -138,9 +138,13 @@ class RBACManager:
             )
             conn.commit()
 
-    def set_user_roles(self, subject: str, email: Optional[str], roles: List[str]):
-        """Persist user->role mapping."""
-        self._sync_set_user_roles(subject, email, roles)
+    async def set_user_roles(self, subject: str, email: Optional[str], roles: List[str]):
+        """Persist user->role mapping (non-blocking).
+
+        Runs the SQLite write in a thread-pool worker — calling sqlite3 directly
+        on the asyncio event loop stalls ALL concurrent requests.
+        """
+        await asyncio.to_thread(self._sync_set_user_roles, subject, email, roles)
 
     def _sync_get_user_roles(self, subject: str) -> List[str]:
         with sqlite3.connect(self.db_path) as conn:
@@ -152,6 +156,6 @@ class RBACManager:
                 return [r.strip() for r in row[0].split(",") if r.strip()]
         return ["user"]
 
-    def get_user_roles(self, subject: str) -> List[str]:
-        """Look up persisted roles for a user subject."""
-        return self._sync_get_user_roles(subject)
+    async def get_user_roles(self, subject: str) -> List[str]:
+        """Look up persisted roles for a user subject (non-blocking)."""
+        return await asyncio.to_thread(self._sync_get_user_roles, subject)

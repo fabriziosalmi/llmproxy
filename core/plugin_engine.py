@@ -375,6 +375,16 @@ class PluginManager:
             module_path, target_name = entrypoint.split(":")
             file_path = os.path.join(self.plugins_dir, f"{module_path.replace('.', '/')}.py")
 
+            # Directory traversal guard: os.path.join silently discards the
+            # base directory when the second argument is an absolute path
+            # (e.g. os.path.join("plugins", "/tmp/evil.py") → "/tmp/evil.py").
+            # Resolve both paths and verify containment before proceeding.
+            safe_base = os.path.abspath(self.plugins_dir) + os.sep
+            if not os.path.abspath(file_path).startswith(safe_base):
+                raise ValueError(
+                    f"Plugin path traversal detected: '{file_path}' escapes plugins_dir"
+                )
+
             if not os.path.exists(file_path):
                 raise FileNotFoundError(f"Plugin file not found: {file_path}")
 
@@ -420,6 +430,11 @@ class PluginManager:
 
         elif p_type == "wasm":
             file_path = os.path.join(self.plugins_dir, f"{entrypoint.replace('.', '/')}.wasm")
+            safe_base = os.path.abspath(self.plugins_dir) + os.sep
+            if not os.path.abspath(file_path).startswith(safe_base):
+                raise ValueError(
+                    f"Plugin path traversal detected: '{file_path}' escapes plugins_dir"
+                )
             if not os.path.exists(file_path):
                 raise FileNotFoundError(f"WASM plugin not found: {file_path}")
 

@@ -50,7 +50,7 @@ def create_router(agent) -> APIRouter:
                 request.state.roles = identity.roles
                 if not agent.rbac.check_permission(identity.roles, "proxy:use"):
                     raise HTTPException(status_code=403, detail="Insufficient permissions")
-                agent.rbac.set_user_roles(identity.subject, identity.email, identity.roles)
+                await agent.rbac.set_user_roles(identity.subject, identity.email, identity.roles)
                 await agent._add_log(
                     f"IDENTITY: {identity.provider} user={identity.email or identity.subject} roles={identity.roles}",
                     level="SECURITY"

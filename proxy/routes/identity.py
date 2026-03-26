@@ -70,7 +70,7 @@ def create_router(agent) -> APIRouter:
             raise HTTPException(status_code=401, detail="Unrecognized JWT provider")
         ttl = agent.config.get("identity", {}).get("session_ttl", 3600)
         proxy_token = agent.identity.generate_proxy_jwt(identity, ttl=ttl)
-        agent.rbac.set_user_roles(identity.subject, identity.email, identity.roles)
+        await agent.rbac.set_user_roles(identity.subject, identity.email, identity.roles)
         return {
             "token": proxy_token,
             "expires_in": ttl,
