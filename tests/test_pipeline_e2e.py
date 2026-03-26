@@ -91,7 +91,7 @@ class PipelineAgent:
         self.identity.enabled = False
         self.rbac = MagicMock()
         self.rbac.check_permission = MagicMock(return_value=True)
-        self.rbac.check_quota = MagicMock(return_value=True)
+        self.rbac.check_quota = AsyncMock(return_value=True)
         self.exporter = None
         self.store = MagicMock()
         self.store.log_spend = AsyncMock()

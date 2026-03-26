@@ -56,7 +56,7 @@ class LightweightAgent:
         self.identity.enabled = False
         self.rbac = MagicMock()
         self.rbac.check_permission = MagicMock(return_value=True)
-        self.rbac.check_quota = MagicMock(return_value=True)
+        self.rbac.check_quota = AsyncMock(return_value=True)
         self.rbac.get_permissions_for_roles = MagicMock(return_value={"proxy:use"})
         self.webhooks = MagicMock()
         self.webhooks.dispatch = AsyncMock()

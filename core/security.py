@@ -211,6 +211,12 @@ class SecurityShield:
             return False  # Fail-closed: block on error rather than silently allow
 
     _MAX_TRACKED_SESSIONS = 10_000
+    # Eviction scan interval: run the full O(N) stale-session sweep at most
+    # once every 30 seconds.  Per-request scanning at 10 000 sessions causes
+    # measurable CPU spikes under load without meaningfully tightening the
+    # eviction window (sessions already expire via _SESSION_TTL = 3600 s).
+    _EVICTION_INTERVAL = 30.0
+    _last_eviction: float = 0.0
 
     def check_session_trajectory(self, session_id: str, current_prompt: str) -> Optional[str]:
         """Analyzes the 'threat trajectory' of a session to detect multi-turn jailbreaks.
@@ -224,13 +230,15 @@ class SecurityShield:
 
         now = time.time()
 
-        # 1. Time-based eviction: purge sessions idle > _SESSION_TTL
-        #    Done opportunistically (every call) — cheap O(1) check per session,
-        #    full scan only when a stale session is found.
-        stale = [sid for sid, data in self.session_memory.items()
-                 if now - data["last_seen"] > self._SESSION_TTL]
-        for sid in stale:
-            del self.session_memory[sid]
+        # 1. Time-based eviction: purge sessions idle > _SESSION_TTL.
+        #    Throttled to once per _EVICTION_INTERVAL to avoid an O(N) dict
+        #    scan on every single request (pathological at 10 000 sessions).
+        if now - SecurityShield._last_eviction >= self._EVICTION_INTERVAL:
+            SecurityShield._last_eviction = now
+            stale = [sid for sid, data in self.session_memory.items()
+                     if now - data["last_seen"] > self._SESSION_TTL]
+            for sid in stale:
+                del self.session_memory[sid]
 
         # 2. Capacity guard (hard cap after eviction)
         if session_id not in self.session_memory:

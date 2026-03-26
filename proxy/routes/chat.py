@@ -62,7 +62,7 @@ def create_router(agent) -> APIRouter:
                     agent._spawn_task(agent.webhooks.dispatch(EventType.AUTH_FAILURE, {"reason": "invalid_api_key", "ip": request.client.host if request.client else "unknown"}))
                     raise HTTPException(status_code=401, detail="Unauthorized: Invalid API key or JWT")
 
-                if not agent.rbac.check_quota(token):
+                if not await agent.rbac.check_quota(token):
                     agent._spawn_task(agent.webhooks.dispatch(EventType.BUDGET_THRESHOLD, {"reason": "quota_exceeded", "key_prefix": token[:8] + "..."}))
                     raise HTTPException(status_code=402, detail="Enterprise Quota Exceeded for this API Key.")
 
