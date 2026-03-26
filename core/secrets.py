@@ -60,14 +60,39 @@ class SecretManager:
 
     @classmethod
     def decrypt(cls, encrypted_secret: str) -> str:
-        """Decrypts a string."""
+        """Decrypts a string.
+
+        Migration path: if decryption fails because the stored value is still
+        plaintext (pre-encryption migration), the raw value is returned and an
+        ERROR is logged.  This fallback exists only to smooth key-rotation
+        migrations; it MUST be removed once all secrets are encrypted.
+
+        Security note: returning plaintext on decryption failure is an
+        intentional, logged degradation — not a silent bypass.  Any unexpected
+        exception (not related to a wrong/missing key) is re-raised so that
+        injection of malformed data cannot silently pass as a valid secret.
+        """
         if not encrypted_secret:
             return ""
         try:
             return cls._get_fernet().decrypt(encrypted_secret.encode()).decode()
-        except (InvalidToken, ValueError, TypeError) as e:
-            # Migration phase: value may not be encrypted yet
-            logger.warning(f"Decryption failed for key (migration fallback): {type(e).__name__}")
+        except InvalidToken:
+            # Expected during migration: value is plaintext or was encrypted
+            # with a different key.  Log at ERROR — this should be rare/transient.
+            logger.error(
+                "Decryption failed (InvalidToken) — returning raw value as migration fallback. "
+                "Ensure all secrets are re-encrypted if this persists."
+            )
+            return encrypted_secret
+        except (ValueError, TypeError) as e:
+            # ValueError covers binascii.Error (non-base64 plaintext input).
+            # TypeError covers None/wrong-type inputs that slipped through.
+            # Both indicate the stored value was never encrypted; treat as
+            # migration fallback the same as InvalidToken.
+            logger.error(
+                f"Decryption failed ({type(e).__name__}) — returning raw value as migration fallback. "
+                "Ensure all secrets are re-encrypted if this persists."
+            )
             return encrypted_secret
 
     @classmethod

@@ -8,7 +8,8 @@ Configurable via config.yaml `rate_limiting` section.
 import time
 import asyncio
 import logging
-from typing import Dict, Optional, Tuple
+from collections import OrderedDict
+from typing import Optional, Tuple
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -48,14 +49,20 @@ class TokenBucket:
 
 
 class RateLimiter:
-    """Per-key rate limiter with automatic bucket creation and eviction."""
+    """Per-key rate limiter with automatic bucket creation and O(1) LRU eviction.
+
+    Uses OrderedDict so that move_to_end() on every access keeps the mapping
+    ordered from least-recently-used (front) to most-recently-used (back).
+    Eviction is therefore O(1) — popitem(last=False) — instead of the O(N)
+    min() scan that would hold the asyncio.Lock for the entire dictionary walk.
+    """
 
     _MAX_BUCKETS = 50_000  # Prevent memory exhaustion from IP spray
 
     def __init__(self, default_capacity: int = 60, default_rate: float = 1.0):
         self.default_capacity = default_capacity
         self.default_rate = default_rate
-        self._buckets: Dict[str, Tuple[TokenBucket, float]] = {}  # key -> (bucket, last_access)
+        self._buckets: OrderedDict[str, TokenBucket] = OrderedDict()
         self._lock = asyncio.Lock()
 
     async def check(self, key: str) -> Tuple[bool, float]:
@@ -63,24 +70,17 @@ class RateLimiter:
         async with self._lock:
             if key not in self._buckets:
                 if len(self._buckets) >= self._MAX_BUCKETS:
-                    self._evict_oldest()
-                self._buckets[key] = (
-                    TokenBucket(self.default_capacity, self.default_rate),
-                    time.monotonic(),
-                )
+                    # O(1): evict the LRU entry (front of OrderedDict)
+                    self._buckets.popitem(last=False)
+                self._buckets[key] = TokenBucket(self.default_capacity, self.default_rate)
+            else:
+                # Mark as most-recently used: move to back in O(1)
+                self._buckets.move_to_end(key)
 
-            bucket, _ = self._buckets[key]
-            self._buckets[key] = (bucket, time.monotonic())
+            bucket = self._buckets[key]
 
         allowed = await bucket.acquire()
         return allowed, bucket.retry_after
-
-    def _evict_oldest(self):
-        """Remove least-recently-used bucket. Caller must hold self._lock."""
-        if not self._buckets:
-            return
-        oldest_key = min(self._buckets, key=lambda k: self._buckets[k][1])
-        del self._buckets[oldest_key]
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):

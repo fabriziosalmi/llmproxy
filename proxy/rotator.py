@@ -143,6 +143,7 @@ class RotatorAgent(BaseAgent):
             budget_lock=self._budget_lock,
             get_session=self._get_session,
             add_log=self._add_log,
+            security=self.security,
         )
 
         self.app = create_app(self)
