@@ -21,6 +21,7 @@ import json
 import time
 import hashlib
 import logging
+import unicodedata
 from typing import Optional, Dict, Any
 
 try:
@@ -173,11 +174,21 @@ class CacheBackend:
         tenant="ab" + model="cd" ≠ tenant="abc" + model="d"
 
         Messages are already PII-masked by the time this runs (PRE_FLIGHT priority 20).
+
+        Unicode normalization (NFKC) is applied to the canonical messages string
+        before hashing.  Without it, an attacker can insert invisible characters
+        (U+200B, fullwidth letters, combining marks, etc.) to produce a key that
+        differs from the "clean" equivalent — either poisoning the cache with a
+        different entry or bypassing negative-cache lookups on repeated attacks.
+        NFKC maps fullwidth→ASCII, strips invisible modifiers, and folds
+        compatibility equivalents, so visually identical queries share one key.
         """
         model = body.get("model", "")
         temperature = str(body.get("temperature", 1.0))
         # Canonical JSON: sorted keys, no whitespace, deterministic
-        messages = json.dumps(body.get("messages", []), sort_keys=True, separators=(",", ":"))
+        messages_raw = json.dumps(body.get("messages", []), sort_keys=True, separators=(",", ":"))
+        # NFKC normalization: collapse Unicode variants to canonical form
+        messages = unicodedata.normalize("NFKC", messages_raw)
 
         payload = f"{tenant_id}\x00{model}\x00{temperature}\x00{messages}"
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
