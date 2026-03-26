@@ -53,7 +53,16 @@ Stateless multi-provider OIDC/JWT verification with RBAC:
 - **TLS 1.2+**: Configurable TLS with cert/key files
 - **Zero-Trust**: Tailscale LocalAPI integration for machine/user identity verification
 - **URL Injection Prevention**: All user-supplied URLs are escaped via `urllib.parse.quote()`
-- **Rate Limiting**: Per-IP/per-key token bucket middleware
+- **Rate Limiting**: Per-IP/per-key token bucket middleware (O(1) LRU eviction via `OrderedDict`)
+
+### 6. Webhook Security
+
+- **HMAC-SHA256 signing**: `X-Webhook-Signature: sha256=<hex>` header on every delivery when `secret` is configured
+- **SSRF guard**: `_SSRFBlockingResolver` validates resolved IPs at aiohttp TCP connect time — after every DNS lookup — blocking private/reserved ranges (loopback, RFC-1918, 169.254/16, IPv6 ULA/link-local). Prevents DNS rebinding. Fail-closed on DNS failure.
+
+### 7. Budget Integrity
+
+- **Delta-based accounting**: Concurrent streaming requests accumulate cost deltas independently; the rotator adds each delta atomically under `budget_lock`, preventing lost-update races where concurrent streams silently overwrite each other's charges.
 
 ## Security Configuration
 

@@ -4,7 +4,7 @@ Security-first proxy for Large Language Models with multi-provider support (15 p
 
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-716%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-870%20passing-brightgreen)
 ![Invariants](https://img.shields.io/badge/invariants-31%20proven-blueviolet)
 ![Coverage](https://img.shields.io/badge/coverage-67%25-yellowgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
@@ -194,6 +194,13 @@ Four built-in roles with granular permissions:
 ### Zero-Trust
 - **Tailscale LocalAPI**: Verifies machine/user identity via Unix socket (`whois` API).
 - **URL injection prevention**: All user-supplied IPs/URLs are escaped via `urllib.parse.quote()`.
+
+### Webhook Security (`core/webhooks.py`)
+- **HMAC-SHA256 payload signing**: `X-Webhook-Signature: sha256=<hex>` header on every delivery when `secret` is configured — proves payload authenticity to the receiver.
+- **SSRF prevention**: `_SSRFBlockingResolver` intercepts aiohttp DNS resolution at TCP connect time and blocks private/reserved IPs (RFC-1918, loopback, 169.254/16, IPv6 ULA/link-local). Fail-closed: DNS failures abort the delivery rather than passing silently. IP literals are validated at load time; hostname-based URLs are validated on every DNS lookup to prevent DNS rebinding.
+
+### Concurrent Budget Safety (`proxy/rotator.py`, `proxy/forwarder.py`)
+- **Delta-based cost accounting**: Each streaming request tracks only its own cost increment (`{"delta": 0.0}`). The rotator atomically adds the delta under `budget_lock` after the stream completes — preventing the lost-update race where N concurrent streams each started from the same `total_cost_today` snapshot and the last writer silently discarded all prior charges.
 
 ### GDPR Compliance (`proxy/routes/gdpr.py`)
 Data subject rights implemented as REST endpoints:
@@ -387,6 +394,8 @@ Litestream-based WAL-mode SQLite → S3 continuous replication is planned but no
 - **Slack** (Block Kit), **Teams** (MessageCard), **Discord** (Embeds), **Generic** (JSON).
 - 7 event types: `circuit_open`, `budget_threshold`, `injection_blocked`, `endpoint_down`, `endpoint_recovered`, `auth_failure`, `panic_activated`.
 - 30-second debounce prevents flooding.
+- **HMAC-SHA256 signing**: when `secret` is configured, every delivery includes `X-Webhook-Signature: sha256=<hex>` — receivers can verify payload authenticity.
+- **SSRF guard**: `_SSRFBlockingResolver` plugs into aiohttp's `TCPConnector` and validates every resolved IP against private/reserved CIDRs (loopback, RFC-1918, link-local 169.254/16, IPv6 ULA) at connect time — prevents DNS rebinding attacks. Fail-closed: DNS failures abort the delivery.
 
 ---
 
