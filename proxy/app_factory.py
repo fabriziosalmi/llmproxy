@@ -3,6 +3,22 @@ LLMPROXY — FastAPI App Factory.
 
 Builds the FastAPI application with middleware stack, route wiring,
 security headers, and graceful shutdown hook.
+
+Auth model — Fail-Closed (Secure by Default)
+─────────────────────────────────────────────
+When auth is enabled, the global_admin_auth middleware enforces
+authentication on ALL paths under /api/v1/* and /admin/* PLUS the
+sensitive root-level paths listed in _ALSO_PROTECT, BEFORE any route
+handler runs.
+
+Only paths in _PUBLIC_EXACT are reachable without credentials.  Any
+new route added under a protected prefix is automatically denied unless
+the developer explicitly adds its path to _PUBLIC_EXACT — the opposite
+of the previous per-route opt-in pattern that guaranteed future CVEs.
+
+The per-route _check_admin_auth() closures in individual route modules
+are retained as defence-in-depth: they catch any gap in the middleware
+config (e.g. a misconfigured prefix) and produce a descriptive error.
 """
 
 import os
@@ -16,6 +32,33 @@ from core.tracing import TraceManager
 from core.firewall_asgi import ByteLevelFirewallMiddleware
 
 logger = logging.getLogger("llmproxy.app_factory")
+
+# ── Auth whitelist ──────────────────────────────────────────────────────────
+# Paths that must remain reachable WITHOUT credentials even when auth is on.
+# Keep this list as SHORT as possible — every entry is a potential exposure.
+#
+#   /health                   — liveness probe (no operational secrets)
+#   /api/v1/identity/config   — tells SSO clients which provider to redirect to
+#   /api/v1/identity/exchange — token exchange: JWT validated inside the route
+#   /api/v1/identity/me       — returns {"authenticated": false} for callers
+#                               without a token; route does its own check
+_PUBLIC_EXACT: frozenset = frozenset({
+    "/health",
+    "/api/v1/identity/config",
+    "/api/v1/identity/exchange",
+    "/api/v1/identity/me",
+})
+
+# Path prefixes that are fully protected (deny-all except _PUBLIC_EXACT above).
+_PROTECTED_PREFIXES: tuple = ("/api/v1/", "/admin/")
+
+# Root-level paths outside the prefixes above that also require auth.
+# /metrics exposes token counts, model usage, budget, and timing side-channels
+# that allow traffic-pattern inference across tenants.
+_ALSO_PROTECT: frozenset = frozenset({
+    "/metrics",
+})
+# ───────────────────────────────────────────────────────────────────────────
 
 
 def _read_version() -> str:
@@ -32,12 +75,63 @@ def create_app(agent) -> FastAPI:
     from core.rate_limiter import RateLimitMiddleware
 
     _version = _read_version()
-    app = FastAPI(title="LLMProxy", version=_version, description="LLM Security Gateway")
+    auth_enabled = agent.config.get("server", {}).get("auth", {}).get("enabled", False)
+
+    # Disable interactive API docs when auth is enabled.
+    # /docs, /redoc and /openapi.json hand an attacker a complete map of every
+    # endpoint before they authenticate — including ones added in future PRs.
+    _docs_url = None if auth_enabled else "/docs"
+    _redoc_url = None if auth_enabled else "/redoc"
+    _openapi_url = None if auth_enabled else "/openapi.json"
+
+    app = FastAPI(
+        title="LLMProxy",
+        version=_version,
+        description="LLM Security Gateway",
+        docs_url=_docs_url,
+        redoc_url=_redoc_url,
+        openapi_url=_openapi_url,
+    )
     agent._start_time = __import__("time").time()
     agent._version = _version
     TraceManager.instrument_app(app)
 
-    # Payload size guard — reject oversized requests BEFORE JSON parsing (OOM protection)
+    # ── Global fail-closed auth middleware ──────────────────────────────────
+    # Runs BEFORE any route handler. Rejects requests to protected paths that
+    # lack a valid API key. New routes under /api/v1/ or /admin/ are denied
+    # automatically — no per-route _check_admin_auth() needed for protection
+    # (those closures remain as defence-in-depth only).
+    @app.middleware("http")
+    async def global_admin_auth(request: Request, call_next):
+        if not auth_enabled:
+            return await call_next(request)
+
+        path = request.url.path
+
+        needs_auth = (
+            any(path.startswith(p) for p in _PROTECTED_PREFIXES)
+            or path in _ALSO_PROTECT
+        )
+
+        if needs_auth and path not in _PUBLIC_EXACT:
+            auth_header = request.headers.get("Authorization", "")
+            token = auth_header.replace("Bearer ", "").strip()
+            valid_keys = agent._get_api_keys()
+            if not token or token not in valid_keys:
+                from fastapi.responses import JSONResponse
+                logger.warning(
+                    f"Global auth: rejected {request.method} {path} "
+                    f"from {request.client.host if request.client else 'unknown'}"
+                )
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Unauthorized"},
+                )
+
+        return await call_next(request)
+
+    # ── Payload size guard ──────────────────────────────────────────────────
+    # Reject oversized requests BEFORE JSON parsing (OOM protection).
     max_payload_kb = agent.config.get("security", {}).get("max_payload_size_kb", 512)
     max_payload_bytes = max_payload_kb * 1024
 
