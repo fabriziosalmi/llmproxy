@@ -4,7 +4,8 @@ import time
 import logging
 import unicodedata
 import uuid
-from typing import Dict, List, Any, Optional
+from collections import OrderedDict
+from typing import List, Any, Optional
 
 from cachetools import TTLCache as _TTLCache
 
@@ -57,8 +58,11 @@ class SecurityShield:
         self.pii_vault: _TTLCache = _TTLCache(maxsize=10_000, ttl=3600)
 
         # Session memory: {session_id: {"scores": [(score, ts), ...], "last_seen": ts}}
-        # Plain dict — eviction handled in check_session_trajectory via timestamps.
-        self.session_memory: Dict[str, Any] = {}
+        # OrderedDict keeps insertion/access order so LRU eviction is O(1):
+        # move_to_end() on every access, popitem(last=False) to evict the LRU.
+        # A plain dict's min() scan over 10k entries fires on every new session
+        # when at capacity — same DoS pattern fixed in RateLimiter.
+        self.session_memory: OrderedDict[str, Any] = OrderedDict()
 
         # Cross-session threat intelligence (S1: ThreatLedger)
         from core.threat_ledger import ThreatLedger
@@ -105,7 +109,11 @@ class SecurityShield:
 
                 last_length = len(current_response)
 
-            await asyncio.sleep(0.05) # Hyper-fast polling
+            # 10 ms polling: at typical LLM token rates (10-20 ms/chunk) this
+            # catches PII within ~1 chunk gap instead of ~5 at the old 50 ms.
+            # Fundamental limitation: bytes already yielded to the client cannot
+            # be recalled — the guard aborts future chunks, not past ones.
+            await asyncio.sleep(0.01)
 
     # Regex patterns used when Presidio is not available
     _REGEX_PII_PATTERNS = [
@@ -243,10 +251,12 @@ class SecurityShield:
         # 2. Capacity guard (hard cap after eviction)
         if session_id not in self.session_memory:
             if len(self.session_memory) >= self._MAX_TRACKED_SESSIONS:
-                # Evict the session that was seen least recently (LRU)
-                lru = min(self.session_memory, key=lambda k: self.session_memory[k]["last_seen"])
-                del self.session_memory[lru]
+                # O(1) LRU eviction: OrderedDict front = least-recently-used
+                self.session_memory.popitem(last=False)
             self.session_memory[session_id] = {"scores": [], "last_seen": now}
+        else:
+            # Mark as most-recently used: move to back in O(1)
+            self.session_memory.move_to_end(session_id)
 
         # 3. Record timestamped score for current prompt
         score, _ = self._calculate_threat_score(current_prompt)
