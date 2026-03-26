@@ -1,4 +1,5 @@
 import aiosqlite
+import asyncio
 import json
 import logging
 import sqlite3
@@ -12,6 +13,11 @@ class SQLiteStore:
 
     def __init__(self, db_path: str = "endpoints.db"):
         self.db_path = db_path
+        # Serialises concurrent log_audit calls so the hash chain is always
+        # linear. Without this, two simultaneous requests read the same
+        # prev_hash, compute diverging entry_hashes, and the chain splits —
+        # verify_audit_chain() then reports permanent tamper-detection failure.
+        self._audit_lock = asyncio.Lock()
 
     async def init_db(self):
         async with aiosqlite.connect(self.db_path) as conn:
@@ -260,32 +266,33 @@ class SQLiteStore:
         import hashlib
         blocked_int = 1 if blocked else 0
 
-        async with aiosqlite.connect(self.db_path) as conn:
-            # Get the hash of the last entry (chain link)
-            async with conn.execute(
-                "SELECT entry_hash FROM audit_log ORDER BY id DESC LIMIT 1"
-            ) as cursor:
-                row = await cursor.fetchone()
-                prev_hash = row[0] if row and row[0] else "GENESIS"
+        async with self._audit_lock:
+            async with aiosqlite.connect(self.db_path) as conn:
+                # Get the hash of the last entry (chain link)
+                async with conn.execute(
+                    "SELECT entry_hash FROM audit_log ORDER BY id DESC LIMIT 1"
+                ) as cursor:
+                    row = await cursor.fetchone()
+                    prev_hash = row[0] if row and row[0] else "GENESIS"
 
-            # Compute deterministic hash: SHA256(prev_hash|ts|req_id|session_id|...)
-            payload = (
-                f"{prev_hash}|{ts}|{req_id}|{session_id}|{key_prefix}|"
-                f"{model}|{provider}|{status}|{prompt_tokens}|{completion_tokens}|"
-                f"{cost_usd}|{latency_ms}|{blocked_int}|{block_reason}|{metadata}"
-            )
-            entry_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+                # Compute deterministic hash: SHA256(prev_hash|ts|req_id|session_id|...)
+                payload = (
+                    f"{prev_hash}|{ts}|{req_id}|{session_id}|{key_prefix}|"
+                    f"{model}|{provider}|{status}|{prompt_tokens}|{completion_tokens}|"
+                    f"{cost_usd}|{latency_ms}|{blocked_int}|{block_reason}|{metadata}"
+                )
+                entry_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
-            await conn.execute(
-                "INSERT INTO audit_log (ts, req_id, session_id, key_prefix, model, provider, "
-                "status, prompt_tokens, completion_tokens, cost_usd, latency_ms, blocked, "
-                "block_reason, metadata, entry_hash, prev_hash) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (ts, req_id, session_id, key_prefix, model, provider, status,
-                 prompt_tokens, completion_tokens, cost_usd, latency_ms,
-                 blocked_int, block_reason, metadata, entry_hash, prev_hash),
-            )
-            await conn.commit()
+                await conn.execute(
+                    "INSERT INTO audit_log (ts, req_id, session_id, key_prefix, model, provider, "
+                    "status, prompt_tokens, completion_tokens, cost_usd, latency_ms, blocked, "
+                    "block_reason, metadata, entry_hash, prev_hash) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (ts, req_id, session_id, key_prefix, model, provider, status,
+                     prompt_tokens, completion_tokens, cost_usd, latency_ms,
+                     blocked_int, block_reason, metadata, entry_hash, prev_hash),
+                )
+                await conn.commit()
 
     async def query_audit(self, date_from: str = "", date_to: str = "",
                           model: str = "", key_prefix: str = "",

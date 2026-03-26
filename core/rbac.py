@@ -84,16 +84,13 @@ class RBACManager:
                 return False
             return True
 
-    def check_quota(self, api_key: str) -> bool:
-        """Returns True if the API key has remaining budget. Non-blocking."""
-        # Called from sync context in some tests -- check if loop is running
-        try:
-            asyncio.get_running_loop()
-            # We're in an async context but this is called sync -- use sync path
-            # (to_thread would deadlock if called from sync code in async loop)
-            return self._sync_check_quota(api_key)
-        except RuntimeError:
-            return self._sync_check_quota(api_key)
+    async def check_quota(self, api_key: str) -> bool:
+        """Returns True if the API key has remaining budget.
+
+        Runs the SQLite read in a thread-pool worker so it never blocks the
+        asyncio event loop, which would stall ALL concurrent requests.
+        """
+        return await asyncio.to_thread(self._sync_check_quota, api_key)
 
     def _sync_update_usage(self, api_key: str, cost: float):
         with sqlite3.connect(self.db_path) as conn:
@@ -103,9 +100,9 @@ class RBACManager:
             )
             conn.commit()
 
-    def update_usage(self, api_key: str, cost: float):
-        """Increments the consumed budget for an API key."""
-        self._sync_update_usage(api_key, cost)
+    async def update_usage(self, api_key: str, cost: float):
+        """Increments the consumed budget for an API key (non-blocking)."""
+        await asyncio.to_thread(self._sync_update_usage, api_key, cost)
 
     def add_quota(self, api_key: str, team: str, budget: float):
         """Configures a quota for a new or existing key."""

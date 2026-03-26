@@ -1,6 +1,7 @@
 """Tests for core.rbac.RBACManager."""
 
 import pytest
+import pytest_asyncio
 from core.rbac import RBACManager
 
 
@@ -32,15 +33,17 @@ def test_check_permission_multiple_roles(rbac):
     assert rbac.check_permission(["user", "operator"], "plugins:manage") is True
 
 
-def test_quota_default_allow(rbac):
-    assert rbac.check_quota("unknown-key-xyz") is True
+@pytest.mark.asyncio
+async def test_quota_default_allow(rbac):
+    assert await rbac.check_quota("unknown-key-xyz") is True
 
 
-def test_quota_exceeded(rbac):
+@pytest.mark.asyncio
+async def test_quota_exceeded(rbac):
     # add_quota(api_key, team, budget)
     rbac.add_quota("team-a-key", "team-a", 10.0)
-    rbac.update_usage("team-a-key", 15.0)
-    assert rbac.check_quota("team-a-key") is False
+    await rbac.update_usage("team-a-key", 15.0)
+    assert await rbac.check_quota("team-a-key") is False
 
 
 def test_set_get_user_roles(rbac):
