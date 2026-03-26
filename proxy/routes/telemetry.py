@@ -29,6 +29,24 @@ def _sanitize_log(log: dict) -> dict:
 def create_router(agent) -> APIRouter:
     router = APIRouter()
 
+    def _check_auth(request: Request):
+        """Enforce API key auth on sensitive streaming endpoints.
+
+        /api/v1/logs streams all application events including SECURITY-level
+        entries (blocked IPs, failed auth attempts, identity assertions, plugin
+        installs).  An unauthenticated subscriber gets a real-time recon feed
+        that reveals which keys are failing (to time attacks), which IPs are
+        blocked (to rotate), and user email addresses from IDENTITY log lines.
+        Auth is skipped only when explicitly disabled (development mode).
+        """
+        if not agent.config.get("server", {}).get("auth", {}).get("enabled", False):
+            return
+        auth_header = request.headers.get("Authorization", "")
+        token = auth_header.replace("Bearer ", "").strip()
+        valid_keys = agent._get_api_keys()
+        if not token or token not in valid_keys:
+            raise HTTPException(status_code=401, detail="Telemetry: Unauthorized")
+
     @router.get("/health")
     async def health():
         import time as _time
@@ -56,6 +74,7 @@ def create_router(agent) -> APIRouter:
 
     @router.get("/api/v1/logs")
     async def stream_logs(request: Request):
+        _check_auth(request)
         global _active_log_streams
         if _active_log_streams >= _MAX_SSE_CONNECTIONS:
             raise HTTPException(status_code=503, detail="Too many SSE connections")
