@@ -83,6 +83,12 @@ class WasmRunner:
         self._plugin = None  # Extism Plugin instance
         self._loaded = False
         self.logger = logging.getLogger(f"wasm.{wasm_path.split('/')[-1]}")
+        # Extism Plugin objects are NOT thread-safe: concurrent calls to
+        # _plugin.call() on the same instance corrupt the WASM linear memory
+        # and can cross-contaminate data between requests (cross-tenant leak)
+        # or crash the process via SIGSEGV. Serialise all execute() calls for
+        # this plugin instance with a per-runner asyncio.Lock.
+        self._exec_lock = asyncio.Lock()
 
     async def load(self) -> bool:
         """
@@ -135,11 +141,14 @@ class WasmRunner:
         input_json = json.dumps(input_data)
 
         try:
-            # Execute in thread pool — releases GIL, doesn't block event loop
-            loop = asyncio.get_event_loop()
-            result_bytes = await loop.run_in_executor(
-                _WASM_EXECUTOR, self._sync_call, input_json
-            )
+            # Serialise calls: the Extism Plugin instance is not thread-safe.
+            # The lock ensures only one coroutine calls into the native WASM
+            # runtime at a time for this plugin, preventing memory corruption.
+            async with self._exec_lock:
+                loop = asyncio.get_event_loop()
+                result_bytes = await loop.run_in_executor(
+                    _WASM_EXECUTOR, self._sync_call, input_json
+                )
             return self._parse_result(result_bytes)
 
         except Exception as e:

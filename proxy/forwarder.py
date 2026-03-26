@@ -31,12 +31,14 @@ class RequestForwarder:
         budget_lock: asyncio.Lock,
         get_session: Callable[[], Awaitable[Any]],
         add_log: Callable[..., Awaitable[None]],
+        security: Any = None,
     ):
         self.config = config
         self.circuit_manager = circuit_manager
         self._budget_lock = budget_lock
         self._get_session = get_session
         self._add_log = add_log
+        self._security = security  # SecurityShield for mid-stream PII/injection monitoring
         # Mutable reference to agent's total_cost_today — updated via charge_budget()
         self._cost_ref: dict[str, float] = {}
 
@@ -180,11 +182,38 @@ class RequestForwarder:
         budget_lock = self._budget_lock
         cost_ref = self._cost_ref
 
+        # Mid-stream speculative guardrail: launch analyze_speculative() as a
+        # background task that monitors the accumulating response text for PII
+        # leakage or injection patterns.  Previously this method existed but
+        # was never wired into the streaming path (dead code).
+        stream_text_chunks: list[str] = []
+        kill_event = asyncio.Event()
+        speculative_task: asyncio.Task | None = None
+        if self._security:
+            prompt = ""
+            messages = ctx.body.get("messages", [])
+            if messages:
+                prompt = str(messages[-1].get("content", ""))
+            speculative_task = asyncio.create_task(
+                self._security.analyze_speculative(prompt, stream_text_chunks, kill_event)
+            )
+
         async def stream_generator():
             nonlocal first_chunk_seen, circuit_success_reported
             stream_usage = {}
             try:
                 async for chunk in adapter.stream(target_url, translated_body, translated_headers, session):
+                    # Abort stream if speculative guardrail fired
+                    if kill_event.is_set():
+                        logger.warning(
+                            f"STREAM ABORTED by speculative guardrail (endpoint={endpoint_id})"
+                        )
+                        yield (
+                            b'data: {"error":"stream_blocked",'
+                            b'"message":"Response blocked by content policy"}\n\n'
+                        )
+                        return
+
                     if not first_chunk_seen:
                         first_chunk_seen = True
                         cb.report_success()
@@ -203,12 +232,22 @@ class RequestForwarder:
                                         stream_usage = u
                         except (json.JSONDecodeError, KeyError, UnicodeDecodeError):
                             pass
+                    # Feed decoded text to the speculative analyzer
+                    if speculative_task is not None:
+                        try:
+                            stream_text_chunks.append(chunk.decode("utf-8", errors="replace"))
+                        except Exception:
+                            pass
                     yield chunk
             except (asyncio.TimeoutError, OSError, RuntimeError) as e:
                 if not circuit_success_reported:
                     cb.report_failure()
                 raise e
             finally:
+                # Signal speculative task to stop and cancel if still running
+                kill_event.set()
+                if speculative_task is not None and not speculative_task.done():
+                    speculative_task.cancel()
                 # Post-stream: update budget with real token cost
                 # In finally block to charge even on client disconnect
                 if stream_usage:
