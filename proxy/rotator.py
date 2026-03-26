@@ -408,13 +408,15 @@ class RotatorAgent(BaseAgent):
             # Forward request with cross-provider fallback
             start_req = time.time()
             session = await self._get_session()
-            # Bind mutable cost reference so streaming can charge budget
+            # Per-request cost dict: isolated from concurrent requests so
+            # concurrent streams cannot overwrite each other's budget reference.
             async with self._budget_lock:
-                self.forwarder._cost_ref = {"total": self.total_cost_today}
-            await self.forwarder.forward_with_fallback(ctx, target, headers, session)
-            # Sync back cost from streaming (if it was updated)
+                cost_ref: dict[str, float] = {"total": self.total_cost_today}
+            await self.forwarder.forward_with_fallback(ctx, target, headers, session,
+                                                       cost_ref=cost_ref)
+            # Sync back real token cost from streaming (if updated)
             async with self._budget_lock:
-                self.total_cost_today = self.forwarder._cost_ref.get("total", self.total_cost_today)
+                self.total_cost_today = cost_ref.get("total", self.total_cost_today)
 
             ctx.metadata["duration"] = time.time() - start_req
 
