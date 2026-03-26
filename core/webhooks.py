@@ -71,15 +71,13 @@ _PRIVATE_NETWORKS = [
 
 
 def _validate_webhook_url(url: str) -> None:
-    """Raise ValueError if url targets a private/internal network (SSRF guard).
+    """Raise ValueError if url is structurally invalid or targets a private IP literal.
 
-    Checks:
-      1. Scheme must be http or https — blocks file://, gopher://, etc.
-      2. Host must be present.
-      3. If host is an IP literal, it must not fall in a private/reserved range.
-      4. If host is a hostname, it is resolved synchronously (cached by the OS
-         resolver) and the resulting IP is checked.  DNS failure is fail-open to
-         avoid blocking legitimate webhooks on transient DNS errors.
+    This is a *load-time* structural check only — it catches obvious mistakes
+    (wrong scheme, bare IP targeting internal ranges) but does NOT prevent DNS
+    rebinding for hostname-based URLs.  The actual runtime SSRF guard is
+    _SSRFBlockingResolver, which validates the resolved IP at aiohttp connect
+    time, after every DNS lookup, preventing rebinding attacks.
     """
     try:
         parsed = urllib.parse.urlparse(url)
@@ -93,30 +91,56 @@ def _validate_webhook_url(url: str) -> None:
     if not host:
         raise ValueError("Webhook URL has no host")
 
-    # Try host as an IP literal first (no DNS needed)
+    # Only check IP literals here — no DNS resolution (TOCTOU / DNS rebinding risk).
+    # Hostname-based URLs are validated by _SSRFBlockingResolver at connect time.
     try:
         ip = ipaddress.ip_address(host)
         for net in _PRIVATE_NETWORKS:
             if ip in net:
                 raise ValueError(f"Webhook URL targets private/reserved IP {ip}")
-        return
     except ValueError as exc:
-        # Re-raise SSRF-specific errors; otherwise host is a hostname, continue
         if "private/reserved" in str(exc):
             raise
+        # Not an IP literal — hostname validation deferred to _SSRFBlockingResolver
 
-    # Hostname — resolve to IP and validate (blocking; webhooks are rare events)
-    try:
-        resolved = socket.gethostbyname(host)
-        ip = ipaddress.ip_address(resolved)
-        for net in _PRIVATE_NETWORKS:
-            if ip in net:
-                raise ValueError(
-                    f"Webhook URL host '{host}' resolves to private/reserved IP {ip}"
-                )
-    except OSError:
-        # DNS failure — fail-open (don't block on transient resolver errors)
-        pass
+
+class _SSRFBlockingResolver(aiohttp.abc.AbstractResolver):
+    """aiohttp resolver that validates resolved IPs against private CIDR ranges.
+
+    By plugging into the TCPConnector, this check runs at the moment aiohttp
+    resolves a hostname before opening a TCP socket — AFTER every DNS lookup.
+    This prevents DNS rebinding: an attacker cannot serve a public IP during
+    _validate_webhook_url() at load time and a private IP at request time,
+    because we re-check every time a connection is established.
+
+    Fail-closed: DNS failures propagate as OSError → aiohttp raises
+    ClientConnectorError, the webhook delivery fails, and the exception is
+    logged.  We never silently allow an unresolved hostname through.
+    """
+
+    def __init__(self) -> None:
+        self._resolver = aiohttp.resolver.DefaultResolver()
+
+    async def resolve(
+        self, hostname: str, port: int = 0, family: int = socket.AF_INET
+    ) -> list:
+        # DNS failure propagates here — fail-closed by default (no except)
+        addrs = await self._resolver.resolve(hostname, port, family)
+        for addr in addrs:
+            try:
+                ip = ipaddress.ip_address(addr["host"])
+            except ValueError:
+                continue
+            for net in _PRIVATE_NETWORKS:
+                if ip in net:
+                    raise OSError(
+                        f"SSRF blocked: {hostname!r} resolved to "
+                        f"private/reserved IP {ip} ({net})"
+                    )
+        return addrs
+
+    async def close(self) -> None:
+        await self._resolver.close()
 
 
 # Minimum interval between identical events (debounce)
@@ -170,8 +194,12 @@ class WebhookDispatcher:
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
+            # _SSRFBlockingResolver validates the resolved IP at connect time,
+            # preventing DNS rebinding attacks that bypass load-time URL checks.
+            connector = aiohttp.TCPConnector(resolver=_SSRFBlockingResolver())
             self._session = aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=10)
+                connector=connector,
+                timeout=aiohttp.ClientTimeout(total=10),
             )
         return self._session
 
