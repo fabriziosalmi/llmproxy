@@ -176,7 +176,6 @@ class RequestForwarder:
         ttft_start = time.perf_counter()
         first_chunk_seen = False
         circuit_success_reported = False
-        budget_lock = self._budget_lock
         # cost_ref is passed per-request — never shared across concurrent requests
         if cost_ref is None:
             cost_ref = {}
@@ -255,8 +254,10 @@ class RequestForwarder:
                     c_tok = stream_usage.get("completion_tokens") or stream_usage.get("candidatesTokenCount", 0)
                     model_name = ctx.body.get("model", "")
                     real_cost = estimate_cost(model_name, p_tok, c_tok)
-                    async with budget_lock:
-                        cost_ref["total"] = cost_ref.get("total", 0.0) + real_cost
+                    # Accumulate only the delta for this request; the rotator
+                    # adds it atomically under budget_lock. No lock needed here
+                    # because cost_ref is per-request and not shared.
+                    cost_ref["delta"] = cost_ref.get("delta", 0.0) + real_cost
                     ctx.metadata["_stream_usage"] = {"prompt_tokens": p_tok, "completion_tokens": c_tok}
                     ctx.metadata["_stream_cost_usd"] = round(real_cost, 6)
 
