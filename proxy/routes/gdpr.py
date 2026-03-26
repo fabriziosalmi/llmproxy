@@ -8,9 +8,10 @@ Endpoints:
   POST /api/v1/gdpr/purge              — Manual trigger: purge expired records
 """
 
+import json
 import time
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Request, HTTPException
 
 logger = logging.getLogger("llmproxy.routes.gdpr")
 
@@ -18,8 +19,24 @@ logger = logging.getLogger("llmproxy.routes.gdpr")
 def create_router(agent) -> APIRouter:
     router = APIRouter()
 
+    def _check_admin_auth(request: Request):
+        """Enforce API key auth on GDPR mutating endpoints.
+
+        Unauthenticated access to erase/export allows any caller to delete or
+        exfiltrate all subject data without a trace.  Auth is skipped only when
+        explicitly disabled (development mode).
+        """
+        if not agent.config.get("server", {}).get("auth", {}).get("enabled", False):
+            return
+        auth_header = request.headers.get("Authorization", "")
+        token = auth_header.replace("Bearer ", "").strip()
+        valid_keys = agent._get_api_keys()
+        if not token or token not in valid_keys:
+            raise HTTPException(status_code=401, detail="GDPR: Unauthorized")
+
     @router.post("/api/v1/gdpr/erase/{subject}")
-    async def erase_subject(subject: str):
+    async def erase_subject(subject: str, request: Request):
+        _check_admin_auth(request)
         """Right to erasure (GDPR Article 17).
 
         Deletes all audit_log, spend_log, and user_roles entries
@@ -32,7 +49,14 @@ def create_router(agent) -> APIRouter:
         if total_deleted == 0:
             raise HTTPException(status_code=404, detail=f"No data found for subject '{subject}'")
 
-        # Immutable audit of the erasure itself (GDPR requires this)
+        # Immutable audit of the erasure itself (GDPR requires this).
+        # Use json.dumps — never interpolate subject directly into a JSON string
+        # (subject may contain quotes/braces that break JSON structure).
+        audit_meta = json.dumps({
+            "action": "erase",
+            "subject": subject,
+            "deleted": total_deleted,
+        }, separators=(",", ":"))
         await agent.store.log_audit(
             ts=int(time.time()),
             req_id=f"gdpr-erase-{subject[:16]}",
@@ -47,7 +71,7 @@ def create_router(agent) -> APIRouter:
             latency_ms=0.0,
             blocked=False,
             block_reason="",
-            metadata=f'{{"action":"erase","subject":"{subject}","deleted":{total_deleted}}}',
+            metadata=audit_meta,
         )
 
         logger.info(f"GDPR erasure: subject='{subject}' deleted={result}")
@@ -58,7 +82,8 @@ def create_router(agent) -> APIRouter:
         }
 
     @router.get("/api/v1/gdpr/export/{subject}")
-    async def export_subject(subject: str):
+    async def export_subject(subject: str, request: Request):
+        _check_admin_auth(request)
         """Data Subject Access Request (GDPR Article 15).
 
         Returns all data associated with the subject, scrubbed of
