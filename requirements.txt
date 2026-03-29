@@ -30,7 +30,7 @@ opentelemetry-instrumentation-aiohttp-server>=0.46b0
 opentelemetry-exporter-otlp>=1.25.0
 
 # Utilities
-cachetools==6.2.4
+cachetools==7.0.5
 
 # Type stubs
 types-PyYAML>=6.0.0
