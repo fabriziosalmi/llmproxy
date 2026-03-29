@@ -29,7 +29,7 @@ SecBeat (L1 — Ingress)
 llmproxy (L3 — Application)
   ├── ASGI firewall (byte-level + encoding detection)
   ├── SecurityShield (injection scoring, PII masking, trajectory analysis)
-  ├── Lexical injection detection (60 patterns, 8 categories, multilingual)
+  ├── Lexical injection detection (54 patterns, 8 categories, multilingual)
   ├── Cross-session threat intelligence (ThreatLedger)
   ├── 5-ring plugin pipeline (18 marketplace plugins)
   ├── Cost-aware routing + budget enforcement

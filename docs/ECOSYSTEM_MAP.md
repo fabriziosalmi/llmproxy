@@ -5,7 +5,7 @@
 | # | Project | Role | Tech | Status |
 |---|---------|------|------|--------|
 | 1 | **SecBeat/edge99** | Edge ingress (WAF, DDoS, TLS, HTTP/3) | Rust, eBPF, K3s | Production (5 POP) |
-| 2 | **llmproxy** | LLM security gateway | Python, FastAPI | v1.7.1 (687 tests) |
+| 2 | **llmproxy** | LLM security gateway | Python, FastAPI | v1.10.1 (870 tests) |
 | 3 | **secure-proxy-manager** | Network egress filter | Squid, Python | Production |
 | 4 | **CyberAPI** | Threat intelligence SaaS | FastAPI, Redis | Production (revenue) |
 | 5 | **Wildbox** | SOC/SIEM command center | Next.js, FastAPI, 10 services | v0.5.5 |

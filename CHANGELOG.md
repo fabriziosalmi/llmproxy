@@ -2,6 +2,41 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.10.1] — 2026-03-29
+
+### Critical Fixes (SEV-0)
+- **Double budget charging** — Cost was added in both `rotator.py` (via `cost_ref`) and `chat.py`, exhausting the daily budget at 2x the real spend rate. Removed the duplicate in `chat.py`.
+- **admin/reload crash** — Called `_compute_config_hash()` which didn't exist; fixed to `_compute_config_hash_sync()`.
+- **AI guard lost after config reload** — `SecurityShield` was recreated without `assistant=` param, silently disabling `inspect_response_ai()` and `detect_anomaly()`.
+- **GDPR purge without auth** — `POST /api/v1/gdpr/purge` had no `_check_admin_auth()` call; anyone could trigger data deletion.
+
+### Race Conditions (SEV-1)
+- **HTTP session creation race** — `_get_session()` now uses `asyncio.Lock` with double-check locking. Previously, concurrent requests could both create sessions, orphaning TCP connectors.
+- **CircuitBreaker async-safety** — `can_execute()`, `report_success()`, `report_failure()` are now `async` with `asyncio.Lock`. Half-open state admits exactly one probe request via `_half_open_probe_active` flag.
+- **Firewall counter atomicity** — `block_by_signature` and `block_by_encoding` changed from `dict` to `defaultdict(int)`, eliminating the non-atomic `get()+set()` read-modify-write pattern.
+
+### Design Fixes (SEV-2)
+- **SQLiteStore persistent connection** — Replaced per-query `aiosqlite.connect()` with a single persistent connection (`_get_conn()`), matching the `CacheBackend` pattern. Eliminates connection open/close overhead and WAL lock contention.
+- **Google adapter API key leak** — API key moved from URL `?key=` query parameter to `x-goog-api-key` header. Keys no longer appear in logs, HTTP Referer headers, or proxy caches.
+- **Session ID derived from token hash** — `session_id` is now `sha256(token)[:16]` instead of the raw API key. Secrets no longer stored in `session_memory`, audit logs, or log messages.
+- **SecurityShield.inspect() now async** — `semantic_scan()` runs in `asyncio.run_in_executor()` to avoid blocking the event loop on CPU-intensive embedding computation.
+- **`_last_eviction` instance-level** — Moved from class variable to instance variable; multiple `SecurityShield` instances no longer interfere with each other's eviction timing.
+
+### Performance (SEV-3)
+- **Pricing prefix specificity** — Prefix list sorted longest-first so `gpt-4o-mini` matches before `gpt-4o` for versioned model names like `gpt-4o-mini-2025-01`.
+- **Streaming spend_log accuracy** — Forwarder now logs spend entries with real post-stream token counts directly in the `finally` block; `chat.py` no longer logs cost=0 for streaming requests.
+- **detect_steganography single pass** — Merged 3 separate O(n) character scans + 2 counting passes into a single O(n) pass with accumulated counters. Regex pre-compiled at class level.
+- **Hot path imports to top-level** — 6 lazy imports (`resolve_model`, `update_endpoint_stats`, `MetricsTracker`, `TraceManager`, `EventType`, `estimate_cost`) moved from per-request to module level.
+
+### Docs
+- README: test count 595 → 870, injection corpus 60/57 → 54 (actual), coverage gate 50 → 65
+
+### Stats
+- 870/870 tests passing
+- 24 files changed, +570 −436 lines
+
+---
+
 ## [1.10.0] — 2026-03-26
 
 ### Security — Architectural (Fail-Closed by Default)

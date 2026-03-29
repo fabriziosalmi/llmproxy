@@ -1,6 +1,6 @@
 # LLMProxy — LLM Security Gateway
 
-Security-first proxy for Large Language Models with multi-provider support (15 providers), cross-provider fallback, per-model pricing, cost-aware smart routing, ring-based plugin pipeline, WASM-sandboxed plugin execution, NLP-powered PII detection, cross-session threat intelligence, HMAC response signing, semantic injection detection (60-pattern multilingual corpus), GDPR compliance (right to erasure, DSAR), immutable audit ledger, global fail-closed auth middleware, and a real-time Security Operations Center UI.
+Security-first proxy for Large Language Models with multi-provider support (15 providers), cross-provider fallback, per-model pricing, cost-aware smart routing, ring-based plugin pipeline, WASM-sandboxed plugin execution, NLP-powered PII detection, cross-session threat intelligence, HMAC response signing, semantic injection detection (54-pattern multilingual corpus), GDPR compliance (right to erasure, DSAR), immutable audit ledger, global fail-closed auth middleware, and a real-time Security Operations Center UI.
 
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)
@@ -175,7 +175,7 @@ Deep inspection layer wired pre-INGRESS in the request chain:
 - **Cross-session threat intelligence** (`core/threat_ledger.py`): Aggregates threat scores by IP and API key across sessions. Detects coordinated attacks where the same actor rotates session IDs. Configurable threshold, window, and min_events.
 - **Injection scoring**: Regex-based threat scoring with configurable threshold.
 - **PII detection & masking**: Dual-mode — Presidio NLP (opt-in, 18 entity types) with regex fallback (email, phone, SSN, credit card, IBAN). `mask_pii()` replaces PII with vault tokens; `demask_pii()` restores originals.
-- **Lexical injection detection** (`core/semantic_analyzer.py`): Sliding-window trigram Jaccard similarity with dual-gate system (overlap + similarity thresholds) against 60 known injection patterns. This is a lexical method (not ML-based) — catches synonym substitution, multilingual injection (IT/DE/FR/ES/JA/KO/AR), verbose wrapping, and injections embedded in long prompts. 8 categories. Adaptive thresholds reduce false positives on common English words. Zero external deps, <1ms latency.
+- **Lexical injection detection** (`core/semantic_analyzer.py`): Sliding-window trigram Jaccard similarity with dual-gate system (overlap + similarity thresholds) against 54 known injection patterns. This is a lexical method (not ML-based) — catches synonym substitution, multilingual injection (IT/DE/FR/ES/JA/KO/AR), verbose wrapping, and injections embedded in long prompts. 8 categories. Adaptive thresholds reduce false positives on common English words. Zero external deps, <1ms latency.
 - **Response signing** (`core/response_signer.py`): HMAC-SHA256 attestation (proxy→client tamper detection). Signs `model|provider|timestamp|request_id|body`. Verifiable via `X-LLMProxy-Signature` header. Constant-time comparison prevents timing attacks. Note: this proves the response wasn't modified after leaving the proxy — it does not prove which LLM generated it (no provider signs responses today).
 - **Wired in `RotatorAgent.proxy_request()`**: Runs before the plugin INGRESS ring — blocked requests return 403 with diagnostic message.
 
@@ -543,10 +543,10 @@ All sensitive values are loaded via **Infisical SDK** with environment variable 
 
 ## Testing
 
-595+ tests across 30 modules, all passing. Unit tests + HTTP integration + pipeline E2E + property-based fuzz (Hypothesis) + **31 mathematical invariant proofs** + concurrency stress tests + performance benchmarks.
+870+ tests across 45 modules, all passing. Unit tests + HTTP integration + pipeline E2E + property-based fuzz (Hypothesis) + **31 mathematical invariant proofs** + concurrency stress tests + performance benchmarks.
 
 ```bash
-make test              # Fast: 595 tests, ~5s
+make test              # Fast: 870 tests, ~18s
 make test-all          # Full: includes e2e, fuzz, store
 make bench             # Benchmarks: 22 perf tests with pytest-benchmark
 
@@ -563,7 +563,7 @@ python -m pytest tests/test_invariants.py tests/test_determinism.py tests/test_c
 
 | Category | Tests | Method | What it proves |
 |----------|-------|--------|----------------|
-| **Injection corpus** | I1-I1c | Exhaustive (57 patterns) | Zero false negatives — every known attack self-detects with score ≥ 0.90 |
+| **Injection corpus** | I1-I1c | Exhaustive (54 patterns) | Zero false negatives — every known attack self-detects with score ≥ 0.90 |
 | **Attack monotonicity** | I2 | Hypothesis | Appending attack to clean text always triggers detection |
 | **Jaccard axioms** | I3-I5 | Hypothesis (500 examples) | Symmetry J(A,B)=J(B,A), bounds [0,1], identity J(A,A)=1 |
 | **Normalize idempotence** | I6 | Hypothesis (200 examples) | f(f(x)) = f(x) for all Unicode input |
@@ -729,7 +729,7 @@ Pre-built configs in `monitoring/`:
 | **Dependency Audit** | `pip-audit` (non-blocking) |
 | **Supply Chain** | `verify_deps.py --strict` + `.pth` malware scan + blocked package check |
 | **Syntax** | `python -m compileall` on all modules |
-| **Test + Coverage** | 595+ tests, `--cov-fail-under=50` |
+| **Test + Coverage** | 870+ tests, `--cov-fail-under=65` |
 | **Mathematical Invariants** | 31 invariant proofs with `-x` (fail-fast) |
 | **Docker Size** | Image < 500MB |
 

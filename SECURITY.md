@@ -58,8 +58,9 @@ LLMProxy implements defense-in-depth with 6 layers:
 
 | Version | Supported |
 |---------|-----------|
-| 1.7.x   | Yes       |
-| < 1.7   | No        |
+| 1.10.x  | Yes       |
+| 1.9.x   | Yes       |
+| < 1.9   | No        |
 
 ## Security Updates
 
