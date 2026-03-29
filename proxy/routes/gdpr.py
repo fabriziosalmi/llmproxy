@@ -131,8 +131,9 @@ def create_router(agent) -> APIRouter:
         }
 
     @router.post("/api/v1/gdpr/purge")
-    async def manual_purge():
+    async def manual_purge(request: Request):
         """Manual trigger: purge records older than retention period."""
+        _check_admin_auth(request)
         gdpr_cfg = agent.config.get("gdpr", {})
         retention_days = gdpr_cfg.get("retention_days", 90)
         result = await agent.store.purge_expired(retention_days)

@@ -32,11 +32,11 @@ class GoogleAdapter(BaseModelAdapter):
         model = body.get("model", "text-embedding-004")
         url = f"{base_url.rstrip('/')}/models/{model}:embedContent"
 
-        # Move API key from auth header to query param
+        # Auth via header (not URL query param — keys in URLs leak to logs/referers)
         google_headers = dict(headers)
         auth = google_headers.pop("Authorization", "")
         if auth.startswith("Bearer "):
-            url += f"?key={auth[7:]}"
+            google_headers["x-goog-api-key"] = auth[7:]
         google_headers["content-type"] = "application/json"
 
         # Translate input — OpenAI sends string or list of strings
@@ -84,14 +84,13 @@ class GoogleAdapter(BaseModelAdapter):
         action = "streamGenerateContent" if stream else "generateContent"
         url = f"{base_url.rstrip('/')}/models/{model}:{action}"
 
-        # If API key is in Authorization header, move to query param
+        # Auth via header (not URL query param — keys in URLs leak to logs/referers)
         google_headers = dict(headers)
         auth = google_headers.pop("Authorization", "")
         if auth.startswith("Bearer "):
-            api_key = auth[7:]
-            url += f"?key={api_key}"
+            google_headers["x-goog-api-key"] = auth[7:]
         if stream:
-            url += "&" if "?" in url else "?"
+            url += "?" if "?" not in url else "&"
             url += "alt=sse"
 
         google_headers["content-type"] = "application/json"

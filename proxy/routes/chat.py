@@ -1,11 +1,19 @@
 """Chat completion route: /v1/chat/completions — the core proxy endpoint."""
+import hashlib
 import json
 import time
 import asyncio
+import datetime as _dt
 import logging
 
 from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.security import APIKeyHeader
+
+from core.metrics import MetricsTracker
+from core.tracing import TraceManager
+from core.webhooks import EventType
+from core.pricing import estimate_cost
+from core.tokenizer import count_messages_tokens
 
 logger = logging.getLogger("llmproxy.routes.chat")
 
@@ -17,11 +25,6 @@ def create_router(agent) -> APIRouter:
 
     @router.post("/v1/chat/completions")
     async def chat_completions(request: Request, api_key: str = Depends(API_KEY_HEADER)):
-        # Lazy imports — avoids pulling in heavy deps (otel, sentry) at import time
-        from core.metrics import MetricsTracker
-        from core.tracing import TraceManager
-        from core.webhooks import EventType
-
         if agent.config["server"]["auth"]["enabled"]:
             if not api_key:
                 MetricsTracker.track_auth_failure("missing_key")
@@ -78,10 +81,14 @@ def create_router(agent) -> APIRouter:
 
         start_time = time.time()
         try:
-            # Use token as session_id when available; fall back to client IP to
-            # avoid collapsing ALL anonymous users into a single trajectory bucket
-            # (which would cross-contaminate threat scores across unrelated clients).
-            session_id = token if 'token' in locals() else (request.client.host if request.client else "anon")
+            # Derive session_id from a hash of the token (never store the raw
+            # secret in session_memory, logs, or audit tables).  Fall back to
+            # client IP to avoid collapsing ALL anonymous users into a single
+            # trajectory bucket.
+            if 'token' in locals() and token:
+                session_id = hashlib.sha256(token.encode()).hexdigest()[:16]
+            else:
+                session_id = request.client.host if request.client else "anon"
             body = await request.json()
 
             # Request deduplication via X-Idempotency-Key header
@@ -102,12 +109,10 @@ def create_router(agent) -> APIRouter:
                     "latency_ms": round(duration * 1000, 1),
                     "status": response.status_code,
                 }))
-            # Token-based cost estimate using per-model pricing table.
-            # Prefer actual usage fields from the response; fall back to
-            # char-count heuristic (~4 chars/token) for streaming responses
-            # where the body is not available as a single blob.
-            from core.pricing import estimate_cost, estimate_cost_pre_flight
-            from core.tokenizer import count_messages_tokens
+            # Budget tracking: cost is already charged atomically in
+            # rotator.proxy_request() via cost_ref["delta"] (for both
+            # streaming and non-streaming).  We only read the current
+            # total here for metrics/webhooks — do NOT add cost again.
             cost_usd = 0.0
             model_name = body.get("model", "")
             try:
@@ -116,14 +121,9 @@ def create_router(agent) -> APIRouter:
                     in_tok = usage.get("prompt_tokens") or count_messages_tokens(body.get("messages", []), model_name)
                     out_tok = usage.get("completion_tokens", 0)
                     cost_usd = estimate_cost(model_name, in_tok, out_tok)
-                else:
-                    # Streaming: estimate from prompt using tiktoken
-                    est_tokens = count_messages_tokens(body.get("messages", []), model_name)
-                    cost_usd = estimate_cost_pre_flight(model_name, est_tokens)
             except (json.JSONDecodeError, AttributeError, UnicodeDecodeError):
                 pass
             async with agent._budget_lock:
-                agent.total_cost_today += cost_usd
                 budget_cfg = agent.config.get("budget", {})
                 daily_limit = budget_cfg.get("daily_limit", 50.0)
                 soft_limit = budget_cfg.get("soft_limit", 40.0)
@@ -134,11 +134,14 @@ def create_router(agent) -> APIRouter:
                     # Immediate flush on critical threshold — don't risk losing budget state
                     agent._spawn_task(agent.flush_budget_now())
 
-            # Log spend + audit (async, non-blocking)
-            import datetime as _dt
+            # Log spend + audit (async, non-blocking).
+            # For streaming responses, spend is logged by the forwarder's
+            # finally block (which has the real token counts and cost).
+            # We still log the audit entry here for all requests.
             _now = int(time.time())
             _date = _dt.date.today().isoformat()
             _key = (token[:8] + "...") if 'token' in locals() and token else ""
+            _is_streaming = not hasattr(response, "body")
             # Extract metadata from response headers (set by rotator.proxy_request)
             _provider = ""
             _req_id = ""
@@ -158,11 +161,14 @@ def create_router(agent) -> APIRouter:
 
             async def _persist_logs():
                 try:
-                    await agent.store.log_spend(
-                        ts=_now, date=_date, key_prefix=_key, model=model_name,
-                        provider=_provider, prompt_tokens=_in_tok, completion_tokens=_out_tok,
-                        cost_usd=cost_usd, latency_ms=round(duration * 1000, 1), status=_status,
-                    )
+                    # Spend log: only for non-streaming (streaming is logged
+                    # by the forwarder with real post-stream token counts).
+                    if not _is_streaming:
+                        await agent.store.log_spend(
+                            ts=_now, date=_date, key_prefix=_key, model=model_name,
+                            provider=_provider, prompt_tokens=_in_tok, completion_tokens=_out_tok,
+                            cost_usd=cost_usd, latency_ms=round(duration * 1000, 1), status=_status,
+                        )
                     await agent.store.log_audit(
                         ts=_now, req_id=_req_id, session_id=session_id[:16],
                         key_prefix=_key, model=model_name, provider=_provider,

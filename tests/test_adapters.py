@@ -284,13 +284,15 @@ class TestGoogleAdapter:
         assert "streamGenerateContent" in url
         assert "alt=sse" in url
 
-    def test_translate_request_api_key_in_url(self):
+    def test_translate_request_api_key_in_header(self):
+        """API key must be in x-goog-api-key header, NOT in URL query params."""
         url, _, headers = self.adapter.translate_request(
             "https://generativelanguage.googleapis.com/v1beta",
             {"model": "gemini-2.5-flash", "messages": [{"role": "user", "content": "Hi"}]},
             dict(OPENAI_HEADERS),
         )
-        assert "key=sk-test-key-123" in url
+        assert "key=" not in url  # Must NOT leak to URL
+        assert headers.get("x-goog-api-key") == "sk-test-key-123"
         assert "Authorization" not in headers
 
     def test_translate_request_messages_to_contents(self):

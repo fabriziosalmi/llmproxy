@@ -60,12 +60,12 @@ class RequestForwarder:
         """Forward a single request (non-streaming) with circuit breaker tracking."""
         response = await adapter.request(target_url, translated_body, translated_headers, session)
         if response.status_code in (429, 500, 502, 503, 504):
-            cb.report_failure()
+            await cb.report_failure()
             raise HTTPException(
                 status_code=response.status_code,
                 detail=f"Upstream {endpoint_id} returned {response.status_code}",
             )
-        cb.report_success()
+        await cb.report_success()
         return response
 
     async def forward_with_fallback(self, ctx, target, headers, session,
@@ -115,7 +115,7 @@ class RequestForwarder:
 
             # Circuit breaker check
             cb = self.circuit_manager.get_breaker(endpoint_id)
-            if not cb.can_execute():
+            if not await cb.can_execute():
                 if attempt["is_fallback"]:
                     continue
                 last_error = HTTPException(
@@ -214,7 +214,7 @@ class RequestForwarder:
 
                     if not first_chunk_seen:
                         first_chunk_seen = True
-                        cb.report_success()
+                        await cb.report_success()
                         circuit_success_reported = True
                         ttft = time.perf_counter() - ttft_start
                         MetricsTracker.track_ttft(endpoint_id, ttft)
@@ -239,7 +239,7 @@ class RequestForwarder:
                     yield chunk
             except (asyncio.TimeoutError, OSError, RuntimeError) as e:
                 if not circuit_success_reported:
-                    cb.report_failure()
+                    await cb.report_failure()
                 raise e
             finally:
                 # Signal speculative task to stop and cancel if still running
@@ -260,6 +260,30 @@ class RequestForwarder:
                     cost_ref["delta"] = cost_ref.get("delta", 0.0) + real_cost
                     ctx.metadata["_stream_usage"] = {"prompt_tokens": p_tok, "completion_tokens": c_tok}
                     ctx.metadata["_stream_cost_usd"] = round(real_cost, 6)
+
+                    # Log spend entry for streaming requests directly here,
+                    # because chat.py cannot read response.body for streaming.
+                    if self._add_log:
+                        import datetime as _dt
+                        import time as _time
+                        try:
+                            store = ctx.state.extra.get("store") if ctx.state else None
+                            if store and hasattr(store, "log_spend"):
+                                _now = int(_time.time())
+                                _date = _dt.date.today().isoformat()
+                                _key = ctx.metadata.get("_key_prefix", "")
+                                _provider = ctx.metadata.get("_provider", "")
+                                _req_id = ctx.metadata.get("req_id", "")
+                                await store.log_spend(
+                                    ts=_now, date=_date, key_prefix=_key,
+                                    model=model_name, provider=_provider,
+                                    prompt_tokens=p_tok, completion_tokens=c_tok,
+                                    cost_usd=real_cost,
+                                    latency_ms=round(ctx.metadata.get("duration", 0) * 1000, 1),
+                                    status=200,
+                                )
+                        except Exception as e:
+                            logger.debug(f"Stream spend log skipped: {e}")
 
         ctx.response = StreamingResponse(stream_generator(), media_type="text/event-stream")
         return ctx.response

@@ -11,7 +11,7 @@ Targets: telemetry.py, models.py, completions.py, embeddings.py,
 import time
 import asyncio
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, AsyncMock
 from httpx import AsyncClient, ASGITransport
 from fastapi import FastAPI
 
@@ -40,7 +40,9 @@ def _make_mock_agent():
 
     # Circuit manager mock
     breaker = MagicMock()
-    breaker.can_execute.return_value = True
+    breaker.can_execute = AsyncMock(return_value=True)
+    breaker.report_success = AsyncMock()
+    breaker.report_failure = AsyncMock()
     agent.circuit_manager = MagicMock()
     agent.circuit_manager.get_breaker.return_value = breaker
 

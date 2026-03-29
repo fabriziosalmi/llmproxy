@@ -188,7 +188,7 @@ class PipelineAgent:
                 raise HTTPException(status_code=403, detail=neg_reason)
 
             # Pre-ring: SecurityShield
-            security_error = self.security.inspect(ctx.body, session_id)
+            security_error = await self.security.inspect(ctx.body, session_id)
             if security_error:
                 MetricsTracker.track_injection_blocked()
                 self.negative_cache.add(ctx.body, security_error)
@@ -318,7 +318,7 @@ class TestSecurityShieldE2E:
     async def test_injection_blocked_by_shield(self, pipeline_client, pipeline_agent):
         """SecurityShield blocks injection attempts before any ring fires."""
         # Force security to detect injection
-        pipeline_agent.security.inspect = MagicMock(return_value="Injection detected: SQL")
+        pipeline_agent.security.inspect = AsyncMock(return_value="Injection detected: SQL")
 
         resp = await pipeline_client.post("/v1/chat/completions", json={
             "model": "gpt-4", "messages": [{"role": "user", "content": "'; DROP TABLE users;--"}],
@@ -332,7 +332,7 @@ class TestSecurityShieldE2E:
     async def test_negative_cache_blocks_repeated_attack(self, pipeline_client, pipeline_agent):
         """After SecurityShield blocks, negative cache blocks identical repeat instantly."""
         # First request: SecurityShield blocks and populates negative cache
-        pipeline_agent.security.inspect = MagicMock(return_value="Injection: XSS attempt")
+        pipeline_agent.security.inspect = AsyncMock(return_value="Injection: XSS attempt")
 
         body = {"model": "gpt-4", "messages": [{"role": "user", "content": "<script>alert(1)</script>"}]}
         resp1 = await pipeline_client.post("/v1/chat/completions", json=body)
@@ -340,7 +340,7 @@ class TestSecurityShieldE2E:
 
         # Second request: now make security pass (simulating it wouldn't catch a variant)
         # but negative cache should still block based on first result
-        pipeline_agent.security.inspect = MagicMock(return_value=None)
+        pipeline_agent.security.inspect = AsyncMock(return_value=None)
         resp2 = await pipeline_client.post("/v1/chat/completions", json=body)
         assert resp2.status_code == 403
         # Still blocked — by L1 negative cache, not security shield

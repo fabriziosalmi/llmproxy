@@ -51,10 +51,10 @@ def create_router(agent) -> APIRouter:
     async def health():
         import time as _time
         pool = await agent.store.get_pool()
-        healthy_count = sum(
-            1 for e in pool
-            if agent.circuit_manager.get_breaker(e.id).can_execute()
-        )
+        healthy_count = 0
+        for e in pool:
+            if await agent.circuit_manager.get_breaker(e.id).can_execute():
+                healthy_count += 1
         uptime = _time.time() - getattr(agent, "_start_time", _time.time())
         return {
             "status": "ok",

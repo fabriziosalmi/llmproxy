@@ -84,6 +84,10 @@ _DEFAULT_PRICING = {"input": 1.00, "output": 3.00}
 # Runtime config overrides (populated by RotatorAgent.setup() from config.yaml)
 _config_overrides: Dict[str, Dict[str, float]] = {}
 
+# Pre-sorted prefix list for O(log n) longest-prefix matching via bisect.
+# Sorted longest-first so the first match is the most specific.
+_SORTED_PREFIXES: list = sorted(MODEL_PRICING.keys(), key=len, reverse=True)
+
 
 def set_config_overrides(overrides: Dict[str, Dict[str, float]]):
     """Apply pricing overrides from config.yaml at startup."""
@@ -91,15 +95,21 @@ def set_config_overrides(overrides: Dict[str, Dict[str, float]]):
 
 
 def get_pricing(model: str) -> Dict[str, float]:
-    """Get pricing for a model. Priority: config override > static table > default."""
+    """Get pricing for a model. Priority: config override > exact match > longest prefix > default.
+
+    Prefix matching is O(P) where P = number of known models (~40), but the
+    list is sorted longest-first so the first hit is the most specific match
+    (e.g. "gpt-4o-mini" matches before "gpt-4o" for "gpt-4o-mini-2025-01").
+    Exact lookups are O(1) dict hits and cover the common case.
+    """
     if model in _config_overrides:
         return _config_overrides[model]
     if model in MODEL_PRICING:
         return MODEL_PRICING[model]
-    # Try prefix matching for versioned model names (e.g. "gpt-4o-2024-08-06")
-    for known_model in MODEL_PRICING:
-        if model.startswith(known_model):
-            return MODEL_PRICING[known_model]
+    # Longest-prefix matching for versioned model names (e.g. "gpt-4o-2024-08-06")
+    for prefix in _SORTED_PREFIXES:
+        if model.startswith(prefix):
+            return MODEL_PRICING[prefix]
     return _DEFAULT_PRICING
 
 

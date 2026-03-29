@@ -41,6 +41,9 @@ from core.export import DatasetExporter
 from core.cache import CacheBackend, NegativeCache
 from core.stream_faker import fake_stream
 
+from core.model_resolver import resolve_model
+from plugins.default.neural_router import update_endpoint_stats
+
 from store.base import BaseRepository
 from .adapters.registry import get_adapter
 from .app_factory import create_app
@@ -82,6 +85,7 @@ class RotatorAgent(BaseAgent):
         self.total_cost_today = 0.0
         self._budget_date: str | None = None
         self._budget_lock = asyncio.Lock()
+        self._session_lock = asyncio.Lock()
         self._pending_writes: asyncio.Queue = asyncio.Queue(maxsize=500)
 
         # Strong references for background tasks (prevents GC in Python 3.12+)
@@ -193,7 +197,14 @@ class RotatorAgent(BaseAgent):
     # ── HTTP Session ──
 
     async def _get_session(self) -> aiohttp.ClientSession:
-        if self._session is None or self._session.closed:
+        # Fast path: session already alive — no lock needed
+        if self._session is not None and not self._session.closed:
+            return self._session
+        # Slow path: create session under lock to prevent duplicate connectors
+        async with self._session_lock:
+            # Re-check after acquiring lock (another coroutine may have created it)
+            if self._session is not None and not self._session.closed:
+                return self._session
             http_cfg = self.config.get("server", {})
             timeout_s = int(http_cfg.get("timeout", "30s").rstrip("s"))
             pool_cfg = self.config.get("connection_pool", {})
@@ -216,7 +227,7 @@ class RotatorAgent(BaseAgent):
                 f"HTTP pool: max={connector.limit} per_host={connector.limit_per_host} "
                 f"keepalive={pool_cfg.get('keepalive_timeout', 30)}s"
             )
-        return self._session
+            return self._session
 
     # ── Circuit Breaker Callbacks ──
 
@@ -335,7 +346,7 @@ class RotatorAgent(BaseAgent):
             # Pre-ring: SecurityShield (injection scoring + trajectory + cross-session)
             client_ip = request.client.host if hasattr(request, 'client') and request.client else ""
             key_prefix = session_id[:8] if session_id != "default" else ""
-            security_error = self.security.inspect(
+            security_error = await self.security.inspect(
                 ctx.body, session_id, ip=client_ip, key_prefix=key_prefix,
             )
             if security_error:
@@ -370,7 +381,6 @@ class RotatorAgent(BaseAgent):
                 return ctx.response
 
             # Model alias/group resolution (before routing)
-            from core.model_resolver import resolve_model
             original_model = ctx.body.get("model", "")
             resolved_model = resolve_model(self.config, original_model)
             if resolved_model != original_model:
@@ -421,7 +431,6 @@ class RotatorAgent(BaseAgent):
             ctx.metadata["duration"] = time.time() - start_req
 
             # Update endpoint performance stats for smart routing
-            from plugins.default.neural_router import update_endpoint_stats
             routed_endpoint_id = getattr(
                 ctx.metadata.get("target_endpoint"), 'id',
                 ctx.metadata.get("_provider", "unknown"),

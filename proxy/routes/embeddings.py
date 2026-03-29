@@ -79,7 +79,7 @@ def create_router(agent) -> APIRouter:
             inspect_text = str(text_input)
 
         session_id = token or (request.client.host if request.client else "anon")
-        security_error = agent.security.inspect(
+        security_error = await agent.security.inspect(
             {"messages": [{"role": "user", "content": inspect_text}]},
             session_id,
         )

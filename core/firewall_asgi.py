@@ -4,6 +4,7 @@ import codecs
 import logging
 import re
 import unicodedata
+from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
@@ -45,11 +46,14 @@ class ByteLevelFirewallMiddleware:
       7. ROT13 detection        — catches vtaber cerivbhf vafgehpgvbaf
       8. Signature matching     — 11 known injection patterns
     """
-    # Class-level counters (shared across instances for metrics)
+    # Class-level counters (shared across instances for metrics).
+    # Using defaultdict(int) so that incrementing is a single __iadd__
+    # operation on the C-level int, eliminating the get()+set() race
+    # window present with plain dicts.
     total_scanned = 0
     total_blocked = 0
-    block_by_signature: dict[str, int] = {}
-    block_by_encoding: dict[str, int] = {}  # tracks which encoding caught it
+    block_by_signature: defaultdict = defaultdict(int)
+    block_by_encoding: defaultdict = defaultdict(int)
 
     # Injection detection patterns — specific enough to avoid false positives
     # on legitimate queries like "what is a system prompt?"
@@ -273,12 +277,8 @@ class ByteLevelFirewallMiddleware:
         blocked, sig, encoding = self._scan_payload(full_body)
         if blocked:
             ByteLevelFirewallMiddleware.total_blocked += 1
-            ByteLevelFirewallMiddleware.block_by_signature[sig] = (
-                ByteLevelFirewallMiddleware.block_by_signature.get(sig, 0) + 1
-            )
-            ByteLevelFirewallMiddleware.block_by_encoding[encoding] = (
-                ByteLevelFirewallMiddleware.block_by_encoding.get(encoding, 0) + 1
-            )
+            ByteLevelFirewallMiddleware.block_by_signature[sig] += 1
+            ByteLevelFirewallMiddleware.block_by_encoding[encoding] += 1
             logger.critical(
                 f"FIREWALL BLOCKED: [{sig}] detected via {encoding} decoding. "
                 f"Socket terminated."

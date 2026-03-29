@@ -81,10 +81,11 @@ async def _run_firewall(body: bytes):
 
 def _reset_counters():
     """Reset class-level counters between tests to avoid cross-contamination."""
+    from collections import defaultdict
     ByteLevelFirewallMiddleware.total_scanned = 0
     ByteLevelFirewallMiddleware.total_blocked = 0
-    ByteLevelFirewallMiddleware.block_by_signature = {}
-    ByteLevelFirewallMiddleware.block_by_encoding = {}
+    ByteLevelFirewallMiddleware.block_by_signature = defaultdict(int)
+    ByteLevelFirewallMiddleware.block_by_encoding = defaultdict(int)
 
 
 # ---------------------------------------------------------------------------

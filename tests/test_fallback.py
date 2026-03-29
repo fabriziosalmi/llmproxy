@@ -178,8 +178,8 @@ class TestFallbackCircuitBreaker:
         # Open the primary circuit breaker
         cb = fwd.circuit_manager.get_breaker("openai-ep")
         for _ in range(10):
-            cb.report_failure()
-        assert not cb.can_execute()
+            await cb.report_failure()
+        assert not await cb.can_execute()
 
         primary = _make_mock_adapter("openai")
         fallback = _make_mock_adapter("anthropic", _ok_response())
@@ -217,7 +217,7 @@ class TestFallbackCircuitBreaker:
         for ep_id in ["openai-ep", "anthropic"]:
             cb = fwd.circuit_manager.get_breaker(ep_id)
             for _ in range(10):
-                cb.report_failure()
+                await cb.report_failure()
 
         mock = _make_mock_adapter("openai")
 

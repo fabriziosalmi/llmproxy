@@ -216,13 +216,13 @@ def create_router(agent) -> APIRouter:
         try:
             old_hash = agent._config_hash
             agent.config = agent._load_config()
-            new_hash = agent._compute_config_hash()
+            new_hash = agent._compute_config_hash_sync()
             agent._config_hash = new_hash
             # Reinitialize config-dependent subsystems
             from core.webhooks import WebhookDispatcher
             agent.webhooks = WebhookDispatcher(agent.config)
             from core.security import SecurityShield
-            agent.security = SecurityShield(agent.config)
+            agent.security = SecurityShield(agent.config, assistant=agent.security.assistant)
             await agent._add_log("Config reloaded via admin API", level="SYSTEM")
             return {"status": "reloaded", "changed": old_hash != new_hash}
         except Exception as e:

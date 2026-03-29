@@ -105,13 +105,15 @@ class TestGoogleEmbeddingAdapter:
         )
         assert "models/text-embedding-004:embedContent" in url
 
-    def test_api_key_in_url(self):
+    def test_api_key_in_header(self):
+        """API key must be in x-goog-api-key header, NOT in URL query params."""
         url, _, headers = self.adapter.translate_embedding_request(
             "https://generativelanguage.googleapis.com/v1beta",
             {"model": "text-embedding-004", "input": "Hello"},
             dict(HEADERS),
         )
-        assert "key=sk-test-key-123" in url
+        assert "key=" not in url  # Must NOT leak to URL
+        assert headers.get("x-goog-api-key") == "sk-test-key-123"
         assert "Authorization" not in headers
 
     def test_body_translation(self):

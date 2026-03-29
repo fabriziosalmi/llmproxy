@@ -63,6 +63,8 @@ class SecurityShield:
         # A plain dict's min() scan over 10k entries fires on every new session
         # when at capacity — same DoS pattern fixed in RateLimiter.
         self.session_memory: OrderedDict[str, Any] = OrderedDict()
+        # Instance-level (not class-level) to prevent cross-instance interference
+        self._last_eviction: float = 0.0
 
         # Cross-session threat intelligence (S1: ThreatLedger)
         from core.threat_ledger import ThreatLedger
@@ -224,7 +226,6 @@ class SecurityShield:
     # measurable CPU spikes under load without meaningfully tightening the
     # eviction window (sessions already expire via _SESSION_TTL = 3600 s).
     _EVICTION_INTERVAL = 30.0
-    _last_eviction: float = 0.0
 
     def check_session_trajectory(self, session_id: str, current_prompt: str) -> Optional[str]:
         """Analyzes the 'threat trajectory' of a session to detect multi-turn jailbreaks.
@@ -241,8 +242,8 @@ class SecurityShield:
         # 1. Time-based eviction: purge sessions idle > _SESSION_TTL.
         #    Throttled to once per _EVICTION_INTERVAL to avoid an O(N) dict
         #    scan on every single request (pathological at 10 000 sessions).
-        if now - SecurityShield._last_eviction >= self._EVICTION_INTERVAL:
-            SecurityShield._last_eviction = now
+        if now - self._last_eviction >= self._EVICTION_INTERVAL:
+            self._last_eviction = now
             stale = [sid for sid, data in self.session_memory.items()
                      if now - data["last_seen"] > self._SESSION_TTL]
             for sid in stale:
@@ -303,10 +304,13 @@ class SecurityShield:
                 matched.append(pattern)
         return score, matched
 
-    def inspect(self, body: Dict[str, Any], session_id: str = "default",
-                ip: str = "", key_prefix: str = "") -> Optional[str]:
+    async def inspect(self, body: Dict[str, Any], session_id: str = "default",
+                      ip: str = "", key_prefix: str = "") -> Optional[str]:
         """
         Inspects the request body and session context for security violations.
+
+        Async to avoid blocking the event loop on CPU-intensive operations
+        (semantic analysis, NFKC normalization on large prompts).
 
         Args:
             body: Request body (messages, model, etc.)
@@ -347,10 +351,14 @@ class SecurityShield:
                 return injection_error_msg
 
             # 2b. Semantic Injection Detector (paraphrase-resistant)
+            # Runs in a thread to avoid blocking the event loop on the
+            # embedding/similarity computation for large prompts.
             if self.config.get("semantic_analysis", {}).get("enabled", True):
                 from core.semantic_analyzer import semantic_scan
                 threshold = self.config.get("semantic_analysis", {}).get("threshold", 0.35)
-                result = semantic_scan(prompt, threshold=threshold)
+                result = await asyncio.get_running_loop().run_in_executor(
+                    None, semantic_scan, prompt, threshold,
+                )
                 if result:
                     sim_score, category, matched = result
                     logger.warning(
@@ -535,15 +543,18 @@ class SecurityShield:
         """
         return text
 
+    # Pre-compiled invisible char pattern (class-level, compiled once)
+    _INVISIBLE_RE = re.compile(
+        r'[\u200B-\u200F\uFEFF\u2060-\u2064\u2066-\u2069\u00AD'
+        r'\U000E0001-\U000E007F]'
+    )
+
     def detect_steganography(self, text: str) -> bool:
         """Detect invisible/smuggled characters used for prompt injection evasion.
 
-        This is NOT true steganographic analysis. It detects:
-          1. Zero-width Unicode chars (U+200B..U+200F, U+FEFF, U+2060..U+2064)
-          2. Anomalous whitespace patterns (double+ spaces used for binary encoding)
-          3. Homoglyph mixing (Cyrillic/Greek chars mixed with Latin — used to
-             evade keyword filters, e.g. Cyrillic 'а' looks identical to Latin 'a')
-          4. Unicode tag characters (U+E0001..U+E007F — invisible instruction channel)
+        Single-pass scan for all indicators: invisible chars, whitespace
+        anomalies, and homoglyph script mixing. Previous implementation did
+        3 separate O(n) passes + 2 additional counting passes.
 
         For true watermarking, use HMAC response signing (core/response_signer.py).
         """
@@ -551,45 +562,46 @@ class SecurityShield:
             return False
 
         findings: list[str] = []
+        invisible_count = 0
+        double_space_count = 0
+        latin_count = 0
+        cyrillic_count = 0
+        prev_was_space = False
 
-        # 1. Zero-width characters: U+200B (ZWSP), U+200C (ZWNJ), U+200D (ZWJ),
-        #    U+200E/F (LRM/RLM), U+FEFF (BOM), U+2060-2064 (word joiners),
-        #    U+2066-2069 (bidi isolates), U+00AD (soft hyphen)
-        invisible_pattern = re.compile(
-            r'[\u200B-\u200F\uFEFF\u2060-\u2064\u2066-\u2069\u00AD'
-            r'\U000E0001-\U000E007F]'  # Unicode tag characters (invisible instruction channel)
-        )
-        invisible_chars = invisible_pattern.findall(text)
-        if len(invisible_chars) > max(3, len(text) * 0.01):  # >1% or >3 absolute
-            findings.append(f"invisible_chars={len(invisible_chars)}")
-
-        # 2. Whitespace anomalies (binary encoding via spaces)
-        double_spaces = len(re.findall(r' {2,}', text))
-        if double_spaces > 10:
-            findings.append(f"double_spaces={double_spaces}")
-
-        # 3. Homoglyph detection: Cyrillic/Greek chars mixed with Latin text.
-        #    Pure Cyrillic or pure Latin is fine — mixing is the red flag.
-        import unicodedata
-        scripts_seen: set[str] = set()
+        # Single pass: count invisible chars, double spaces, and script types
         for ch in text:
+            # 1. Invisible characters (zero-width, tags, soft hyphen)
+            if self._INVISIBLE_RE.match(ch):
+                invisible_count += 1
+
+            # 2. Whitespace anomalies (consecutive spaces)
+            if ch == ' ':
+                if prev_was_space:
+                    double_space_count += 1
+                prev_was_space = True
+            else:
+                prev_was_space = False
+
+            # 3. Homoglyph detection: count Latin vs Cyrillic
             if ch.isalpha():
                 name = unicodedata.name(ch, "")
                 if "CYRILLIC" in name:
-                    scripts_seen.add("cyrillic")
-                elif "GREEK" in name:
-                    scripts_seen.add("greek")
-                elif "LATIN" in name or name.startswith("LATIN"):
-                    scripts_seen.add("latin")
-        # Flag if Latin + Cyrillic mixed (classic homoglyph attack)
-        if "latin" in scripts_seen and "cyrillic" in scripts_seen:
-            # Count Cyrillic chars — if < 20% of alpha chars, it's smuggling not bilingual
-            cyrillic_count = sum(1 for ch in text if ch.isalpha() and "CYRILLIC" in unicodedata.name(ch, ""))
-            latin_count = sum(1 for ch in text if ch.isalpha() and "LATIN" in unicodedata.name(ch, ""))
-            total_alpha = cyrillic_count + latin_count
-            minority_ratio = min(cyrillic_count, latin_count) / total_alpha if total_alpha > 0 else 0
-            # If the minority script is < 20% of chars, likely homoglyph smuggling
-            # If ~50/50, it's probably legitimate bilingual content
+                    cyrillic_count += 1
+                elif "LATIN" in name:
+                    latin_count += 1
+
+        # Evaluate thresholds
+        text_len = len(text)
+        if invisible_count > max(3, text_len * 0.01):
+            findings.append(f"invisible_chars={invisible_count}")
+
+        if double_space_count > 10:
+            findings.append(f"double_spaces={double_space_count}")
+
+        # Homoglyph: Latin + Cyrillic mixed with minority < 20%
+        if latin_count > 0 and cyrillic_count > 0:
+            total_alpha = latin_count + cyrillic_count
+            minority_ratio = min(cyrillic_count, latin_count) / total_alpha
             if minority_ratio < 0.20:
                 findings.append(f"homoglyph_mix=latin+cyrillic(minority={minority_ratio:.0%})")
 

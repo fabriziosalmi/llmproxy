@@ -112,7 +112,10 @@ async def select_endpoint(ctx: PluginContext):
         return
 
     # Filter to endpoints with CLOSED/HALF_OPEN circuit breakers
-    healthy = [e for e in pool if rotator.circuit_manager.get_breaker(e.id).can_execute()]
+    healthy = []
+    for e in pool:
+        if await rotator.circuit_manager.get_breaker(e.id).can_execute():
+            healthy.append(e)
     if not healthy:
         ctx.error = "All endpoints offline (circuit OPEN)."
         ctx.stop_chain = True

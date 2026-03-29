@@ -485,9 +485,22 @@ async def test_chat_auth_valid_key(auth_client, agent_with_auth):
 
 @pytest.mark.asyncio
 async def test_budget_persisted_after_request(client, agent, store):
-    """J.5: total_cost_today should be persisted to store after each request."""
+    """J.5: total_cost_today should be persisted to store after each request.
+
+    Budget charging happens inside rotator.proxy_request() via cost_ref.
+    Since we mock proxy_request, we simulate the cost being charged by
+    setting total_cost_today directly (as the real proxy_request would).
+    """
     mock_response = JSONResponse(content=make_openai_response(), status_code=200)
-    agent.proxy_request = AsyncMock(return_value=mock_response)
+    original_proxy_request = agent.proxy_request
+
+    async def _mock_proxy_request(request, body=None, session_id="default"):
+        # Simulate the cost charging that happens inside the real proxy_request
+        async with agent._budget_lock:
+            agent.total_cost_today += 0.001  # small simulated cost
+        return mock_response
+
+    agent.proxy_request = _mock_proxy_request
 
     await client.post("/v1/chat/completions", json={
         "model": "gpt-4",
