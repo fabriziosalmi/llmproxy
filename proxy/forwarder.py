@@ -263,27 +263,25 @@ class RequestForwarder:
 
                     # Log spend entry for streaming requests directly here,
                     # because chat.py cannot read response.body for streaming.
-                    if self._add_log:
+                    try:
                         import datetime as _dt
                         import time as _time
-                        try:
-                            store = ctx.state.extra.get("store") if ctx.state else None
-                            if store and hasattr(store, "log_spend"):
-                                _now = int(_time.time())
-                                _date = _dt.date.today().isoformat()
-                                _key = ctx.metadata.get("_key_prefix", "")
-                                _provider = ctx.metadata.get("_provider", "")
-                                _req_id = ctx.metadata.get("req_id", "")
-                                await store.log_spend(
-                                    ts=_now, date=_date, key_prefix=_key,
-                                    model=model_name, provider=_provider,
-                                    prompt_tokens=p_tok, completion_tokens=c_tok,
-                                    cost_usd=real_cost,
-                                    latency_ms=round(ctx.metadata.get("duration", 0) * 1000, 1),
-                                    status=200,
-                                )
-                        except Exception as e:
-                            logger.debug(f"Stream spend log skipped: {e}")
+                        store = ctx.state.extra.get("store") if ctx.state else None
+                        if store and hasattr(store, "log_spend"):
+                            _now = int(_time.time())
+                            _date = _dt.date.today().isoformat()
+                            _key = ctx.metadata.get("_key_prefix", "")
+                            _provider = ctx.metadata.get("_provider", "")
+                            await store.log_spend(
+                                ts=_now, date=_date, key_prefix=_key,
+                                model=model_name, provider=_provider,
+                                prompt_tokens=p_tok, completion_tokens=c_tok,
+                                cost_usd=real_cost,
+                                latency_ms=round(ctx.metadata.get("duration", 0) * 1000, 1),
+                                status=200,
+                            )
+                    except Exception as e:
+                        logger.debug(f"Stream spend log skipped: {e}")
 
         ctx.response = StreamingResponse(stream_generator(), media_type="text/event-stream")
         return ctx.response

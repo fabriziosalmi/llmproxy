@@ -492,7 +492,6 @@ async def test_budget_persisted_after_request(client, agent, store):
     setting total_cost_today directly (as the real proxy_request would).
     """
     mock_response = JSONResponse(content=make_openai_response(), status_code=200)
-    original_proxy_request = agent.proxy_request
 
     async def _mock_proxy_request(request, body=None, session_id="default"):
         # Simulate the cost charging that happens inside the real proxy_request
