@@ -54,7 +54,9 @@ def validate_config(config: dict) -> list[str]:
 
         if api_key_env:
             val = os.environ.get(api_key_env, "")
-            if val and not val.startswith(("sk-proj-...", "sk-ant-...", "AIza...", "gsk_...")):
+            # Check if the value is a real key (not a placeholder like "sk-proj-...")
+            _PLACEHOLDERS = {"sk-proj-...", "sk-ant-...", "AIza...", "gsk_...", "your-api-key", "CHANGE-ME", ""}
+            if val and val not in _PLACEHOLDERS:
                 active_providers.append(name)
             elif not val:
                 warnings.append(
