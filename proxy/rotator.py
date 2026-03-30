@@ -66,6 +66,19 @@ class ProxyOrchestrator(BaseAgent):
         self.config = self._load_config()
         self._config_hash = self._compute_config_hash_sync()
 
+        # External signature loading (hot-reloaded every 30s)
+        self.signature_store = None
+        try:
+            from core.signature_loader import SignatureStore
+            sig_cfg = self.config.get("security", {}).get("signatures", {})
+            self.signature_store = SignatureStore(
+                signatures_path=sig_cfg.get("signatures_file", "data/signatures.yaml"),
+                corpus_path=sig_cfg.get("corpus_file", "data/injection_corpus.yaml"),
+            )
+            self.signature_store.load()
+        except Exception as e:
+            logger.warning(f"External signatures not loaded, using defaults: {e}")
+
         # Security subsystems
         self.security = SecurityShield(self.config, assistant=assistant)
         self.zt_manager = ZeroTrustManager(self.config)

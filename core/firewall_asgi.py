@@ -62,9 +62,9 @@ class ByteLevelFirewallMiddleware:
     total_scan_time_ms: float = 0.0
     max_scan_time_ms: float = 0.0
 
-    # Injection detection patterns — specific enough to avoid false positives
-    # on legitimate queries like "what is a system prompt?"
-    BANNED_SIGNATURES = [
+    # Fallback signatures used when no SignatureStore is configured.
+    # Production deployments should use data/signatures.yaml instead.
+    _FALLBACK_SIGNATURES = [
         # Original 11 — instruction override & extraction
         b"ignore previous instructions",
         b"ignore all previous",
@@ -100,10 +100,10 @@ class ByteLevelFirewallMiddleware:
         b"emergency override authorized",
     ]
 
-    def __init__(self, app, max_body_bytes: int = 0):
+    def __init__(self, app, max_body_bytes: int = 0, signature_store=None):
         self.app = app
-        # 0 = no byte-level size enforcement (rely on Content-Length guard alone)
         self.max_body_bytes = max_body_bytes
+        self._signature_store = signature_store
 
     # R2-06: Cyrillic/Greek confusable homoglyphs (NFKC doesn't normalize these)
     _CONFUSABLE_MAP = str.maketrans({
@@ -188,10 +188,21 @@ class ByteLevelFirewallMiddleware:
                 continue
         return decoded_parts
 
+    def _get_signatures(self) -> list[bytes]:
+        """Return active signatures — from SignatureStore if available, else fallback."""
+        if self._signature_store and self._signature_store.loaded:
+            return self._signature_store.banned_signatures
+        return self._FALLBACK_SIGNATURES
+
+    def _get_rot13_sigs(self) -> list[bytes]:
+        if self._signature_store and self._signature_store.loaded:
+            return self._signature_store.rot13_signatures
+        return _ROT13_SIGS
+
     def _check_signatures(self, chunk: bytes) -> str | None:
         """Check a normalized chunk against all banned signatures.
         Returns the matched signature string, or None."""
-        for sig in self.BANNED_SIGNATURES:
+        for sig in self._get_signatures():
             if sig in chunk:
                 return sig.decode("utf-8", errors="replace")
         return None
@@ -261,7 +272,7 @@ class ByteLevelFirewallMiddleware:
             decoded_fragments.append((part, "hex"))
 
         # Layer 7: ROT13 (check the already-normalized chunk)
-        for rot_sig in _ROT13_SIGS:
+        for rot_sig in self._get_rot13_sigs():
             if rot_sig in chunk:
                 try:
                     original = codecs.decode(

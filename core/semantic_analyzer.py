@@ -128,8 +128,19 @@ INJECTION_CORPUS: list[tuple[str, str]] = [
 
 _NGRAM_SIZE = 3
 # (trigrams, category, char_len, overlap_ratio)
-# Reset to None whenever _normalize changes so patterns are re-computed.
 _corpus_cache: list[tuple[frozenset[str], str, int, float]] | None = None
+_active_corpus: list[tuple[str, str]] | None = None  # Set by SignatureStore
+
+
+def set_corpus(corpus: list[tuple[str, str]]) -> None:
+    """Replace the active corpus with externally loaded patterns.
+
+    Called by SignatureStore after a successful YAML reload.
+    Invalidates the trigram cache so patterns are re-computed on next scan.
+    """
+    global _active_corpus, _corpus_cache
+    _active_corpus = corpus
+    _corpus_cache = None  # Force re-computation
 
 
 # Pre-compiled regex for _normalize (avoid re-compiling per call)
@@ -278,8 +289,9 @@ def _ensure_corpus():
     if _corpus_cache is not None:
         return
 
+    source = _active_corpus if _active_corpus is not None else INJECTION_CORPUS
     _corpus_cache = []
-    for pattern, category in INJECTION_CORPUS:
+    for pattern, category in source:
         normalized = _normalize(pattern)
         trigrams = _trigrams_from_normalized(normalized)
         char_len = len(normalized)
