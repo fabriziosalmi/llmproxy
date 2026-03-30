@@ -388,9 +388,14 @@ function initEventFeed() {
 
     function connect() {
         try {
+            const _token = localStorage.getItem('proxy_key') || '';
+            if (!_token) {
+                // Defer until user has logged in
+                setTimeout(connect, 2000);
+                return;
+            }
             if (eventSource) eventSource.close();
             errorCount = 0;
-            const _token = localStorage.getItem('proxy_key') || '';
             eventSource = new EventSource(`${window.location.origin}/api/v1/logs?token=${encodeURIComponent(_token)}`);
             eventSource.onmessage = (e) => {
                 errorCount = 0;
