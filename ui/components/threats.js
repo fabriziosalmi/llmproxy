@@ -390,7 +390,8 @@ function initEventFeed() {
         try {
             if (eventSource) eventSource.close();
             errorCount = 0;
-            eventSource = new EventSource(`${window.location.origin}/api/v1/logs`);
+            const _token = localStorage.getItem('proxy_key') || '';
+            eventSource = new EventSource(`${window.location.origin}/api/v1/logs?token=${encodeURIComponent(_token)}`);
             eventSource.onmessage = (e) => {
                 errorCount = 0;
                 try {

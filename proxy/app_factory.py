@@ -117,6 +117,10 @@ def create_app(agent) -> FastAPI:
         if needs_auth and path not in _PUBLIC_EXACT:
             auth_header = request.headers.get("Authorization", "")
             token = auth_header.replace("Bearer ", "").strip()
+            # SSE (EventSource) cannot send custom headers — accept token
+            # from query parameter as fallback for streaming endpoints.
+            if not token:
+                token = request.query_params.get("token", "")
             valid_keys = agent._get_api_keys()
             if not token or token not in valid_keys:
                 from fastapi.responses import JSONResponse
