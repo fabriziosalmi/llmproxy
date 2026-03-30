@@ -475,6 +475,47 @@
 
             <!-- ENDPOINTS VIEW -->
             <div id="view-endpoints" class="content-view hidden">
+                <!-- Add Endpoint -->
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xs font-bold text-white">Endpoint Registry</h2>
+                    <button id="add-endpoint-toggle" class="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg text-[10px] font-bold text-emerald-400 transition-colors">+ Add Endpoint</button>
+                </div>
+                <div id="add-endpoint-form" class="hidden bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-emerald-500/20 p-5 mb-4">
+                    <h3 class="text-[11px] font-bold text-white mb-3">Add LLM Endpoint</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                        <div>
+                            <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Name / ID *</label>
+                            <input id="ep-name" type="text" placeholder="my-openai" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50">
+                        </div>
+                        <div>
+                            <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Base URL *</label>
+                            <input id="ep-url" type="text" placeholder="https://api.openai.com/v1" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50">
+                        </div>
+                        <div>
+                            <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Provider *</label>
+                            <select id="ep-provider" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none bg-[#0a0a0c]">
+                                <option value="openai">OpenAI</option>
+                                <option value="anthropic">Anthropic</option>
+                                <option value="google">Google</option>
+                                <option value="azure">Azure</option>
+                                <option value="ollama">Ollama</option>
+                                <option value="groq">Groq</option>
+                                <option value="together">Together</option>
+                                <option value="mistral">Mistral</option>
+                                <option value="deepseek">DeepSeek</option>
+                                <option value="openrouter">OpenRouter</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Priority</label>
+                            <input id="ep-priority" type="number" value="0" min="0" max="100" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none">
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-end gap-2">
+                        <button id="ep-cancel-btn" class="px-3 py-1.5 text-[10px] font-bold text-slate-500 hover:text-white transition-colors">Cancel</button>
+                        <button id="ep-add-btn" class="px-4 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 rounded-lg text-[10px] font-bold text-emerald-400 transition-colors">Add Endpoint</button>
+                    </div>
+                </div>
                 <div id="registry-container">
                     <!-- Populated by registry.js -->
                 </div>
@@ -575,12 +616,19 @@
                     <div class="flex items-center justify-between mb-3">
                         <h2 class="text-xs font-bold text-white">GDPR Data Subject Rights</h2>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <div>
                             <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Export Subject Data (DSAR)</label>
                             <div class="flex gap-2">
                                 <input id="sec-gdpr-subject" type="text" placeholder="session_id or email..." class="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-[10px] text-white font-mono focus:outline-none focus:border-rose-500/50">
                                 <button id="sec-gdpr-export-btn" class="px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[10px] font-bold text-slate-400 transition-colors">Export</button>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-[9px] font-bold text-rose-400 uppercase tracking-widest mb-1 block">Erase Subject (Art. 17)</label>
+                            <div class="flex gap-2">
+                                <button id="sec-gdpr-erase-btn" class="px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 rounded-lg text-[10px] font-bold text-rose-400 transition-colors">Erase</button>
+                                <button id="sec-gdpr-purge-btn" class="px-3 py-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 rounded-lg text-[10px] font-bold text-amber-400 transition-colors">Purge Expired</button>
                             </div>
                         </div>
                         <div>
@@ -592,9 +640,30 @@
                 </div>
 
                 <!-- Semantic Analyzer Corpus -->
-                <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4">
+                <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4 mb-4">
                     <h2 class="text-xs font-bold text-white mb-3">Semantic Injection Corpus</h2>
                     <div id="sec-corpus-categories" class="grid grid-cols-2 md:grid-cols-4 gap-2"></div>
+                </div>
+
+                <!-- Audit Log Query -->
+                <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <h2 class="text-xs font-bold text-white">Audit Log</h2>
+                        <button id="sec-audit-query-btn" class="px-3 py-1.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 rounded-lg text-[10px] font-bold transition-colors">Query</button>
+                    </div>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+                        <input id="audit-model" type="text" placeholder="Model filter..." class="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-sky-500/50">
+                        <input id="audit-key" type="text" placeholder="Key prefix..." class="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-sky-500/50">
+                        <select id="audit-blocked" class="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-[10px] text-white font-mono focus:outline-none bg-[#0a0a0c]">
+                            <option value="-1">All requests</option>
+                            <option value="1">Blocked only</option>
+                            <option value="0">Passed only</option>
+                        </select>
+                        <input id="audit-limit" type="number" value="25" min="1" max="500" class="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-[10px] text-white font-mono focus:outline-none">
+                    </div>
+                    <div id="sec-audit-results" class="max-h-80 overflow-y-auto">
+                        <p class="text-[10px] text-slate-600 font-mono">Click "Query" to load audit entries.</p>
+                    </div>
                 </div>
             </div>
 
