@@ -171,7 +171,7 @@ class TestModelResolutionDeterminism:
 
         for alias, expected in config["model_aliases"].items():
             for _ in range(100):
-                result = resolve_model(config, alias)
+                result, _ = resolve_model(config, alias)
                 assert result == expected, (
                     f"Alias '{alias}' resolved to '{result}' instead of '{expected}'"
                 )
