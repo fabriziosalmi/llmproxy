@@ -218,5 +218,4 @@ class SmartBudgetGuard(BasePlugin):
         self._session_spend.clear()
         self._team_spend.clear()
         self._hydrated = False
-        self._hydrated = False
         self.logger.info("SmartBudgetGuard unloaded, spend trackers cleared")
