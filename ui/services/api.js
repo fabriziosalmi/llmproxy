@@ -96,4 +96,11 @@ export const api = {
         const qs = new URLSearchParams(params).toString();
         return _json(`${BASE_URL}/api/v1/audit?${qs}`);
     },
+
+    // Operations: reset/clear
+    async resetFirewall() { return _post(`${BASE_URL}/api/v1/firewall/reset`, {}); },
+    async clearCaches() { return _post(`${BASE_URL}/api/v1/cache/clear`, {}); },
+    async resetSecurity() { return _post(`${BASE_URL}/api/v1/security/reset`, {}); },
+    async resetCircuitBreaker(id) { return _post(`${BASE_URL}/api/v1/circuit-breaker/${id}/reset`, {}); },
+    async reloadConfig() { return _post(`${BASE_URL}/api/v1/admin/reload`, {}); },
 };

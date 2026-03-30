@@ -394,6 +394,17 @@
                     </div>
                 </div>
 
+                <!-- Operations -->
+                <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-6">
+                    <h2 class="text-sm font-bold text-white mb-3">Operations</h2>
+                    <div class="flex flex-wrap gap-2">
+                        <button id="reset-firewall-btn" class="px-3 py-2 bg-white/5 hover:bg-rose-500/10 border border-white/10 hover:border-rose-500/20 rounded-lg text-[10px] font-bold text-slate-400 hover:text-rose-400 transition-colors">Reset WAF Counters</button>
+                        <button id="clear-caches-btn" class="px-3 py-2 bg-white/5 hover:bg-amber-500/10 border border-white/10 hover:border-amber-500/20 rounded-lg text-[10px] font-bold text-slate-400 hover:text-amber-400 transition-colors">Clear Caches</button>
+                        <button id="reset-security-btn" class="px-3 py-2 bg-white/5 hover:bg-violet-500/10 border border-white/10 hover:border-violet-500/20 rounded-lg text-[10px] font-bold text-slate-400 hover:text-violet-400 transition-colors">Reset Sessions & Ledger</button>
+                        <button id="reload-config-btn" class="px-3 py-2 bg-white/5 hover:bg-sky-500/10 border border-white/10 hover:border-sky-500/20 rounded-lg text-[10px] font-bold text-slate-400 hover:text-sky-400 transition-colors">Reload Config</button>
+                    </div>
+                </div>
+
                 <!-- Security Guards Grid -->
                 <div id="guards-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     <!-- Populated by guards.js -->
