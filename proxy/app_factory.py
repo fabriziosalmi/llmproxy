@@ -249,8 +249,11 @@ def create_app(agent) -> FastAPI:
         await drain_pending_writes(agent)
         # 3. Force SQLite WAL checkpoint before container receives SIGKILL
         try:
-            conn = await agent.store._get_conn()
-            await conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            db_path = getattr(agent.store, 'db_path', None)
+            if db_path:
+                import aiosqlite
+                async with aiosqlite.connect(db_path) as conn:
+                    await conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         except Exception as e:
             logger.error(f"WAL checkpoint failed on shutdown: {e}")
         await agent.cache_backend.close()

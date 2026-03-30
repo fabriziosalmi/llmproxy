@@ -26,6 +26,7 @@ from typing import Optional, Dict, Any
 
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
+from models import LLMEndpoint, EndpointStatus
 
 from core.base_agent import BaseAgent
 from core.metrics import MetricsTracker
@@ -198,6 +199,48 @@ class ProxyOrchestrator(BaseAgent):
         except asyncio.QueueFull:
             self.logger.error("Pending writes queue full — budget state write DROPPED")
 
+    async def _seed_endpoints_from_config(self):
+        """Register config.yaml endpoints into the database.
+
+        Only adds endpoints that have valid API keys and aren't already
+        registered. This makes them visible in the UI and available for routing.
+        """
+        endpoints_cfg = self.config.get("endpoints", {})
+        existing = await self.store.get_all()
+        existing_ids = {ep.id for ep in existing}
+
+        for name, ep_cfg in endpoints_cfg.items():
+            if name in existing_ids:
+                continue
+
+            provider = ep_cfg.get("provider", name)
+            base_url = ep_cfg.get("base_url", "")
+            api_key_env = ep_cfg.get("api_key_env", "")
+            models = ep_cfg.get("models", [])
+
+            if not base_url:
+                continue
+
+            # Check if API key is available and not a placeholder
+            if api_key_env:
+                key_val = os.environ.get(api_key_env, "")
+                _placeholders = {"sk-proj-...", "sk-ant-...", "AIza...", "gsk_...", "your-api-key", "CHANGE-ME", ""}
+                if not key_val or key_val in _placeholders:
+                    continue
+
+            ep = LLMEndpoint(
+                id=name,
+                url=base_url,
+                status=EndpointStatus.VERIFIED,
+                metadata={
+                    "provider": provider,
+                    "models": models,
+                    "api_key_env": api_key_env,
+                },
+            )
+            await self.store.add_endpoint(ep)
+            logger.info(f"Seeded endpoint '{name}' ({provider}) with {len(models)} models")
+
     async def flush_budget_now(self):
         """Immediate flush of pending writes — called on critical budget thresholds."""
         from .background import drain_pending_writes
@@ -304,6 +347,10 @@ class ProxyOrchestrator(BaseAgent):
             self._spawn_task(cache_eviction_loop(self.cache_backend, eviction_interval))
         self._spawn_task(config_watch_loop(self, 30))
         self._spawn_task(write_flush_loop(self, 0.25))
+
+        # Seed endpoints from config.yaml into the database
+        # so they appear in the UI registry and are available for routing.
+        await self._seed_endpoints_from_config()
 
         # Active health probing
         from core.health_prober import EndpointHealthProber
