@@ -73,8 +73,37 @@ export function initGuards() {
     renderGuards();
     initProxyToggle();
     initPriorityToggle();
+    initOperations();
     refreshCacheStats();
     store.poll(refreshCacheStats, 10000, 'guards');
+}
+
+function initOperations() {
+    const ops = [
+        { id: 'reset-firewall-btn', fn: () => api.resetFirewall(), label: 'WAF counters reset' },
+        { id: 'clear-caches-btn', fn: () => api.clearCaches(), label: 'Caches cleared' },
+        { id: 'reset-security-btn', fn: () => api.resetSecurity(), label: 'Sessions & ledger reset' },
+        { id: 'reload-config-btn', fn: () => api.reloadConfig(), label: 'Config reloaded' },
+    ];
+    for (const op of ops) {
+        const btn = document.getElementById(op.id);
+        if (!btn) continue;
+        btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            btn.textContent = 'Working...';
+            try {
+                await op.fn();
+                toast(op.label, 'success');
+            } catch (e) {
+                toast(`Failed: ${e.message}`, 'error');
+            }
+            btn.disabled = false;
+            btn.textContent = btn.textContent === 'Working...' ? op.label.split(' ')[0] : btn.textContent;
+            // Restore original text
+            const origTexts = { 'reset-firewall-btn': 'Reset WAF Counters', 'clear-caches-btn': 'Clear Caches', 'reset-security-btn': 'Reset Sessions & Ledger', 'reload-config-btn': 'Reload Config' };
+            btn.textContent = origTexts[op.id] || btn.textContent;
+        });
+    }
 }
 
 function initProxyToggle() {
