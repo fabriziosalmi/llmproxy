@@ -99,13 +99,12 @@ class SecurityShield:
         while not kill_event.is_set():
             current_response = "".join(stream_chunks)
 
-            # 1. Periodically check for PII or Injections in the accumulated stream
+            # 1. Periodically check for injection patterns in the accumulated stream
             if len(current_response) > last_length + 20: # Every 20 chars
-                # Check for raw PII leaking (unmasked)
-                if self._check_pii_leak(current_response):
-                    logger.warning("SPECULATIVE GUARDRAIL: PII LEAK DETECTED MID-STREAM!")
-                    kill_event.set()
-                    return
+                # NOTE: PII check on RESPONSES removed — it generates false positives
+                # on legitimate content (model names, version numbers, example data).
+                # PII masking is handled in Ring 2 (input) and Ring 4 (output).
+                # The speculative guardrail focuses on injection/prompt-leak only.
 
                 if self._check_response_injections(current_response):
                     logger.warning("SPECULATIVE GUARDRAIL: THREAT PATTERN DETECTED MID-STREAM!")
