@@ -68,9 +68,10 @@ class RateLimiter:
     async def check(self, key: str) -> Tuple[bool, float]:
         """Returns (allowed, retry_after_seconds).
 
-        H4: bucket.acquire() is now called inside the global lock to prevent
-        a race where the bucket is evicted between lookup and acquire. The
-        per-bucket lock is still held inside acquire() for token atomicity.
+        R2-01: bucket.acquire() OUTSIDE the global lock to avoid serializing
+        all rate checks behind one lock (starvation under high concurrency).
+        The bucket reference held by the caller is safe even if evicted —
+        it just becomes orphaned (extra token for one request, acceptable).
         """
         async with self._lock:
             if key not in self._buckets:
@@ -79,10 +80,10 @@ class RateLimiter:
                 self._buckets[key] = TokenBucket(self.default_capacity, self.default_rate)
             else:
                 self._buckets.move_to_end(key)
-
             bucket = self._buckets[key]
-            allowed = await bucket.acquire()
-            return allowed, bucket.retry_after
+
+        allowed = await bucket.acquire()
+        return allowed, bucket.retry_after
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):

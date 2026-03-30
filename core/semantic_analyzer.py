@@ -140,7 +140,29 @@ _RE_SPACES = re.compile(r'\s+')
 _LEET_MAP = str.maketrans({
     '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's',
     '7': 't', '@': 'a', '$': 's', '!': 'i',
-    '|': 'l', '(': 'c',
+    '|': 'l',
+})
+
+# R2-06: Cyrillic/Greek confusable homoglyphs that NFKC does NOT normalize.
+# An attacker can write "ignore" with Cyrillic а/е/о to bypass trigram matching.
+_CONFUSABLE_MAP = str.maketrans({
+    '\u0430': 'a',  # Cyrillic а → Latin a
+    '\u0435': 'e',  # Cyrillic е → Latin e
+    '\u043e': 'o',  # Cyrillic о → Latin o
+    '\u0440': 'p',  # Cyrillic р → Latin p
+    '\u0441': 'c',  # Cyrillic с → Latin c
+    '\u0443': 'y',  # Cyrillic у → Latin y
+    '\u0456': 'i',  # Cyrillic і → Latin i
+    '\u043d': 'h',  # Cyrillic н → Latin h (visual)
+    '\u0442': 't',  # Cyrillic т → Latin t (visual in some fonts)
+    '\u0445': 'x',  # Cyrillic х → Latin x
+    '\u0412': 'b',  # Cyrillic В → Latin B
+    '\u039f': 'o',  # Greek Ο → Latin O
+    '\u03bf': 'o',  # Greek ο → Latin o
+    '\u0391': 'a',  # Greek Α → Latin A
+    '\u03b1': 'a',  # Greek α → Latin a
+    '\u0395': 'e',  # Greek Ε → Latin E
+    '\u03b5': 'e',  # Greek ε → Latin e
 })
 
 
@@ -151,6 +173,7 @@ def _normalize(text: str) -> str:
     The leetspeak layer (W2) catches "1gn0r3 pr3v10us" → "ignore previous".
     """
     text = unicodedata.normalize("NFKC", text).lower()
+    text = text.translate(_CONFUSABLE_MAP)
     text = text.translate(_LEET_MAP)
     text = _RE_PUNCT.sub('', text)
     text = _RE_SPACES.sub(' ', text).strip()

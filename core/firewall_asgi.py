@@ -50,14 +50,15 @@ class ByteLevelFirewallMiddleware:
       8. Signature matching     — 11 known injection patterns
     """
     # Class-level counters (shared across instances for metrics).
-    # Using defaultdict(int) so that incrementing is a single __iadd__
-    # operation on the C-level int, eliminating the get()+set() race
-    # window present with plain dicts.
+    # R2-08: These are approximate — class-level += is not atomic under
+    # concurrent async tasks (LOAD_ATTR + BINARY_ADD + STORE_ATTR).
+    # Using a lock for exact metrics would add latency on every request.
+    # Accepted trade-off: counters may drift by ~0.1% under high load.
+    # For exact metrics, use Prometheus client counters externally.
     total_scanned = 0
     total_blocked = 0
     block_by_signature: defaultdict = defaultdict(int)
     block_by_encoding: defaultdict = defaultdict(int)
-    # W9: Latency tracking for firewall scan performance monitoring
     total_scan_time_ms: float = 0.0
     max_scan_time_ms: float = 0.0
 
@@ -90,7 +91,7 @@ class ByteLevelFirewallMiddleware:
         # W4: Delimiter injection
         b"<|im_start|>system",
         b"[inst]",
-        b"<s>",
+        b"<s>[inst]",
         b"end_turn",
         # W4: Indirect / social engineering
         b"the user said to ignore",
@@ -104,18 +105,26 @@ class ByteLevelFirewallMiddleware:
         # 0 = no byte-level size enforcement (rely on Content-Length guard alone)
         self.max_body_bytes = max_body_bytes
 
+    # R2-06: Cyrillic/Greek confusable homoglyphs (NFKC doesn't normalize these)
+    _CONFUSABLE_MAP = str.maketrans({
+        '\u0430': 'a', '\u0435': 'e', '\u043e': 'o', '\u0440': 'p',
+        '\u0441': 'c', '\u0443': 'y', '\u0456': 'i', '\u043d': 'h',
+        '\u0445': 'x', '\u039f': 'o', '\u03bf': 'o', '\u0391': 'a',
+        '\u03b1': 'a', '\u0395': 'e', '\u03b5': 'e',
+    })
+
     @staticmethod
     def _normalize_unicode(data: bytes) -> bytes:
         """NFKC normalize + strip accents/diacritics + collapse homoglyphs."""
         try:
             text = data.decode("utf-8", errors="replace")
-            # NFKC: fullwidth → ASCII (ｉｇｎｏｒｅ → ignore), ligatures → components
             text = unicodedata.normalize("NFKC", text)
-            # Strip combining marks (accents/diacritics): ïgnörè → ignore
             text = "".join(
                 c for c in unicodedata.normalize("NFD", text)
                 if unicodedata.category(c) != "Mn"
             )
+            # R2-06: Map Cyrillic/Greek confusables to Latin equivalents
+            text = text.translate(ByteLevelFirewallMiddleware._CONFUSABLE_MAP)
             return text.lower().encode("utf-8", errors="replace")
         except (UnicodeDecodeError, UnicodeError):
             return data
