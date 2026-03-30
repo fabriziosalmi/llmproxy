@@ -17,6 +17,11 @@
         @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
         .typing-dot { animation: blink 1.2s ease-in-out infinite; }
         pre code { white-space: pre-wrap; word-break: break-word; }
+        /* Markdown prose styling for assistant messages */
+        .prose-invert h1, .prose-invert h2, .prose-invert h3 { margin-top: 0.75rem; }
+        .prose-invert li { margin: 0.15rem 0; }
+        .prose-invert pre { margin: 0.5rem 0; }
+        .prose-invert br + br { display: none; } /* collapse double breaks */
     </style>
 </head>
 <body>
