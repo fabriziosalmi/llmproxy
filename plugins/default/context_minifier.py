@@ -15,12 +15,10 @@ async def compress(ctx: PluginContext):
     last_msg = messages[-1]
     content = last_msg.get("content", "")
 
-    if len(content) > 1000: # Only minify large payloads
-        # 1. Remove multi-line comments (/* ... */)
+    original_len = len(content)
+    if original_len > 1000:  # Only minify large payloads
         content = re.sub(r'/\*.*?\*/', '', content, flags=re.DOTALL)
-        # 2. Remove single-line comments (// ...)
         content = re.sub(r'//.*?\n', '\n', content)
-        # 3. Collapse multiple newlines/spaces
         content = re.sub(r'\n\s*\n', '\n', content)
         content = re.sub(r'[ \t]{2,}', ' ', content)
 
@@ -28,5 +26,6 @@ async def compress(ctx: PluginContext):
         modified = True
 
     if modified:
+        reduction = original_len - len(content)
         ctx.metadata["minified"] = True
-        await rotator._add_log(f"MINIFIER: Reduced prompt size by {len(content)} chars.", level="SYSTEM")
+        await rotator._add_log(f"MINIFIER: Reduced prompt by {reduction} chars ({original_len} → {len(content)}).", level="SYSTEM")
