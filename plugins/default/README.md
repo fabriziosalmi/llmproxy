@@ -12,7 +12,7 @@ All default plugins are **enabled by default** and form the security backbone of
 | 15 | `context_minifier.py` | PRE_FLIGHT | Compresses large contexts (strips comments, whitespace) |
 | 20 | `pii_masker.py` | PRE_FLIGHT | Neural PII detection and masking (Presidio NLP + regex) |
 | 30 | `cache_check.py` | PRE_FLIGHT | Exact-match cache lookup with tenant isolation |
-| 50 | `neural_router.py` | ROUTING | Endpoint selection with circuit breakers + load balancing |
+| 50 | `smart_router.py` | ROUTING | EMA-weighted endpoint selection with circuit breakers + cost-aware scoring |
 | 70 | `kill_switch.py` | POST_FLIGHT | Detects model infinite loops (word repetition, stuttering) |
 | 80 | `shield_sanitizer.py` | POST_FLIGHT | Response sanitization (injection detection, watermarking) |
 | 90 | `json_healer.py` | POST_FLIGHT | Repairs truncated JSON from streaming responses |
