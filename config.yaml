@@ -1,0 +1,279 @@
+# LLM Proxy Configuration
+
+server:
+  host: 0.0.0.0
+  port: 8090
+  timeout: 30s
+  keep_alive: 60s
+  tls:
+    enabled: false
+    cert_file: "/etc/llmproxy/certs/server.crt"
+    key_file: "/etc/llmproxy/certs/server.key"
+    min_version: "1.2"
+  auth:
+    enabled: true
+    # API keys loaded from env: LLM_PROXY_API_KEYS (comma-separated)
+    api_keys_env: "LLM_PROXY_API_KEYS"
+  metrics:
+    enabled: false
+    port: 9091
+  admin:
+    enabled: true
+    port: 8081
+  vllm:
+    enabled: true
+    model_path: "smollm-360m-instruct-mlx"
+    fallback_threshold: 0.1
+
+# Security shield — read by SecurityShield at root level
+security:
+  enabled: true
+  max_payload_size_kb: 512
+  max_messages: 50
+  link_sanitization:
+    enabled: true
+    blocked_domains: ["malicious-site.com", "phishing.net"]
+
+# Identity & SSO — Multi-provider OIDC
+identity:
+  enabled: false  # Set true to require JWT auth (falls back to API key if false)
+  default_role: "user"
+  providers:
+    - name: google
+      client_id_env: "OIDC_GOOGLE_CLIENT_ID"
+    - name: microsoft
+      client_id_env: "OIDC_MICROSOFT_CLIENT_ID"
+    - name: apple
+      client_id_env: "OIDC_APPLE_CLIENT_ID"
+  role_mappings:
+    # "admin@example.com": ["admin"]
+    # "ops@example.com": ["operator"]
+  session_ttl: 3600
+
+local_llm:
+  enabled: true
+  host: "http://localhost:1234"
+  model: "Qwen3-0.6B"
+  orchestrator_model: "qwen3.5-4b-mlx"
+  vision_model: "qwen3.5-4b-mlx"
+  max_recursion_depth: 3
+
+# Strategy for rotating between providers
+rotation:
+  strategy: "round_robin"  # Options: round_robin, weighted, least_used, random
+  failover:
+    enabled: true
+    max_retries: 3
+    retry_delay: 1s
+    switch_on_status: [429, 500, 503]
+
+# Cross-provider fallback chains — when primary provider is down, try alternatives.
+# Each chain maps a model to ordered fallback options (tried left to right).
+fallback_chains:
+  "gpt-4o":
+    - provider: anthropic
+      model: "claude-sonnet-4-20250514"
+    - provider: google
+      model: "gemini-2.5-pro"
+  "gpt-4o-mini":
+    - provider: anthropic
+      model: "claude-haiku-4-5-20251001"
+    - provider: google
+      model: "gemini-2.5-flash"
+  "claude-sonnet-4-20250514":
+    - provider: openai
+      model: "gpt-4o"
+    - provider: google
+      model: "gemini-2.5-pro"
+  "claude-haiku-4-5-20251001":
+    - provider: openai
+      model: "gpt-4o-mini"
+    - provider: google
+      model: "gemini-2.5-flash"
+  "gemini-2.5-pro":
+    - provider: openai
+      model: "gpt-4o"
+    - provider: anthropic
+      model: "claude-sonnet-4-20250514"
+
+# Model aliases — shorthand names that resolve to real model IDs
+model_aliases:
+  "gpt4": "gpt-4o"
+  "gpt4-mini": "gpt-4o-mini"
+  "claude": "claude-sonnet-4-20250514"
+  "claude-haiku": "claude-haiku-4-5-20251001"
+  "gemini": "gemini-2.5-flash"
+  "fast": "gpt-4o-mini"
+  "best": "gpt-4o"
+  "cheap": "gemini-2.0-flash"
+
+# Model groups — pool of models with routing strategy
+model_groups:
+  "auto":
+    strategy: "cheapest"
+    models:
+      - { model: "gpt-4o-mini", provider: "openai", weight: 0.5 }
+      - { model: "gemini-2.5-flash", provider: "google", weight: 0.3 }
+      - { model: "claude-haiku-4-5-20251001", provider: "anthropic", weight: 0.2 }
+
+# LLM Providers — each endpoint maps to an adapter in proxy/adapters/
+endpoints:
+  openai:
+    provider: "openai"
+    base_url: "https://api.openai.com/v1"
+    api_key_env: "OPENAI_API_KEY"
+    models: ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "o3-mini", "text-embedding-3-small", "text-embedding-3-large"]
+    rate_limit: { rpm: 3500, tpm: 60000 }
+
+  anthropic:
+    provider: "anthropic"
+    base_url: "https://api.anthropic.com/v1"
+    api_key_env: "ANTHROPIC_API_KEY"
+    models: ["claude-sonnet-4-20250514", "claude-haiku-4-5-20251001", "claude-opus-4-20250514"]
+    rate_limit: { rpm: 1000 }
+
+  google:
+    provider: "google"
+    base_url: "https://generativelanguage.googleapis.com/v1beta"
+    api_key_env: "GOOGLE_API_KEY"
+    models: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash", "text-embedding-004"]
+
+  azure:
+    provider: "azure"
+    base_url: "https://{resource}.openai.azure.com/openai/deployments/{deployment}"
+    api_key_env: "AZURE_OPENAI_API_KEY"
+    models: ["gpt-4o", "gpt-4o-mini"]
+
+  ollama:
+    provider: "ollama"
+    base_url: "http://localhost:11434"
+    auth_type: "none"
+    models: ["llama3.3", "qwen3", "phi-4", "gemma3", "nomic-embed-text", "mxbai-embed-large"]
+
+  groq:
+    provider: "groq"
+    base_url: "https://api.groq.com/openai/v1"
+    api_key_env: "GROQ_API_KEY"
+    models: ["llama-3.3-70b-versatile", "mixtral-8x7b-32768"]
+
+  together:
+    provider: "together"
+    base_url: "https://api.together.xyz/v1"
+    api_key_env: "TOGETHER_API_KEY"
+    models: ["meta-llama/Llama-3.3-70B-Instruct-Turbo", "mistralai/Mixtral-8x7B-Instruct-v0.1"]
+
+  mistral:
+    provider: "mistral"
+    base_url: "https://api.mistral.ai/v1"
+    api_key_env: "MISTRAL_API_KEY"
+    models: ["mistral-large-latest", "mistral-small-latest", "codestral-latest"]
+
+  deepseek:
+    provider: "deepseek"
+    base_url: "https://api.deepseek.com/v1"
+    api_key_env: "DEEPSEEK_API_KEY"
+    models: ["deepseek-chat", "deepseek-reasoner"]
+
+  xai:
+    provider: "xai"
+    base_url: "https://api.x.ai/v1"
+    api_key_env: "XAI_API_KEY"
+    models: ["grok-3", "grok-3-mini"]
+
+  perplexity:
+    provider: "perplexity"
+    base_url: "https://api.perplexity.ai"
+    api_key_env: "PERPLEXITY_API_KEY"
+    models: ["sonar-pro", "sonar"]
+
+  openrouter:
+    provider: "openrouter"
+    base_url: "https://openrouter.ai/api/v1"
+    api_key_env: "OPENROUTER_API_KEY"
+    models: []  # supports all models via unified API
+
+  fireworks:
+    provider: "fireworks"
+    base_url: "https://api.fireworks.ai/inference/v1"
+    api_key_env: "FIREWORKS_API_KEY"
+    models: ["accounts/fireworks/models/llama-v3p3-70b-instruct"]
+
+  sambanova:
+    provider: "sambanova"
+    base_url: "https://api.sambanova.ai/v1"
+    api_key_env: "SAMBANOVA_API_KEY"
+    models: ["Meta-Llama-3.3-70B-Instruct"]
+
+  # ── Community / OpenAI-compatible providers (uncomment to enable) ──
+  # infercom:
+  #   provider: "openai-compatible"
+  #   base_url: "https://api.infercom.ai/v1"
+  #   api_key_env: "INFERCOM_API_KEY"
+  #   models: ["MiniMax-M2.5", "DeepSeek-R1", "Meta-Llama-3.3-70B-Instruct"]
+  #   notes: "EU-sovereign hosting (Germany). OpenAI-compatible."
+
+# Monitoring and Logging
+logging:
+  level: "info"
+  format: "json"
+  output: "/var/log/llmproxy/proxy.log"
+  audit_trail:
+    enabled: true
+    mask_pii: true
+
+caching:
+  enabled: true
+  db_path: "cache.db"
+  ttl: 3600
+  eviction_interval: 3600
+  negative_cache:
+    maxsize: 50000
+    ttl: 300
+
+observability:
+  tracing:
+    enabled: true
+    service_name: "llmproxy"
+    otlp_endpoint: null
+    console_exporter: true
+  sentry:
+    dsn_env: "SENTRY_DSN"
+  export:
+    enabled: false
+    output_dir: "exports"
+    scrub_pii: true
+    compress_on_rotate: true
+
+# ChatOps & Webhook Dispatcher
+webhooks:
+  enabled: false
+  endpoints:
+    - name: slack-ops
+      target: slack
+      url_env: "SLACK_WEBHOOK_URL"
+      events: ["circuit_open", "budget_threshold", "panic_activated", "endpoint_down"]
+    - name: discord-alerts
+      target: discord
+      url_env: "DISCORD_WEBHOOK_URL"
+      events: ["*"]
+
+chatops:
+  telegram:
+    enabled: false
+    token_env: "TELEGRAM_BOT_TOKEN"
+    chat_id: null
+
+# Daily budget tracking — soft_limit triggers a webhook warning
+budget:
+  daily_limit: 50.0    # Hard cap per day (USD)
+  soft_limit: 40.0     # Webhook warning threshold (USD)
+  fallback_to_local_on_limit: true
+
+# Litestream SQLite WAL replication (optional)
+# See: https://litestream.io/
+# litestream:
+#   dbs:
+#     - path: /data/endpoints.db
+#       replicas:
+#         - type: s3
+#           bucket: llmproxy-backups

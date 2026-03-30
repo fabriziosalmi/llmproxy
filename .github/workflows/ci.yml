@@ -1,0 +1,165 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install ruff
+      - run: ruff check .
+
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install mypy types-PyYAML types-cachetools types-aiofiles
+      - name: mypy (core + proxy)
+        run: python -m mypy core/ proxy/ --ignore-missing-imports --disable-error-code misc --disable-error-code assignment --disable-error-code no-any-return
+
+  security:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install pip-audit
+      - name: pip-audit
+        run: pip-audit -r requirements.txt --skip-editable --ignore-vuln PYSEC-2024-62 || true
+        # Non-blocking — tracks known vulnerabilities without failing CI.
+
+  supply-chain:
+    name: Supply Chain Integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Verify dependency integrity + .pth scan
+        run: python scripts/verify_deps.py --strict
+      - name: Explicit .pth file audit
+        run: |
+          echo "Scanning for .pth files in site-packages..."
+          PTH_FILES=$(find "$(python -c 'import site; print(site.getsitepackages()[0])')" -name "*.pth" 2>/dev/null || true)
+          if [ -n "$PTH_FILES" ]; then
+            echo "Found .pth files:"
+            echo "$PTH_FILES"
+            for f in $PTH_FILES; do
+              if grep -qE "(exec\(|eval\(|subprocess|Popen|__import__|urllib|socket|base64|\.ssh|\.env|\.aws)" "$f" 2>/dev/null; then
+                echo "CRITICAL: Suspicious .pth file detected: $f"
+                echo "Contents:"
+                cat "$f"
+                exit 1
+              fi
+            done
+            echo "All .pth files clean."
+          else
+            echo "No .pth files found (good)."
+          fi
+      - name: Check for blocked packages
+        run: |
+          for pkg in litellm openai-proxy llm-proxy; do
+            if pip show "$pkg" 2>/dev/null; then
+              echo "CRITICAL: Blocked package $pkg is installed!"
+              exit 1
+            fi
+          done
+          echo "No blocked packages found."
+
+  test:
+    name: Test + Coverage
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov httpx hypothesis
+      - name: Run tests with coverage
+        run: |
+          python -m pytest tests/ -v --tb=short \
+            --cov=core --cov=proxy --cov=plugins --cov=store \
+            --cov-report=term-missing \
+            --cov-fail-under=65 \
+            --ignore=tests/test_store.py \
+            --ignore=tests/integrated_test.py \
+            --ignore=tests/test_e2e.py \
+            --ignore=tests/test_openapi_contracts.py \
+            --ignore=tests/test_benchmarks.py
+        env:
+          PYTHONDONTWRITEBYTECODE: 1
+
+  invariants:
+    name: Mathematical Invariants
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio hypothesis
+      - name: Run invariant + determinism + concurrency tests
+        run: |
+          python -m pytest tests/test_invariants.py tests/test_determinism.py tests/test_concurrency_stress.py \
+            -v --tb=long -x
+        env:
+          PYTHONDONTWRITEBYTECODE: 1
+
+  syntax-check:
+    name: Syntax Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Compile all Python files
+        run: |
+          python -m compileall core/ proxy/ store/ plugins/ -q
+
+  docker-size:
+    name: Docker Image Size
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build Docker image
+        run: docker build -t llmproxy:ci .
+      - name: Check image size
+        run: |
+          SIZE=$(docker image inspect llmproxy:ci --format='{{.Size}}')
+          SIZE_MB=$((SIZE / 1024 / 1024))
+          echo "Image size: ${SIZE_MB}MB"
+          if [ "$SIZE_MB" -gt 500 ]; then
+            echo "WARNING: Docker image exceeds 500MB (${SIZE_MB}MB)"
+            exit 1
+          fi

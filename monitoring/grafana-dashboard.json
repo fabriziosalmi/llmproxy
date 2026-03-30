@@ -1,0 +1,216 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "Request Rate (req/s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(llm_proxy_requests_total[5m])",
+          "legendFormat": "{{method}} {{endpoint}} {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" }
+      }
+    },
+    {
+      "title": "Error Rate (%)",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 4, "x": 8, "y": 0 },
+      "targets": [
+        {
+          "expr": "100 * rate(llm_proxy_request_errors_total[5m]) / (rate(llm_proxy_requests_total[5m]) > 0)",
+          "legendFormat": "Error %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Latency (P50 / P95 / P99)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(llm_proxy_request_latency_seconds_bucket[5m]))",
+          "legendFormat": "P50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(llm_proxy_request_latency_seconds_bucket[5m]))",
+          "legendFormat": "P95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(llm_proxy_request_latency_seconds_bucket[5m]))",
+          "legendFormat": "P99"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      }
+    },
+    {
+      "title": "Daily Cost ($)",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 4, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "llm_proxy_budget_consumed_usd",
+          "legendFormat": "Today"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 40 },
+              { "color": "red", "value": 50 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Token Usage (input / output)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 4, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(llm_proxy_token_usage_total{role=\"input\"}[5m])",
+          "legendFormat": "Input tokens/s"
+        },
+        {
+          "expr": "rate(llm_proxy_token_usage_total{role=\"output\"}[5m])",
+          "legendFormat": "Output tokens/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short" }
+      }
+    },
+    {
+      "title": "Circuit Breakers",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "llm_proxy_circuit_open",
+          "legendFormat": "{{endpoint}}",
+          "format": "table",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "title": "Injection Blocks",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 3, "x": 18, "y": 8 },
+      "targets": [
+        {
+          "expr": "increase(llm_proxy_injection_blocked_total[24h])",
+          "legendFormat": "Blocked (24h)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 10 },
+              { "color": "red", "value": 100 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Auth Failures",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 3, "x": 21, "y": 8 },
+      "targets": [
+        {
+          "expr": "increase(llm_proxy_auth_failures_total[1h])",
+          "legendFormat": "{{reason}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 50 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Cost by Model (Top 5)",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "topk(5, sum by (model) (increase(llm_proxy_cost_total[24h])))",
+          "legendFormat": "{{model}}"
+        }
+      ]
+    },
+    {
+      "title": "Requests by Provider",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum by (endpoint) (increase(llm_proxy_requests_total[24h]))",
+          "legendFormat": "{{endpoint}}"
+        }
+      ]
+    },
+    {
+      "title": "Streaming TTFT (Time to First Token)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(llm_proxy_streaming_ttft_seconds_bucket[5m]))",
+          "legendFormat": "TTFT P50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(llm_proxy_streaming_ttft_seconds_bucket[5m]))",
+          "legendFormat": "TTFT P95"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      }
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["llmproxy", "ai", "security"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "LLMProxy Overview",
+  "uid": "llmproxy-overview",
+  "version": 1
+}
