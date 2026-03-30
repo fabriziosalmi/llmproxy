@@ -33,5 +33,33 @@ export const store = {
     update(patch) {
         this.state = { ...this.state, ...patch };
         this.notify();
-    }
+    },
+
+    /**
+     * Create a polling interval that auto-pauses when:
+     * - The page is hidden (Page Visibility API)
+     * - The active tab doesn't match requiredTab (if specified)
+     *
+     * Returns a cleanup function. Fixes audit #13 — view-scoped polling.
+     */
+    poll(fn, intervalMs, requiredTab = null) {
+        let timer = null;
+
+        const tick = () => {
+            if (document.hidden) return;
+            if (requiredTab && this.state.currentTab !== requiredTab) return;
+            try { fn(); } catch {}
+        };
+
+        const start = () => { if (!timer) timer = setInterval(tick, intervalMs); };
+        const stop = () => { if (timer) { clearInterval(timer); timer = null; } };
+
+        // Pause when page hidden
+        document.addEventListener('visibilitychange', () => {
+            document.hidden ? stop() : start();
+        });
+
+        start();
+        return stop;
+    },
 };

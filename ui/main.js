@@ -16,15 +16,19 @@ import { initAnalytics } from './components/analytics.js';
 import { renderSecurity } from './components/security.js';
 import { auth } from './services/auth.js';
 
-// Global state listener for UI updates
+// Global state listener — only re-render what changed (audit #24)
+let _prevState = { ...store.state };
 store.subscribe((state) => {
+    // Always update navigation/sidebar (cheap)
     renderSidebar();
     renderContent();
-    renderRegistry();
-    renderGuards();
-    renderThreats();
-    renderSettings();
-    if (state.currentTab === 'security') renderSecurity();
+
+    // Only re-render view-specific components when relevant state changes
+    if (state.registry !== _prevState.registry) renderRegistry();
+    if (state.features !== _prevState.features || state.proxyEnabled !== _prevState.proxyEnabled || state.priorityMode !== _prevState.priorityMode) renderGuards();
+    if (state.currentTab === 'security' && state.currentTab !== _prevState.currentTab) renderSecurity();
+
+    _prevState = { ...state };
 });
 
 // Helper function for navigation (assuming it's defined elsewhere or will be added)
@@ -132,8 +136,8 @@ async function init() {
         console.warn("Backend unavailable — running in offline mode.", err);
     }
 
-    // Background refresh
-    setInterval(() => { try { fetchRegistry(); } catch(e) {} }, 30000);
+    // Background refresh — pauses when page hidden (audit #13)
+    store.poll(fetchRegistry, 30000, 'endpoints');
 
     console.info("LLMPROXY Modular UI Environment: READY");
 }
@@ -194,19 +198,18 @@ function initHUD() {
         ];
 
         const cmdList = document.getElementById('cmd-list');
-        input.addEventListener('input', () => {
-            const query = input.value.toLowerCase();
-            if(!cmdList) return;
-            cmdList.innerHTML = '';
-            
-            const results = commands.filter(c => 
-                c.name.toLowerCase().includes(query) || 
-                c.desc.toLowerCase().includes(query)
-            );
+        let selectedIdx = -1;
+        let lastResults = [];
 
-            results.forEach(res => {
+        function renderResults(results) {
+            lastResults = results;
+            selectedIdx = results.length > 0 ? 0 : -1;
+            cmdList.innerHTML = '';
+            results.forEach((res, i) => {
                 const item = document.createElement('div');
-                item.className = "flex items-center justify-between p-3 hover:bg-white/5 rounded-xl cursor-pointer transition-all border border-transparent hover:border-white/10 group";
+                item.className = `flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all border border-transparent group ${i === selectedIdx ? 'bg-white/5 border-white/10' : 'hover:bg-white/5 hover:border-white/10'}`;
+                item.setAttribute('role', 'option');
+                item.setAttribute('aria-selected', i === selectedIdx ? 'true' : 'false');
                 item.innerHTML = `
                     <div class="flex items-center gap-4">
                         <div class="p-2 bg-sky-500/10 rounded-lg text-sky-400 group-hover:scale-110 transition-transform">
@@ -217,14 +220,41 @@ function initHUD() {
                             <p class="text-[9px] text-slate-500 font-medium">${res.desc}</p>
                         </div>
                     </div>
-                    <div class="text-[9px] font-mono text-slate-700 bg-white/5 px-2 py-1 rounded">ENTER</div>
+                    <div class="text-[9px] font-mono text-slate-500 bg-white/5 px-2 py-1 rounded">ENTER</div>
                 `;
-                item.onclick = () => {
-                    executeCommand(res.id);
-                    togglePalette();
-                };
+                item.onclick = () => { executeCommand(res.id); togglePalette(); };
                 cmdList.appendChild(item);
             });
+        }
+
+        function highlightIdx(newIdx) {
+            if (!lastResults.length) return;
+            selectedIdx = ((newIdx % lastResults.length) + lastResults.length) % lastResults.length;
+            cmdList.querySelectorAll('[role="option"]').forEach((el, i) => {
+                const active = i === selectedIdx;
+                el.className = `flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all border group ${active ? 'bg-white/5 border-white/10' : 'border-transparent hover:bg-white/5 hover:border-white/10'}`;
+                el.setAttribute('aria-selected', active ? 'true' : 'false');
+                if (active) el.scrollIntoView({ block: 'nearest' });
+            });
+        }
+
+        input.addEventListener('input', () => {
+            const query = input.value.toLowerCase();
+            const results = commands.filter(c =>
+                c.name.toLowerCase().includes(query) ||
+                c.desc.toLowerCase().includes(query)
+            );
+            renderResults(results);
+        });
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown') { e.preventDefault(); highlightIdx(selectedIdx + 1); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); highlightIdx(selectedIdx - 1); }
+            else if (e.key === 'Enter' && lastResults[selectedIdx]) {
+                e.preventDefault();
+                executeCommand(lastResults[selectedIdx].id);
+                togglePalette();
+            }
         });
     }
 
