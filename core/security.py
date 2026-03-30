@@ -369,21 +369,32 @@ class SecurityShield:
             return flood_error
 
         # 2. Injection Detector (Prompt/Hidden)
-        prompt = self._extract_prompt(body)
+        # H6: Reuse prompt from step 0 instead of calling _extract_prompt() twice.
         if prompt:
             injection_error_msg = self._check_injections(prompt)
             if injection_error_msg:
                 return injection_error_msg
 
             # 2b. Semantic Injection Detector (paraphrase-resistant)
-            # Runs in a thread to avoid blocking the event loop on the
-            # embedding/similarity computation for large prompts.
+            # H10: Uses a bounded ThreadPoolExecutor (max 4 threads) with a
+            # 5-second timeout to prevent DoS via 100k-char prompts saturating
+            # the default unbounded executor.
             if self.config.get("semantic_analysis", {}).get("enabled", True):
                 from core.semantic_analyzer import semantic_scan
+                from concurrent.futures import ThreadPoolExecutor
                 threshold = self.config.get("semantic_analysis", {}).get("threshold", 0.35)
-                result = await asyncio.get_running_loop().run_in_executor(
-                    None, semantic_scan, prompt, threshold,
-                )
+                if not hasattr(self, '_semantic_executor'):
+                    self._semantic_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="semantic")
+                try:
+                    result = await asyncio.wait_for(
+                        asyncio.get_running_loop().run_in_executor(
+                            self._semantic_executor, semantic_scan, prompt, threshold,
+                        ),
+                        timeout=5.0,
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning(f"Semantic scan timed out (prompt={len(prompt)} chars)")
+                    result = None
                 if result:
                     sim_score, category, matched = result
                     logger.warning(
@@ -447,20 +458,32 @@ class SecurityShield:
         score, matched = self._calculate_threat_score(prompt)
         if score >= 0.7:
             logger.warning(f"Injection blocked: score={score:.1f}, patterns={matched}")
-            return f"Potential prompt injection detected (threat score: {score:.1f})"
+            # H11: Don't leak the exact score — it enables binary search
+            # to calibrate prompts just below the threshold.
+            return "Request blocked by content security policy"
         return None
 
     def _check_links(self, prompt: str) -> Optional[str]:
         if not self.config.get("link_sanitization", {}).get("enabled", True):
             return None
 
-        # Improved link detection
+        from urllib.parse import urlparse
+
         links = re.findall(r"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+", prompt)
         blocked_domains = self.config.get("link_sanitization", {}).get("blocked_domains", [])
 
         for link in links:
-            if any(domain in link for domain in blocked_domains):
-                return f"Unsafe link detected: {link}"
+            # H1: Extract actual domain via urlparse, then exact or suffix match.
+            # Prevents substring false positives (e.g. "not-malicious-site.com"
+            # matching "malicious-site.com") and path/query confusion.
+            try:
+                netloc = urlparse(link).netloc.lower().split(":")[0]  # strip port
+            except Exception:
+                continue
+            for domain in blocked_domains:
+                domain_lower = domain.lower()
+                if netloc == domain_lower or netloc.endswith("." + domain_lower):
+                    return f"Unsafe link detected: {link}"
 
         return None
 
@@ -487,10 +510,26 @@ class SecurityShield:
             logger.warning("Invisible char detection: Payload dropped due to smuggled characters.")
             return "[SEC_ERR: INVISIBLE_CHAR_DETECTED]"
 
-        # 4. Link Sanitizer
+        # 4. Link Sanitizer — replace blocked URLs with [BLOCKED_LINK]
+        # H1: Use urlparse for proper domain extraction instead of substring.
         blocked_domains = self.config.get("link_sanitization", {}).get("blocked_domains", [])
-        for domain in blocked_domains:
-            sanitized = sanitized.replace(domain, "[BLOCKED_LINK]")
+        if blocked_domains:
+            from urllib.parse import urlparse
+            def _replace_blocked_urls(match):
+                try:
+                    netloc = urlparse(match.group(0)).netloc.lower().split(":")[0]
+                    for d in blocked_domains:
+                        d_lower = d.lower()
+                        if netloc == d_lower or netloc.endswith("." + d_lower):
+                            return "[BLOCKED_LINK]"
+                except Exception:
+                    pass
+                return match.group(0)
+            sanitized = re.sub(
+                r"https?://[^\s<>\"']+",
+                _replace_blocked_urls,
+                sanitized,
+            )
 
         # 5. Bidirectional De-masking
         sanitized = self.demask_pii(sanitized)

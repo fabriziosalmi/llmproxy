@@ -45,7 +45,10 @@ def create_router(agent) -> APIRouter:
                 except ValueError as e:
                     MetricsTracker.track_auth_failure("jwt_invalid")
                     agent._spawn_task(agent.webhooks.dispatch(EventType.AUTH_FAILURE, {"reason": "jwt_invalid", "error": str(e)}))
-                    raise HTTPException(status_code=401, detail=f"Identity: {e}")
+                    # H7: Don't leak internal error details (JWKS paths, OIDC
+                    # URLs, JWT algorithm info). Log full error, return generic.
+                    logger.warning(f"Identity verification failed: {e}")
+                    raise HTTPException(status_code=401, detail="Unauthorized: Invalid or expired token")
 
             if identity and identity.verified:
                 request.state.identity = identity
@@ -82,13 +85,17 @@ def create_router(agent) -> APIRouter:
         start_time = time.time()
         try:
             # Derive session_id from a hash of the token (never store the raw
-            # secret in session_memory, logs, or audit tables).  Fall back to
-            # client IP to avoid collapsing ALL anonymous users into a single
-            # trajectory bucket.
+            # secret in session_memory, logs, or audit tables).
+            # H5: When auth is disabled, avoid collapsing all users behind the
+            # same NAT into one session. Hash IP + User-Agent + Accept-Language
+            # as a rough client fingerprint to disambiguate.
             if 'token' in locals() and token:
                 session_id = hashlib.sha256(token.encode()).hexdigest()[:16]
             else:
-                session_id = request.client.host if request.client else "anon"
+                ip = request.client.host if request.client else "anon"
+                ua = request.headers.get("user-agent", "")
+                lang = request.headers.get("accept-language", "")
+                session_id = hashlib.sha256(f"{ip}:{ua}:{lang}".encode()).hexdigest()[:16]
             body = await request.json()
 
             # Request deduplication via X-Idempotency-Key header

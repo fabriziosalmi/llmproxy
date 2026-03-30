@@ -70,11 +70,14 @@ class NegativeCache:
     def _hash_prompt(body: Dict[str, Any]) -> str:
         """Hash the raw prompt for negative cache lookup.
 
-        Uses the full messages array (not just last message) to catch
-        multi-turn attack patterns. Raw bytes, not canonical JSON —
-        we want byte-identical matching only.
+        Uses the full messages array + model (H9) to catch multi-turn
+        attack patterns. Including the model prevents cross-model cache
+        pollution (different models may have different safety profiles).
         """
-        raw = json.dumps(body.get("messages", []), separators=(",", ":")).encode("utf-8")
+        raw = json.dumps(
+            [body.get("model", ""), body.get("messages", [])],
+            separators=(",", ":"),
+        ).encode("utf-8")
         return hashlib.sha256(raw).hexdigest()
 
     def check(self, body: Dict[str, Any]) -> Optional[str]:
