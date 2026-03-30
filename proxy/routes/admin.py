@@ -99,7 +99,7 @@ def create_router(agent) -> APIRouter:
                 "total_scanned": ByteLevelFirewallMiddleware.total_scanned,
                 "total_blocked": ByteLevelFirewallMiddleware.total_blocked,
                 "block_by_signature": ByteLevelFirewallMiddleware.block_by_signature,
-                "signatures_count": len(ByteLevelFirewallMiddleware.BANNED_SIGNATURES),
+                "signatures_count": len(ByteLevelFirewallMiddleware._FALLBACK_SIGNATURES),
             },
             "rate_limiter": {
                 "enabled": agent.config.get("rate_limiting", {}).get("enabled", False),

@@ -3,7 +3,7 @@ Fuzz tests for the ASGI byte-level firewall (core/firewall_asgi.py).
 
 Uses Hypothesis property-based testing to verify that:
 - Random binary data never crashes the firewall
-- All 11 BANNED_SIGNATURES are correctly detected (case-insensitive)
+- All 11 _FALLBACK_SIGNATURES are correctly detected (case-insensitive)
 - Unicode/multibyte inputs don't cause exceptions
 - Partial signature matches DON'T trigger blocks
 - Signatures embedded in JSON bodies are detected
@@ -124,16 +124,16 @@ class TestFirewallFuzz:
         assert status == 200
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("signature", ByteLevelFirewallMiddleware.BANNED_SIGNATURES)
+    @pytest.mark.parametrize("signature", ByteLevelFirewallMiddleware._FALLBACK_SIGNATURES)
     async def test_all_banned_signatures_detected(self, signature):
-        """Each of the 11 BANNED_SIGNATURES must be detected and blocked."""
+        """Each of the 11 _FALLBACK_SIGNATURES must be detected and blocked."""
         _reset_counters()
         status, blocked = await _run_firewall(signature)
         assert blocked, f"Signature {signature!r} was not blocked"
         assert status == 403
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("signature", ByteLevelFirewallMiddleware.BANNED_SIGNATURES)
+    @pytest.mark.parametrize("signature", ByteLevelFirewallMiddleware._FALLBACK_SIGNATURES)
     async def test_banned_signatures_case_insensitive(self, signature):
         """Signatures in mixed case must also be detected (body is lowercased)."""
         _reset_counters()
@@ -145,17 +145,17 @@ class TestFirewallFuzz:
     async def test_partial_signature_does_not_trigger(self):
         """Partial matches (truncated signatures) must NOT trigger a block."""
         _reset_counters()
-        for sig in ByteLevelFirewallMiddleware.BANNED_SIGNATURES:
+        for sig in ByteLevelFirewallMiddleware._FALLBACK_SIGNATURES:
             # Take the first half of each signature
             partial = sig[: len(sig) // 2]
             # Make sure the partial is not itself a full signature
-            if partial in ByteLevelFirewallMiddleware.BANNED_SIGNATURES:
+            if partial in ByteLevelFirewallMiddleware._FALLBACK_SIGNATURES:
                 continue
             status, blocked = await _run_firewall(partial)
             assert not blocked, f"Partial signature {partial!r} incorrectly blocked"
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("signature", ByteLevelFirewallMiddleware.BANNED_SIGNATURES)
+    @pytest.mark.parametrize("signature", ByteLevelFirewallMiddleware._FALLBACK_SIGNATURES)
     async def test_signature_embedded_in_json_body(self, signature):
         """Signatures inside a JSON-encoded body must still be detected."""
         _reset_counters()
@@ -210,7 +210,7 @@ class TestFirewallFuzz:
     async def test_signature_with_random_padding(self, prefix, suffix):
         """A banned signature surrounded by random bytes must still be detected."""
         _reset_counters()
-        sig = ByteLevelFirewallMiddleware.BANNED_SIGNATURES[0]  # "ignore previous instructions"
+        sig = ByteLevelFirewallMiddleware._FALLBACK_SIGNATURES[0]  # "ignore previous instructions"
         body = prefix + sig + suffix
         status, blocked = await _run_firewall(body)
         assert blocked, "Padded signature was not detected"
