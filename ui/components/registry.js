@@ -3,6 +3,7 @@
  */
 import { store } from '../services/store.js';
 import { api } from '../services/api.js';
+import { toast } from '../services/toast.js';
 
 export async function fetchRegistry() {
     try {
@@ -21,11 +22,27 @@ const CIRCUIT_STATES = {
     half_open: { label: 'HALF', dot: 'bg-amber-400 shadow-amber-500/40', text: 'text-amber-400' },
 };
 
+let _sortKey = 'priority';
+let _sortAsc = false;
+
+function sortEndpoints(endpoints) {
+    const sorted = [...endpoints];
+    sorted.sort((a, b) => {
+        let va = a[_sortKey] ?? '', vb = b[_sortKey] ?? '';
+        if (typeof va === 'string') va = va.toLowerCase();
+        if (typeof vb === 'string') vb = vb.toLowerCase();
+        if (va < vb) return _sortAsc ? -1 : 1;
+        if (va > vb) return _sortAsc ? 1 : -1;
+        return 0;
+    });
+    return sorted;
+}
+
 export function renderRegistry() {
     const container = document.getElementById('registry-container');
     if (!container) return;
 
-    const endpoints = store.state.registry || [];
+    const endpoints = sortEndpoints(store.state.registry || []);
 
     if (endpoints.length === 0) {
         container.innerHTML = `
@@ -42,11 +59,11 @@ export function renderRegistry() {
             <table class="w-full">
                 <thead>
                     <tr class="border-b border-white/[0.06]">
-                        <th class="text-left text-[9px] font-bold text-slate-500 uppercase tracking-widest px-4 py-3">Endpoint</th>
-                        <th class="text-left text-[9px] font-bold text-slate-500 uppercase tracking-widest px-4 py-3">Status</th>
-                        <th class="text-left text-[9px] font-bold text-slate-500 uppercase tracking-widest px-4 py-3">Circuit</th>
-                        <th class="text-left text-[9px] font-bold text-slate-500 uppercase tracking-widest px-4 py-3">Latency</th>
-                        <th class="text-left text-[9px] font-bold text-slate-500 uppercase tracking-widest px-4 py-3">Priority</th>
+                        <th data-sort="id" class="text-left text-[9px] font-bold text-slate-500 uppercase tracking-widest px-4 py-3 cursor-pointer hover:text-white transition-colors">Endpoint ${_sortKey === 'id' ? (_sortAsc ? '&#9650;' : '&#9660;') : ''}</th>
+                        <th data-sort="status" class="text-left text-[9px] font-bold text-slate-500 uppercase tracking-widest px-4 py-3 cursor-pointer hover:text-white transition-colors">Status ${_sortKey === 'status' ? (_sortAsc ? '&#9650;' : '&#9660;') : ''}</th>
+                        <th data-sort="circuit_state" class="text-left text-[9px] font-bold text-slate-500 uppercase tracking-widest px-4 py-3 cursor-pointer hover:text-white transition-colors">Circuit ${_sortKey === 'circuit_state' ? (_sortAsc ? '&#9650;' : '&#9660;') : ''}</th>
+                        <th data-sort="latency" class="text-left text-[9px] font-bold text-slate-500 uppercase tracking-widest px-4 py-3 cursor-pointer hover:text-white transition-colors">Latency ${_sortKey === 'latency' ? (_sortAsc ? '&#9650;' : '&#9660;') : ''}</th>
+                        <th data-sort="priority" class="text-left text-[9px] font-bold text-slate-500 uppercase tracking-widest px-4 py-3 cursor-pointer hover:text-white transition-colors">Priority ${_sortKey === 'priority' ? (_sortAsc ? '&#9650;' : '&#9660;') : ''}</th>
                         <th class="text-right text-[9px] font-bold text-slate-500 uppercase tracking-widest px-4 py-3">Actions</th>
                     </tr>
                 </thead>
@@ -74,7 +91,7 @@ export function renderRegistry() {
                 <div class="flex items-center gap-1.5">
                     <div class="w-2 h-2 rounded-full ${circuit.dot} shadow-[0_0_6px]"></div>
                     <span class="text-[9px] font-bold font-mono ${circuit.text}">${circuit.label}</span>
-                    ${(ep.failure_count || 0) > 0 ? `<span class="text-[8px] font-mono text-slate-600">${ep.failure_count}/${ep.failure_threshold || 5}</span>` : ''}
+                    ${(ep.failure_count || 0) > 0 ? `<span class="text-[10px] font-mono text-slate-600">${ep.failure_count}/${ep.failure_threshold || 5}</span>` : ''}
                 </div>
             </td>
             <td class="px-4 py-3 text-[10px] font-mono text-slate-400">${ep.latency || '--'}</td>
@@ -97,23 +114,37 @@ export function renderRegistry() {
         tbody.appendChild(row);
     });
 
+    // Wire sort headers
+    container.querySelectorAll('th[data-sort]').forEach(th => {
+        th.addEventListener('click', () => {
+            const key = th.dataset.sort;
+            if (_sortKey === key) { _sortAsc = !_sortAsc; } else { _sortKey = key; _sortAsc = true; }
+            renderRegistry();
+        });
+    });
+
     // Wire actions
     tbody.querySelectorAll('button[data-action]').forEach(btn => {
         btn.addEventListener('click', async () => {
             const id = btn.dataset.id;
             const action = btn.dataset.action;
-            if (action === 'toggle') {
-                await api.toggleEndpoint(id);
-            } else if (action === 'delete') {
-                if (confirm(`Delete endpoint ${id}?`)) {
+            try {
+                if (action === 'toggle') {
+                    await api.toggleEndpoint(id);
+                    toast(`Endpoint ${id} toggled`, 'success');
+                } else if (action === 'delete') {
+                    if (!confirm(`Delete endpoint ${id}?`)) return;
                     await api.deleteEndpoint(id);
+                    toast(`Endpoint ${id} deleted`, 'success');
+                } else if (action === 'priority-up') {
+                    const ep = endpoints.find(e => e.id === id);
+                    if (ep) await api.updatePriority(id, (ep.priority || 0) + 1);
+                } else if (action === 'priority-down') {
+                    const ep = endpoints.find(e => e.id === id);
+                    if (ep) await api.updatePriority(id, Math.max(0, (ep.priority || 0) - 1));
                 }
-            } else if (action === 'priority-up') {
-                const ep = endpoints.find(e => e.id === id);
-                if (ep) await api.updatePriority(id, (ep.priority || 0) + 1);
-            } else if (action === 'priority-down') {
-                const ep = endpoints.find(e => e.id === id);
-                if (ep) await api.updatePriority(id, Math.max(0, (ep.priority || 0) - 1));
+            } catch (e) {
+                toast(`Action failed: ${e.message}`, 'error');
             }
             fetchRegistry();
         });

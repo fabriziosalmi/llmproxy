@@ -3,6 +3,7 @@
  */
 import { store } from '../services/store.js';
 import { api } from '../services/api.js';
+import { toast } from '../services/toast.js';
 
 const GUARD_INFO = {
     injection_guard: {
@@ -73,7 +74,7 @@ export function initGuards() {
     initProxyToggle();
     initPriorityToggle();
     refreshCacheStats();
-    setInterval(refreshCacheStats, 10000);
+    store.poll(refreshCacheStats, 10000, 'guards');
 }
 
 function initProxyToggle() {
@@ -113,6 +114,7 @@ function updateToggleUI(btnId, dotId, enabled, color) {
     const dot = document.getElementById(dotId);
     if (!btn || !dot) return;
 
+    btn.setAttribute('aria-checked', String(enabled));
     if (enabled) {
         btn.className = `relative w-14 h-7 rounded-full transition-colors bg-${color}-500/20 border border-${color}-500/30`;
         dot.className = `absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-${color}-400 transition-transform translate-x-7 shadow-lg shadow-${color}-500/30`;
@@ -142,11 +144,11 @@ export function renderGuards() {
                     <h3 class="text-xs font-bold text-white">${info.name}</h3>
                 </div>
                 ${info.toggleable ? `
-                    <button data-guard="${key}" class="guard-toggle relative w-10 h-5 rounded-full transition-colors ${enabled ? `bg-${c}-500/30 border border-${c}-500/40` : 'bg-slate-700/50 border border-slate-600/30'}">
+                    <button data-guard="${key}" role="switch" aria-checked="${enabled}" aria-label="Toggle ${info.name}" class="guard-toggle relative w-10 h-5 rounded-full transition-colors ${enabled ? `bg-${c}-500/30 border border-${c}-500/40` : 'bg-slate-700/50 border border-slate-600/30'}">
                         <div class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full transition-transform ${enabled ? `bg-${c}-400 translate-x-5` : 'bg-slate-500 translate-x-0'}"></div>
                     </button>
                 ` : `
-                    <span class="text-[8px] font-bold font-mono text-${c}-400/60 bg-${c}-500/10 px-2 py-0.5 rounded">${info.status}</span>
+                    <span class="text-[10px] font-bold font-mono text-${c}-400/60 bg-${c}-500/10 px-2 py-0.5 rounded">${info.status}</span>
                 `}
             </div>
             <p class="text-[10px] text-slate-400 leading-relaxed">${info.desc}</p>
@@ -167,8 +169,9 @@ export function renderGuards() {
                 const features = { ...store.state.features, [name]: res.enabled };
                 store.update({ features });
                 renderGuards();
+                toast(`${GUARD_INFO[name]?.name || name} ${res.enabled ? 'enabled' : 'disabled'}`, 'success');
             } catch (e) {
-                console.error('Guard toggle failed:', e);
+                toast(`Guard toggle failed: ${e.message}`, 'error');
             }
         });
     });
@@ -189,7 +192,7 @@ async function refreshCacheStats() {
         const badge = document.getElementById('cache-status-badge');
         if (badge) {
             badge.textContent = 'OFFLINE';
-            badge.className = 'text-[8px] font-bold font-mono text-slate-500 bg-slate-500/10 px-2 py-0.5 rounded';
+            badge.className = 'text-[10px] font-bold font-mono text-slate-500 bg-slate-500/10 px-2 py-0.5 rounded';
         }
     }
 }
@@ -203,10 +206,10 @@ function renderCacheStats(data) {
     if (badge) {
         if (l1.enabled || l2.enabled) {
             badge.textContent = 'ACTIVE';
-            badge.className = 'text-[8px] font-bold font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded';
+            badge.className = 'text-[10px] font-bold font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded';
         } else {
             badge.textContent = 'DISABLED';
-            badge.className = 'text-[8px] font-bold font-mono text-slate-500 bg-slate-500/10 px-2 py-0.5 rounded';
+            badge.className = 'text-[10px] font-bold font-mono text-slate-500 bg-slate-500/10 px-2 py-0.5 rounded';
         }
     }
 

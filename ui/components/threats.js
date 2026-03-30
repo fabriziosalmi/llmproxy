@@ -13,8 +13,8 @@ export function initThreats() {
     initEventFeed();
     refreshMetrics();
     refreshLatencyData();
-    setInterval(refreshMetrics, 10000);
-    setInterval(refreshLatencyData, 10000);
+    store.poll(refreshMetrics, 10000, 'threats');
+    store.poll(refreshLatencyData, 10000, 'threats');
 }
 
 async function refreshMetrics() {
@@ -97,8 +97,8 @@ function renderBudgetGauge(consumed, limit, totalCost, guardsStatus) {
                 <div class="h-full bg-${color}-500/60 rounded-full transition-all" style="width: ${pct}%"></div>
             </div>
             <div class="flex justify-between mt-1">
-                <span class="text-[8px] text-slate-600 font-mono">$${remaining} remaining</span>
-                <span class="text-[8px] text-slate-600 font-mono">Daily reset</span>
+                <span class="text-[10px] text-slate-600 font-mono">$${remaining} remaining</span>
+                <span class="text-[10px] text-slate-600 font-mono">Daily reset</span>
             </div>
         ` : ''}
     `;
@@ -173,8 +173,8 @@ function renderFirewallStats(guardsStatus) {
             <div class="space-y-1 mt-2 pt-2 border-t border-white/[0.04]">
                 ${sigEntries.map(([sig, count]) => `
                     <div class="flex items-center justify-between">
-                        <span class="text-[8px] font-mono text-slate-500 truncate max-w-[250px]">${sig}</span>
-                        <span class="text-[8px] font-mono text-rose-400">${count}x</span>
+                        <span class="text-[10px] font-mono text-slate-500 truncate max-w-[250px]">${sig}</span>
+                        <span class="text-[10px] font-mono text-rose-400">${count}x</span>
                     </div>
                 `).join('')}
             </div>
@@ -224,12 +224,12 @@ function renderRingLatencyBars(latency) {
         return `
             <div class="mb-2">
                 <div class="flex items-center justify-between mb-0.5">
-                    <span class="text-[8px] font-bold ${rc.text} uppercase tracking-wider">${rc.label}</span>
+                    <span class="text-[10px] font-bold ${rc.text} uppercase tracking-wider">${rc.label}</span>
                     <div class="flex items-center gap-3">
-                        <span class="text-[8px] font-mono text-slate-500">P50 <span class="text-white">${r.p50.toFixed(1)}ms</span></span>
-                        <span class="text-[8px] font-mono text-slate-500">P95 <span class="text-amber-400">${r.p95.toFixed(1)}ms</span></span>
-                        <span class="text-[8px] font-mono text-slate-500">P99 <span class="text-rose-400">${r.p99.toFixed(1)}ms</span></span>
-                        <span class="text-[7px] font-mono text-slate-600">${r.count}x</span>
+                        <span class="text-[10px] font-mono text-slate-500">P50 <span class="text-white">${r.p50.toFixed(1)}ms</span></span>
+                        <span class="text-[10px] font-mono text-slate-500">P95 <span class="text-amber-400">${r.p95.toFixed(1)}ms</span></span>
+                        <span class="text-[10px] font-mono text-slate-500">P99 <span class="text-rose-400">${r.p99.toFixed(1)}ms</span></span>
+                        <span class="text-[9px] font-mono text-slate-600">${r.count}x</span>
                     </div>
                 </div>
                 <div class="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
@@ -266,11 +266,11 @@ function renderTTFT(ttft) {
             </div>
         </div>
         <div class="flex items-center gap-2">
-            <span class="text-[8px] font-mono text-slate-600">${ttft.samples} stream samples</span>
+            <span class="text-[10px] font-mono text-slate-600">${ttft.samples} stream samples</span>
             <div class="flex-1 h-1 bg-white/5 rounded-full overflow-hidden">
                 <div class="h-full bg-${color}-500/40 rounded-full" style="width: ${Math.min(100, (ttft.p50 / 2000) * 100)}%"></div>
             </div>
-            <span class="text-[8px] font-mono text-slate-600">2s target</span>
+            <span class="text-[10px] font-mono text-slate-600">2s target</span>
         </div>
     `;
 }
@@ -304,16 +304,16 @@ function renderRingTimeline(traces) {
         const upstreamSeg = upstreamWidth > 0 ? `<div class="bg-emerald-500/60 h-full rounded-sm" style="width: ${upstreamWidth}%" title="Upstream: ${upstream}ms"></div>` : '';
 
         const ts = trace.timestamp ? new Date(trace.timestamp * 1000).toLocaleTimeString() : '--';
-        const ttftBadge = trace.ttft_ms ? `<span class="text-[7px] font-mono text-sky-400 bg-sky-500/10 px-1 py-0.5 rounded">TTFT ${trace.ttft_ms}ms</span>` : '';
+        const ttftBadge = trace.ttft_ms ? `<span class="text-[9px] font-mono text-sky-400 bg-sky-500/10 px-1 py-0.5 rounded">TTFT ${trace.ttft_ms}ms</span>` : '';
 
         return `
             <div class="flex items-center gap-3 group">
-                <span class="text-[8px] font-mono text-slate-600 w-16 shrink-0">${ts}</span>
-                <span class="text-[7px] font-mono text-slate-500 w-12 shrink-0">${trace.req_id || '--'}</span>
+                <span class="text-[10px] font-mono text-slate-600 w-16 shrink-0">${ts}</span>
+                <span class="text-[9px] font-mono text-slate-500 w-12 shrink-0">${trace.req_id || '--'}</span>
                 <div class="flex-1 h-3 bg-white/[0.03] rounded-full overflow-hidden flex">
                     ${segments}${upstreamSeg}
                 </div>
-                <span class="text-[8px] font-mono text-white w-16 text-right shrink-0">${total.toFixed(0)}ms</span>
+                <span class="text-[10px] font-mono text-white w-16 text-right shrink-0">${total.toFixed(0)}ms</span>
                 ${ttftBadge}
             </div>
         `;
@@ -384,21 +384,39 @@ function initEventFeed() {
     const feed = document.getElementById('threat-feed');
     if (!feed) return;
 
-    try {
-        eventSource = new EventSource(`${window.location.origin}/api/v1/logs`);
-        eventSource.onmessage = (e) => {
-            try {
-                const entry = JSON.parse(e.data);
-                if (!isSecurityEvent(entry)) return;
-                addEventToFeed(feed, entry);
-            } catch {}
-        };
-        eventSource.onerror = () => {
-            feed.innerHTML = '<p class="text-[10px] text-slate-500 italic">Event stream disconnected. Reconnecting...</p>';
-        };
-    } catch {
-        feed.innerHTML = '<p class="text-[10px] text-slate-500 italic">Event stream unavailable.</p>';
+    let errorCount = 0;
+
+    function connect() {
+        try {
+            if (eventSource) eventSource.close();
+            errorCount = 0;
+            eventSource = new EventSource(`${window.location.origin}/api/v1/logs`);
+            eventSource.onmessage = (e) => {
+                errorCount = 0;
+                try {
+                    const entry = JSON.parse(e.data);
+                    if (!isSecurityEvent(entry)) return;
+                    addEventToFeed(feed, entry);
+                } catch {}
+            };
+            eventSource.onerror = () => {
+                errorCount++;
+                if (errorCount > 5) {
+                    eventSource.close();
+                    feed.innerHTML = `<div class="flex items-center gap-2">
+                        <p class="text-[10px] text-slate-500">Event stream disconnected.</p>
+                        <button id="sse-reconnect-btn" class="text-[10px] text-sky-400 hover:text-sky-300 font-bold">Reconnect</button>
+                    </div>`;
+                    const btn = document.getElementById('sse-reconnect-btn');
+                    if (btn) btn.addEventListener('click', connect);
+                }
+            };
+        } catch {
+            feed.innerHTML = '<p class="text-[10px] text-slate-500 italic">Event stream unavailable.</p>';
+        }
     }
+
+    connect();
 }
 
 function isSecurityEvent(entry) {
@@ -410,9 +428,23 @@ function isSecurityEvent(entry) {
         msg.includes('RATE') || msg.includes('ZT') || msg.includes('PANIC') || msg.includes('BUDGET');
 }
 
+function updateChart(entry) {
+    if (!chart) return;
+    const hour = new Date().getHours();
+    const isBlocked = (entry.level || '').toUpperCase() === 'SECURITY' ||
+        (entry.message || '').toUpperCase().includes('BLOCK');
+    if (isBlocked) {
+        chart.data.datasets[0].data[hour] += 1;
+    } else {
+        chart.data.datasets[1].data[hour] += 1;
+    }
+    chart.update('none'); // skip animation for perf
+}
+
 function addEventToFeed(feed, entry) {
     const placeholder = feed.querySelector('p.italic');
     if (placeholder) placeholder.remove();
+    updateChart(entry);
 
     const level = (entry.level || 'INFO').toUpperCase();
     const colors = {

@@ -3,6 +3,7 @@
  * Fetches from GET /v1/models and displays in a sortable table.
  */
 import { api } from '../services/api.js';
+import { store } from '../services/store.js';
 
 const EMBEDDING_PREFIXES = ['text-embedding', 'embedding-', 'nomic-embed', 'mxbai-embed', 'all-minilm', 'bge-', 'snowflake-arctic', 'mistral-embed'];
 
@@ -10,9 +11,22 @@ function isEmbeddingModel(id) {
     return EMBEDDING_PREFIXES.some(p => id.toLowerCase().startsWith(p));
 }
 
+let _allChat = [];
+let _allEmbed = [];
+
 export function initModels() {
     refreshModels();
-    setInterval(refreshModels, 30000);
+    store.poll(refreshModels, 30000, 'models');
+
+    const searchInput = document.getElementById('models-search');
+    if (searchInput) {
+        searchInput.addEventListener('input', () => {
+            const q = searchInput.value.toLowerCase().trim();
+            const fc = q ? _allChat.filter(m => m.id.toLowerCase().includes(q) || m.owned_by.toLowerCase().includes(q)) : _allChat;
+            const fe = q ? _allEmbed.filter(m => m.id.toLowerCase().includes(q) || m.owned_by.toLowerCase().includes(q)) : _allEmbed;
+            renderModelsTable(fc, fe);
+        });
+    }
 }
 
 export function renderModels() {
@@ -25,14 +39,14 @@ async function refreshModels() {
         const models = data.data || [];
 
         const providers = new Set(models.map(m => m.owned_by));
-        const embeddings = models.filter(m => isEmbeddingModel(m.id));
-        const chat = models.filter(m => !isEmbeddingModel(m.id));
+        _allEmbed = models.filter(m => isEmbeddingModel(m.id));
+        _allChat = models.filter(m => !isEmbeddingModel(m.id));
 
         setText('kpi-active-models', models.length);
         setText('kpi-providers', providers.size);
-        setText('kpi-embedding-models', embeddings.length);
+        setText('kpi-embedding-models', _allEmbed.length);
 
-        renderModelsTable(chat, embeddings);
+        renderModelsTable(_allChat, _allEmbed);
     } catch (e) {
         console.error('Failed to load models:', e);
     }
@@ -59,7 +73,7 @@ function renderModelsTable(chatModels, embeddingModels) {
     function modelRow(m) {
         const color = providerColors[m.owned_by] || 'text-slate-400';
         const badge = isEmbeddingModel(m.id)
-            ? '<span class="ml-2 px-1.5 py-0.5 text-[8px] font-bold bg-violet-500/20 text-violet-400 rounded">EMB</span>'
+            ? '<span class="ml-2 px-1.5 py-0.5 text-[10px] font-bold bg-violet-500/20 text-violet-400 rounded">EMB</span>'
             : '';
         return `
             <tr class="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors">

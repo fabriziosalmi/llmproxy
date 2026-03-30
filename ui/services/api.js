@@ -1,212 +1,99 @@
 /**
  * LLMPROXY — Centralized API Service
+ *
+ * All requests go through _fetch() which auto-injects Authorization
+ * headers and validates response status (fixes audit #21 + #22).
  */
 
 const BASE_URL = window.location.origin;
 
+/** Auth-aware fetch wrapper. Injects Bearer token and checks response status. */
+async function _fetch(url, options = {}) {
+    const token = localStorage.getItem('proxy_key') || '';
+    const headers = { ...(options.headers || {}) };
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+    const response = await fetch(url, { ...options, headers });
+    if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        const err = new Error(`API ${response.status}: ${body.slice(0, 200)}`);
+        err.status = response.status;
+        err.body = body;
+        throw err;
+    }
+    return response;
+}
+
+async function _json(url, options) {
+    const response = await _fetch(url, options);
+    return await response.json();
+}
+
+async function _text(url, options) {
+    const response = await _fetch(url, options);
+    return await response.text();
+}
+
+function _post(url, data) {
+    return _json(url, {
+        method: 'POST',
+        body: JSON.stringify(data),
+        headers: { 'Content-Type': 'application/json' },
+    });
+}
+
 export const api = {
-    async fetchNetworkInfo() {
-        const response = await fetch(`${BASE_URL}/api/v1/network/info`);
-        return await response.json();
-    },
+    async fetchNetworkInfo() { return _json(`${BASE_URL}/api/v1/network/info`); },
+    async fetchVersion() { return _json(`${BASE_URL}/api/v1/version`); },
+    async fetchRegistry() { return _json(`${BASE_URL}/api/v1/registry`); },
 
-    async fetchVersion() {
-        const response = await fetch(`${BASE_URL}/api/v1/version`);
-        return await response.json();
-    },
+    async toggleEndpoint(id) { return _fetch(`${BASE_URL}/api/v1/registry/${id}/toggle`, { method: 'POST' }); },
+    async deleteEndpoint(id) { return _fetch(`${BASE_URL}/api/v1/registry/${id}`, { method: 'DELETE' }); },
+    async updatePriority(id, priority) { return _post(`${BASE_URL}/api/v1/registry/${id}/priority`, { priority }); },
 
-    async fetchRegistry() {
-        const response = await fetch(`${BASE_URL}/api/v1/registry`);
-        return await response.json();
-    },
+    async fetchProxyStatus() { return _json(`${BASE_URL}/api/v1/proxy/status`); },
+    async toggleProxy(enabled) { return _post(`${BASE_URL}/api/v1/proxy/toggle`, { enabled }); },
+    async togglePriorityMode(enabled) { return _post(`${BASE_URL}/api/v1/proxy/priority/toggle`, { enabled }); },
 
-    async toggleEndpoint(id) {
-        return await fetch(`${BASE_URL}/api/v1/registry/${id}/toggle`, { method: 'POST' });
-    },
+    async fetchServiceInfo() { return _json(`${BASE_URL}/api/v1/service-info`); },
+    async fetchFeatures() { return _json(`${BASE_URL}/api/v1/features`); },
+    async toggleFeature(name, enabled) { return _post(`${BASE_URL}/api/v1/features/toggle`, { name, enabled }); },
 
-    async deleteEndpoint(id) {
-        return await fetch(`${BASE_URL}/api/v1/registry/${id}`, { method: 'DELETE' });
-    },
+    async fetchPlugins() { return _json(`${BASE_URL}/api/v1/plugins`); },
+    async togglePlugin(name, enabled) { return _post(`${BASE_URL}/api/v1/plugins/toggle`, { name, enabled }); },
+    async panic() { return _json(`${BASE_URL}/api/v1/panic`, { method: 'POST' }); },
+    async fetchPluginStats() { return _json(`${BASE_URL}/api/v1/plugins/stats`); },
 
-    async updatePriority(id, priority) {
-        return await fetch(`${BASE_URL}/api/v1/registry/${id}/priority`, {
-            method: 'POST',
-            body: JSON.stringify({ priority }),
-            headers: { 'Content-Type': 'application/json' }
-        });
-    },
+    async fetchMetrics() { return _text(`${BASE_URL}/metrics`); },
+    async fetchHealth() { return _json(`${BASE_URL}/health`); },
+    async fetchGuardsStatus() { return _json(`${BASE_URL}/api/v1/guards/status`); },
+    async fetchCacheStats() { return _json(`${BASE_URL}/api/v1/cache/stats`); },
+    async fetchWebhooks() { return _json(`${BASE_URL}/api/v1/webhooks`); },
+    async fetchExportStatus() { return _json(`${BASE_URL}/api/v1/export/status`); },
+    async fetchRbacRoles() { return _json(`${BASE_URL}/api/v1/rbac/roles`); },
+    async fetchIdentityMe() { return _json(`${BASE_URL}/api/v1/identity/me`); },
 
-    async fetchProxyStatus() {
-        const response = await fetch(`${BASE_URL}/api/v1/proxy/status`);
-        return await response.json();
-    },
+    async fetchLatencyMetrics() { return _json(`${BASE_URL}/api/v1/metrics/latency`); },
+    async fetchRingTimeline() { return _json(`${BASE_URL}/api/v1/metrics/ring-timeline`); },
 
-    async toggleProxy(enabled) {
-        const response = await fetch(`${BASE_URL}/api/v1/proxy/toggle`, {
-            method: 'POST',
-            body: JSON.stringify({ enabled }),
-            headers: { 'Content-Type': 'application/json' }
-        });
-        return await response.json();
-    },
-
-    async togglePriorityMode(enabled) {
-        const response = await fetch(`${BASE_URL}/api/v1/proxy/priority/toggle`, {
-            method: 'POST',
-            body: JSON.stringify({ enabled }),
-            headers: { 'Content-Type': 'application/json' }
-        });
-        return await response.json();
-    },
-
-    async fetchServiceInfo() {
-        const response = await fetch(`${BASE_URL}/api/v1/service-info`);
-        return await response.json();
-    },
-
-    async fetchFeatures() {
-        const response = await fetch(`${BASE_URL}/api/v1/features`);
-        return await response.json();
-    },
-
-    async toggleFeature(name, enabled) {
-        const response = await fetch(`${BASE_URL}/api/v1/features/toggle`, {
-            method: 'POST',
-            body: JSON.stringify({ name, enabled }),
-            headers: { 'Content-Type': 'application/json' }
-        });
-        return await response.json();
-    },
-
-    async fetchPlugins() {
-        const response = await fetch(`${BASE_URL}/api/v1/plugins`);
-        return await response.json();
-    },
-
-    async togglePlugin(name, enabled) {
-        return await fetch(`${BASE_URL}/api/v1/plugins/toggle`, {
-            method: 'POST',
-            body: JSON.stringify({ name, enabled }),
-            headers: { 'Content-Type': 'application/json' }
-        });
-    },
-
-    async panic() {
-        const response = await fetch(`${BASE_URL}/api/v1/panic`, { method: 'POST' });
-        return await response.json();
-    },
-
-    async fetchPluginStats() {
-        const response = await fetch(`${BASE_URL}/api/v1/plugins/stats`);
-        return await response.json();
-    },
-
-    async fetchMetrics() {
-        const response = await fetch(`${BASE_URL}/metrics`);
-        return await response.text();
-    },
-
-    async fetchHealth() {
-        const response = await fetch(`${BASE_URL}/health`);
-        return await response.json();
-    },
-
-    async fetchGuardsStatus() {
-        const response = await fetch(`${BASE_URL}/api/v1/guards/status`);
-        return await response.json();
-    },
-
-    async fetchCacheStats() {
-        const response = await fetch(`${BASE_URL}/api/v1/cache/stats`);
-        return await response.json();
-    },
-
-    async fetchWebhooks() {
-        const response = await fetch(`${BASE_URL}/api/v1/webhooks`);
-        return await response.json();
-    },
-
-    async fetchExportStatus() {
-        const response = await fetch(`${BASE_URL}/api/v1/export/status`);
-        return await response.json();
-    },
-
-    async fetchRbacRoles() {
-        const response = await fetch(`${BASE_URL}/api/v1/rbac/roles`);
-        return await response.json();
-    },
-
-    async fetchIdentityMe() {
-        const response = await fetch(`${BASE_URL}/api/v1/identity/me`, {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('proxy_key') || ''}` }
-        });
-        return await response.json();
-    },
-
-    async fetchLatencyMetrics() {
-        const response = await fetch(`${BASE_URL}/api/v1/metrics/latency`);
-        return await response.json();
-    },
-
-    async fetchRingTimeline() {
-        const response = await fetch(`${BASE_URL}/api/v1/metrics/ring-timeline`);
-        return await response.json();
-    },
-
-    async installPlugin(data) {
-        const response = await fetch(`${BASE_URL}/api/v1/plugins/install`, {
-            method: 'POST',
-            body: JSON.stringify(data),
-            headers: { 'Content-Type': 'application/json' }
-        });
-        return await response.json();
-    },
-
-    async uninstallPlugin(name) {
-        const response = await fetch(`${BASE_URL}/api/v1/plugins/${name}`, { method: 'DELETE' });
-        return await response.json();
-    },
-
-    async rollbackPlugins() {
-        const response = await fetch(`${BASE_URL}/api/v1/plugins/rollback`, { method: 'POST' });
-        return await response.json();
-    },
+    async installPlugin(data) { return _post(`${BASE_URL}/api/v1/plugins/install`, data); },
+    async uninstallPlugin(name) { return _json(`${BASE_URL}/api/v1/plugins/${name}`, { method: 'DELETE' }); },
+    async rollbackPlugins() { return _json(`${BASE_URL}/api/v1/plugins/rollback`, { method: 'POST' }); },
 
     async sendChatMessage(text, model = 'auto') {
-        return await fetch(`${BASE_URL}/v1/chat/completions`, {
+        return _json(`${BASE_URL}/v1/chat/completions`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('proxy_key') || ''}`
-            },
-            body: JSON.stringify({
-                model,
-                messages: [{ role: 'user', content: text }]
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model, messages: [{ role: 'user', content: text }] }),
         });
     },
 
-    // Models discovery
-    async fetchModels() {
-        const response = await fetch(`${BASE_URL}/v1/models`);
-        return await response.json();
-    },
-
-    // Spend analytics
-    async fetchSpend(groupBy = 'model') {
-        const response = await fetch(`${BASE_URL}/api/v1/analytics/spend?group_by=${groupBy}`);
-        return await response.json();
-    },
-
-    async fetchTopModels(limit = 10) {
-        const response = await fetch(`${BASE_URL}/api/v1/analytics/spend/topmodels?limit=${limit}`);
-        return await response.json();
-    },
-
-    // Audit log
+    async fetchModels() { return _json(`${BASE_URL}/v1/models`); },
+    async fetchSpend(groupBy = 'model') { return _json(`${BASE_URL}/api/v1/analytics/spend?group_by=${groupBy}`); },
+    async fetchTopModels(limit = 10) { return _json(`${BASE_URL}/api/v1/analytics/spend/topmodels?limit=${limit}`); },
     async fetchAudit(params = {}) {
         const qs = new URLSearchParams(params).toString();
-        const response = await fetch(`${BASE_URL}/api/v1/audit?${qs}`);
-        return await response.json();
-    }
+        return _json(`${BASE_URL}/api/v1/audit?${qs}`);
+    },
 };

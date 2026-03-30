@@ -50,6 +50,12 @@ button:active, .cursor-pointer:active {
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
 }
+/* Fallback for browsers without backdrop-filter (audit #8) */
+@supports not (backdrop-filter: blur(1px)) {
+    .glass, .glass-sidebar {
+        background: rgba(15, 15, 18, 0.95);
+    }
+}
 
 .glass-sidebar {
     background: rgba(10, 10, 12, 0.4);
@@ -266,6 +272,8 @@ body.cinema-mode main {
     z-index: 9999;
     opacity: 0.028;
     mix-blend-mode: overlay;
+    /* Respect reduced-motion preference (audit #7) */
+    transition: opacity 0.3s;
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
@@ -302,6 +310,27 @@ body.cinema-mode main {
         0 0 0 1px rgba(14, 165, 233, 0.4),
         0 0 25px -2px rgba(14, 165, 233, 0.25);
     transform: scale(1.05);
+}
+
+/* ─── Reduced Motion ─── */
+@media (prefers-reduced-motion: reduce) {
+    .nebula-grain { display: none; }
+    .animate-in { animation: none; }
+    .animate-marquee { animation: none; }
+    .animate-pulse { animation: none; }
+    *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+
+/* ─── Touch Target Minimum (audit #31 — WCAG 2.5.8) ─── */
+@media (pointer: coarse) {
+    button, [role="switch"], .nav-item, .cursor-pointer {
+        min-height: 36px;
+        min-width: 36px;
+    }
+    button[data-action], .guard-toggle {
+        min-height: 32px;
+        padding: 6px 10px;
+    }
 }
 
 /* ─── Mobile Responsive ─── */
@@ -360,6 +389,24 @@ body.cinema-mode main {
     background: linear-gradient(90deg, rgba(255,255,255,0.02) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.02) 75%);
     background-size: 800px 100%;
     animation: shimmer 1.4s infinite linear;
+}
+
+/* ─── Toast Notifications ─── */
+@keyframes toastIn {
+    from { opacity: 0; transform: translateX(40px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+@keyframes toastOut {
+    from { opacity: 1; transform: translateX(0); }
+    to { opacity: 0; transform: translateX(40px); }
+}
+.toast {
+    pointer-events: auto;
+    animation: toastIn 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+    max-width: 360px;
+}
+.toast.removing {
+    animation: toastOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
 }
 
 /* ─── 1.2: Breadcrumb divider ─── */
