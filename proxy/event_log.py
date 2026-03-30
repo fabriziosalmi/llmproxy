@@ -44,11 +44,25 @@ class EventLogger:
             self._dlq_write(dropped)
         await self.telemetry_queue.put(event)
 
+    _DLQ_PATH = "dlq.jsonl"
+    _DLQ_MAX_BYTES = 10 * 1024 * 1024  # 10 MB — rotate when exceeded
+
     def _dlq_write(self, entry: Any):
         """Dead-letter queue: persist dropped log/telemetry entries to file.
-        Non-blocking, best-effort -- prevents silent data loss under load spikes."""
+        Non-blocking, best-effort -- prevents silent data loss under load spikes.
+        Rotates the file when it exceeds _DLQ_MAX_BYTES to prevent unbounded growth."""
+        import os
         try:
-            with open("dlq.jsonl", "a") as f:
+            # Rotate if oversized
+            try:
+                if os.path.getsize(self._DLQ_PATH) > self._DLQ_MAX_BYTES:
+                    rotated = self._DLQ_PATH + ".1"
+                    if os.path.exists(rotated):
+                        os.remove(rotated)
+                    os.rename(self._DLQ_PATH, rotated)
+            except OSError:
+                pass  # File may not exist yet
+            with open(self._DLQ_PATH, "a") as f:
                 f.write(json.dumps(entry, default=str) + "\n")
         except Exception:
             pass  # DLQ is best-effort, never block the hot path

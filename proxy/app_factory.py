@@ -164,8 +164,8 @@ def create_app(agent) -> FastAPI:
         if request.url.path.startswith("/ui"):
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
-                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                "script-src 'self'; "
+                "style-src 'self' https://fonts.googleapis.com; "
                 "font-src 'self' https://fonts.gstatic.com; "
                 "img-src 'self' data:; "
                 "connect-src 'self'; "
@@ -173,7 +173,18 @@ def create_app(agent) -> FastAPI:
             )
         return response
 
+    tls_cfg = agent.config.get("server", {}).get("tls", {})
+    if not tls_cfg.get("enabled", False):
+        logger.warning(
+            "TLS is DISABLED — all traffic is unencrypted. For production, either "
+            "enable TLS in config.yaml or place a reverse proxy (Traefik/Caddy/nginx) in front."
+        )
     cors_origins = agent.config.get("server", {}).get("cors_origins", ["*"])
+    if cors_origins == ["*"]:
+        logger.warning(
+            "CORS allow_origins is ['*'] — any website can make authenticated requests "
+            "to this proxy. Set server.cors_origins in config.yaml to restrict in production."
+        )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins,

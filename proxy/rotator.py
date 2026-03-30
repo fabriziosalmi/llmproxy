@@ -1,9 +1,10 @@
 """
 LLMProxy — Security Gateway Orchestrator.
 
-RotatorAgent is the core orchestrator: initializes the security pipeline,
-wires route modules via the app factory, and handles the proxy request chain
-through the 5-ring plugin system with SecurityShield pre-inspection.
+ProxyOrchestrator (formerly RotatorAgent) is the core orchestrator: initializes
+the security pipeline, wires route modules via the app factory, and handles the
+proxy request chain through the 5-ring plugin system with SecurityShield
+pre-inspection.
 
 Extracted modules:
   - proxy/app_factory.py   — FastAPI app + middleware + routes
@@ -53,7 +54,7 @@ from .forwarder import RequestForwarder
 logger = logging.getLogger("llmproxy.rotator")
 
 
-class RotatorAgent(BaseAgent):
+class ProxyOrchestrator(BaseAgent):
     """Security gateway orchestrator — routes requests through the plugin pipeline."""
 
     def __init__(self, store: BaseRepository, assistant=None, config_path: str = "config.yaml"):
@@ -395,11 +396,17 @@ class RotatorAgent(BaseAgent):
                     over_budget = self.total_cost_today >= daily_limit
                 if over_budget:
                     local_model = budget_cfg.get("local_model", "ollama/llama3.3")
+                    original_before_downgrade = ctx.body.get("model", "")
                     ctx.metadata["_budget_downgrade"] = True
-                    ctx.metadata["_original_model_pre_downgrade"] = ctx.body.get("model", "")
+                    ctx.metadata["_original_model_pre_downgrade"] = original_before_downgrade
                     ctx.body["model"] = local_model
+                    ctx.metadata["_budget_downgrade_headers"] = {
+                        "X-LLMProxy-Model-Downgraded": "true",
+                        "X-LLMProxy-Original-Model": original_before_downgrade,
+                        "X-LLMProxy-Downgrade-Reason": "daily_budget_exceeded",
+                    }
                     await self._add_log(
-                        f"BUDGET DOWNGRADE: {ctx.body.get('model')} → {local_model} "
+                        f"BUDGET DOWNGRADE: {original_before_downgrade} → {local_model} "
                         f"(${self.total_cost_today:.2f}/${daily_limit:.2f})",
                         level="PROXY",
                     )
@@ -491,6 +498,9 @@ class RotatorAgent(BaseAgent):
                     ctx.response.headers["X-LLMProxy-Cache"] = cache_status
                 ctx.response.headers["X-LLMProxy-Provider"] = ctx.metadata.get("_provider", "")
                 ctx.response.headers["X-LLMProxy-Request-Id"] = ctx.metadata.get("req_id", "")
+                # Budget downgrade notification headers
+                for k, v in ctx.metadata.get("_budget_downgrade_headers", {}).items():
+                    ctx.response.headers[k] = v
 
                 # S2: Cryptographic response signing
                 if self.response_signer.enabled and hasattr(ctx.response, "body"):
@@ -521,3 +531,7 @@ class RotatorAgent(BaseAgent):
             self.logger.error(f"Proxy pipeline error: {e}")
             TraceManager.capture_exception(e)
             raise HTTPException(status_code=502, detail="Upstream request failed")
+
+
+# Back-compat alias — external code and tests import RotatorAgent
+RotatorAgent = ProxyOrchestrator

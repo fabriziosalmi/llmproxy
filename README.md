@@ -661,6 +661,19 @@ The `docker-compose.yml` includes:
 - Resource limits: 2GB memory limit, 512MB reservation.
 - Ports: 8090 (API) + 9091 (Prometheus).
 
+### Production Security Checklist
+
+> **LLMProxy ships with TLS disabled and CORS set to `["*"]` for ease of development. Before exposing to any network, review these settings.**
+
+| Setting | Default | Production | Config |
+|---------|---------|-----------|--------|
+| **TLS** | `disabled` | Enable TLS **or** place a reverse proxy (Traefik, Caddy, nginx) in front | `server.tls.enabled: true` in `config.yaml` |
+| **CORS** | `["*"]` | Restrict to your frontend origin(s) | `server.cors_origins: ["https://your-app.com"]` in `config.yaml` |
+| **Auth** | `enabled` | Keep enabled; rotate API keys regularly | `server.auth.enabled: true` |
+| **API Keys** | placeholder | Replace `sk-proxy-CHANGE-ME` with strong keys | `LLM_PROXY_API_KEYS` env var |
+
+The proxy logs **warnings at startup** when TLS is disabled or CORS is set to `["*"]`.
+
 ### Hardened Deployment with Egress Filtering
 
 For production deployments handling sensitive data, pair LLMProxy with [secure-proxy-manager](https://github.com/fabriziosalmi/secure-proxy-manager) — a Squid-based network proxy with egress filtering, domain whitelisting, and direct IP blocking.
