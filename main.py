@@ -57,6 +57,7 @@ async def main():
         TraceManager.initialize(
             service_name=obs_config.get("service_name", "llmproxy"),
             otlp_endpoint=obs_config.get("otlp_endpoint"),
+            console_export=obs_config.get("console_export", False),
             sentry_dsn=sentry_dsn,
         )
 
