@@ -2,6 +2,55 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.10.6] — 2026-03-30
+
+### Adaptive Firewall
+- **External signature loading** — Signatures and injection corpus loaded from `data/signatures.yaml` and `data/injection_corpus.yaml`. Hot-reloaded every 30s. Falls back to hardcoded if files missing.
+- **Confidence-based escalation** — Composite score (0.4*regex + 0.35*semantic + 0.25*trajectory). Block >= 0.7, pass <= 0.3, gray zone escalates to AI.
+- **On-demand AI analysis** — Gray-zone requests (~2% of traffic) analyzed by `assistant.generate()` with 5s timeout. Fail-closed. No AI = threshold fallback.
+- **162 firewall signatures** (was 28), **157 semantic patterns** (was 64), **11 categories**, **20+ languages**.
+
+### Critical Fixes
+- **Forwarder missing provider API key** — Upstream requests sent without Authorization header. All providers failed silently. Fixed: inject from endpoint config `api_key_env`.
+- **Model resolver group/endpoint mismatch** — "auto" picked `gpt-4o-mini` but sent to Google. Fixed: `resolve_model()` returns `(model, provider)`, smart router pins endpoint.
+- **Startup rejected real API keys** — `startswith("AIza...")` matched all Google keys. Fixed: exact-match against placeholder set.
+- **Speculative guardrail PII false positive** — Aborted streams on legitimate content (model names matched PII regex). Removed PII check from speculative guardrail.
+- **OTEL console span flood** — `ConsoleSpanExporter` default `True` dumped JSON spans to stdout. Default changed to `False`.
+- **SSE auth** — `EventSource` can't send headers. Added `?token=` query param fallback. Deferred connection until token available in localStorage.
+- **CSP blocked Tailwind JIT** — Added `'unsafe-inline'` for styles, `'unsafe-eval'` for scripts. Removed Google Fonts refs (fonts are local).
+
+### Operations Panel (Guards View)
+- **Reset WAF Counters** — `POST /api/v1/firewall/reset`
+- **Clear Caches** — `POST /api/v1/cache/clear` (L1 negative + L2 positive)
+- **Reset Sessions & Ledger** — `POST /api/v1/security/reset`
+- **Circuit Breaker Reset** — `POST /api/v1/circuit-breaker/{id}/reset` + per-endpoint UI button
+- **Config Reload** — existing `POST /api/v1/admin/reload` exposed in UI
+
+### Chat Interface (`/ui/chat.html`)
+- Streaming chat with model selector (auto-populated from `/v1/models`)
+- Safe markdown rendering (escapeHtml first, then regex formatting — no XSS)
+- Provider + model labels: `groq (llama-3.3-70b-versatile)`
+- Per-message stats: TTFT, TPS (tok/s), prompt/completion tokens, total time
+- Multi-turn conversation history
+- Error display for upstream provider failures
+
+### Models & Config
+- Updated all providers to March 2026 models (OpenAI gpt-5.4, Anthropic claude-opus-4-6, Google gemini-3.1)
+- Resilient "auto" group: filters to available providers only
+- Endpoint seeding: config.yaml endpoints auto-registered in DB at startup
+- SSE shutdown: `CancelledError` caught in generators for clean Ctrl+C
+
+### UI
+- Eye favicon + logo (SVG, consistent brand)
+- README rewritten: 780 -> 285 lines
+
+### Stats
+- 942/942 tests passing
+- 33 files changed, +2198 -150 lines since v1.10.5
+- 21 commits
+
+---
+
 ## [1.10.5] — 2026-03-30
 
 ### Red Team Round 2 — 12 new findings fixed (2 CRITICAL, 6 HIGH, 4 MEDIUM)
