@@ -183,7 +183,12 @@ async function sendMessage() {
         if (!fullContent && rawChunks) {
             try {
                 const fullJson = JSON.parse(rawChunks);
-                fullContent = fullJson.choices?.[0]?.message?.content || '';
+                // Check for upstream error
+                if (fullJson.error) {
+                    fullContent = `Provider error: ${fullJson.error.message || JSON.stringify(fullJson.error)}`;
+                } else {
+                    fullContent = fullJson.choices?.[0]?.message?.content || '';
+                }
                 if (fullContent) bodyEl.textContent = fullContent;
                 if (fullJson.usage) usage = fullJson.usage;
                 if (fullJson.model) responseModel = fullJson.model;
