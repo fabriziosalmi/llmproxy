@@ -66,21 +66,23 @@ class RateLimiter:
         self._lock = asyncio.Lock()
 
     async def check(self, key: str) -> Tuple[bool, float]:
-        """Returns (allowed, retry_after_seconds)."""
+        """Returns (allowed, retry_after_seconds).
+
+        H4: bucket.acquire() is now called inside the global lock to prevent
+        a race where the bucket is evicted between lookup and acquire. The
+        per-bucket lock is still held inside acquire() for token atomicity.
+        """
         async with self._lock:
             if key not in self._buckets:
                 if len(self._buckets) >= self._MAX_BUCKETS:
-                    # O(1): evict the LRU entry (front of OrderedDict)
                     self._buckets.popitem(last=False)
                 self._buckets[key] = TokenBucket(self.default_capacity, self.default_rate)
             else:
-                # Mark as most-recently used: move to back in O(1)
                 self._buckets.move_to_end(key)
 
             bucket = self._buckets[key]
-
-        allowed = await bucket.acquire()
-        return allowed, bucket.retry_after
+            allowed = await bucket.acquire()
+            return allowed, bucket.retry_after
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):

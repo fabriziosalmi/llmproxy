@@ -18,6 +18,11 @@ async def cleanse(ctx: PluginContext):
     """Ring 4: Post-Flight Sanitization & Watermarking."""
     rotator = ctx.metadata.get("rotator")
     if not ctx.response or not hasattr(ctx.response, "body"):
+        # H12: StreamingResponse has no .body — it's an async iterator.
+        # Streaming responses are NOT sanitized by this plugin. The only
+        # defense is the speculative guardrail (analyze_speculative) which
+        # runs concurrently but is detect-only (bytes already sent).
+        # To enforce full sanitization, disable streaming or use buffered mode.
         return
 
     try:
@@ -26,12 +31,17 @@ async def cleanse(ctx: PluginContext):
         if not choices:
             return
 
-        raw_content = choices[0].get("message", {}).get("content", "")
-        if not raw_content:
-            return
-
-        sanitized = rotator.security.sanitize_response(raw_content)
-        choices[0].setdefault("message", {})["content"] = sanitized
+        # H3: Sanitize ALL choices, not just choices[0]. When n>1 is
+        # requested, alternative completions bypass sanitization.
+        any_blocked = False
+        for choice in choices:
+            raw_content = choice.get("message", {}).get("content", "")
+            if not raw_content:
+                continue
+            sanitized = rotator.security.sanitize_response(raw_content)
+            choice.setdefault("message", {})["content"] = sanitized
+            if "[SEC_ERR:" in sanitized:
+                any_blocked = True
 
         # JSONResponse.body is a read-only property — create a new Response
         new_body = json.dumps(data, separators=(",", ":")).encode()
@@ -41,7 +51,7 @@ async def cleanse(ctx: PluginContext):
             media_type="application/json",
         )
 
-        if "[SEC_ERR:" in sanitized:
+        if any_blocked:
             ctx.error = "Security Shield blocked response."
             ctx.stop_chain = True
 

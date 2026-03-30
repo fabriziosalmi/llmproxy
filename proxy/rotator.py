@@ -330,7 +330,7 @@ class ProxyOrchestrator(BaseAgent):
             session_id=session_id,
             metadata={
                 "rotator": self,
-                "req_id": uuid.uuid4().hex[:8],
+                "req_id": uuid.uuid4().hex[:16],
                 "_cache_control": request.headers.get("cache-control", "") if request else "",
             },
             state=self.plugin_state,
