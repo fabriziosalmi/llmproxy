@@ -43,6 +43,12 @@ async def config_watch_loop(agent, interval: int = 30):
                 # Trigger plugin hot-reload
                 if hasattr(agent, 'plugin_manager'):
                     await agent.plugin_manager.load_plugins()
+                # Invalidate model resolver provider cache
+                try:
+                    from core.model_resolver import invalidate_provider_cache
+                    invalidate_provider_cache()
+                except ImportError:
+                    pass
                 logger.info("Config hot-reloaded (security, circuits, cache, plugins)")
             # Signature hot-reload (independent of config hash)
             if hasattr(agent, 'signature_store') and agent.signature_store:
