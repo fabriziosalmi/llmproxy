@@ -2,6 +2,23 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.10.8] — 2026-03-30
+
+### UI: Full Gap Analysis Closure
+- **Cost Efficiency table** — model ranking by avg cost/request, cheapest/most expensive highlighted
+- **Webhook Test Fire** — button in Settings sends test payload to all configured endpoints
+- **Uptime + Pool Health KPIs** — Threats dashboard shows server uptime and healthy/total endpoints
+- All "trivial" and "moderate" backend-to-UI gaps from the capability audit are now closed
+
+### Cumulative Session Stats (v1.10.2 - v1.10.8)
+- 7 releases, 30+ commits
+- 76 security findings fixed (red team round 1 + 2, WAF audit)
+- Adaptive firewall (162 signatures, 157 semantic patterns, confidence scoring, AI escalation)
+- Complete SOC UI (chat, operations panel, audit query, GDPR controls, endpoint management)
+- 942/942 tests passing
+
+---
+
 ## [1.10.7] — 2026-03-30
 
 ### UI: Security Operations
