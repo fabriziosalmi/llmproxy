@@ -10,6 +10,7 @@ export default defineConfig({
     ['link', { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' }],
     ['link', { href: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap', rel: 'stylesheet' }],
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/llmproxy/favicon.svg' }],
+    ['link', { rel: 'icon', type: 'image/png', sizes: '32x32', href: '/llmproxy/favicon.png' }],
     ['meta', { name: 'theme-color', content: '#f43f5e' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:title', content: 'LLMProxy — LLM Security Gateway' }],
