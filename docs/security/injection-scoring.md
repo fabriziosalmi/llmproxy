@@ -6,16 +6,15 @@ The **SecurityShield** (`core/security.py`) provides deep inspection for prompt 
 
 SecurityShield uses regex-based threat scoring to evaluate each request. The score represents the likelihood of a prompt injection attempt.
 
-Requests exceeding the configurable threshold are blocked with a 403 response including diagnostic information:
+Requests exceeding the configurable threshold are blocked with a generic 403 response. The exact score is not exposed to the client (prevents binary search for threshold calibration):
 
 ```json
 {
-  "error": "Request blocked by SecurityShield",
-  "type": "injection_detected",
-  "score": 0.85,
-  "threshold": 0.7
+  "detail": "Request blocked by content security policy"
 }
 ```
+
+Detailed scores are logged server-side for SOC investigation.
 
 ## Multi-Turn Trajectory Detection
 
