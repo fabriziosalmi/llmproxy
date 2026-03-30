@@ -1,0 +1,99 @@
+groups:
+  - name: llmproxy-alerts
+    rules:
+      # ── Availability ──
+      - alert: LLMProxyDown
+        expr: up{job="llmproxy"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "LLMProxy is down"
+          description: "LLMProxy instance {{ $labels.instance }} is unreachable."
+
+      - alert: HighErrorRate
+        expr: >
+          100 * rate(llm_proxy_request_errors_total[5m])
+          / (rate(llm_proxy_requests_total[5m]) > 0) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Error rate above 5%"
+          description: "LLMProxy error rate is {{ $value | printf \"%.1f\" }}% over 5m."
+
+      # ── Latency ──
+      - alert: HighP95Latency
+        expr: >
+          histogram_quantile(0.95, rate(llm_proxy_request_latency_seconds_bucket[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 latency above 10s"
+          description: "P95 request latency is {{ $value | printf \"%.1f\" }}s."
+
+      # ── Circuit Breakers ──
+      - alert: CircuitBreakerOpen
+        expr: llm_proxy_circuit_open > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Circuit breaker open for {{ $labels.endpoint }}"
+          description: "Provider {{ $labels.endpoint }} has tripped its circuit breaker. Requests will use fallback chains."
+
+      # ── Budget ──
+      - alert: BudgetWarning
+        expr: llm_proxy_budget_consumed_usd > 40
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Daily budget at ${{ $value | printf \"%.2f\" }}"
+          description: "Approaching daily budget limit ($50). Consider reviewing model usage."
+
+      - alert: BudgetExceeded
+        expr: llm_proxy_budget_consumed_usd > 50
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Daily budget exceeded (${{ $value | printf \"%.2f\" }})"
+          description: "Budget cap reached. Requests may be downgraded to local LLM or rejected."
+
+      # ── Security ──
+      - alert: InjectionSpike
+        expr: increase(llm_proxy_injection_blocked_total[10m]) > 50
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Injection attack spike: {{ $value }} blocks in 10m"
+          description: "Unusual volume of blocked injection attempts. Check threat ledger."
+
+      - alert: AuthFailureSpike
+        expr: increase(llm_proxy_auth_failures_total[5m]) > 20
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Auth failure spike: {{ $value }} in 5m"
+          description: "Possible brute-force attack or misconfigured client."
+
+  - name: llmproxy-recording
+    rules:
+      # Pre-compute frequently queried metrics
+      - record: llmproxy:request_rate_5m
+        expr: rate(llm_proxy_requests_total[5m])
+
+      - record: llmproxy:error_rate_5m
+        expr: >
+          rate(llm_proxy_request_errors_total[5m])
+          / (rate(llm_proxy_requests_total[5m]) > 0)
+
+      - record: llmproxy:p95_latency_5m
+        expr: histogram_quantile(0.95, rate(llm_proxy_request_latency_seconds_bucket[5m]))
+
+      - record: llmproxy:cost_per_hour
+        expr: increase(llm_proxy_cost_total[1h])

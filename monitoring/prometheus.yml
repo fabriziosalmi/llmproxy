@@ -1,0 +1,16 @@
+# Prometheus config for LLMProxy monitoring
+# Usage: docker compose -f docker-compose.monitoring.yml up -d
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "prometheus-rules.yml"
+
+scrape_configs:
+  - job_name: "llmproxy"
+    static_configs:
+      - targets: ["llmproxy:8090"]
+    metrics_path: "/metrics"
+    scrape_interval: 10s

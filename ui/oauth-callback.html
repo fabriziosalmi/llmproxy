@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>LLMPROXY — OAuth Callback</title>
+    <style>
+        body { background: #050506; color: #94a3b8; font-family: 'Inter', sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .msg { text-align: center; font-size: 14px; }
+        .spinner { width: 24px; height: 24px; border: 2px solid rgba(56,189,248,0.2); border-top-color: #38bdf8; border-radius: 50%; animation: spin 0.6s linear infinite; margin: 0 auto 16px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="msg">
+        <div class="spinner"></div>
+        <p>Completing sign-in...</p>
+    </div>
+    <script>
+        // Extract id_token from URL fragment (implicit flow)
+        const hash = window.location.hash.substring(1);
+        const params = new URLSearchParams(hash);
+        const idToken = params.get('id_token');
+        const error = params.get('error');
+        const errorDesc = params.get('error_description');
+
+        if (window.opener) {
+            if (idToken) {
+                window.opener.postMessage({ type: 'oauth_callback', id_token: idToken }, window.location.origin);
+            } else {
+                window.opener.postMessage({ type: 'oauth_callback', error: errorDesc || error || 'Authentication failed' }, window.location.origin);
+            }
+            setTimeout(() => window.close(), 500);
+        } else {
+            // Fallback: if no opener (direct navigation), redirect to main UI
+            if (idToken) {
+                // Store temporarily and redirect
+                sessionStorage.setItem('_oauth_id_token', idToken);
+                window.location.href = '/ui/';
+            } else {
+                document.querySelector('.msg p').textContent = error || 'Authentication failed. Close this window.';
+            }
+        }
+    </script>
+</body>
+</html>
