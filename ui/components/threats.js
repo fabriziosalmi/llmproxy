@@ -19,9 +19,10 @@ export function initThreats() {
 
 async function refreshMetrics() {
     try {
-        const [text, guardsStatus] = await Promise.all([
+        const [text, guardsStatus, health] = await Promise.all([
             api.fetchMetrics().catch(() => ''),
             api.fetchGuardsStatus().catch(() => null),
+            api.fetchHealth().catch(() => null),
         ]);
 
         const requests = extractMetric(text, 'llm_proxy_requests_total') || 0;
@@ -48,6 +49,17 @@ async function refreshMetrics() {
 
         // Per-endpoint breakdown
         renderEndpointBreakdown(text);
+
+        // Health / uptime
+        if (health) {
+            const uptime = health.uptime_seconds || 0;
+            const h = Math.floor(uptime / 3600);
+            const m = Math.floor((uptime % 3600) / 60);
+            setText('kpi-uptime', h > 0 ? `${h}h ${m}m` : `${m}m`);
+            const poolSize = health.pool_size || 0;
+            const poolHealthy = health.pool_healthy || 0;
+            setText('kpi-pool-health', `${poolHealthy}/${poolSize}`);
+        }
 
         // Firewall stats
         if (guardsStatus) renderFirewallStats(guardsStatus);
