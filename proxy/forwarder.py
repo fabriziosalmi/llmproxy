@@ -162,9 +162,19 @@ class RequestForwarder:
                     level="PROXY",
                 )
 
+            # Inject provider API key from endpoint config
+            provider_headers = dict(headers)
+            ep_metadata = getattr(a_target, 'metadata', {}) or {}
+            api_key_env = ep_metadata.get("api_key_env", "")
+            if api_key_env:
+                import os
+                api_key = os.environ.get(api_key_env, "")
+                if api_key:
+                    provider_headers["Authorization"] = f"Bearer {api_key}"
+
             # Translate request for this provider
             target_url, translated_body, translated_headers = a_adapter.translate_request(
-                str(a_target.url), ctx.body, headers,
+                str(a_target.url), ctx.body, provider_headers,
             )
 
             try:
