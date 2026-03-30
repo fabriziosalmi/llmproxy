@@ -26,6 +26,9 @@ from enum import Enum
 from typing import List, Dict, Any, Optional, Sequence
 from dataclasses import dataclass, field
 
+from core.plugin_sdk import BasePlugin, PluginResponse, PluginResponseError
+from core.wasm_runner import WasmRunner
+
 # Bounded executor for sync plugin execution — prevents unbounded thread growth
 # under load. max_workers capped at 32 to avoid memory exhaustion from
 # non-cancellable threads (asyncio timeout stops waiting but thread keeps running).
@@ -33,9 +36,6 @@ _PLUGIN_EXECUTOR = ThreadPoolExecutor(
     max_workers=min(32, (os.cpu_count() or 4) + 4),
     thread_name_prefix="plugin-sync",
 )
-
-from core.plugin_sdk import BasePlugin, PluginResponse, PluginResponseError
-from core.wasm_runner import WasmRunner
 
 class PluginHook(Enum):
     INGRESS = "ingress"         # Ring 1: Auth, ZT, Rate Limit
