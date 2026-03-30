@@ -2,6 +2,20 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.10.7] — 2026-03-30
+
+### UI: Security Operations
+- **Audit Log Query** — Filterable table in Security view (model, key prefix, blocked/passed, limit). Shows timestamp, model, HTTP status, token counts, cost, blocked indicator.
+- **GDPR Erase (Art. 17)** — Delete all data for a subject with confirmation dialog.
+- **GDPR Purge Expired** — Trigger retention purge from UI.
+- **Add Endpoint** — Form in Endpoints view (name, URL, provider dropdown, priority). New `POST /api/v1/registry` backend endpoint.
+- **Nav font size** — 11px to 13px for readability.
+
+### Stats
+- 942/942 tests passing
+
+---
+
 ## [1.10.6] — 2026-03-30
 
 ### Adaptive Firewall
