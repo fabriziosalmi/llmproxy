@@ -1,0 +1,191 @@
+/* ── LLMProxy Docs — Apple-style theme ── */
+
+:root {
+  /* Rose accent to match SOC UI */
+  --vp-c-brand-1: #e11d48;
+  --vp-c-brand-2: #be123c;
+  --vp-c-brand-3: #9f1239;
+  --vp-c-brand-soft: rgba(225, 29, 72, 0.12);
+
+  /* Typography */
+  --vp-font-family-base: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  --vp-font-family-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.dark {
+  --vp-c-brand-1: #fb7185;
+  --vp-c-brand-2: #f43f5e;
+  --vp-c-brand-3: #e11d48;
+  --vp-c-brand-soft: rgba(251, 113, 133, 0.14);
+}
+
+/* ── Hero Section — Apple-style ── */
+
+.VPHero .name {
+  font-size: 4rem !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.03em !important;
+  line-height: 1.1 !important;
+}
+
+.VPHero .clip {
+  background: linear-gradient(135deg, #f43f5e 0%, #8b5cf6 50%, #06b6d4 100%) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+.VPHero .tagline {
+  font-size: 1.35rem !important;
+  font-weight: 400 !important;
+  color: var(--vp-c-text-2) !important;
+  max-width: 560px !important;
+  line-height: 1.6 !important;
+}
+
+.VPHero .actions .action {
+  margin: 0 8px;
+}
+
+.VPHero .VPButton.brand {
+  background: linear-gradient(135deg, #f43f5e, #e11d48) !important;
+  border: none !important;
+  font-weight: 600 !important;
+  padding: 12px 28px !important;
+  border-radius: 12px !important;
+  transition: all 0.2s ease !important;
+  box-shadow: 0 4px 14px rgba(244, 63, 94, 0.4) !important;
+}
+
+.VPHero .VPButton.brand:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 6px 20px rgba(244, 63, 94, 0.5) !important;
+}
+
+.VPHero .VPButton.alt {
+  border-radius: 12px !important;
+  font-weight: 600 !important;
+  padding: 12px 28px !important;
+}
+
+/* ── Feature Cards — Clean ── */
+
+.VPFeatures .VPFeature {
+  border-radius: 16px !important;
+  border: 1px solid var(--vp-c-divider) !important;
+  background: var(--vp-c-bg-soft) !important;
+  transition: all 0.3s ease !important;
+}
+
+.dark .VPFeatures .VPFeature {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+.VPFeatures .VPFeature:hover {
+  transform: translateY(-2px) !important;
+  border-color: var(--vp-c-brand-1) !important;
+  box-shadow: 0 8px 30px rgba(244, 63, 94, 0.08) !important;
+}
+
+.VPFeature .title {
+  font-weight: 700 !important;
+  font-size: 1.05rem !important;
+}
+
+.VPFeature .details {
+  font-size: 0.9rem !important;
+  line-height: 1.6 !important;
+  color: var(--vp-c-text-2) !important;
+}
+
+/* ── Content Spacing — Apple-like whitespace ── */
+
+.vp-doc h1 {
+  font-size: 2.2rem !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.02em !important;
+}
+
+.vp-doc h2 {
+  font-size: 1.6rem !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.01em !important;
+  padding-top: 36px !important;
+  border-top: 1px solid var(--vp-c-divider) !important;
+  margin-top: 48px !important;
+}
+
+.vp-doc h3 {
+  font-size: 1.2rem !important;
+  font-weight: 600 !important;
+}
+
+/* ── Code Blocks ── */
+
+.vp-doc div[class*='language-'] {
+  border-radius: 12px !important;
+  border: 1px solid var(--vp-c-divider) !important;
+}
+
+.dark .vp-doc div[class*='language-'] {
+  background: rgba(0, 0, 0, 0.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+/* ── Screenshots — polished frames ── */
+
+.vp-doc img {
+  border-radius: 12px !important;
+  border: 1px solid var(--vp-c-divider) !important;
+  margin: 24px 0 !important;
+}
+
+.dark .vp-doc img {
+  border-color: rgba(255, 255, 255, 0.06) !important;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* ── Sidebar Polish ── */
+
+.VPSidebar .group .title {
+  font-weight: 700 !important;
+  font-size: 0.85rem !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+}
+
+/* ── Nav bar — glass effect in dark mode ── */
+
+.dark .VPNav .VPNavBar {
+  backdrop-filter: blur(12px) !important;
+  background: rgba(15, 15, 15, 0.8) !important;
+}
+
+/* ── Custom containers ── */
+
+.vp-doc .custom-block {
+  border-radius: 12px !important;
+}
+
+/* ── Table styling ── */
+
+.vp-doc table {
+  border-radius: 8px !important;
+  overflow: hidden !important;
+}
+
+.vp-doc tr {
+  border-color: var(--vp-c-divider) !important;
+}
+
+/* ── Responsive hero ── */
+
+@media (max-width: 640px) {
+  .VPHero .name {
+    font-size: 2.4rem !important;
+  }
+  .VPHero .tagline {
+    font-size: 1.1rem !important;
+  }
+}

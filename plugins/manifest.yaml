@@ -1,0 +1,695 @@
+plugins:
+  - name: "Ingress Auth & Zero-Trust"
+    hook: "ingress"
+    priority: 10
+    enabled: true
+    version: "1.0.0"
+    entrypoint: "default.ingress_auth:verify"
+
+  - name: "PII Neural Masker"
+    hook: "pre_flight"
+    priority: 20
+    enabled: true
+    version: "1.0.0"
+    entrypoint: "default.pii_masker:mask"
+
+  - name: "WAF-Aware Cache Lookup"
+    hook: "pre_flight"
+    priority: 30
+    enabled: true
+    version: "1.0.0"
+    entrypoint: "default.cache_check:lookup"
+    timeout_ms: 10
+
+  - name: "Enterprise Neural Router"
+    hook: "routing"
+    priority: 50
+    enabled: true
+    version: "1.2.0"
+    entrypoint: "default.neural_router:select_endpoint"
+
+  - name: "Post-Flight Sanitizer"
+    hook: "post_flight"
+    priority: 80
+    enabled: true
+    version: "1.0.0"
+    entrypoint: "default.shield_sanitizer:cleanse"
+
+  - name: "Unified Telemetry & FinOps"
+    hook: "background"
+    priority: 100
+    enabled: true
+    version: "1.1.0"
+    entrypoint: "default.telemetry_ops:record"
+
+  - name: "Aider Context Minifier"
+    hook: "pre_flight"
+    priority: 15
+    enabled: true
+    version: "1.0.0"
+    entrypoint: "default.context_minifier:compress"
+
+  - name: "Speculative Kill-Switch"
+    hook: "post_flight"
+    priority: 70
+    enabled: true
+    version: "1.0.0"
+    entrypoint: "default.kill_switch:analyze"
+
+  - name: "JSON Auto-Healer"
+    hook: "post_flight"
+    priority: 90
+    enabled: true
+    version: "1.0.0"
+    entrypoint: "default.json_healer:repair"
+
+  # ── Marketplace Plugins (BasePlugin class mode) ──
+
+  - name: "Agentic Loop Breaker"
+    hook: "pre_flight"
+    priority: 12
+    enabled: true
+    type: "python"
+    entrypoint: "marketplace.agentic_loop_breaker:AgenticLoopBreaker"
+    version: "1.0.0"
+    author: "llmproxy"
+    description: "Detects and breaks agentic retry loops via prompt hashing"
+    timeout_ms: 10
+    config:
+      max_repeats: 3
+      window_seconds: 120
+      hash_messages: 3
+    ui_schema:
+      - key: "max_repeats"
+        type: "number"
+        label: "Max Repeats"
+        description: "Number of identical prompts before blocking"
+        default: 3
+        min: 2
+        max: 20
+      - key: "window_seconds"
+        type: "number"
+        label: "Window (seconds)"
+        description: "Sliding window for repeat detection"
+        default: 120
+        min: 30
+        max: 600
+      - key: "hash_messages"
+        type: "number"
+        label: "Messages to Hash"
+        description: "Number of trailing messages to fingerprint"
+        default: 3
+        min: 1
+        max: 10
+
+  - name: "Smart Budget Guard"
+    hook: "pre_flight"
+    priority: 11
+    enabled: true
+    type: "python"
+    entrypoint: "marketplace.smart_budget_guard:SmartBudgetGuard"
+    version: "1.0.0"
+    author: "llmproxy"
+    description: "Pre-flight budget enforcement with cost estimation"
+    timeout_ms: 5
+    config:
+      session_budget_usd: 5.0
+      team_budget_usd: 100.0
+      cost_per_1k_input: 0.003
+      cost_per_1k_output: 0.015
+      avg_output_ratio: 0.5
+      warn_threshold: 0.8
+    ui_schema:
+      - key: "session_budget_usd"
+        type: "number"
+        label: "Session Budget ($)"
+        description: "Maximum spend per session in USD"
+        default: 5.0
+        min: 0.1
+        max: 1000
+      - key: "team_budget_usd"
+        type: "number"
+        label: "Team Budget ($)"
+        description: "Maximum spend per team/API key in USD"
+        default: 100.0
+        min: 1
+        max: 100000
+      - key: "warn_threshold"
+        type: "number"
+        label: "Warning Threshold"
+        description: "Warn at this percentage of budget (0.0 - 1.0)"
+        default: 0.8
+        min: 0.5
+        max: 0.99
+
+  # ── Optional Marketplace Plugins (disabled by default — opt-in) ──
+
+  - name: "Prompt Complexity Scorer"
+    hook: "pre_flight"
+    priority: 14
+    enabled: false
+    type: "python"
+    entrypoint: "marketplace.prompt_complexity_scorer:PromptComplexityScorer"
+    version: "1.0.0"
+    author: "llmproxy"
+    description: "Scores prompt complexity (0-1) for intelligent model routing"
+    timeout_ms: 5
+    config:
+      depth_weight: 0.3
+      turns_weight: 0.2
+      code_weight: 0.25
+      instruction_weight: 0.25
+    ui_schema:
+      - key: "depth_weight"
+        type: "number"
+        label: "Depth Weight"
+        description: "Weight for token depth signal (0.0 - 1.0)"
+        default: 0.3
+        min: 0.0
+        max: 1.0
+      - key: "turns_weight"
+        type: "number"
+        label: "Turns Weight"
+        description: "Weight for conversation turn count (0.0 - 1.0)"
+        default: 0.2
+        min: 0.0
+        max: 1.0
+      - key: "code_weight"
+        type: "number"
+        label: "Code Weight"
+        description: "Weight for code block density (0.0 - 1.0)"
+        default: 0.25
+        min: 0.0
+        max: 1.0
+      - key: "instruction_weight"
+        type: "number"
+        label: "Instruction Weight"
+        description: "Weight for instruction density (0.0 - 1.0)"
+        default: 0.25
+        min: 0.0
+        max: 1.0
+
+  - name: "Response Quality Gate"
+    hook: "post_flight"
+    priority: 75
+    enabled: false
+    type: "python"
+    entrypoint: "marketplace.response_quality_gate:ResponseQualityGate"
+    version: "1.0.0"
+    author: "llmproxy"
+    description: "Detects empty, refused, or truncated LLM responses"
+    timeout_ms: 5
+    config:
+      min_length: 20
+      refusal_threshold: 2
+      check_truncation: true
+    ui_schema:
+      - key: "min_length"
+        type: "number"
+        label: "Min Response Length"
+        description: "Minimum response length for non-trivial prompts (chars)"
+        default: 20
+        min: 5
+        max: 200
+      - key: "refusal_threshold"
+        type: "number"
+        label: "Refusal Threshold"
+        description: "Number of refusal patterns to flag as safety refusal"
+        default: 2
+        min: 1
+        max: 5
+      - key: "check_truncation"
+        type: "boolean"
+        label: "Check Truncation"
+        description: "Detect responses cut off mid-sentence"
+        default: true
+
+  - name: "Latency SLA Guard"
+    hook: "post_flight"
+    priority: 76
+    enabled: false
+    type: "python"
+    entrypoint: "marketplace.latency_sla_guard:LatencySlaGuard"
+    version: "1.0.0"
+    author: "llmproxy"
+    description: "Measures TTFT and total latency, flags SLA violations"
+    timeout_ms: 2
+    config:
+      ttft_p95_ms: 500
+      total_p95_ms: 3000
+      hard_limit_ms: 10000
+      window_size: 500
+    ui_schema:
+      - key: "ttft_p95_ms"
+        type: "number"
+        label: "TTFT P95 Target (ms)"
+        description: "Time-to-first-byte P95 target"
+        default: 500
+        min: 100
+        max: 5000
+      - key: "total_p95_ms"
+        type: "number"
+        label: "Total P95 Target (ms)"
+        description: "Total request latency P95 target"
+        default: 3000
+        min: 500
+        max: 30000
+      - key: "hard_limit_ms"
+        type: "number"
+        label: "Hard Limit (ms)"
+        description: "Hard SLA breach threshold"
+        default: 10000
+        min: 1000
+        max: 60000
+      - key: "window_size"
+        type: "number"
+        label: "Window Size"
+        description: "Rolling window for percentile calculation"
+        default: 500
+        min: 50
+        max: 5000
+
+  - name: "Model Downgrader"
+    hook: "pre_flight"
+    priority: 16
+    enabled: false
+    type: "python"
+    entrypoint: "marketplace.model_downgrader:ModelDowngrader"
+    version: "1.0.0"
+    author: "llmproxy"
+    description: "Downgrades expensive models for simple prompts to save 10-20x on costs"
+    timeout_ms: 2
+    config:
+      complexity_threshold: 0.3
+    ui_schema:
+      - key: "complexity_threshold"
+        type: "number"
+        label: "Complexity Threshold"
+        description: "Downgrade model when prompt complexity is below this score (0.0 - 1.0)"
+        default: 0.3
+        min: 0.05
+        max: 0.8
+
+  - name: "Context Window Guard"
+    hook: "pre_flight"
+    priority: 18
+    enabled: false
+    type: "python"
+    entrypoint: "marketplace.context_window_guard:ContextWindowGuard"
+    version: "1.0.0"
+    author: "llmproxy"
+    description: "Blocks requests exceeding the model's context window"
+    timeout_ms: 2
+    config:
+      safety_margin: 0.9
+    ui_schema:
+      - key: "safety_margin"
+        type: "number"
+        label: "Safety Margin"
+        description: "Block at this fraction of context window (leave room for response)"
+        default: 0.9
+        min: 0.5
+        max: 1.0
+
+  - name: "Per-Model Rate Limiter"
+    hook: "pre_flight"
+    priority: 13
+    enabled: false
+    type: "python"
+    entrypoint: "marketplace.model_rate_limiter:ModelRateLimiter"
+    version: "1.0.0"
+    author: "llmproxy"
+    description: "Per-model rate limiting with sliding window counters"
+    timeout_ms: 2
+    config:
+      default_rpm: 60
+      window_seconds: 60
+    ui_schema:
+      - key: "default_rpm"
+        type: "number"
+        label: "Default RPM"
+        description: "Requests per minute for unlisted models"
+        default: 60
+        min: 1
+        max: 1000
+      - key: "window_seconds"
+        type: "number"
+        label: "Window (seconds)"
+        description: "Sliding window duration for rate counting"
+        default: 60
+        min: 10
+        max: 300
+
+  - name: "Canary Detector"
+    hook: "post_flight"
+    priority: 77
+    enabled: false
+    type: "python"
+    entrypoint: "marketplace.canary_detector:CanaryDetector"
+    version: "1.0.0"
+    author: "llmproxy"
+    description: "Detects system prompt leakage in LLM responses"
+    timeout_ms: 5
+    config:
+      min_leak_chars: 50
+      similarity_threshold: 0.6
+      block_on_leak: false
+    ui_schema:
+      - key: "min_leak_chars"
+        type: "number"
+        label: "Min Leak Chars"
+        description: "Minimum leaked characters to trigger detection"
+        default: 50
+        min: 20
+        max: 200
+      - key: "similarity_threshold"
+        type: "number"
+        label: "Similarity Threshold"
+        description: "Fraction of system prompt found in response to flag as leak"
+        default: 0.6
+        min: 0.3
+        max: 1.0
+      - key: "block_on_leak"
+        type: "boolean"
+        label: "Block on Leak"
+        description: "Automatically block responses containing leaked system prompts"
+        default: false
+
+  - name: "System Prompt Enforcer"
+    hook: "pre_flight"
+    priority: 8
+    enabled: false
+    type: "python"
+    entrypoint: "marketplace.system_prompt_enforcer:SystemPromptEnforcer"
+    version: "1.0.0"
+    author: "llmproxy"
+    description: "Injects or overrides the system prompt in every request — clients cannot bypass it"
+    timeout_ms: 2
+    config:
+      prompt: ""
+      mode: "prepend"
+      skip_if_empty: false
+    ui_schema:
+      - key: "prompt"
+        type: "textarea"
+        label: "Enforced System Prompt"
+        description: "The system prompt to inject into every request"
+        default: ""
+      - key: "mode"
+        type: "select"
+        label: "Injection Mode"
+        description: "How to apply the enforced prompt relative to the client's system message"
+        default: "prepend"
+        options: ["prepend", "append", "replace"]
+      - key: "skip_if_empty"
+        type: "boolean"
+        label: "Skip if No Messages"
+        description: "Skip enforcement when the request contains no messages"
+        default: false
+
+  - name: "Max Tokens Enforcer"
+    hook: "pre_flight"
+    priority: 7
+    enabled: false
+    type: "python"
+    entrypoint: "marketplace.max_tokens_enforcer:MaxTokensEnforcer"
+    version: "1.0.0"
+    author: "llmproxy"
+    description: "Clamps max_tokens to a configured ceiling — clients cannot exceed it"
+    timeout_ms: 1
+    config:
+      ceiling: 4096
+      inject_default: false
+      log_clamp: true
+    ui_schema:
+      - key: "ceiling"
+        type: "number"
+        label: "Max Tokens Ceiling"
+        description: "Hard upper bound on max_tokens regardless of client request"
+        default: 4096
+        min: 64
+        max: 200000
+      - key: "inject_default"
+        type: "boolean"
+        label: "Inject Default"
+        description: "Inject ceiling as max_tokens when client omits it"
+        default: false
+      - key: "log_clamp"
+        type: "boolean"
+        label: "Log Clamp Events"
+        description: "Log a warning when a request is clamped"
+        default: true
+
+  - name: "A/B Model Router"
+    hook: "routing"
+    priority: 45
+    enabled: false
+    type: "python"
+    entrypoint: "marketplace.ab_model_router:ABModelRouter"
+    version: "1.0.0"
+    author: "llmproxy"
+    description: "Routes a configurable % of traffic to a variant model for A/B experimentation"
+    timeout_ms: 2
+    config:
+      control_model: "gpt-4o"
+      variant_model: "gpt-4o-mini"
+      split_pct: 0.1
+      sticky: true
+      experiment_id: "ab_test"
+    ui_schema:
+      - key: "control_model"
+        type: "text"
+        label: "Control Model"
+        description: "Primary model (receives 100% - split_pct of traffic)"
+        default: "gpt-4o"
+      - key: "variant_model"
+        type: "text"
+        label: "Variant Model"
+        description: "Model under test (receives split_pct of traffic)"
+        default: "gpt-4o-mini"
+      - key: "split_pct"
+        type: "number"
+        label: "Variant Split (%)"
+        description: "Fraction of traffic routed to variant (0.0 = 0%, 1.0 = 100%)"
+        default: 0.1
+        min: 0.01
+        max: 1.0
+      - key: "sticky"
+        type: "boolean"
+        label: "Sticky Sessions"
+        description: "Pin each session_id to the same arm for consistent multi-turn conversations"
+        default: true
+      - key: "experiment_id"
+        type: "text"
+        label: "Experiment ID"
+        description: "Tag injected into request metadata for tracking in audit log"
+        default: "ab_test"
+
+  - name: "Topic Blocklist"
+    hook: "pre_flight"
+    priority: 9
+    enabled: false
+    type: "python"
+    entrypoint: "marketplace.topic_blocklist:TopicBlocklist"
+    version: "1.0.0"
+    author: "llmproxy"
+    description: "Blocks requests containing forbidden topics via keyword/regex matching"
+    timeout_ms: 5
+    config:
+      topics:
+        - "how to make a bomb"
+        - "how to make explosives"
+        - "csam"
+      action: "block"
+      match_mode: "keyword"
+      case_sensitive: false
+      scan_roles:
+        - "user"
+    ui_schema:
+      - key: "topics"
+        type: "array"
+        label: "Blocked Topics"
+        description: "Keywords or regex patterns to block (one per line)"
+        default: ["how to make a bomb", "how to make explosives", "csam"]
+      - key: "action"
+        type: "select"
+        label: "Action on Match"
+        description: "What to do when a topic is detected"
+        default: "block"
+        options: ["block", "warn", "log"]
+      - key: "match_mode"
+        type: "select"
+        label: "Match Mode"
+        description: "How to match topics against request content"
+        default: "keyword"
+        options: ["keyword", "whole_word", "regex"]
+      - key: "case_sensitive"
+        type: "boolean"
+        label: "Case Sensitive"
+        description: "Enable case-sensitive matching"
+        default: false
+      - key: "scan_roles"
+        type: "array"
+        label: "Scan Roles"
+        description: "Message roles to scan (user, system, assistant)"
+        default: ["user"]
+
+  - name: "Token Counter"
+    hook: "background"
+    priority: 95
+    enabled: false
+    type: "python"
+    entrypoint: "marketplace.token_counter:TokenCounter"
+    version: "1.0.0"
+    author: "llmproxy"
+    description: "Extracts real token counts from API responses and corrects budget estimates"
+    timeout_ms: 5
+    config:
+      cost_per_1k_input: 0.003
+      cost_per_1k_output: 0.015
+    ui_schema:
+      - key: "cost_per_1k_input"
+        type: "number"
+        label: "Cost per 1K Input"
+        description: "USD per 1000 input tokens"
+        default: 0.003
+        min: 0.0001
+        max: 1.0
+      - key: "cost_per_1k_output"
+        type: "number"
+        label: "Cost per 1K Output"
+        description: "USD per 1000 output tokens"
+        default: 0.015
+        min: 0.0001
+        max: 1.0
+
+  # ── v1.6.0 Marketplace Plugins ──
+
+  - name: "Tool Guard"
+    hook: "pre_flight"
+    priority: 6
+    enabled: false
+    type: "python"
+    entrypoint: "marketplace.tool_guard:ToolGuard"
+    version: "1.0.0"
+    author: "llmproxy"
+    description: "Strips or blocks restricted tools/functions based on user role (agentic safety)"
+    timeout_ms: 2
+    config:
+      restricted_tools: ["execute_bash", "drop_table", "delete_database"]
+      action: "strip"
+      admin_roles: ["admin"]
+    ui_schema:
+      - key: "restricted_tools"
+        type: "array"
+        label: "Restricted Tools"
+        description: "Tool/function names that require admin role"
+        default: ["execute_bash", "drop_table", "delete_database"]
+      - key: "action"
+        type: "select"
+        label: "Action"
+        description: "What to do when restricted tools are found"
+        default: "strip"
+        options: ["strip", "block"]
+      - key: "admin_roles"
+        type: "array"
+        label: "Admin Roles"
+        description: "Roles allowed to use restricted tools"
+        default: ["admin"]
+
+  - name: "Tenant QoS Router"
+    hook: "routing"
+    priority: 44
+    enabled: false
+    type: "python"
+    entrypoint: "marketplace.tenant_qos_router:TenantQoSRouter"
+    version: "1.0.0"
+    author: "llmproxy"
+    description: "Routes requests to models based on tenant tier (free/basic/premium)"
+    timeout_ms: 2
+    config:
+      tier_mapping:
+        free: "gpt-4o-mini"
+        basic: "gpt-4o-mini"
+        premium: ""
+      default_tier: "free"
+      force_downgrade: true
+    ui_schema:
+      - key: "default_tier"
+        type: "select"
+        label: "Default Tier"
+        description: "Tier for users with no explicit mapping"
+        default: "free"
+        options: ["free", "basic", "premium"]
+      - key: "force_downgrade"
+        type: "boolean"
+        label: "Force Downgrade"
+        description: "Always downgrade non-premium users"
+        default: true
+
+  - name: "Schema Enforcer"
+    hook: "post_flight"
+    priority: 78
+    enabled: false
+    type: "python"
+    entrypoint: "marketplace.schema_enforcer:SchemaEnforcer"
+    version: "1.0.0"
+    author: "llmproxy"
+    description: "Validates LLM JSON responses against client-provided JSON schema"
+    timeout_ms: 5
+    config:
+      action: "warn"
+      max_schema_size: 8192
+    ui_schema:
+      - key: "action"
+        type: "select"
+        label: "Action on Failure"
+        description: "What to do when schema validation fails"
+        default: "warn"
+        options: ["warn", "block"]
+      - key: "max_schema_size"
+        type: "number"
+        label: "Max Schema Size"
+        description: "Maximum schema size in bytes (prevent abuse)"
+        default: 8192
+        min: 256
+        max: 65536
+
+  - name: "Shadow Traffic"
+    hook: "background"
+    priority: 96
+    enabled: false
+    type: "python"
+    entrypoint: "marketplace.shadow_traffic:ShadowTraffic"
+    version: "1.0.0"
+    author: "llmproxy"
+    description: "Sends sampled traffic to a shadow model for A/B comparison (dark launch)"
+    timeout_ms: 50
+    config:
+      shadow_model: ""
+      shadow_provider: ""
+      sample_rate: 0.05
+      store_responses: true
+    ui_schema:
+      - key: "shadow_model"
+        type: "text"
+        label: "Shadow Model"
+        description: "Model to send shadow traffic to (e.g. claude-sonnet-4-20250514)"
+        default: ""
+      - key: "shadow_provider"
+        type: "text"
+        label: "Shadow Provider"
+        description: "Provider for shadow model (leave empty for auto-detect)"
+        default: ""
+      - key: "sample_rate"
+        type: "number"
+        label: "Sample Rate"
+        description: "Fraction of requests to shadow (0.0 = none, 1.0 = all)"
+        default: 0.05
+        min: 0.01
+        max: 1.0
+      - key: "store_responses"
+        type: "boolean"
+        label: "Store Responses"
+        description: "Persist shadow comparison data to SQLite"
+        default: true

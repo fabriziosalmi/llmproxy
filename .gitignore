@@ -1,0 +1,96 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+
+# Environment Variables
+.env
+
+# Database
+*.db
+*.sqlite3
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+
+# UI & Docs
+node_modules/
+.npm/
+dist/
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+.vitepress/cache/
+
+demo/
+
+# Claude Code & personal session files
+.claude/
+CLAUDE.md
+OGGI.md
+FEATURES.md
+OPPORTUNITIES.md
+AUDIT.md
+AUDIT_v2.md
+
+# Runtime artifacts
+.proxy.pid
+distillation_data.jsonl
+test_ui/
+ROADMAP.md
+
+# SQLite WAL/SHM sidecars (any DB, any path)
+*.db-shm
+*.db-wal
+
+# Export dataset files
+exports/
+
+# pytest cache
+.pytest_cache/
+.ruff_cache/
+demo/
+
+# Runtime
+dlq.jsonl
+
+# temp files
+.vitepress/cache/
+.mypy_cache/
+.hypothesis/
+.coverage
+htmlcov/
+
+# homelab
+docs/CYBERAPI_INTEGRATION.md
+docs/ECOSYSTEM_MAP.md
+docs/INTEGRATION_ARCHITECTURE.md
