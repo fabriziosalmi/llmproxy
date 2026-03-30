@@ -443,10 +443,14 @@ class ProxyOrchestrator(BaseAgent):
 
             # Model alias/group resolution (before routing)
             original_model = ctx.body.get("model", "")
-            resolved_model = resolve_model(self.config, original_model)
+            resolved_model, resolved_provider = resolve_model(self.config, original_model)
             if resolved_model != original_model:
                 ctx.body["model"] = resolved_model
                 ctx.metadata["_model_alias"] = original_model
+            # When resolved from a group, pin the provider so the smart
+            # router picks the matching endpoint (not a random one).
+            if resolved_provider:
+                ctx.metadata["_resolved_provider"] = resolved_provider
 
             # Budget-aware model downgrade: if over hard limit, fall back to local
             budget_cfg = self.config.get("budget", {})

@@ -45,31 +45,33 @@ def _get_available_providers(config: Dict[str, Any]) -> set[str]:
     return available
 
 
-def resolve_model(config: Dict[str, Any], requested_model: str) -> str:
-    """Resolve a model alias or group to a real model name.
+def resolve_model(config: Dict[str, Any], requested_model: str) -> tuple[str, str | None]:
+    """Resolve a model alias or group to a real model name + provider.
 
-    Returns the resolved model name (or the original if no match).
-    Groups only consider models whose provider has a valid API key.
+    Returns (model_name, provider_name_or_None).
+    When resolving from a group, the provider is returned so the router
+    knows which endpoint to use (prevents model/endpoint mismatch).
     """
     # 1. Check aliases
     aliases = config.get("model_aliases", {})
     if requested_model in aliases:
         resolved = str(aliases[requested_model])
         logger.debug(f"Alias resolved: {requested_model} → {resolved}")
-        return resolved
+        return resolved, None
 
     # 2. Check groups
     groups = config.get("model_groups", {})
     if requested_model in groups:
         group = groups[requested_model]
         available = _get_available_providers(config)
-        group_resolved = _pick_from_group(group, available)
-        if group_resolved:
-            logger.debug(f"Group resolved: {requested_model} → {group_resolved}")
-            return group_resolved
+        result = _pick_from_group(group, available)
+        if result:
+            model, provider = result
+            logger.debug(f"Group resolved: {requested_model} → {model} ({provider})")
+            return model, provider
 
     # 3. Pass-through
-    return requested_model
+    return requested_model, None
 
 
 def invalidate_provider_cache():
@@ -89,9 +91,10 @@ def _filter_available(models: List[Dict], available: set[str]) -> List[Dict]:
     return filtered
 
 
-def _pick_from_group(group: Dict[str, Any], available: set[str]) -> Optional[str]:
+def _pick_from_group(group: Dict[str, Any], available: set[str]) -> Optional[tuple[str, str]]:
     """Pick a model from a group based on strategy.
 
+    Returns (model_name, provider_name) or None.
     Only considers models whose provider is available (has API key).
     """
     models = _filter_available(group.get("models", []), available)
@@ -102,24 +105,23 @@ def _pick_from_group(group: Dict[str, Any], available: set[str]) -> Optional[str
 
     if strategy == "cheapest":
         from core.pricing import get_pricing
-        return str(min(models, key=lambda m: get_pricing(m["model"])["input"])["model"])
-
+        chosen = min(models, key=lambda m: get_pricing(m["model"])["input"])
     elif strategy == "fastest":
         try:
             from plugins.default.neural_router import get_endpoint_stats
         except ImportError:
             logger.debug("neural_router not available for 'fastest' strategy, falling back to random")
-            return str(random.choice(models)["model"])
+            chosen = random.choice(models)
+            return str(chosen["model"]), str(chosen.get("provider", ""))
 
         def _latency(m):
             stats = get_endpoint_stats(m.get("provider", ""))
             return stats.get("latency_ms", 999.0)
-        return str(min(models, key=_latency)["model"])
-
+        chosen = min(models, key=_latency)
     elif strategy == "weighted":
         weights = [m.get("weight", 1.0) for m in models]
         chosen = random.choices(models, weights=weights, k=1)[0]
-        return str(chosen["model"])
-
     else:  # "random"
-        return str(random.choice(models)["model"])
+        chosen = random.choice(models)
+
+    return str(chosen["model"]), str(chosen.get("provider", ""))
