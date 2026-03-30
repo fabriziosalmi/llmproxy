@@ -151,6 +151,7 @@ async function sendMessage() {
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let fullContent = '';
+        let rawChunks = '';
         let usage = null;
         let responseModel = model;
 
@@ -159,6 +160,7 @@ async function sendMessage() {
             if (done) break;
 
             const chunk = decoder.decode(value, { stream: true });
+            rawChunks += chunk;
             for (const line of chunk.split('\n')) {
                 if (!line.startsWith('data: ') || line === 'data: [DONE]') continue;
                 try {
@@ -175,7 +177,20 @@ async function sendMessage() {
             }
         }
 
-        conversationHistory.push({ role: 'assistant', content: fullContent });
+        // Fallback: if streaming produced no content, try parsing as
+        // non-streaming JSON response (some providers return full JSON
+        // even with stream:true, or the proxy may buffer the response).
+        if (!fullContent && rawChunks) {
+            try {
+                const fullJson = JSON.parse(rawChunks);
+                fullContent = fullJson.choices?.[0]?.message?.content || '';
+                if (fullContent) bodyEl.textContent = fullContent;
+                if (fullJson.usage) usage = fullJson.usage;
+                if (fullJson.model) responseModel = fullJson.model;
+            } catch {}
+        }
+
+        conversationHistory.push({ role: 'assistant', content: fullContent || '(empty response)' });
 
         const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
         latencyInfo.textContent = `${elapsed}s`;
