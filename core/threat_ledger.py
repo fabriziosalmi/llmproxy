@@ -97,9 +97,13 @@ class ThreatLedger:
         entries = ledger[actor]
         entries.append((score, now))
 
-        # Trim to window
+        # Trim to window + cap per-actor list size (R2-07: prevents OOM
+        # from 1000 req/s × 600s window = 600k tuples per actor).
         cutoff = now - self.window_seconds
         entries[:] = [(s, ts) for s, ts in entries if ts >= cutoff]
+        _MAX_ENTRIES = 1000
+        if len(entries) > _MAX_ENTRIES:
+            entries[:] = entries[-_MAX_ENTRIES:]
 
         # Check threshold: need minimum events AND sum exceeds threshold
         if len(entries) >= self.min_events:

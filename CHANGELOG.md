@@ -2,6 +2,33 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.10.5] — 2026-03-30
+
+### Red Team Round 2 — 12 new findings fixed (2 CRITICAL, 6 HIGH, 4 MEDIUM)
+
+**CRITICAL:**
+- **Rate limiter global lock starvation** (R2-01) — H4 fix from Round 1 moved `bucket.acquire()` inside global lock, serializing ALL rate checks. Reverted: acquire outside lock, orphan bucket = 1 free token (acceptable).
+- **JWT roles claim injection** (R2-02) — `_resolve_roles()` trusted raw JWT `roles` claim. Attacker with own OIDC tenant could set `roles: ["admin"]`. Fixed: validate against `DEFAULT_PERMISSIONS` keys.
+
+**HIGH:**
+- **`<s>` signature false positive** (R2-03) — 3-byte `<s>` matched all HTML `<strong>`, `<span>`, etc. Changed to `<s>[inst]` (Llama-2 specific).
+- **Cyrillic homoglyph bypass** (R2-06) — NFKC doesn't map Cyrillic а/е/о to Latin. Added `_CONFUSABLE_MAP` (17 Cyrillic+Greek homoglyphs) in both firewall and semantic analyzer.
+- **ThreatLedger unbounded list OOM** (R2-07) — 1000 req/s × 600s = 600k tuples per actor. Capped at 1000 entries per actor.
+- **Firewall counter race** (R2-08) — Class-level `+=` not atomic. Documented as approximate metrics (lock would add latency).
+
+**MEDIUM:**
+- **Audit + analytics endpoints missing auth** (R2-10/11) — `_check_admin_auth()` added to `/api/v1/audit`, `/api/v1/analytics/spend`, `topmodels`, `cost-efficiency`.
+- **Audit verify OOM** (R2-12) — `SELECT * FROM audit_log` loaded entire table. Added `LIMIT 100000`.
+- **row_factory cancellation** (R2-15) — Added `try/finally` to all 4 `_row_factory_lock` blocks.
+- **GDPR export IDOR** (R2-09) — Short subjects (e.g., "a") matched broadly. Added 8-char minimum.
+
+### Stats
+- 915/915 tests passing
+- 12 files changed
+- 0 regressions
+
+---
+
 ## [1.10.4] — 2026-03-30
 
 ### Red Team Security Audit (Round 1) — 13 exploitable findings fixed

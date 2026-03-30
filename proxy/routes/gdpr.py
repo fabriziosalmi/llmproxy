@@ -36,13 +36,12 @@ def create_router(agent) -> APIRouter:
 
     @router.post("/api/v1/gdpr/erase/{subject}")
     async def erase_subject(subject: str, request: Request):
+        """Right to erasure (GDPR Article 17)."""
         _check_admin_auth(request)
-        """Right to erasure (GDPR Article 17).
-
-        Deletes all audit_log, spend_log, and user_roles entries
-        for the given subject (matched on session_id, key_prefix, email).
-        Returns deletion counts. The erasure itself is logged immutably.
-        """
+        # R2-09: Require minimum subject length to prevent broad matches
+        # (e.g., subject="a" matching all session_ids starting with 'a').
+        if len(subject) < 8:
+            raise HTTPException(status_code=400, detail="Subject must be at least 8 characters")
         result = await agent.store.delete_subject_data(subject)
         total_deleted = sum(result.values())
 
@@ -83,12 +82,14 @@ def create_router(agent) -> APIRouter:
 
     @router.get("/api/v1/gdpr/export/{subject}")
     async def export_subject(subject: str, request: Request):
-        _check_admin_auth(request)
         """Data Subject Access Request (GDPR Article 15).
 
         Returns all data associated with the subject, scrubbed of
         sensitive fields (API keys, tokens). Response is JSON.
         """
+        _check_admin_auth(request)
+        if len(subject) < 8:
+            raise HTTPException(status_code=400, detail="Subject must be at least 8 characters")
         data = await agent.store.export_subject_data(subject)
         total_records = len(data.get("audit", [])) + len(data.get("spend", [])) + len(data.get("roles", []))
 

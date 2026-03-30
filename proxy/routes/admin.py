@@ -243,6 +243,7 @@ def create_router(agent) -> APIRouter:
     @router.get("/api/v1/analytics/spend")
     async def analytics_spend(request: Request):
         """Spend breakdown by model, provider, key, or date."""
+        _check_admin_auth(request)
         params = request.query_params
         result = await agent.store.query_spend(
             date_from=params.get("from", ""),
@@ -259,6 +260,7 @@ def create_router(agent) -> APIRouter:
     @router.get("/api/v1/analytics/spend/topmodels")
     async def analytics_top_models(request: Request):
         """Top models by spend."""
+        _check_admin_auth(request)
         result = await agent.store.query_spend(
             group_by="model",
             limit=int(request.query_params.get("limit", "10")),
@@ -268,6 +270,7 @@ def create_router(agent) -> APIRouter:
     @router.get("/api/v1/analytics/cost-efficiency")
     async def analytics_cost_efficiency(request: Request):
         """Cost efficiency: avg cost/request and cost savings from routing."""
+        _check_admin_auth(request)
         params = request.query_params
         by_model = await agent.store.query_spend(
             date_from=params.get("from", ""),
@@ -319,6 +322,7 @@ def create_router(agent) -> APIRouter:
     @router.get("/api/v1/audit")
     async def query_audit_log(request: Request):
         """Query persistent audit log with filters."""
+        _check_admin_auth(request)
         params = request.query_params
         return await agent.store.query_audit(
             date_from=params.get("from", ""),
