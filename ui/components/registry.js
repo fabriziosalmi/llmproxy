@@ -14,6 +14,40 @@ export async function fetchRegistry() {
 
 export function initRegistry() {
     fetchRegistry();
+
+    // Add endpoint form toggle
+    const toggleBtn = document.getElementById('add-endpoint-toggle');
+    const form = document.getElementById('add-endpoint-form');
+    if (toggleBtn && form) {
+        toggleBtn.addEventListener('click', () => form.classList.toggle('hidden'));
+        document.getElementById('ep-cancel-btn')?.addEventListener('click', () => form.classList.add('hidden'));
+    }
+
+    // Add endpoint submit
+    const addBtn = document.getElementById('ep-add-btn');
+    if (addBtn) {
+        addBtn.addEventListener('click', async () => {
+            const id = document.getElementById('ep-name')?.value?.trim();
+            const url = document.getElementById('ep-url')?.value?.trim();
+            const provider = document.getElementById('ep-provider')?.value;
+            const priority = document.getElementById('ep-priority')?.value || '0';
+            if (!id || !url) { toast('Name and URL are required', 'warning'); return; }
+            addBtn.textContent = 'Adding...';
+            addBtn.disabled = true;
+            try {
+                await api.addEndpoint({ id, url, provider, priority: parseInt(priority) });
+                toast(`Endpoint "${id}" added`, 'success');
+                form.classList.add('hidden');
+                document.getElementById('ep-name').value = '';
+                document.getElementById('ep-url').value = '';
+                await fetchRegistry();
+            } catch (e) {
+                toast(`Failed: ${e.message}`, 'error');
+            }
+            addBtn.textContent = 'Add Endpoint';
+            addBtn.disabled = false;
+        });
+    }
 }
 
 const CIRCUIT_STATES = {

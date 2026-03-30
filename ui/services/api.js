@@ -48,6 +48,7 @@ export const api = {
     async fetchVersion() { return _json(`${BASE_URL}/api/v1/version`); },
     async fetchRegistry() { return _json(`${BASE_URL}/api/v1/registry`); },
 
+    async addEndpoint(data) { return _post(`${BASE_URL}/api/v1/registry`, data); },
     async toggleEndpoint(id) { return _fetch(`${BASE_URL}/api/v1/registry/${id}/toggle`, { method: 'POST' }); },
     async deleteEndpoint(id) { return _fetch(`${BASE_URL}/api/v1/registry/${id}`, { method: 'DELETE' }); },
     async updatePriority(id, priority) { return _post(`${BASE_URL}/api/v1/registry/${id}/priority`, { priority }); },
