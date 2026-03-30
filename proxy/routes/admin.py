@@ -335,4 +335,64 @@ def create_router(agent) -> APIRouter:
             offset=int(params.get("offset", "0")),
         )
 
+    # ── Operations: Reset & Clear ──
+
+    @router.post("/api/v1/firewall/reset")
+    async def reset_firewall_counters(request: Request):
+        """Reset all firewall WAF counters to zero."""
+        _check_admin_auth(request)
+        from core.firewall_asgi import ByteLevelFirewallMiddleware
+        ByteLevelFirewallMiddleware.total_scanned = 0
+        ByteLevelFirewallMiddleware.total_blocked = 0
+        ByteLevelFirewallMiddleware.block_by_signature.clear()
+        ByteLevelFirewallMiddleware.block_by_encoding.clear()
+        ByteLevelFirewallMiddleware.total_scan_time_ms = 0.0
+        ByteLevelFirewallMiddleware.max_scan_time_ms = 0.0
+        return {"status": "reset", "message": "Firewall counters cleared"}
+
+    @router.post("/api/v1/cache/clear")
+    async def clear_caches(request: Request):
+        """Clear L1 (negative) and/or L2 (positive) caches."""
+        _check_admin_auth(request)
+        result = {}
+        # L1 negative cache
+        if hasattr(agent, 'negative_cache') and agent.negative_cache:
+            agent.negative_cache.clear()
+            result["negative_cache"] = "cleared"
+        # L2 positive cache
+        if hasattr(agent, 'cache_backend') and agent.cache_backend:
+            try:
+                evicted = await agent.cache_backend.evict_expired()
+                result["positive_cache"] = f"evicted {evicted} entries"
+            except Exception:
+                result["positive_cache"] = "evict failed"
+        return {"status": "cleared", **result}
+
+    @router.post("/api/v1/security/reset")
+    async def reset_security_state(request: Request):
+        """Reset SecurityShield session memory and threat ledger."""
+        _check_admin_auth(request)
+        result = {}
+        if hasattr(agent, 'security'):
+            sessions = len(agent.security.session_memory)
+            agent.security.session_memory.clear()
+            result["sessions_cleared"] = sessions
+            if agent.security.threat_ledger:
+                agent.security.threat_ledger._by_ip.clear()
+                agent.security.threat_ledger._by_key.clear()
+                result["threat_ledger"] = "cleared"
+        return {"status": "reset", **result}
+
+    @router.post("/api/v1/circuit-breaker/{endpoint_id}/reset")
+    async def reset_circuit_breaker(endpoint_id: str, request: Request):
+        """Manually reset a circuit breaker to CLOSED state."""
+        _check_admin_auth(request)
+        cb = await agent.circuit_manager.get_breaker(endpoint_id)
+        async with cb._lock:
+            from core.circuit_breaker import CircuitState
+            cb.state = CircuitState.CLOSED
+            cb.failure_count = 0
+            cb._half_open_probe_active = False
+        return {"status": "reset", "endpoint": endpoint_id, "state": "CLOSED"}
+
     return router
