@@ -80,14 +80,14 @@ async function loadRbac() {
                 <table class="w-full">
                     <thead>
                         <tr class="border-b border-white/[0.06]">
-                            <th class="text-left text-[8px] font-bold text-slate-500 uppercase px-2 py-1.5 sticky left-0 bg-[#050506]">Permission</th>
-                            ${roleNames.map(r => `<th class="text-center text-[8px] font-bold text-slate-500 uppercase px-2 py-1.5">${r}</th>`).join('')}
+                            <th class="text-left text-[10px] font-bold text-slate-500 uppercase px-2 py-1.5 sticky left-0 bg-[#050506]">Permission</th>
+                            ${roleNames.map(r => `<th class="text-center text-[10px] font-bold text-slate-500 uppercase px-2 py-1.5">${r}</th>`).join('')}
                         </tr>
                     </thead>
                     <tbody>
                         ${allPerms.map(perm => `
                             <tr class="border-b border-white/[0.03] hover:bg-white/[0.02]">
-                                <td class="text-[8px] font-mono text-slate-400 px-2 py-1 sticky left-0 bg-[#050506]">${perm}</td>
+                                <td class="text-[10px] font-mono text-slate-400 px-2 py-1 sticky left-0 bg-[#050506]">${perm}</td>
                                 ${roleNames.map(r => `
                                     <td class="text-center px-2 py-1">
                                         ${roles[r].includes(perm) ? '<span class="text-emerald-400 text-[10px]">&#10003;</span>' : '<span class="text-slate-700 text-[10px]">-</span>'}
@@ -124,17 +124,17 @@ async function loadWebhooks() {
                 eps.map(ep => `
                     <div class="flex items-center justify-between p-2 bg-white/[0.02] rounded-lg">
                         <div class="flex items-center gap-2">
-                            <span class="text-[8px] font-mono text-${targetColors[ep.target] || 'slate'}-400 bg-${targetColors[ep.target] || 'slate'}-500/10 px-1.5 py-0.5 rounded uppercase">${ep.target}</span>
+                            <span class="text-[10px] font-mono text-${targetColors[ep.target] || 'slate'}-400 bg-${targetColors[ep.target] || 'slate'}-500/10 px-1.5 py-0.5 rounded uppercase">${ep.target}</span>
                             <span class="text-[10px] font-bold text-white">${ep.name}</span>
                         </div>
-                        <span class="text-[8px] font-mono text-slate-500">${ep.events.join(', ')}</span>
+                        <span class="text-[10px] font-mono text-slate-500">${ep.events.join(', ')}</span>
                     </div>
                 `).join('')}
             </div>
             <div class="mt-3 pt-2 border-t border-white/[0.04]">
-                <p class="text-[8px] text-slate-600 uppercase font-bold mb-1">Available Events</p>
+                <p class="text-[10px] text-slate-600 uppercase font-bold mb-1">Available Events</p>
                 <div class="flex flex-wrap gap-1">
-                    ${(data.event_types || []).map(e => `<span class="text-[7px] font-mono text-slate-500 bg-white/[0.03] px-1.5 py-0.5 rounded">${e}</span>`).join('')}
+                    ${(data.event_types || []).map(e => `<span class="text-[9px] font-mono text-slate-500 bg-white/[0.03] px-1.5 py-0.5 rounded">${e}</span>`).join('')}
                 </div>
             </div>
         `;
@@ -168,11 +168,11 @@ async function loadExport() {
             </div>
             ${files.length > 0 ? `
                 <div class="space-y-1 pt-2 border-t border-white/[0.04]">
-                    <p class="text-[8px] text-slate-600 uppercase font-bold mb-1">Recent Files</p>
+                    <p class="text-[10px] text-slate-600 uppercase font-bold mb-1">Recent Files</p>
                     ${files.map(f => `
                         <div class="flex items-center justify-between">
                             <span class="text-[9px] font-mono text-slate-400">${f.name}</span>
-                            <span class="text-[8px] font-mono text-slate-600">${(f.size_bytes / 1024).toFixed(1)} KB</span>
+                            <span class="text-[10px] font-mono text-slate-600">${(f.size_bytes / 1024).toFixed(1)} KB</span>
                         </div>
                     `).join('')}
                 </div>

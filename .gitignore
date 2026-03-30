@@ -62,6 +62,7 @@ OPPORTUNITIES.md
 AUDIT.md
 AUDIT_v2.md
 UI_AUDIT.md
+AUDIT_WAF.md
 
 # Runtime artifacts
 .proxy.pid

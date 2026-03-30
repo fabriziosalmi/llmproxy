@@ -5,6 +5,7 @@
  * GDPR controls, semantic corpus info, response signing status.
  */
 import { api } from '../services/api.js';
+import { toast } from '../services/toast.js';
 
 let _initialized = false;
 
@@ -24,7 +25,7 @@ export async function renderSecurity() {
 
 async function _loadGuardsStatus() {
     try {
-        const data = await api.get('/api/v1/guards/status');
+        const data = await api.fetchGuardsStatus();
         const shield = data?.security_shield || {};
 
         // Threat Ledger
@@ -48,7 +49,10 @@ async function _loadGuardsStatus() {
 
 async function _loadRetention() {
     try {
-        const data = await api.get('/api/v1/gdpr/retention');
+        const token = localStorage.getItem('proxy_key') || '';
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+        const res = await fetch(`${window.location.origin}/api/v1/gdpr/retention`, { headers });
+        const data = res.ok ? await res.json() : null;
         const el = document.getElementById('sec-retention-info');
         if (el && data) {
             el.textContent = `${data.retention_days}d retention · ${data.legal_basis}`;
@@ -82,6 +86,16 @@ async function _loadCorpusStats() {
     } catch { /* non-critical */ }
 }
 
+// ── Helpers ──
+
+async function _authJson(path) {
+    const token = localStorage.getItem('proxy_key') || '';
+    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+    const res = await fetch(`${window.location.origin}${path}`, { headers });
+    if (!res.ok) throw new Error(`${res.status}`);
+    return res.json();
+}
+
 // ── Event Listeners ──
 
 function _initListeners() {
@@ -94,14 +108,14 @@ function _initListeners() {
             resultEl.textContent = 'Verifying chain...';
             resultEl.className = 'font-mono text-[10px] text-slate-400';
             try {
-                const data = await api.get('/api/v1/audit/verify');
+                const data = await _authJson('/api/v1/audit/verify');
                 if (data.valid) {
-                    resultEl.textContent = `✓ Chain valid — ${data.verified} entries verified, 0 tampering detected`;
+                    resultEl.textContent = `Chain valid — ${data.verified} entries verified, 0 tampering detected`;
                     resultEl.className = 'font-mono text-[10px] text-emerald-400';
                     const statusEl = document.getElementById('sec-chain-status');
                     if (statusEl) { statusEl.textContent = 'VALID'; statusEl.className = 'text-2xl font-black text-emerald-400'; }
                 } else {
-                    resultEl.textContent = `✗ CHAIN BROKEN at entry #${data.broken_at} — ${data.error || 'tamper detected'}`;
+                    resultEl.textContent = `CHAIN BROKEN at entry #${data.broken_at} — ${data.error || 'tamper detected'}`;
                     resultEl.className = 'font-mono text-[10px] text-rose-400';
                     const statusEl = document.getElementById('sec-chain-status');
                     if (statusEl) { statusEl.textContent = 'BROKEN'; statusEl.className = 'text-2xl font-black text-rose-400'; }
@@ -113,7 +127,7 @@ function _initListeners() {
         });
     }
 
-    // GDPR Export
+    // GDPR Export — downloads JSON file (audit #18)
     const exportBtn = document.getElementById('sec-gdpr-export-btn');
     if (exportBtn) {
         exportBtn.addEventListener('click', async () => {
@@ -122,14 +136,25 @@ function _initListeners() {
             if (!subjectInput || !resultEl) return;
 
             const subject = subjectInput.value.trim();
-            if (!subject) { resultEl.textContent = 'Enter a subject ID'; resultEl.classList.remove('hidden'); return; }
+            if (!subject) { toast('Enter a subject ID', 'warning'); return; }
 
             resultEl.classList.remove('hidden');
             resultEl.textContent = 'Exporting...';
+            resultEl.className = 'mt-3 font-mono text-[10px] text-slate-400';
             try {
-                const data = await api.get(`/api/v1/gdpr/export/${encodeURIComponent(subject)}`);
-                resultEl.textContent = `Exported ${data.record_count} records for "${subject}" at ${data.exported_at}`;
+                const data = await _authJson(`/api/v1/gdpr/export/${encodeURIComponent(subject)}`);
+                // Trigger file download
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `dsar_${subject}_${new Date().toISOString().slice(0, 10)}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                const count = (data.audit?.length || 0) + (data.spend?.length || 0) + (data.roles?.length || 0);
+                resultEl.textContent = `Downloaded ${count} records for "${subject}"`;
                 resultEl.className = 'mt-3 font-mono text-[10px] text-emerald-400';
+                toast(`DSAR export downloaded (${count} records)`, 'success');
             } catch (e) {
                 resultEl.textContent = `No data found for "${subject}"`;
                 resultEl.className = 'mt-3 font-mono text-[10px] text-slate-500';
