@@ -6,7 +6,7 @@ import os
 import yaml
 from dotenv import load_dotenv
 
-from proxy.rotator import RotatorAgent
+from proxy.rotator import ProxyOrchestrator
 from core.metrics import start_metrics_server
 from core.discovery_utils import get_tailscale_ip
 from core.tracing import TraceManager
@@ -66,7 +66,7 @@ async def main():
         start_metrics_server(port=metrics_cfg.get("port", 9091))
 
     # Launch the security gateway
-    rotator = RotatorAgent(store)
+    rotator = ProxyOrchestrator(store)
     port = config.get("server", {}).get("port", 8090)
     logger.info(f"LLMProxy Security Gateway starting on port {port}")
 

@@ -28,7 +28,22 @@ async def config_watch_loop(agent, interval: int = 30):
                 agent.webhooks = WebhookDispatcher(agent.config)
                 prev_assistant = getattr(agent.security, 'assistant', None)
                 agent.security = SecurityShield(agent.config, assistant=prev_assistant)
-                logger.info("Config hot-reloaded (file change detected)")
+                # Reload circuit breaker thresholds on existing breakers
+                if hasattr(agent, 'circuit_manager'):
+                    cb_cfg = agent.config.get("circuit_breaker", {})
+                    ft = cb_cfg.get("failure_threshold", 5)
+                    rt = cb_cfg.get("recovery_timeout", 60)
+                    for cb in agent.circuit_manager._circuits.values():
+                        cb.failure_threshold = ft
+                        cb.recovery_timeout = rt
+                # Reload cache TTL from new config
+                if hasattr(agent, 'cache_backend'):
+                    cache_cfg = agent.config.get("cache", {})
+                    agent.cache_backend._ttl = cache_cfg.get("ttl", 3600)
+                # Trigger plugin hot-reload
+                if hasattr(agent, 'plugin_manager'):
+                    await agent.plugin_manager.load_plugins()
+                logger.info("Config hot-reloaded (security, circuits, cache, plugins)")
         except Exception as e:
             logger.warning(f"Config watch error: {e}")
 

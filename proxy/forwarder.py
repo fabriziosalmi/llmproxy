@@ -9,6 +9,7 @@ import json
 import time
 import asyncio
 import logging
+from dataclasses import dataclass, field
 from typing import Any, Callable, Awaitable
 
 import aiohttp
@@ -21,24 +22,49 @@ from core.metrics import MetricsTracker
 logger = logging.getLogger("llmproxy.forwarder")
 
 
+@dataclass
+class ForwardingContext:
+    """Decouples the forwarder from the orchestrator's internals.
+
+    Instead of passing raw locks, callbacks, and object references,
+    the orchestrator builds this context once and hands it over.
+    """
+    config: dict = field(default_factory=dict)
+    circuit_manager: Any = None
+    budget_lock: asyncio.Lock | None = None
+    get_session: Callable[[], Awaitable[Any]] | None = None
+    add_log: Callable[..., Awaitable[None]] | None = None
+    security: Any = None  # SecurityShield for mid-stream PII/injection monitoring
+
+
 class RequestForwarder:
     """Forwards requests to upstream LLM providers with fallback chain support."""
 
     def __init__(
         self,
-        config: dict,
-        circuit_manager: Any,
-        budget_lock: asyncio.Lock,
-        get_session: Callable[[], Awaitable[Any]],
-        add_log: Callable[..., Awaitable[None]],
+        config: dict | None = None,
+        circuit_manager: Any = None,
+        budget_lock: asyncio.Lock | None = None,
+        get_session: Callable[[], Awaitable[Any]] | None = None,
+        add_log: Callable[..., Awaitable[None]] | None = None,
         security: Any = None,
+        *,
+        ctx: ForwardingContext | None = None,
     ):
-        self.config = config
-        self.circuit_manager = circuit_manager
-        self._budget_lock = budget_lock
-        self._get_session = get_session
-        self._add_log = add_log
-        self._security = security  # SecurityShield for mid-stream PII/injection monitoring
+        if ctx is not None:
+            self.config = ctx.config
+            self.circuit_manager = ctx.circuit_manager
+            self._budget_lock = ctx.budget_lock
+            self._get_session = ctx.get_session
+            self._add_log = ctx.add_log
+            self._security = ctx.security
+        else:
+            self.config = config or {}
+            self.circuit_manager = circuit_manager
+            self._budget_lock = budget_lock
+            self._get_session = get_session
+            self._add_log = add_log
+            self._security = security
 
     def resolve_endpoint_for_provider(self, provider: str) -> Any:
         """Resolve the configured endpoint URL for a provider."""
@@ -155,11 +181,25 @@ class RequestForwarder:
                     )
                     return ctx.response
 
-            except (HTTPException, asyncio.TimeoutError, aiohttp.ClientError, OSError, ValueError, RuntimeError) as e:
+            except (asyncio.TimeoutError, aiohttp.ClientError, OSError) as e:
+                # Retryable: network/timeout errors → try next provider
                 last_error = e
                 if not attempt["is_fallback"]:
                     await self._add_log(
-                        f"PRIMARY FAILED: {endpoint_id} — {e}", level="PROXY",
+                        f"PRIMARY FAILED (retryable): {endpoint_id} — {type(e).__name__}: {e}",
+                        level="PROXY",
+                    )
+                continue
+            except HTTPException as e:
+                # Permanent client errors (4xx except 429) → don't fallback
+                if 400 <= e.status_code < 500 and e.status_code != 429:
+                    raise
+                # 429/5xx are retryable
+                last_error = e
+                if not attempt["is_fallback"]:
+                    await self._add_log(
+                        f"PRIMARY FAILED (retryable): {endpoint_id} — HTTP {e.status_code}",
+                        level="PROXY",
                     )
                 continue
 
@@ -248,11 +288,26 @@ class RequestForwarder:
                     speculative_task.cancel()
                 # Post-stream: update budget with real token cost
                 # In finally block to charge even on client disconnect
+                from core.pricing import estimate_cost
+                from core.tokenizer import count_tokens
+                model_name = ctx.body.get("model", "")
                 if stream_usage:
-                    from core.pricing import estimate_cost
                     p_tok = stream_usage.get("prompt_tokens") or stream_usage.get("promptTokenCount", 0)
                     c_tok = stream_usage.get("completion_tokens") or stream_usage.get("candidatesTokenCount", 0)
-                    model_name = ctx.body.get("model", "")
+                else:
+                    # Fallback: estimate tokens from accumulated text when
+                    # provider omits usage chunk (prevents budget bypass).
+                    prompt_text = " ".join(
+                        str(m.get("content", "")) for m in ctx.body.get("messages", [])
+                    )
+                    response_text = "".join(stream_text_chunks)
+                    p_tok = count_tokens(prompt_text, model_name)
+                    c_tok = count_tokens(response_text, model_name)
+                    logger.info(
+                        f"Stream usage missing — estimated {p_tok}+{c_tok} tokens "
+                        f"for model={model_name} endpoint={endpoint_id}"
+                    )
+                if p_tok or c_tok:
                     real_cost = estimate_cost(model_name, p_tok, c_tok)
                     # Accumulate only the delta for this request; the rotator
                     # adds it atomically under budget_lock. No lock needed here

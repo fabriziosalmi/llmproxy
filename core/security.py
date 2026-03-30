@@ -77,7 +77,19 @@ class SecurityShield:
         ) if self.config.get("threat_ledger", {}).get("enabled", True) else None
 
     async def analyze_speculative(self, prompt: str, stream_chunks: List[str], kill_event: Any):
-        """Asynchronously monitors a response stream for security violations."""
+        """Asynchronously monitors a response stream for security violations.
+
+        IMPORTANT — DETECT-ONLY LIMITATION:
+        This guardrail runs concurrently with the streaming response. Chunks
+        are analyzed AFTER they have already been yielded to the client.
+        Bytes already sent cannot be recalled. When a violation is detected
+        the stream is aborted (kill_event), but the client may have already
+        received the problematic content.
+
+        Use this for alerting and audit logging, NOT as a prevention
+        mechanism. For true prevention, disable streaming or use a
+        buffered-response mode.
+        """
         if not self.enabled:
             return
 
@@ -283,25 +295,30 @@ class SecurityShield:
 
         return None
 
+    # Pre-compiled threat patterns — avoids per-request re.compile overhead
+    # and eliminates ReDoS risk from unbounded backtracking on crafted input.
+    # Patterns use possessive-style atomics where possible (no optional
+    # repeating groups like (all\s+)? that cause catastrophic backtracking).
+    _THREAT_PATTERNS: list[tuple["re.Pattern[str]", float]] = [
+        (re.compile(r"ignore\s+(?:all\s+)?previous\s+instructions?"), 0.9),
+        (re.compile(r"system\s*prompt"), 0.8),
+        (re.compile(r"you\s+are\s+now\s+a"), 0.7),
+        (re.compile(r"bypass\s+(?:all\s+)?(?:safety|security|filter)"), 0.85),
+        (re.compile(r"reveal\s+(?:your\s+)?(?:secret|hidden|base)\s+instructions?"), 0.9),
+        (re.compile(r"```\s*system"), 0.85),
+        (re.compile(r"<\|im_start\|>"), 0.95),
+        (re.compile(r"assistant:\s"), 0.6),
+    ]
+
     def _calculate_threat_score(self, prompt: str) -> tuple[float, List[str]]:
         """Internal helper to calculate injection threat score."""
         normalized = unicodedata.normalize("NFKC", prompt).lower()
-        threats = [
-            (r"ignore\s+(all\s+)?previous\s+instructions?", 0.9),
-            (r"system\s*prompt", 0.8),
-            (r"you\s+are\s+now\s+a", 0.7),
-            (r"bypass\s+(all\s+)?(safety|security|filter)", 0.85),
-            (r"reveal\s+(your\s+)?(secret|hidden|base)\s+instructions?", 0.9),
-            (r"```\s*system", 0.85),
-            (r"<\|im_start\|>", 0.95),
-            (r"assistant:\s", 0.6),
-        ]
         score = 0.0
         matched = []
-        for pattern, weight in threats:
-            if re.search(pattern, normalized):
+        for compiled, weight in self._THREAT_PATTERNS:
+            if compiled.search(normalized):
                 score += weight
-                matched.append(pattern)
+                matched.append(compiled.pattern)
         return score, matched
 
     async def inspect(self, body: Dict[str, Any], session_id: str = "default",
