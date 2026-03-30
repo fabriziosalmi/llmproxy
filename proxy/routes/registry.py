@@ -72,6 +72,28 @@ def create_router(agent) -> APIRouter:
 
         return StreamingResponse(event_generator(), media_type="text/event-stream")
 
+    @router.post("/api/v1/registry")
+    async def add_endpoint_api(request: Request):
+        """Add a new LLM endpoint to the registry."""
+        _check_admin_auth(request)
+        data = await request.json()
+        ep_id = data.get("id", "").strip()
+        url = data.get("url", "").strip()
+        provider = data.get("provider", "openai")
+        priority = int(data.get("priority", 0))
+        if not ep_id or not url:
+            raise HTTPException(status_code=400, detail="id and url are required")
+        from models import LLMEndpoint, EndpointStatus
+        ep = LLMEndpoint(
+            id=ep_id,
+            url=url,
+            status=EndpointStatus.VERIFIED,
+            metadata={"provider": provider, "priority": priority},
+        )
+        await agent.store.add_endpoint(ep)
+        await agent._add_log(f"ENDPOINT: {ep_id} ADDED ({provider} @ {url})", level="SYSTEM")
+        return {"status": "added", "id": ep_id}
+
     @router.delete("/api/v1/registry/{endpoint_id}")
     async def delete_endpoint(endpoint_id: str, request: Request):
         _check_admin_auth(request)
