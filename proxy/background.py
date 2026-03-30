@@ -44,6 +44,14 @@ async def config_watch_loop(agent, interval: int = 30):
                 if hasattr(agent, 'plugin_manager'):
                     await agent.plugin_manager.load_plugins()
                 logger.info("Config hot-reloaded (security, circuits, cache, plugins)")
+            # Signature hot-reload (independent of config hash)
+            if hasattr(agent, 'signature_store') and agent.signature_store:
+                try:
+                    reloaded = await asyncio.to_thread(agent.signature_store.reload_if_changed)
+                    if reloaded:
+                        logger.info("Signatures hot-reloaded from YAML files")
+                except Exception as sig_e:
+                    logger.warning(f"Signature reload error (keeping old sigs): {sig_e}")
         except Exception as e:
             logger.warning(f"Config watch error: {e}")
 

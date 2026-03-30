@@ -203,7 +203,11 @@ def create_app(agent) -> FastAPI:
         allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
     )
-    app.add_middleware(ByteLevelFirewallMiddleware, max_body_bytes=max_payload_bytes)
+    app.add_middleware(
+        ByteLevelFirewallMiddleware,
+        max_body_bytes=max_payload_bytes,
+        signature_store=getattr(agent, 'signature_store', None),
+    )
     app.add_middleware(RateLimitMiddleware, config=agent.config)
 
     from .routes import (
