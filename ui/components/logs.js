@@ -65,7 +65,8 @@ export function initLogs() {
     const BASE_URL = window.location.origin;
     if (store.state.logSource) store.state.logSource.close();
     
-    const logSource = new EventSource(`${BASE_URL}/api/v1/logs`);
+    const _token = localStorage.getItem('proxy_key') || '';
+    const logSource = new EventSource(`${BASE_URL}/api/v1/logs?token=${encodeURIComponent(_token)}`);
     store.update({ logSource });
 
     term.writeln('\x1b[32m[SYSTEM]\x1b[0m Waiting for neural traffic link...'); // 13. No italic
