@@ -1,0 +1,55 @@
+# Core
+fastapi==0.135.2
+uvicorn[standard]==0.42.0
+PyYAML==6.0.3
+
+# HTTP
+aiohttp==3.13.3
+
+# Database
+aiosqlite==0.22.1
+
+# Monitoring
+prometheus-client==0.24.1
+
+# Security & Identity
+cryptography==46.0.5
+PyJWT==2.12.1
+
+# Export & Observability
+aiofiles==25.1.0
+sentry-sdk[fastapi]==2.55.0
+
+# Observability
+opentelemetry-api>=1.25.0
+opentelemetry-sdk>=1.25.0
+opentelemetry-instrumentation>=0.46b0
+opentelemetry-instrumentation-fastapi>=0.46b0
+opentelemetry-instrumentation-aiohttp-client>=0.46b0
+opentelemetry-instrumentation-aiohttp-server>=0.46b0
+opentelemetry-exporter-otlp>=1.25.0
+
+# Utilities
+cachetools==6.2.4
+
+# Type stubs
+types-PyYAML>=6.0.0
+types-cachetools>=5.0.0
+types-aiofiles>=24.1.0
+
+# Testing
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+
+# Optional: Secrets manager (falls back to env vars without this)
+# infisical-sdk>=3.0.0
+
+# Optional: NLP-powered PII detection
+# presidio-analyzer
+# presidio-anonymizer
+
+# Optional: WASM plugin support
+# extism
+
+# Optional: Parquet export
+# pyarrow
