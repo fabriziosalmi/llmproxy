@@ -176,9 +176,9 @@ def create_app(agent) -> FastAPI:
         if request.url.path.startswith("/ui"):
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
-                "script-src 'self'; "
-                "style-src 'self' https://fonts.googleapis.com; "
-                "font-src 'self' https://fonts.gstatic.com; "
+                "script-src 'self' 'unsafe-eval'; "    # Tailwind JIT requires eval
+                "style-src 'self' 'unsafe-inline'; "   # Tailwind JIT injects <style>
+                "font-src 'self'; "                    # Fonts are local (vendor/fonts/)
                 "img-src 'self' data:; "
                 "connect-src 'self'; "
                 "frame-ancestors 'none'"
