@@ -2,6 +2,7 @@
  * Settings View — Identity, RBAC, webhooks, export, rate limiting, system info.
  */
 import { api } from '../services/api.js';
+import { toast } from '../services/toast.js';
 
 export async function initSettings() {
     const tasks = [
@@ -12,6 +13,23 @@ export async function initSettings() {
         loadExport(),
     ];
     await Promise.allSettled(tasks);
+
+    // Webhook test-fire
+    const testBtn = document.getElementById('test-webhook-btn');
+    if (testBtn) {
+        testBtn.addEventListener('click', async () => {
+            testBtn.disabled = true;
+            testBtn.textContent = 'Sending...';
+            try {
+                await api.testWebhook();
+                toast('Test webhook dispatched', 'success');
+            } catch (e) {
+                toast(`Webhook test failed: ${e.message}`, 'error');
+            }
+            testBtn.textContent = 'Test Fire';
+            testBtn.disabled = false;
+        });
+    }
 }
 
 async function loadSystemInfo() {

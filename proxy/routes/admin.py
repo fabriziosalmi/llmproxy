@@ -395,4 +395,18 @@ def create_router(agent) -> APIRouter:
             cb._half_open_probe_active = False
         return {"status": "reset", "endpoint": endpoint_id, "state": "CLOSED"}
 
+    @router.post("/api/v1/webhooks/test")
+    async def test_webhook(request: Request):
+        """Send a test payload to all configured webhook endpoints."""
+        _check_admin_auth(request)
+        from core.webhooks import EventType
+        try:
+            await agent.webhooks.dispatch(
+                EventType.INJECTION_BLOCKED,
+                {"message": "Test webhook from LLMProxy UI", "test": True},
+            )
+            return {"status": "sent", "message": "Test payload dispatched to all endpoints"}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
     return router
