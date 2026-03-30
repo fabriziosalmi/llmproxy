@@ -564,13 +564,18 @@
                         <p id="kpi-spend-completion" class="text-2xl font-black text-rose-400 font-mono">--</p>
                     </div>
                 </div>
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
                     <div id="analytics-by-model" class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6">
                         <h3 class="text-xs font-bold text-white mb-4">Spend by Model</h3>
                     </div>
                     <div id="analytics-by-provider" class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6">
                         <h3 class="text-xs font-bold text-white mb-4">Spend by Provider</h3>
                     </div>
+                </div>
+                <!-- Cost Efficiency -->
+                <div id="analytics-efficiency" class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6">
+                    <h3 class="text-xs font-bold text-white mb-4">Cost Efficiency</h3>
+                    <p class="text-[9px] text-slate-600 font-mono">Loading...</p>
                 </div>
             </div>
 
@@ -711,7 +716,10 @@
 
                 <!-- Webhooks -->
                 <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-4">
-                    <h2 class="text-xs font-bold text-white mb-4">Webhooks</h2>
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-xs font-bold text-white">Webhooks</h2>
+                        <button id="test-webhook-btn" class="px-3 py-1.5 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20 rounded-lg text-[10px] font-bold text-violet-400 transition-colors">Test Fire</button>
+                    </div>
                     <div id="webhooks-status">
                         <p class="text-[9px] text-slate-600 font-mono">Loading...</p>
                     </div>
