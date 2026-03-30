@@ -8,10 +8,28 @@ Provides a fully wired RotatorAgent with:
   - All plugins loaded from manifest
 """
 
+import pytest
 from typing import List, Optional, Dict, Any
 
 from models import LLMEndpoint, EndpointStatus
 from store.base import BaseRepository
+
+
+@pytest.fixture(autouse=True)
+def _reset_semantic_corpus():
+    """Reset semantic analyzer global state after each test.
+
+    SignatureStore.load() calls set_corpus() which mutates module-level
+    globals. Without reset, test ordering determines which corpus is
+    active — causing flaky failures in invariant and multilingual tests.
+    """
+    yield
+    try:
+        import core.semantic_analyzer as sa
+        sa._active_corpus = None
+        sa._corpus_cache = None
+    except ImportError:
+        pass
 
 
 class InMemoryRepository(BaseRepository):
