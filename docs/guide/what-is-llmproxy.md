@@ -1,4 +1,4 @@
-# What is LLMProxy?
+# <img src="/logo.svg" style="height: 48px; display: inline; vertical-align: middle; margin-right: 12px; border-radius: 8px;"> What is LLMProxy?
 
 LLMProxy is a **security-first proxy** for Large Language Models. It sits between your applications and LLM providers, adding layered security, intelligent routing, cost controls, and real-time monitoring.
 
