@@ -109,6 +109,10 @@ class SQLiteStore:
         """)
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_model ON audit_log(model)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_key ON audit_log(key_prefix, ts)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_session ON audit_log(session_id, ts)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_spend_key ON spend_log(key_prefix, date)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_endpoints_status ON endpoints(status)")
         # RBAC / GDPR: user_roles table (referenced by delete_subject_data / export_subject_data)
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS user_roles (
@@ -120,12 +124,37 @@ class SQLiteStore:
             )
         """)
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_user_roles_subject ON user_roles(subject)")
-        # Migration: add hash columns to existing tables (no-op if already present)
-        for col in ("entry_hash TEXT DEFAULT ''", "prev_hash TEXT DEFAULT ''"):
-            try:
-                await conn.execute(f"ALTER TABLE audit_log ADD COLUMN {col}")
-            except sqlite3.OperationalError:
-                pass  # Column already exists
+        # Schema migration tracking
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS _migrations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL,
+                applied_at INTEGER NOT NULL
+            )
+        """)
+        # Run migrations (idempotent — skips already-applied)
+        import time as _time
+        _migrations = [
+            ("001_audit_hash_columns", [
+                "ALTER TABLE audit_log ADD COLUMN entry_hash TEXT DEFAULT ''",
+                "ALTER TABLE audit_log ADD COLUMN prev_hash TEXT DEFAULT ''",
+            ]),
+        ]
+        for mig_name, stmts in _migrations:
+            async with conn.execute(
+                "SELECT 1 FROM _migrations WHERE name = ?", (mig_name,)
+            ) as cur:
+                if await cur.fetchone():
+                    continue
+            for stmt in stmts:
+                try:
+                    await conn.execute(stmt)
+                except sqlite3.OperationalError:
+                    pass  # Column/table already exists from pre-migration era
+            await conn.execute(
+                "INSERT INTO _migrations (name, applied_at) VALUES (?, ?)",
+                (mig_name, int(_time.time())),
+            )
         await conn.commit()
 
     async def add_endpoint(self, endpoint: LLMEndpoint):
@@ -527,6 +556,19 @@ class SQLiteStore:
             verified += 1
 
         return {"valid": True, "total": len(rows), "verified": verified, "broken_at": None}
+
+    async def health_check(self) -> bool:
+        """Verify the database connection is alive via a lightweight PRAGMA."""
+        try:
+            conn = await self._get_conn()
+            async with conn.execute("PRAGMA quick_check(1)") as cur:
+                row = await cur.fetchone()
+                return row is not None and row[0] == "ok"
+        except Exception as e:
+            logger.error(f"SQLiteStore health check failed: {e}")
+            # Connection is dead — reset so _get_conn() recreates it
+            self._conn = None
+            return False
 
     async def close(self):
         """Graceful shutdown — close persistent connection."""

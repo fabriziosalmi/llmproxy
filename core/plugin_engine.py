@@ -20,10 +20,19 @@ import yaml
 import asyncio
 import logging
 import inspect
+from concurrent.futures import ThreadPoolExecutor
 from collections import deque
 from enum import Enum
 from typing import List, Dict, Any, Optional, Sequence
 from dataclasses import dataclass, field
+
+# Bounded executor for sync plugin execution — prevents unbounded thread growth
+# under load. max_workers capped at 32 to avoid memory exhaustion from
+# non-cancellable threads (asyncio timeout stops waiting but thread keeps running).
+_PLUGIN_EXECUTOR = ThreadPoolExecutor(
+    max_workers=min(32, (os.cpu_count() or 4) + 4),
+    thread_name_prefix="plugin-sync",
+)
 
 from core.plugin_sdk import BasePlugin, PluginResponse, PluginResponseError
 from core.wasm_runner import WasmRunner
@@ -326,6 +335,11 @@ class PluginManager:
                 self.logger.error(f"Error unloading plugin {name}: {e}")
         self._plugin_instances.clear()
 
+        # Reset per-plugin stats (quarantine, error counts) so reloaded
+        # plugins start fresh — stale quarantine from a previous version
+        # would otherwise block a fixed plugin from executing.
+        self._plugin_stats.clear()
+
         # Reset rings
         for hook in PluginHook:
             self.rings[hook] = []
@@ -558,7 +572,7 @@ class PluginManager:
                             # Sync functions run in executor with timeout
                             loop = asyncio.get_running_loop()
                             await asyncio.wait_for(
-                                loop.run_in_executor(None, func, context),
+                                loop.run_in_executor(_PLUGIN_EXECUTOR, func, context),
                                 timeout=timeout_s
                             )
                     except asyncio.TimeoutError:

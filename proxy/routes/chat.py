@@ -115,9 +115,12 @@ def create_router(agent) -> APIRouter:
             # total here for metrics/webhooks — do NOT add cost again.
             cost_usd = 0.0
             model_name = body.get("model", "")
+            model_version = ""  # Actual model version from upstream (e.g. "gpt-4o-2024-08-06")
             try:
                 if hasattr(response, "body"):
-                    usage = json.loads(response.body).get("usage", {})
+                    resp_data = json.loads(response.body)
+                    model_version = resp_data.get("model", "")
+                    usage = resp_data.get("usage", {})
                     in_tok = usage.get("prompt_tokens") or count_messages_tokens(body.get("messages", []), model_name)
                     out_tok = usage.get("completion_tokens", 0)
                     cost_usd = estimate_cost(model_name, in_tok, out_tok)
@@ -169,11 +172,13 @@ def create_router(agent) -> APIRouter:
                             provider=_provider, prompt_tokens=_in_tok, completion_tokens=_out_tok,
                             cost_usd=cost_usd, latency_ms=round(duration * 1000, 1), status=_status,
                         )
+                    _audit_meta = json.dumps({"model_version": model_version}) if model_version else "{}"
                     await agent.store.log_audit(
                         ts=_now, req_id=_req_id, session_id=session_id[:16],
                         key_prefix=_key, model=model_name, provider=_provider,
                         status=_status, prompt_tokens=_in_tok, completion_tokens=_out_tok,
                         cost_usd=cost_usd, latency_ms=round(duration * 1000, 1),
+                        metadata=_audit_meta,
                     )
                 except Exception as e:
                     logger.warning(f"Audit/spend log persistence failed: {e}")

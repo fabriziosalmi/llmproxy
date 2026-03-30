@@ -10,3 +10,7 @@ class BaseAgent(ABC):
     @abstractmethod
     async def run(self):
         pass
+
+
+# Back-compat alias — old name was misleading (not an ML agent)
+BaseOrchestrator = BaseAgent
