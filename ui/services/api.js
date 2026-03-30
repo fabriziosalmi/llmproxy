@@ -104,4 +104,5 @@ export const api = {
     async resetSecurity() { return _post(`${BASE_URL}/api/v1/security/reset`, {}); },
     async resetCircuitBreaker(id) { return _post(`${BASE_URL}/api/v1/circuit-breaker/${id}/reset`, {}); },
     async reloadConfig() { return _post(`${BASE_URL}/api/v1/admin/reload`, {}); },
+    async testWebhook() { return _post(`${BASE_URL}/api/v1/webhooks/test`, {}); },
 };
