@@ -61,24 +61,37 @@ export function initLogs() {
         resizeListenerAttached = true;
     }
 
-    // Connect Log Stream
+    // Connect Log Stream — defer until auth token is available
     const BASE_URL = window.location.origin;
-    if (store.state.logSource) store.state.logSource.close();
-    
-    const _token = localStorage.getItem('proxy_key') || '';
-    const logSource = new EventSource(`${BASE_URL}/api/v1/logs?token=${encodeURIComponent(_token)}`);
-    store.update({ logSource });
+    term.writeln('\x1b[32m[SYSTEM]\x1b[0m Waiting for neural traffic link...');
 
-    term.writeln('\x1b[32m[SYSTEM]\x1b[0m Waiting for neural traffic link...'); // 13. No italic
+    function connectLogStream() {
+        const token = localStorage.getItem('proxy_key') || '';
+        if (!token) {
+            // Retry in 2s — user hasn't logged in yet
+            setTimeout(connectLogStream, 2000);
+            return;
+        }
+        if (store.state.logSource) store.state.logSource.close();
+        const logSource = new EventSource(`${BASE_URL}/api/v1/logs?token=${encodeURIComponent(token)}`);
+        store.update({ logSource });
+        logSource.onmessage = onLogMessage;
+        logSource.onerror = () => {
+            // Reconnect after delay (token may have expired)
+            setTimeout(connectLogStream, 5000);
+        };
+    }
 
-    logSource.onmessage = (event) => {
+    function onLogMessage(event) {
         try {
             const entry = JSON.parse(event.data);
             appendLogToTerm(entry);
         } catch (e) {
             console.error('Failed to parse log entry:', e);
         }
-    };
+    }
+
+    connectLogStream();
 
     const clearBtn = document.getElementById('clear-logs-btn');
     if (clearBtn) {
