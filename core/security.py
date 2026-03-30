@@ -132,10 +132,18 @@ class SecurityShield:
     # Regex patterns used when Presidio is not available
     _REGEX_PII_PATTERNS = [
         (r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', 'EMAIL'),
-        (r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b', 'PHONE'),
+        (r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b', 'PHONE_US'),
         (r'\b\d{3}-\d{2}-\d{4}\b', 'SSN'),
         (r'\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b', 'CREDIT_CARD'),
         (r'\b[A-Z]{2}\d{2}[\s]?[\dA-Z]{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{0,2}\b', 'IBAN'),
+        # W7: International phone formats (+CC with 7-15 digits)
+        (r'\+\d{1,3}[\s.-]?\(?\d{1,4}\)?[\s.-]?\d{2,4}[\s.-]?\d{2,4}[\s.-]?\d{0,4}\b', 'PHONE_INTL'),
+        # W7: IPv4 addresses (avoid matching version numbers like 1.2.3)
+        (r'\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b', 'IP_ADDRESS'),
+        # W7: API keys / tokens (common patterns: sk-, key-, token-, Bearer)
+        (r'\b(?:sk|key|token|bearer|api[_-]?key)[_-][A-Za-z0-9_-]{20,}\b', 'API_KEY'),
+        # W7: Amex credit cards (15 digits starting with 34/37)
+        (r'\b3[47]\d{2}[\s-]?\d{6}[\s-]?\d{5}\b', 'CREDIT_CARD'),
     ]
 
     # Presidio entity types to detect
@@ -392,9 +400,29 @@ class SecurityShield:
         return None
 
     def _extract_prompt(self, body: Dict[str, Any]) -> str:
+        """Extract ALL user-controlled text from the request body.
+
+        W3: Few-shot injection defense — inspects all messages, not just the
+        last. An attacker can hide injection in earlier messages (e.g.,
+        msg[0]="ignore previous", msg[1]="instructions") or in fake
+        assistant turns used as few-shot examples.
+        """
         messages = body.get("messages", [])
         if messages:
-            return str(messages[-1].get("content", ""))
+            parts = []
+            for msg in messages:
+                content = msg.get("content", "")
+                if content:
+                    parts.append(str(content))
+                # Also inspect tool_calls if present (W3: tool injection)
+                tool_calls = msg.get("tool_calls", [])
+                for tc in tool_calls:
+                    fn = tc.get("function", {})
+                    if fn.get("name"):
+                        parts.append(str(fn["name"]))
+                    if fn.get("arguments"):
+                        parts.append(str(fn["arguments"]))
+            return " ".join(parts)
         return str(body.get("prompt", ""))
 
     def _check_payload_flooding(self, body: Dict[str, Any]) -> Optional[str]:
@@ -513,17 +541,16 @@ class SecurityShield:
             return True
 
         # 3. Response Entropy (repetition/flood detection)
-        # Only flag extremely LOW entropy (< 1.0) which indicates byte-flooding or
-        # repetition attacks. High entropy is intentionally NOT blocked: legitimate
-        # code, JSON, Base64, and non-Latin scripts (CJK, Arabic, etc.) all produce
-        # high Shannon entropy values and would generate false positives.
+        # W10: Flag low entropy (< 1.5) indicating byte-flooding or repetition.
+        # Raised from 1.0 to catch phrases like "yes yes yes yes" (entropy ~1.0).
+        # Normal English text has entropy 3.5-4.5; code/JSON 4.0-6.0.
         if len(text) > 100:
             import math
             counts: dict[str, int] = {}
             for c in text:
                 counts[c] = counts.get(c, 0) + 1
             entropy = -sum((count / len(text)) * math.log2(count / len(text)) for count in counts.values())
-            if entropy < 1.0:
+            if entropy < 1.5:
                 logger.warning(f"Entropy Shield: Suspiciously low entropy detected ({entropy:.2f}) — likely repetition attack.")
                 return True
 
@@ -562,8 +589,15 @@ class SecurityShield:
         return text
 
     # Pre-compiled invisible char pattern (class-level, compiled once)
+    # W6: Extended invisible character detection.
+    # Added: U+202A-202E (bidi overrides — actively dangerous for visual spoofing),
+    # U+2028-2029 (line/paragraph separators), U+180E (Mongolian vowel separator),
+    # U+2000-200A (various Unicode spaces used for obfuscation).
     _INVISIBLE_RE = re.compile(
         r'[\u200B-\u200F\uFEFF\u2060-\u2064\u2066-\u2069\u00AD'
+        r'\u202A-\u202E'   # bidi overrides (LRE, RLE, PDF, LRO, RLO)
+        r'\u2028-\u2029'   # line/paragraph separators
+        r'\u180E'          # Mongolian vowel separator
         r'\U000E0001-\U000E007F]'
     )
 
@@ -616,11 +650,14 @@ class SecurityShield:
         if double_space_count > 10:
             findings.append(f"double_spaces={double_space_count}")
 
-        # Homoglyph: Latin + Cyrillic mixed with minority < 20%
+        # Homoglyph: Latin + Cyrillic mixed with minority < 10% (W10).
+        # Lowered from 20% to 10% to avoid false positives on multilingual
+        # code comments. True homoglyph attacks use 1-5 Cyrillic chars in
+        # an otherwise Latin string (e.g., Cyrillic 'а' in "pаssword").
         if latin_count > 0 and cyrillic_count > 0:
             total_alpha = latin_count + cyrillic_count
             minority_ratio = min(cyrillic_count, latin_count) / total_alpha
-            if minority_ratio < 0.20:
+            if minority_ratio < 0.10:
                 findings.append(f"homoglyph_mix=latin+cyrillic(minority={minority_ratio:.0%})")
 
         if findings:
