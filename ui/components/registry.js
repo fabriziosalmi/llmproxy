@@ -107,6 +107,7 @@ export function renderRegistry() {
                 </div>
             </td>
             <td class="px-4 py-3 text-right">
+                <button data-action="reset-cb" data-id="${ep.id}" class="text-[9px] text-slate-500 hover:text-emerald-400 px-2 py-1 rounded hover:bg-white/5 transition-colors">Reset CB</button>
                 <button data-action="toggle" data-id="${ep.id}" class="text-[9px] text-slate-500 hover:text-amber-400 px-2 py-1 rounded hover:bg-white/5 transition-colors">Toggle</button>
                 <button data-action="delete" data-id="${ep.id}" class="text-[9px] text-slate-500 hover:text-rose-400 px-2 py-1 rounded hover:bg-white/5 transition-colors">Delete</button>
             </td>
@@ -129,7 +130,10 @@ export function renderRegistry() {
             const id = btn.dataset.id;
             const action = btn.dataset.action;
             try {
-                if (action === 'toggle') {
+                if (action === 'reset-cb') {
+                    await api.resetCircuitBreaker(id);
+                    toast(`Circuit breaker ${id} reset to CLOSED`, 'success');
+                } else if (action === 'toggle') {
                     await api.toggleEndpoint(id);
                     toast(`Endpoint ${id} toggled`, 'success');
                 } else if (action === 'delete') {
