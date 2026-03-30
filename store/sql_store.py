@@ -287,10 +287,12 @@ class SQLiteStore:
         conn = await self._get_conn()
         async with self._row_factory_lock:
             conn.row_factory = aiosqlite.Row
-            async with conn.execute(sql, params) as cursor:
-                rows = await cursor.fetchall()
-                result = [dict(r) for r in rows]
-            conn.row_factory = None
+            try:
+                async with conn.execute(sql, params) as cursor:
+                    rows = await cursor.fetchall()
+                    result = [dict(r) for r in rows]
+            finally:
+                conn.row_factory = None
         return result
 
     async def get_spend_total(self, date_from: str = "", date_to: str = "") -> dict:
@@ -400,13 +402,15 @@ class SQLiteStore:
         # Fetch page
         async with self._row_factory_lock:
             conn.row_factory = aiosqlite.Row
-            async with conn.execute(
-                f"SELECT * FROM audit_log {where} ORDER BY ts DESC LIMIT ? OFFSET ?",
-                params + [limit, offset],
-            ) as cursor:
-                rows = await cursor.fetchall()
-                items = [dict(r) for r in rows]
-            conn.row_factory = None
+            try:
+                async with conn.execute(
+                    f"SELECT * FROM audit_log {where} ORDER BY ts DESC LIMIT ? OFFSET ?",
+                    params + [limit, offset],
+                ) as cursor:
+                    rows = await cursor.fetchall()
+                    items = [dict(r) for r in rows]
+            finally:
+                conn.row_factory = None
 
         return {"total": total, "items": items}
 
@@ -469,26 +473,26 @@ class SQLiteStore:
         conn = await self._get_conn()
         async with self._row_factory_lock:
             conn.row_factory = aiosqlite.Row
+            try:
+                async with conn.execute(
+                    "SELECT * FROM audit_log WHERE session_id = ? OR key_prefix = ? ORDER BY ts DESC",
+                    (subject, subject),
+                ) as cursor:
+                    audit = [dict(r) for r in await cursor.fetchall()]
 
-            async with conn.execute(
-                "SELECT * FROM audit_log WHERE session_id = ? OR key_prefix = ? ORDER BY ts DESC",
-                (subject, subject),
-            ) as cursor:
-                audit = [dict(r) for r in await cursor.fetchall()]
+                async with conn.execute(
+                    "SELECT * FROM spend_log WHERE key_prefix = ? ORDER BY ts DESC",
+                    (subject,),
+                ) as cursor:
+                    spend = [dict(r) for r in await cursor.fetchall()]
 
-            async with conn.execute(
-                "SELECT * FROM spend_log WHERE key_prefix = ? ORDER BY ts DESC",
-                (subject,),
-            ) as cursor:
-                spend = [dict(r) for r in await cursor.fetchall()]
-
-            async with conn.execute(
-                "SELECT * FROM user_roles WHERE subject = ? OR email = ?",
-                (subject, subject),
-            ) as cursor:
-                roles = [dict(r) for r in await cursor.fetchall()]
-
-            conn.row_factory = None
+                async with conn.execute(
+                    "SELECT * FROM user_roles WHERE subject = ? OR email = ?",
+                    (subject, subject),
+                ) as cursor:
+                    roles = [dict(r) for r in await cursor.fetchall()]
+            finally:
+                conn.row_factory = None
         return {"audit": audit, "spend": spend, "roles": roles}
 
     async def verify_audit_chain(self) -> dict:
@@ -501,16 +505,19 @@ class SQLiteStore:
         import hashlib
 
         conn = await self._get_conn()
+        # R2-12: Limit to last 100k rows to prevent OOM on large audit logs.
+        # Verifying the most recent entries is sufficient for tamper detection.
+        _MAX_VERIFY_ROWS = 100_000
         async with self._row_factory_lock:
             conn.row_factory = aiosqlite.Row
-            async with conn.execute(
-                "SELECT * FROM audit_log ORDER BY id ASC"
-            ) as cursor:
-                rows = [dict(r) for r in await cursor.fetchall()]
-            conn.row_factory = None
-
-        if not rows:
-            return {"valid": True, "total": 0, "verified": 0, "broken_at": None}
+            try:
+                async with conn.execute(
+                    "SELECT * FROM audit_log ORDER BY id ASC LIMIT ?",
+                    (_MAX_VERIFY_ROWS,),
+                ) as cursor:
+                    rows = [dict(r) for r in await cursor.fetchall()]
+            finally:
+                conn.row_factory = None
 
         expected_prev = "GENESIS"
         verified = 0

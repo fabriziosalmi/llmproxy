@@ -248,9 +248,14 @@ class IdentityManager:
             return list(self.role_mappings[email])
 
         # Check JWT roles claim (e.g., Azure AD `roles` or `groups`)
+        # R2-02: Validate against known RBAC roles to prevent role injection
+        # from attacker-controlled OIDC tenants.
         jwt_roles = claims.get(provider.roles_claim)
         if isinstance(jwt_roles, list) and jwt_roles:
-            return jwt_roles
+            from core.rbac import DEFAULT_PERMISSIONS
+            valid_roles = set(DEFAULT_PERMISSIONS.keys())
+            filtered = [r for r in jwt_roles if isinstance(r, str) and r in valid_roles]
+            return filtered if filtered else [self.default_role]
 
         return [self.default_role]
 
