@@ -11,7 +11,7 @@ server:
     key_file: "/etc/llmproxy/certs/server.key"
     min_version: "1.2"
   auth:
-    enabled: true
+    enabled: false
     # API keys loaded from env: LLM_PROXY_API_KEYS (comma-separated)
     api_keys_env: "LLM_PROXY_API_KEYS"
   metrics:
@@ -70,51 +70,50 @@ rotation:
 # Cross-provider fallback chains — when primary provider is down, try alternatives.
 # Each chain maps a model to ordered fallback options (tried left to right).
 fallback_chains:
-  "gpt-4o":
-    - provider: anthropic
-      model: "claude-sonnet-4-20250514"
-    - provider: google
-      model: "gemini-2.5-pro"
-  "gpt-4o-mini":
-    - provider: anthropic
-      model: "claude-haiku-4-5-20251001"
-    - provider: google
-      model: "gemini-2.5-flash"
-  "claude-sonnet-4-20250514":
-    - provider: openai
-      model: "gpt-4o"
-    - provider: google
-      model: "gemini-2.5-pro"
-  "claude-haiku-4-5-20251001":
-    - provider: openai
-      model: "gpt-4o-mini"
-    - provider: google
-      model: "gemini-2.5-flash"
+  "gpt-5.4":
+    - { provider: anthropic, model: "claude-opus-4-6" }
+    - { provider: google, model: "gemini-2.5-pro" }
+  "gpt-5.4-mini":
+    - { provider: anthropic, model: "claude-sonnet-4-6" }
+    - { provider: google, model: "gemini-2.5-flash" }
+  "claude-opus-4-6":
+    - { provider: openai, model: "gpt-5.4" }
+    - { provider: google, model: "gemini-2.5-pro" }
+  "claude-sonnet-4-6":
+    - { provider: openai, model: "gpt-5.4-mini" }
+    - { provider: google, model: "gemini-2.5-flash" }
   "gemini-2.5-pro":
-    - provider: openai
-      model: "gpt-4o"
-    - provider: anthropic
-      model: "claude-sonnet-4-20250514"
+    - { provider: openai, model: "gpt-5.4" }
+    - { provider: anthropic, model: "claude-opus-4-6" }
+  "gemini-2.5-flash":
+    - { provider: openai, model: "gpt-5.4-mini" }
+    - { provider: anthropic, model: "claude-sonnet-4-6" }
 
 # Model aliases — shorthand names that resolve to real model IDs
 model_aliases:
   "gpt4": "gpt-4o"
-  "gpt4-mini": "gpt-4o-mini"
-  "claude": "claude-sonnet-4-20250514"
+  "gpt5": "gpt-5.4"
+  "gpt": "gpt-5.4"
+  "claude": "claude-sonnet-4-6"
+  "claude-opus": "claude-opus-4-6"
   "claude-haiku": "claude-haiku-4-5-20251001"
   "gemini": "gemini-2.5-flash"
-  "fast": "gpt-4o-mini"
-  "best": "gpt-4o"
-  "cheap": "gemini-2.0-flash"
+  "gemini-pro": "gemini-2.5-pro"
+  "fast": "gpt-5.4-mini"
+  "best": "gpt-5.4"
+  "cheap": "gemini-2.5-flash-lite"
+  "reasoning": "o3"
 
 # Model groups — pool of models with routing strategy
+# Only models from providers with valid API keys are considered.
 model_groups:
   "auto":
     strategy: "cheapest"
     models:
-      - { model: "gpt-4o-mini", provider: "openai", weight: 0.5 }
+      - { model: "gpt-5.4-nano", provider: "openai", weight: 0.4 }
       - { model: "gemini-2.5-flash", provider: "google", weight: 0.3 }
       - { model: "claude-haiku-4-5-20251001", provider: "anthropic", weight: 0.2 }
+      - { model: "llama-3.3-70b-versatile", provider: "groq", weight: 0.1 }
 
 # LLM Providers — each endpoint maps to an adapter in proxy/adapters/
 endpoints:
@@ -122,21 +121,63 @@ endpoints:
     provider: "openai"
     base_url: "https://api.openai.com/v1"
     api_key_env: "OPENAI_API_KEY"
-    models: ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "o3-mini", "text-embedding-3-small", "text-embedding-3-large"]
+    models:
+      # Frontier (March 2026)
+      - "gpt-5.4"
+      - "gpt-5.4-mini"
+      - "gpt-5.4-nano"
+      - "gpt-5.4-pro"
+      # Previous gen
+      - "gpt-5"
+      - "gpt-5-mini"
+      - "gpt-4.1"
+      - "gpt-4o"
+      - "gpt-4o-mini"
+      # Reasoning
+      - "o3"
+      - "o3-pro"
+      - "o3-mini"
+      - "o4-mini"
+      # Codex
+      - "gpt-5-codex"
+      - "gpt-5.3-codex"
+      # Embeddings
+      - "text-embedding-3-small"
+      - "text-embedding-3-large"
     rate_limit: { rpm: 3500, tpm: 60000 }
 
   anthropic:
     provider: "anthropic"
     base_url: "https://api.anthropic.com/v1"
     api_key_env: "ANTHROPIC_API_KEY"
-    models: ["claude-sonnet-4-20250514", "claude-haiku-4-5-20251001", "claude-opus-4-20250514"]
+    models:
+      # Current gen (March 2026)
+      - "claude-opus-4-6"
+      - "claude-sonnet-4-6"
+      - "claude-haiku-4-5-20251001"
+      # Previous gen
+      - "claude-sonnet-4-5-20250929"
+      - "claude-opus-4-5-20251101"
+      - "claude-sonnet-4-20250514"
+      - "claude-opus-4-20250514"
     rate_limit: { rpm: 1000 }
 
   google:
     provider: "google"
     base_url: "https://generativelanguage.googleapis.com/v1beta"
     api_key_env: "GOOGLE_API_KEY"
-    models: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash", "text-embedding-004"]
+    models:
+      # Gemini 3 series (March 2026)
+      - "gemini-3.1-pro-preview"
+      - "gemini-3-flash-preview"
+      - "gemini-3.1-flash-lite-preview"
+      # Gemini 2.5 series (stable)
+      - "gemini-2.5-pro"
+      - "gemini-2.5-flash"
+      - "gemini-2.5-flash-lite"
+      # Embeddings
+      - "gemini-embedding-001"
+      - "text-embedding-004"
 
   azure:
     provider: "azure"

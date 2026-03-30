@@ -63,6 +63,10 @@ def create_router(agent) -> APIRouter:
                         yield f"data: {json.dumps(event)}\n\n"
                     except asyncio.TimeoutError:
                         yield ": keep-alive\n\n"
+                    except (asyncio.CancelledError, GeneratorExit):
+                        break
+            except (asyncio.CancelledError, GeneratorExit):
+                pass
             finally:
                 _active_telemetry["count"] -= 1
 
