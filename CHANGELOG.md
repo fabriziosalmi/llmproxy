@@ -2,6 +2,64 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.10.4] — 2026-03-30
+
+### Red Team Security Audit (Round 1) — 13 exploitable findings fixed
+
+**HIGH severity:**
+- **Domain blocklist substring bypass** (H1) — `_check_links()` and `sanitize_response()` used `domain in url` substring match. "not-malicious-site.com" matched "malicious-site.com". Fixed: `urlparse().netloc` with exact/suffix domain boundary match.
+- **PII masker only last message** (H2) — `pii_masker.py` only masked `messages[-1]`. SSN/CC in earlier messages forwarded to upstream LLM in cleartext. Fixed: loops ALL messages.
+- **Session collapse without auth** (H5) — All users behind same NAT shared one session (IP-only). Attacker's threat score poisoned legitimate users. Fixed: `hash(IP:User-Agent:Accept-Language)` fingerprint.
+
+**MEDIUM severity:**
+- **Response sanitizer only choices[0]** (H3) — `n>1` requests bypassed sanitization on alternative completions. Fixed: loops ALL choices.
+- **Identity error detail leak** (H7) — `ValueError` from JWT verification exposed JWKS paths, OIDC URLs, algorithm info. Fixed: generic "Invalid or expired token".
+- **Semantic analyzer DoS** (H10) — Default unbounded executor + no timeout. 100k-char prompts saturated thread pool. Fixed: `ThreadPoolExecutor(4)` + `asyncio.wait_for(5s)`.
+- **Threat score leak** (H11) — Exact score in 403 enabled binary search to calibrate prompts at 0.69 (just below 0.7 threshold). Fixed: generic error, score only in server logs.
+- **Streaming bypasses sanitizer** (H12) — Documented architectural limitation in `shield_sanitizer.py`.
+
+**LOW severity:**
+- **Rate limiter bucket race** (H4) — `bucket.acquire()` called after global lock release; evicted bucket could be used. Fixed: acquire inside lock.
+- **_extract_prompt() double call** (H6) — Deduplicated: reuse from step 0.
+- **Trace ID log injection** (H8) — Unvalidated `X-Trace-Id` header. Fixed: regex `^[a-fA-F0-9-]{1,64}$`.
+- **NegativeCache ignores model** (H9) — Same messages + different model shared cache entry. Fixed: hash includes `[model, messages]`.
+- **req_id 32-bit collision** (H13) — Birthday bound at 65k requests. Fixed: 64-bit (`uuid4.hex[:16]`).
+
+### WAF Hardening (14 audit findings)
+- **Encoding chain bypass** (W1) — Iterative 2-level nested decoding: catches `Base64(URL("..."))`, double-base64, `Hex(Base64("..."))`.
+- **Typo/leetspeak evasion** (W2) — Leetspeak normalization (`1→i, 0→o, 3→e, @→a, $→s`) before trigram matching.
+- **Few-shot injection** (W3) — `_extract_prompt()` inspects ALL messages + `tool_calls` (name + arguments).
+- **Firewall signatures** (W4) — 11 → 28 (DAN, jailbreak, role-play, delimiter, social engineering).
+- **Multilingual corpus** (W5) — 7 → 17 patterns (+ZH, RU, PT, HI, TR, PL). 64 total semantic patterns.
+- **Bidi override detection** (W6) — `U+202A-202E`, `U+2028-2029`, `U+180E` added.
+- **PII international** (W7) — +4 patterns: intl phone, IPv4, API keys, Amex 15-digit.
+- **Sliding window step** (W8) — Capped at `window_size - pattern_len`.
+- **Firewall latency metrics** (W9) — `total_scan_time_ms` + `max_scan_time_ms`.
+- **Homoglyph threshold** (W10) — 20% → 10% (fewer false positives on multilingual code).
+- **Entropy threshold** (W10) — 1.0 → 1.5 (catches repetition attacks).
+
+### UI/UX Overhaul (23 of 32 findings fixed)
+- **Auth headers on all API calls** — `_fetch()` wrapper auto-injects Bearer token; UI works with auth enabled.
+- **Error handling** — `_fetch()` throws on non-2xx; silent failures eliminated.
+- **Toast notification system** — Replaces all native `alert()` calls.
+- **URL hash routing** — `#/tab` navigation survives refresh, supports back/forward.
+- **Font sizes** — All `text-[7px]`/`text-[8px]` upgraded to 9px/10px minimum (WCAG).
+- **View-scoped polling** — `store.poll()` only fetches active tab; Page Visibility API pauses on hidden.
+- **Command palette keyboard nav** — Arrow keys, Enter to activate, ARIA roles.
+- **ARIA landmarks** — `role="navigation"`, `role="main"`, `role="banner"`, `role="switch"`.
+- **Models search/filter**, **GDPR file download**, **registry table sort**, **reduced-motion**, **glassmorphism fallback**, **touch targets**, **selective re-rendering**, **SSE reconnection**.
+
+### Stats
+- 915/915 tests passing (was 870)
+- 28 firewall signatures (was 11)
+- 64 semantic injection patterns (was 54)
+- 17 multilingual patterns across 12 languages (was 7 across 5)
+- 9 PII regex patterns (was 5)
+- 34 new WAF-specific tests
+- 3 exploit chains identified and neutralized
+
+---
+
 ## [1.10.2] — 2026-03-30
 
 ### Critical Fixes (SEV-0)
