@@ -319,11 +319,11 @@ class RequestForwarder:
                     # Charge budget atomically now that the stream is done.
                     # The rotator cannot do this because it runs before the
                     # generator; cost_ref["delta"] was still 0.0 at that point.
-                    _budget_lock = cost_ref.get("_budget_lock")
-                    _rotator = cost_ref.get("_rotator")
+                    _budget_lock = cost_ref.get("_budget_lock")  # type: ignore[arg-type]
+                    _rotator = cost_ref.get("_rotator")  # type: ignore[arg-type]
                     if _budget_lock and _rotator:
-                        async with _budget_lock:
-                            _rotator.total_cost_today += real_cost
+                        async with _budget_lock:  # type: ignore[attr-defined]
+                            _rotator.total_cost_today += real_cost  # type: ignore[attr-defined]
 
                     # Log spend entry for streaming requests directly here,
                     # because chat.py cannot read response.body for streaming.
