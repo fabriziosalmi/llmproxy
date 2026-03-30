@@ -123,6 +123,15 @@ async def select_endpoint(ctx: PluginContext):
         ctx.stop_chain = True
         return
 
+    # If model resolver pinned a provider (from group resolution),
+    # filter to only that provider's endpoint to prevent model/endpoint mismatch.
+    pinned_provider = ctx.metadata.get("_resolved_provider")
+    if pinned_provider:
+        pinned = [e for e in healthy if e.id == pinned_provider
+                  or (e.metadata or {}).get("provider") == pinned_provider]
+        if pinned:
+            healthy = pinned
+
     # Steering strategy selection
     if rotator.priority_mode:
         # Priority mode: highest-priority endpoint wins

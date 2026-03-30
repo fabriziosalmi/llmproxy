@@ -103,15 +103,15 @@ class TestOSeriesTranslation:
 class TestModelAliases:
     def test_alias_resolution(self):
         config = {"model_aliases": {"gpt4": "gpt-4o", "fast": "gpt-4o-mini"}}
-        assert resolve_model(config, "gpt4") == "gpt-4o"
-        assert resolve_model(config, "fast") == "gpt-4o-mini"
+        assert resolve_model(config, "gpt4")[0] == "gpt-4o"
+        assert resolve_model(config, "fast")[0] == "gpt-4o-mini"
 
     def test_unknown_passthrough(self):
         config = {"model_aliases": {}}
-        assert resolve_model(config, "gpt-4o") == "gpt-4o"
+        assert resolve_model(config, "gpt-4o")[0] == "gpt-4o"
 
     def test_no_config(self):
-        assert resolve_model({}, "gpt-4o") == "gpt-4o"
+        assert resolve_model({}, "gpt-4o")[0] == "gpt-4o"
 
 
 class TestModelGroups:
@@ -127,9 +127,10 @@ class TestModelGroups:
                 },
             },
         }
-        result = resolve_model(config, "auto")
+        result, provider = resolve_model(config, "auto")
         # gemini-2.0-flash ($0.10) is cheaper than gpt-4o ($2.50)
         assert result == "gemini-2.0-flash"
+        assert provider == "google"
 
     def test_random_strategy(self):
         config = {
@@ -143,7 +144,7 @@ class TestModelGroups:
                 },
             },
         }
-        result = resolve_model(config, "random")
+        result, _ = resolve_model(config, "random")
         assert result in ("gpt-4o", "claude-sonnet-4-20250514")
 
     def test_weighted_strategy(self):
@@ -159,19 +160,19 @@ class TestModelGroups:
             },
         }
         # Weight 0 for mini → should always pick gpt-4o
-        results = set(resolve_model(config, "weighted") for _ in range(20))
+        results = set(resolve_model(config, "weighted")[0] for _ in range(20))
         assert results == {"gpt-4o"}
 
     def test_empty_group_passthrough(self):
         config = {"model_groups": {"empty": {"strategy": "random", "models": []}}}
-        assert resolve_model(config, "empty") == "empty"
+        assert resolve_model(config, "empty")[0] == "empty"
 
     def test_alias_takes_priority_over_group(self):
         config = {
             "model_aliases": {"auto": "gpt-4o"},
             "model_groups": {"auto": {"strategy": "cheapest", "models": [{"model": "gemini-2.0-flash"}]}},
         }
-        assert resolve_model(config, "auto") == "gpt-4o"
+        assert resolve_model(config, "auto")[0] == "gpt-4o"
 
 
 # ══════════════════════════════════════════════════════
@@ -293,5 +294,5 @@ class TestModelResolverResilience:
                 },
             },
         }
-        result = resolve_model(config, "fast")
+        result, _ = resolve_model(config, "fast")
         assert result in ("gpt-4o", "gpt-4o-mini")
