@@ -22,6 +22,7 @@ config (e.g. a misconfigured prefix) and produce a descriptive error.
 """
 
 import os
+import re
 import logging
 
 from fastapi import FastAPI, Request
@@ -158,8 +159,10 @@ def create_app(agent) -> FastAPI:
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         # W3C Trace Context: propagate trace ID for full-stack observability
+        # H8: Validate trace_id is alphanumeric+dash only to prevent log
+        # injection via crafted X-Trace-Id headers (e.g. SQL/SIEM injection).
         trace_id = request.headers.get("x-trace-id") or (request.headers.get("traceparent", "").split("-")[1] if "-" in request.headers.get("traceparent", "") else None)
-        if trace_id:
+        if trace_id and re.match(r'^[a-fA-F0-9-]{1,64}$', trace_id):
             response.headers["X-Trace-Id"] = trace_id
         if request.url.path.startswith("/ui"):
             response.headers["Content-Security-Policy"] = (
