@@ -103,6 +103,8 @@ def scan_pth_files() -> list[str]:
         "easy-install",          # setuptools legacy
         "_virtualenv",           # virtualenv
         "__editable__",          # PEP 660 editable installs
+        "a1_coverage",           # coverage.py subprocess measurement
+        "coverage",              # coverage.py
     }
 
     for site_dir in sys.path:

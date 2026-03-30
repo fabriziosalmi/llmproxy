@@ -63,6 +63,7 @@ AUDIT.md
 AUDIT_v2.md
 UI_AUDIT.md
 AUDIT_WAF.md
+AUDIT_WAF_HACKER.md
 
 # Runtime artifacts
 .proxy.pid
