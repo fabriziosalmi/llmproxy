@@ -44,7 +44,7 @@
     </div>
 
     <!-- Sidebar -->
-    <aside id="sidebar" class="w-56 bg-[#0a0a0c]/80 backdrop-blur-xl border-r border-white/[0.04] flex flex-col transition-all duration-300 z-50 shrink-0 md:relative fixed inset-y-0 left-0 mobile-hidden">
+    <aside id="sidebar" role="navigation" aria-label="Main navigation" class="sidebar w-56 bg-[#0a0a0c]/80 backdrop-blur-xl border-r border-white/[0.04] flex flex-col transition-all duration-300 z-50 shrink-0 md:relative fixed inset-y-0 left-0 mobile-hidden">
         <!-- Brand -->
         <div class="p-4 border-b border-white/[0.04]">
             <div class="flex items-center gap-3">
@@ -119,7 +119,7 @@
                 Kill Switch
             </button>
             <div id="user-section" class="flex items-center gap-2 mt-2 px-1">
-                <div id="user-avatar" class="hidden w-5 h-5 rounded-full bg-rose-500/20 flex items-center justify-center text-[8px] font-bold text-rose-400 shrink-0"></div>
+                <div id="user-avatar" class="hidden w-5 h-5 rounded-full bg-rose-500/20 flex items-center justify-center text-[10px] font-bold text-rose-400 shrink-0"></div>
                 <span id="user-display-name" class="hidden text-[9px] text-slate-400 truncate flex-1 font-mono"></span>
                 <span id="login-hint" class="text-[9px] text-slate-600 font-mono truncate flex-1">API Key</span>
                 <button id="logout-btn" class="hidden text-[9px] text-rose-400 hover:text-rose-300 font-bold shrink-0">Out</button>
@@ -136,9 +136,9 @@
     <div id="sidebar-backdrop" class="hidden fixed inset-0 bg-black/50 z-40 md:hidden"></div>
 
     <!-- Main Content -->
-    <main class="flex-1 overflow-y-auto bg-[#050506]">
+    <main role="main" class="flex-1 overflow-y-auto bg-[#050506]">
         <!-- Header -->
-        <header class="sticky top-0 z-30 bg-[#050506]/80 backdrop-blur-xl border-b border-white/[0.04] px-6 py-3 flex items-center justify-between">
+        <header role="banner" class="sticky top-0 z-30 bg-[#050506]/80 backdrop-blur-xl border-b border-white/[0.04] px-6 py-3 flex items-center justify-between">
             <div class="flex items-center gap-3">
                 <button id="mobile-menu-btn" class="md:hidden p-1.5 rounded-lg hover:bg-white/5">
                     <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
@@ -216,7 +216,7 @@
                     <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-5">
                         <div class="flex items-center justify-between mb-3">
                             <h2 class="text-xs font-bold text-white">Ring Latency</h2>
-                            <span class="text-[8px] font-mono text-slate-600">P50 / P95 / P99</span>
+                            <span class="text-[10px] font-mono text-slate-600">P50 / P95 / P99</span>
                         </div>
                         <div id="ring-latency-bars">
                             <p class="text-[9px] text-slate-600 font-mono">Collecting samples...</p>
@@ -225,7 +225,7 @@
                     <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-5">
                         <div class="flex items-center justify-between mb-3">
                             <h2 class="text-xs font-bold text-white">TTFT — Time to First Token</h2>
-                            <span class="text-[8px] font-mono text-slate-600">Streaming</span>
+                            <span class="text-[10px] font-mono text-slate-600">Streaming</span>
                         </div>
                         <div id="ttft-metrics">
                             <p class="text-[9px] text-slate-600 font-mono">No streaming data yet</p>
@@ -262,42 +262,42 @@
                         <div class="flex items-center gap-2 shrink-0">
                             <div class="px-3 py-2 bg-rose-500/10 border border-rose-500/20 rounded-xl text-center">
                                 <p class="text-[9px] font-bold text-rose-400 uppercase">Firewall</p>
-                                <p class="text-[8px] text-slate-500 mt-0.5">ASGI L7</p>
+                                <p class="text-[10px] text-slate-500 mt-0.5">ASGI L7</p>
                             </div>
                             <svg class="w-4 h-4 text-slate-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                         </div>
                         <div class="flex items-center gap-2 shrink-0">
                             <div class="px-3 py-2 bg-amber-500/10 border border-amber-500/20 rounded-xl text-center">
                                 <p class="text-[9px] font-bold text-amber-400 uppercase">Shield</p>
-                                <p class="text-[8px] text-slate-500 mt-0.5">Injection + PII</p>
+                                <p class="text-[10px] text-slate-500 mt-0.5">Injection + PII</p>
                             </div>
                             <svg class="w-4 h-4 text-slate-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                         </div>
                         <div class="flex items-center gap-2 shrink-0">
                             <div class="px-3 py-2 bg-sky-500/10 border border-sky-500/20 rounded-xl text-center">
                                 <p class="text-[9px] font-bold text-sky-400 uppercase">Ring 1</p>
-                                <p class="text-[8px] text-slate-500 mt-0.5">Ingress</p>
+                                <p class="text-[10px] text-slate-500 mt-0.5">Ingress</p>
                             </div>
                             <svg class="w-4 h-4 text-slate-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                         </div>
                         <div class="flex items-center gap-2 shrink-0">
                             <div class="px-3 py-2 bg-violet-500/10 border border-violet-500/20 rounded-xl text-center">
                                 <p class="text-[9px] font-bold text-violet-400 uppercase">Ring 2</p>
-                                <p class="text-[8px] text-slate-500 mt-0.5">Pre-Flight</p>
+                                <p class="text-[10px] text-slate-500 mt-0.5">Pre-Flight</p>
                             </div>
                             <svg class="w-4 h-4 text-slate-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                         </div>
                         <div class="flex items-center gap-2 shrink-0">
                             <div class="px-3 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-center">
                                 <p class="text-[9px] font-bold text-emerald-400 uppercase">Proxy</p>
-                                <p class="text-[8px] text-slate-500 mt-0.5">Forward</p>
+                                <p class="text-[10px] text-slate-500 mt-0.5">Forward</p>
                             </div>
                             <svg class="w-4 h-4 text-slate-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                         </div>
                         <div class="shrink-0">
                             <div class="px-3 py-2 bg-teal-500/10 border border-teal-500/20 rounded-xl text-center">
                                 <p class="text-[9px] font-bold text-teal-400 uppercase">Ring 4-5</p>
-                                <p class="text-[8px] text-slate-500 mt-0.5">Post + BG</p>
+                                <p class="text-[10px] text-slate-500 mt-0.5">Post + BG</p>
                             </div>
                         </div>
                     </div>
@@ -321,7 +321,7 @@
                             <h2 class="text-sm font-bold text-white">Gateway Status</h2>
                             <p class="text-[10px] text-slate-500 mt-0.5">Master proxy enable/disable</p>
                         </div>
-                        <button id="proxy-toggle-btn" class="relative w-14 h-7 rounded-full transition-colors bg-emerald-500/20 border border-emerald-500/30">
+                        <button id="proxy-toggle-btn" role="switch" aria-checked="true" aria-label="Enable proxy gateway" class="relative w-14 h-7 rounded-full transition-colors bg-emerald-500/20 border border-emerald-500/30">
                             <div id="proxy-toggle-dot" class="absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-emerald-400 transition-transform translate-x-7 shadow-lg shadow-emerald-500/30"></div>
                         </button>
                     </div>
@@ -334,7 +334,7 @@
                             <h2 class="text-sm font-bold text-white">Priority Steering</h2>
                             <p class="text-[10px] text-slate-500 mt-0.5">Route to highest-priority endpoint only</p>
                         </div>
-                        <button id="priority-toggle-btn" class="relative w-14 h-7 rounded-full transition-colors bg-slate-700/50 border border-slate-600/30">
+                        <button id="priority-toggle-btn" role="switch" aria-checked="false" aria-label="Enable priority steering" class="relative w-14 h-7 rounded-full transition-colors bg-slate-700/50 border border-slate-600/30">
                             <div id="priority-toggle-dot" class="absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-slate-500 transition-transform translate-x-0"></div>
                         </button>
                     </div>
@@ -347,7 +347,7 @@
                             <svg class="w-4 h-4 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg>
                             <h2 class="text-sm font-bold text-white">Cache Performance</h2>
                         </div>
-                        <span id="cache-status-badge" class="text-[8px] font-bold font-mono text-slate-500 bg-slate-500/10 px-2 py-0.5 rounded">LOADING</span>
+                        <span id="cache-status-badge" class="text-[10px] font-bold font-mono text-slate-500 bg-slate-500/10 px-2 py-0.5 rounded">LOADING</span>
                     </div>
                     <div class="grid grid-cols-2 gap-4">
                         <!-- L1 Negative Cache -->
@@ -405,11 +405,11 @@
                     <h3 class="text-[11px] font-bold text-white mb-3">Install Plugin</h3>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                         <div>
-                            <label class="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Name *</label>
+                            <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Name *</label>
                             <input id="install-name" type="text" placeholder="my_plugin" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50">
                         </div>
                         <div>
-                            <label class="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Hook (Ring) *</label>
+                            <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Hook (Ring) *</label>
                             <select id="install-hook" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50 bg-[#0a0a0c]">
                                 <option value="ingress">ingress (Ring 1)</option>
                                 <option value="pre_flight">pre_flight (Ring 2)</option>
@@ -419,24 +419,24 @@
                             </select>
                         </div>
                         <div>
-                            <label class="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Entrypoint *</label>
+                            <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Entrypoint *</label>
                             <input id="install-entrypoint" type="text" placeholder="marketplace/my_plugin:MyPlugin" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50">
                         </div>
                         <div>
-                            <label class="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Timeout (ms)</label>
+                            <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Timeout (ms)</label>
                             <input id="install-timeout" type="number" value="500" min="10" max="5000" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50">
                         </div>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                         <div>
-                            <label class="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Fail Policy</label>
+                            <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Fail Policy</label>
                             <select id="install-fail-policy" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50 bg-[#0a0a0c]">
                                 <option value="open">open (fail-open)</option>
                                 <option value="closed">closed (fail-closed)</option>
                             </select>
                         </div>
                         <div>
-                            <label class="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Description</label>
+                            <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Description</label>
                             <input id="install-description" type="text" placeholder="What does this plugin do?" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50">
                         </div>
                     </div>
@@ -473,6 +473,9 @@
                         <p class="text-[9px] font-bold text-violet-400 uppercase tracking-widest mb-1">Embedding Models</p>
                         <p id="kpi-embedding-models" class="text-2xl font-black text-violet-400 font-mono">--</p>
                     </div>
+                </div>
+                <div class="mb-4">
+                    <input id="models-search" type="text" placeholder="Filter models..." class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-[10px] text-white font-mono w-64 focus:outline-none focus:border-sky-500/50">
                 </div>
                 <div id="models-table" class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6">
                 </div>
@@ -651,14 +654,17 @@
     </main>
 
     <!-- Command Palette -->
-    <div id="cmd-palette-overlay" class="hidden fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm items-center justify-center">
+    <div id="cmd-palette-overlay" class="hidden fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm items-center justify-center" role="dialog" aria-modal="true" aria-label="Command palette">
         <div id="cmd-palette-box" class="w-full max-w-lg mx-4 bg-[#0a0a0c]/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl scale-95 opacity-0 transition-all duration-200">
             <div class="p-4 border-b border-white/[0.06]">
-                <input id="cmd-input" type="text" placeholder="Search commands..." class="w-full bg-transparent text-sm text-white placeholder-slate-500 focus:outline-none font-mono">
+                <input id="cmd-input" type="text" placeholder="Search commands..." class="w-full bg-transparent text-sm text-white placeholder-slate-500 focus:outline-none font-mono" role="combobox" aria-expanded="true" aria-controls="cmd-list" aria-autocomplete="list">
             </div>
-            <div id="cmd-list" class="p-2 max-h-64 overflow-y-auto"></div>
+            <div id="cmd-list" class="p-2 max-h-64 overflow-y-auto" role="listbox"></div>
         </div>
     </div>
+
+    <!-- Toast container -->
+    <div id="toast-container" class="fixed bottom-6 right-6 z-[110] flex flex-col gap-2 pointer-events-none"></div>
 
     <script type="module" src="main.js"></script>
 </body>

@@ -3,10 +3,11 @@
  * Fetches from GET /api/v1/analytics/spend and displays KPIs + tables.
  */
 import { api } from '../services/api.js';
+import { store } from '../services/store.js';
 
 export function initAnalytics() {
     refreshAnalytics();
-    setInterval(refreshAnalytics, 30000);
+    store.poll(refreshAnalytics, 30000, 'analytics');
 }
 
 export function renderAnalytics() {

@@ -2,6 +2,7 @@
  * Plugins View — Security plugin pipeline with per-plugin stats and config.
  */
 import { api } from '../services/api.js';
+import { toast } from '../services/toast.js';
 
 const RING_COLORS = {
     ingress: 'rose',
@@ -76,7 +77,7 @@ export async function initPlugins() {
             const description = document.getElementById('install-description')?.value?.trim() || '';
 
             if (!name || !hook || !entrypoint) {
-                alert('Name, Hook, and Entrypoint are required.');
+                toast('Name, Hook, and Entrypoint are required.', 'warning');
                 return;
             }
 
@@ -93,16 +94,16 @@ export async function initPlugins() {
                 });
                 if (result.status === 'installed') {
                     installForm.classList.add('hidden');
-                    // Clear form
                     document.getElementById('install-name').value = '';
                     document.getElementById('install-entrypoint').value = '';
                     document.getElementById('install-description').value = '';
                     await renderPluginList();
+                    toast(`Plugin "${name}" installed successfully`, 'success');
                 } else {
-                    alert(`Install failed: ${result.detail || JSON.stringify(result)}`);
+                    toast(`Install failed: ${result.detail || JSON.stringify(result)}`, 'error', 5000);
                 }
             } catch (e) {
-                alert(`Install error: ${e.message}`);
+                toast(`Install error: ${e.message}`, 'error', 5000);
             }
             submitBtn.textContent = 'Install & Hot-Swap';
             submitBtn.disabled = false;
@@ -145,13 +146,13 @@ async function renderPluginList() {
                     <div class="flex-1 min-w-0">
                         <h3 class="text-[11px] font-bold text-white truncate">${p.name || 'Unknown'}</h3>
                         <div class="flex items-center gap-2 mt-1">
-                            <span class="text-[8px] font-mono text-${color}-400 bg-${color}-500/10 px-1.5 py-0.5 rounded">${ring.toUpperCase()}</span>
-                            <span class="text-[8px] font-mono text-slate-600">${p.timeout_ms || 500}ms</span>
-                            <span class="text-[8px] font-mono text-slate-600">${p.fail_policy || 'open'}</span>
+                            <span class="text-[10px] font-mono text-${color}-400 bg-${color}-500/10 px-1.5 py-0.5 rounded">${ring.toUpperCase()}</span>
+                            <span class="text-[10px] font-mono text-slate-600">${p.timeout_ms || 500}ms</span>
+                            <span class="text-[10px] font-mono text-slate-600">${p.fail_policy || 'open'}</span>
                         </div>
                     </div>
                     <div class="flex items-center gap-1.5 shrink-0">
-                        ${p.version && p.version !== '0.0.0' ? `<span class="text-[8px] font-mono text-slate-500">v${p.version}</span>` : ''}
+                        ${p.version && p.version !== '0.0.0' ? `<span class="text-[10px] font-mono text-slate-500">v${p.version}</span>` : ''}
                         <div class="w-2 h-2 rounded-full ${enabled ? 'bg-emerald-400' : 'bg-slate-600'}"></div>
                     </div>
                 </div>
@@ -159,37 +160,37 @@ async function renderPluginList() {
                 <div class="grid grid-cols-4 gap-1 mt-2 pt-2 border-t border-white/[0.04]">
                     <div class="text-center">
                         <p class="text-[10px] font-bold font-mono ${hasStats ? 'text-white' : 'text-slate-600'}">${inv.toLocaleString()}</p>
-                        <p class="text-[7px] text-slate-600 uppercase">calls</p>
+                        <p class="text-[9px] text-slate-600 uppercase">calls</p>
                     </div>
                     <div class="text-center">
                         <p class="text-[10px] font-bold font-mono ${blocks > 0 ? 'text-rose-400' : 'text-slate-600'}">${blocks}</p>
-                        <p class="text-[7px] text-slate-600 uppercase">blocks</p>
+                        <p class="text-[9px] text-slate-600 uppercase">blocks</p>
                     </div>
                     <div class="text-center">
                         <p class="text-[10px] font-bold font-mono ${errs > 0 ? 'text-amber-400' : 'text-slate-600'}">${errRate}%</p>
-                        <p class="text-[7px] text-slate-600 uppercase">err</p>
+                        <p class="text-[9px] text-slate-600 uppercase">err</p>
                     </div>
                     <div class="text-center">
                         <p class="text-[10px] font-bold font-mono ${avgLat > 100 ? 'text-amber-400' : 'text-slate-600'}">${avgLat.toFixed(1)}</p>
-                        <p class="text-[7px] text-slate-600 uppercase">ms avg</p>
+                        <p class="text-[9px] text-slate-600 uppercase">ms avg</p>
                     </div>
                 </div>
                 ${hasPercentiles ? `
                     <div class="mt-2 pt-2 border-t border-white/[0.04]">
                         <div class="flex items-center justify-between">
-                            <span class="text-[7px] text-slate-600 uppercase font-bold">Latency</span>
+                            <span class="text-[9px] text-slate-600 uppercase font-bold">Latency</span>
                             <div class="flex items-center gap-2">
-                                <span class="text-[7px] font-mono text-slate-500">P50 <span class="text-white">${pct.p50.toFixed(1)}</span></span>
-                                <span class="text-[7px] font-mono text-slate-500">P95 <span class="text-amber-400">${pct.p95.toFixed(1)}</span></span>
-                                <span class="text-[7px] font-mono text-slate-500">P99 <span class="text-rose-400">${pct.p99.toFixed(1)}</span></span>
+                                <span class="text-[9px] font-mono text-slate-500">P50 <span class="text-white">${pct.p50.toFixed(1)}</span></span>
+                                <span class="text-[9px] font-mono text-slate-500">P95 <span class="text-amber-400">${pct.p95.toFixed(1)}</span></span>
+                                <span class="text-[9px] font-mono text-slate-500">P99 <span class="text-rose-400">${pct.p99.toFixed(1)}</span></span>
                             </div>
                         </div>
                     </div>
                 ` : ''}
                 ${renderConfigFields(p)}
                 <div class="mt-2 pt-2 border-t border-white/[0.04] flex items-center justify-end gap-2">
-                    <button data-action="toggle-plugin" data-name="${p.name}" class="text-[8px] text-slate-500 hover:text-amber-400 px-2 py-0.5 rounded hover:bg-white/5 transition-colors">${enabled ? 'Disable' : 'Enable'}</button>
-                    <button data-action="uninstall-plugin" data-name="${p.name}" class="text-[8px] text-slate-500 hover:text-rose-400 px-2 py-0.5 rounded hover:bg-white/5 transition-colors">Uninstall</button>
+                    <button data-action="toggle-plugin" data-name="${p.name}" class="text-[10px] text-slate-500 hover:text-amber-400 px-2 py-0.5 rounded hover:bg-white/5 transition-colors">${enabled ? 'Disable' : 'Enable'}</button>
+                    <button data-action="uninstall-plugin" data-name="${p.name}" class="text-[10px] text-slate-500 hover:text-rose-400 px-2 py-0.5 rounded hover:bg-white/5 transition-colors">Uninstall</button>
                 </div>
             `;
             grid.appendChild(card);
@@ -204,11 +205,13 @@ async function renderPluginList() {
                     if (plugin) {
                         await api.togglePlugin(name, plugin.enabled === false);
                         await renderPluginList();
+                        toast(`Plugin "${name}" ${plugin.enabled === false ? 'enabled' : 'disabled'}`, 'success');
                     }
                 } else if (action === 'uninstall-plugin') {
                     if (!confirm(`Uninstall plugin "${name}"? This will hot-swap.`)) return;
                     await api.uninstallPlugin(name);
                     await renderPluginList();
+                    toast(`Plugin "${name}" uninstalled`, 'success');
                 }
             });
         });
@@ -232,14 +235,14 @@ function renderConfigFields(plugin) {
 
     const fields = schema.map(f => `
         <div class="flex items-center justify-between">
-            <span class="text-[8px] text-slate-500">${f.label || f.key}</span>
-            <span class="text-[8px] font-mono text-slate-400">${f.default !== undefined ? f.default : '--'}</span>
+            <span class="text-[10px] text-slate-500">${f.label || f.key}</span>
+            <span class="text-[10px] font-mono text-slate-400">${f.default !== undefined ? f.default : '--'}</span>
         </div>
     `).join('');
 
     return `
         <div class="mt-2 pt-2 border-t border-white/[0.04] space-y-1">
-            <p class="text-[7px] text-slate-600 uppercase font-bold mb-1">Config</p>
+            <p class="text-[9px] text-slate-600 uppercase font-bold mb-1">Config <span class="text-slate-700 normal-case">(read-only)</span></p>
             ${fields}
         </div>
     `;
