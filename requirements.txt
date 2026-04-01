@@ -4,7 +4,7 @@ uvicorn[standard]==0.42.0
 PyYAML==6.0.3
 
 # HTTP
-aiohttp==3.13.3
+aiohttp==3.13.4
 
 # Database
 aiosqlite==0.22.1
@@ -13,7 +13,7 @@ aiosqlite==0.22.1
 prometheus-client==0.24.1
 
 # Security & Identity
-cryptography==46.0.5
+cryptography==46.0.6
 PyJWT==2.12.1
 
 # Export & Observability
