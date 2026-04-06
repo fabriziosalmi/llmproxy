@@ -18,7 +18,7 @@ PyJWT==2.12.1
 
 # Export & Observability
 aiofiles==25.1.0
-sentry-sdk[fastapi]==2.55.0
+sentry-sdk[fastapi]==2.57.0
 
 # Observability
 opentelemetry-api>=1.25.0
