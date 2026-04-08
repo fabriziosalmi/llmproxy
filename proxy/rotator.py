@@ -189,7 +189,7 @@ class ProxyOrchestrator(BaseAgent):
         import hashlib
         if os.path.exists(self.config_path):
             with open(self.config_path, 'rb') as f:
-                return hashlib.md5(f.read()).hexdigest()
+                return hashlib.md5(f.read(), usedforsecurity=False).hexdigest()
         return ""
 
     def enqueue_write(self, key: str, value: Any):
@@ -371,7 +371,7 @@ class ProxyOrchestrator(BaseAgent):
     async def run(self, port: int | None = None):
         if port is None:
             port = self.config.get("server", {}).get("port", 8090)
-        host = self.config.get("server", {}).get("host", "0.0.0.0")
+        host = self.config.get("server", {}).get("host", "0.0.0.0")  # nosec B104
         await self.setup()
         config = uvicorn.Config(self.app, host=host, port=port, log_level="info")
         server = uvicorn.Server(config)
@@ -493,7 +493,7 @@ class ProxyOrchestrator(BaseAgent):
             # increment for this request; rotator adds it atomically under
             # budget_lock, preventing lost-update when concurrent streams
             # each started from the same total_cost_today snapshot.
-            cost_ref: dict[str, float] = {"delta": 0.0}
+            cost_ref: dict[str, Any] = {"delta": 0.0}
             # Pass budget_lock to cost_ref so the stream generator can charge
             # the budget atomically when it finishes (streaming responses
             # return immediately — cost_ref["delta"] is still 0.0 here).

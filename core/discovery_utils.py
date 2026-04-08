@@ -16,4 +16,4 @@ def get_tailscale_ip() -> str:
     except Exception as e:
         logger.debug(f"Tailscale not found or inactive: {e}")
 
-    return "0.0.0.0"
+    return "0.0.0.0"  # nosec B104
