@@ -140,5 +140,8 @@ function renderBreakdown(containerId, title, rows, groupCol) {
 
 function setText(id, value) {
     const el = document.getElementById(id);
-    if (el) el.textContent = value;
+    if (el) {
+        el.textContent = value;
+        el.classList.remove('skeleton');
+    }
 }

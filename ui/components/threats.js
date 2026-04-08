@@ -71,7 +71,10 @@ async function refreshMetrics() {
 
 function setText(id, value) {
     const el = document.getElementById(id);
-    if (el) el.textContent = value;
+    if (el) {
+        el.textContent = value;
+        el.classList.remove('skeleton');
+    }
 }
 
 function renderBudgetGauge(consumed, limit, totalCost, guardsStatus) {
