@@ -37,7 +37,7 @@ async def main():
 
     # Bind to Tailscale interface if available
     ts_ip = get_tailscale_ip()
-    if ts_ip != "0.0.0.0":
+    if ts_ip != "0.0.0.0":  # nosec B104
         config["server"]["host"] = ts_ip
         logger.info(f"Binding to Tailscale interface: {ts_ip}")
 
