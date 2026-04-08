@@ -41,6 +41,8 @@ class RequestDeduplicator:
                 response, expires = self._completed[key]
                 if time.time() < expires:
                     logger.debug(f"Dedup HIT (cached): {key[:16]}...")
+                    if asyncio.iscoroutine(coro):
+                        coro.close()
                     return response
                 else:
                     del self._completed[key]
@@ -57,6 +59,8 @@ class RequestDeduplicator:
         if not is_executor:
             # Wait for the executor to finish (lock already released).
             logger.debug(f"Dedup WAIT (in-flight): {key[:16]}...")
+            if asyncio.iscoroutine(coro):
+                coro.close()
             return await future
 
         # We are the executor — run the coroutine outside the lock.
@@ -70,6 +74,9 @@ class RequestDeduplicator:
         except Exception as e:
             if not future.done():
                 future.set_exception(e)
+                # Call exception() to prevent "Future exception was never retrieved" warning
+                # in case there are no waiters for this future.
+                future.exception()
             raise
         finally:
             async with self._lock:

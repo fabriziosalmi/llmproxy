@@ -44,7 +44,7 @@ async def test_malformed_jwt_returns_none(mock_secret):
     assert result is None
 
 
-@patch("core.identity.get_secret", return_value="test-secret-key-1234567890")
+@patch("core.identity.get_secret", return_value="super-secret-key-that-is-at-least-32-bytes-long")
 def test_generate_and_verify_proxy_jwt(mock_secret):
     from core.identity import IdentityManager, IdentityContext
     mgr = IdentityManager(IDENTITY_CONFIG)
@@ -67,7 +67,7 @@ def test_generate_and_verify_proxy_jwt(mock_secret):
     assert "user" in ctx.roles
 
 
-@patch("core.identity.get_secret", return_value="test-secret-key-1234567890")
+@patch("core.identity.get_secret", return_value="super-secret-key-that-is-at-least-32-bytes-long")
 def test_proxy_jwt_expired(mock_secret):
     from core.identity import IdentityManager, IdentityContext
     mgr = IdentityManager(IDENTITY_CONFIG)
