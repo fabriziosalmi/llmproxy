@@ -266,15 +266,15 @@ body.cinema-mode main {
 
 /* ─── 1.7: Noise/Grain Overlay — military monitor effect ─── */
 .nebula-grain {
-    position: fixed;
+    position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
     pointer-events: none;
-    z-index: 9999;
+    z-index: 0;
     opacity: 0.028;
-    mix-blend-mode: overlay;
+    mix-blend-mode: normal;
     /* Respect reduced-motion preference (audit #7) */
     transition: opacity 0.3s;
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
@@ -420,4 +420,62 @@ body.cinema-mode main {
     font-size: 10px;
     margin: 0 2px;
     user-select: none;
+}
+
+/* ==========================================================================
+   MISSION CRITICAL UX / PERFORMANCE PATTERNS
+   ========================================================================== */
+
+/* 1. Hardware-Accelerated View Transitions */
+.content-view {
+    will-change: opacity, transform;
+}
+.content-view:not(.hidden) {
+    animation: viewFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes viewFadeIn {
+    0% { opacity: 0; transform: translateY(12px) scale(0.995); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* 2. Skeleton Loading States (prevents CLS and visual jumps) */
+.skeleton {
+    background: linear-gradient(90deg, rgba(255,255,255,0.02) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.02) 75%);
+    background-size: 200% 100%;
+    animation: skeletonLoading 1.5s infinite linear;
+    border-radius: 4px;
+    color: transparent !important;
+    pointer-events: none;
+    user-select: none;
+    display: inline-block;
+    min-width: 3ch;
+}
+@keyframes skeletonLoading {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* 3. Focus Visibility (Accessibility standard for Pro UI) */
+*:focus-visible {
+    outline: 2px solid var(--apple-blue) !important;
+    outline-offset: 2px !important;
+    transition: outline-offset 0.1s ease;
+}
+
+/* 4. Micro-interactions (Tactile buttons) */
+button, .nav-item, .system-toggle, .cursor-pointer {
+    transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease !important;
+}
+button:active:not(:disabled), .nav-item:active, .system-toggle:active {
+    transform: scale(0.96) !important;
+}
+
+/* 5. Smooth Table Row Hover */
+tr {
+    transition: background-color 0.2s ease;
+}
+
+/* 6. Command Palette Smoothness */
+#cmd-palette-box {
+    will-change: transform, opacity;
 }

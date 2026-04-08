@@ -20,11 +20,15 @@ export function initModels() {
 
     const searchInput = document.getElementById('models-search');
     if (searchInput) {
+        let debounceTimer;
         searchInput.addEventListener('input', () => {
-            const q = searchInput.value.toLowerCase().trim();
-            const fc = q ? _allChat.filter(m => m.id.toLowerCase().includes(q) || m.owned_by.toLowerCase().includes(q)) : _allChat;
-            const fe = q ? _allEmbed.filter(m => m.id.toLowerCase().includes(q) || m.owned_by.toLowerCase().includes(q)) : _allEmbed;
-            renderModelsTable(fc, fe);
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                const q = searchInput.value.toLowerCase().trim();
+                const fc = q ? _allChat.filter(m => m.id.toLowerCase().includes(q) || m.owned_by.toLowerCase().includes(q)) : _allChat;
+                const fe = q ? _allEmbed.filter(m => m.id.toLowerCase().includes(q) || m.owned_by.toLowerCase().includes(q)) : _allEmbed;
+                renderModelsTable(fc, fe);
+            }, 150);
         });
     }
 }
@@ -112,5 +116,8 @@ function renderModelsTable(chatModels, embeddingModels) {
 
 function setText(id, value) {
     const el = document.getElementById(id);
-    if (el) el.textContent = value;
+    if (el) {
+        el.textContent = value;
+        el.classList.remove('skeleton');
+    }
 }

@@ -5,7 +5,18 @@
  * headers and validates response status (fixes audit #21 + #22).
  */
 
+import { toast } from './toast.js';
+
 const BASE_URL = window.location.origin;
+let lastErrorTime = 0;
+
+function safeToast(msg, type) {
+    const now = Date.now();
+    if (now - lastErrorTime > 5000) {
+        toast(msg, type);
+        lastErrorTime = now;
+    }
+}
 
 /** Auth-aware fetch wrapper. Injects Bearer token and checks response status. */
 async function _fetch(url, options = {}) {
@@ -14,15 +25,37 @@ async function _fetch(url, options = {}) {
     if (token) {
         headers['Authorization'] = `Bearer ${token}`;
     }
-    const response = await fetch(url, { ...options, headers });
-    if (!response.ok) {
-        const body = await response.text().catch(() => '');
-        const err = new Error(`API ${response.status}: ${body.slice(0, 200)}`);
-        err.status = response.status;
-        err.body = body;
-        throw err;
+    
+    try {
+        const response = await fetch(url, { ...options, headers });
+        if (!response.ok) {
+            const body = await response.text().catch(() => '');
+            const err = new Error(`API ${response.status}: ${body.slice(0, 200)}`);
+            err.status = response.status;
+            err.body = body;
+            
+            // Global Error Interceptor for UI Feedback
+            if (response.status === 401) {
+                safeToast('Session expired or unauthorized. Please re-authenticate.', 'warning');
+            } else if (response.status >= 500) {
+                safeToast(`Server Error (${response.status}): The backend is currently unavailable.`, 'error');
+            } else if (response.status === 429) {
+                safeToast(`Rate limited: Please slow down your requests.`, 'warning');
+            } else {
+                // Generic 400 errors
+                safeToast(`Error: ${body.slice(0, 100) || response.statusText}`, 'error');
+            }
+            
+            throw err;
+        }
+        return response;
+    } catch (networkError) {
+        if (!networkError.status) {
+            // It's a true network error (fetch failed entirely, like offline)
+            safeToast('Network error: Unable to reach the proxy server.', 'error');
+        }
+        throw networkError;
     }
-    return response;
 }
 
 async function _json(url, options) {

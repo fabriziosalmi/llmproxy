@@ -18,7 +18,7 @@
         .font-mono { font-family: 'JetBrains Mono', 'Fira Code', monospace !important; }
     </style>
 </head>
-<body class="h-screen flex overflow-hidden selection:bg-rose-500/30 bg-[#050506]">
+<body class="h-screen flex overflow-hidden selection:bg-rose-500/30 bg-[#050506] relative">
     <div class="nebula-grain"></div>
 
     <!-- Login Overlay -->
@@ -170,19 +170,19 @@
                 <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                     <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4">
                         <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Requests Today</p>
-                        <p id="kpi-requests" class="text-2xl font-black text-white font-mono">--</p>
+                        <p id="kpi-requests" class="text-2xl font-black text-white font-mono skeleton">0000</p>
                     </div>
                     <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-rose-500/20 p-4">
                         <p class="text-[9px] font-bold text-rose-400 uppercase tracking-widest mb-1">Threats Blocked</p>
-                        <p id="kpi-blocked" class="text-2xl font-black text-rose-400 font-mono">--</p>
+                        <p id="kpi-blocked" class="text-2xl font-black text-rose-400 font-mono skeleton">000</p>
                     </div>
                     <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-amber-500/20 p-4">
                         <p class="text-[9px] font-bold text-amber-400 uppercase tracking-widest mb-1">PII Masked</p>
-                        <p id="kpi-pii" class="text-2xl font-black text-amber-400 font-mono">--</p>
+                        <p id="kpi-pii" class="text-2xl font-black text-amber-400 font-mono skeleton">000</p>
                     </div>
                     <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-emerald-500/20 p-4">
                         <p class="text-[9px] font-bold text-emerald-400 uppercase tracking-widest mb-1">Pass Rate</p>
-                        <p id="kpi-passrate" class="text-2xl font-black text-emerald-400 font-mono">--</p>
+                        <p id="kpi-passrate" class="text-2xl font-black text-emerald-400 font-mono skeleton">000%</p>
                     </div>
                 </div>
 
@@ -190,19 +190,19 @@
                 <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                     <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4">
                         <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Errors</p>
-                        <p id="kpi-errors" class="text-lg font-black text-red-400 font-mono">0</p>
+                        <p id="kpi-errors" class="text-lg font-black text-red-400 font-mono skeleton">000</p>
                     </div>
                     <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4">
                         <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Tokens</p>
-                        <p id="kpi-tokens" class="text-lg font-black text-sky-400 font-mono">0</p>
+                        <p id="kpi-tokens" class="text-lg font-black text-sky-400 font-mono skeleton">0000</p>
                     </div>
                     <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4">
                         <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Uptime</p>
-                        <p id="kpi-uptime" class="text-lg font-black text-teal-400 font-mono">--</p>
+                        <p id="kpi-uptime" class="text-lg font-black text-teal-400 font-mono skeleton">00h 00m</p>
                     </div>
                     <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4">
                         <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Healthy Endpoints</p>
-                        <p id="kpi-pool-health" class="text-lg font-black text-emerald-400 font-mono">--</p>
+                        <p id="kpi-pool-health" class="text-lg font-black text-emerald-400 font-mono skeleton">0/0</p>
                     </div>
                 </div>
 
@@ -557,19 +557,19 @@
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                     <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-violet-500/20 p-4">
                         <p class="text-[9px] font-bold text-violet-400 uppercase tracking-widest mb-1">Total Requests</p>
-                        <p id="kpi-spend-requests" class="text-2xl font-black text-violet-400 font-mono">--</p>
+                        <p id="kpi-spend-requests" class="text-2xl font-black text-violet-400 font-mono skeleton">000</p>
                     </div>
                     <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-amber-500/20 p-4">
                         <p class="text-[9px] font-bold text-amber-400 uppercase tracking-widest mb-1">Total Spend</p>
-                        <p id="kpi-spend-total" class="text-2xl font-black text-amber-400 font-mono">--</p>
+                        <p id="kpi-spend-total" class="text-2xl font-black text-amber-400 font-mono skeleton">$0.00</p>
                     </div>
                     <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-teal-500/20 p-4">
                         <p class="text-[9px] font-bold text-teal-400 uppercase tracking-widest mb-1">Prompt Tokens</p>
-                        <p id="kpi-spend-prompt" class="text-2xl font-black text-teal-400 font-mono">--</p>
+                        <p id="kpi-spend-prompt" class="text-2xl font-black text-teal-400 font-mono skeleton">0000</p>
                     </div>
                     <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-rose-500/20 p-4">
                         <p class="text-[9px] font-bold text-rose-400 uppercase tracking-widest mb-1">Completion Tokens</p>
-                        <p id="kpi-spend-completion" class="text-2xl font-black text-rose-400 font-mono">--</p>
+                        <p id="kpi-spend-completion" class="text-2xl font-black text-rose-400 font-mono skeleton">0000</p>
                     </div>
                 </div>
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
@@ -593,22 +593,22 @@
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                     <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4">
                         <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Threat Ledger</p>
-                        <p id="sec-tracked-ips" class="text-2xl font-black text-white">—</p>
+                        <p id="sec-tracked-ips" class="text-2xl font-black text-white skeleton">00</p>
                         <p class="text-[9px] text-slate-500 mt-1">Tracked IPs</p>
                     </div>
                     <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4">
                         <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Injection Corpus</p>
-                        <p id="sec-corpus-patterns" class="text-2xl font-black text-white">—</p>
+                        <p id="sec-corpus-patterns" class="text-2xl font-black text-white skeleton">00</p>
                         <p class="text-[9px] text-slate-500 mt-1">Semantic Patterns</p>
                     </div>
                     <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4">
                         <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Audit Chain</p>
-                        <p id="sec-chain-status" class="text-2xl font-black text-emerald-400">—</p>
+                        <p id="sec-chain-status" class="text-2xl font-black text-emerald-400 skeleton">00</p>
                         <p class="text-[9px] text-slate-500 mt-1">Integrity</p>
                     </div>
                     <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4">
                         <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Response Signing</p>
-                        <p id="sec-signing-status" class="text-2xl font-black text-white">—</p>
+                        <p id="sec-signing-status" class="text-2xl font-black text-white skeleton">00</p>
                         <p class="text-[9px] text-slate-500 mt-1">HMAC Status</p>
                     </div>
                 </div>
@@ -747,11 +747,11 @@
                     <div class="grid grid-cols-2 gap-4">
                         <div>
                             <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Version</label>
-                            <p id="sys-version" class="text-xs text-white font-mono">--</p>
+                            <p id="sys-version" class="text-xs text-white font-mono skeleton">v0.0.0</p>
                         </div>
                         <div>
                             <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Endpoint</label>
-                            <p id="sys-url" class="text-xs text-white font-mono">--</p>
+                            <p id="sys-url" class="text-xs text-white font-mono skeleton">https://localhost:0000</p>
                         </div>
                     </div>
                 </div>

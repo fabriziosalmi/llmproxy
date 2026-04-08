@@ -55,8 +55,12 @@ export function initLogs() {
 
     // Handle Window Resize (attach once only)
     if (!resizeListenerAttached) {
+        let resizeTimeout;
         window.addEventListener('resize', () => {
-            if (fitAddon) fitAddon.fit();
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                if (fitAddon) fitAddon.fit();
+            }, 100);
         });
         resizeListenerAttached = true;
     }
