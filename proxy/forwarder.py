@@ -95,7 +95,7 @@ class RequestForwarder:
         return response
 
     async def forward_with_fallback(self, ctx, target, headers, session,
-                                    cost_ref: "dict[str, float] | None" = None):
+                                    cost_ref: "dict[str, Any] | None" = None):
         """Forward request with cross-provider fallback on failure.
 
         Tries the primary endpoint first. On failure (circuit open, HTTP error,
@@ -157,10 +157,11 @@ class RequestForwarder:
                 ctx.metadata["_fallback_used"] = attempt["provider"]
                 ctx.metadata["_fallback_model"] = a_model
                 ctx.metadata["_original_model"] = original_model
-                await self._add_log(
-                    f"FALLBACK: {original_model} → {a_model} ({attempt['provider']})",
-                    level="PROXY",
-                )
+                if self._add_log:
+                    await self._add_log(
+                        f"FALLBACK: {original_model} → {a_model} ({attempt['provider']})",
+                        level="PROXY",
+                    )
 
             # Inject provider API key from endpoint config
             provider_headers = dict(headers)
@@ -194,7 +195,7 @@ class RequestForwarder:
             except (asyncio.TimeoutError, aiohttp.ClientError, OSError) as e:
                 # Retryable: network/timeout errors → try next provider
                 last_error = e
-                if not attempt["is_fallback"]:
+                if not attempt["is_fallback"] and self._add_log:
                     await self._add_log(
                         f"PRIMARY FAILED (retryable): {endpoint_id} — {type(e).__name__}: {e}",
                         level="PROXY",
@@ -206,7 +207,7 @@ class RequestForwarder:
                     raise
                 # 429/5xx are retryable
                 last_error = e
-                if not attempt["is_fallback"]:
+                if not attempt["is_fallback"] and self._add_log:
                     await self._add_log(
                         f"PRIMARY FAILED (retryable): {endpoint_id} — HTTP {e.status_code}",
                         level="PROXY",
@@ -221,7 +222,7 @@ class RequestForwarder:
 
     async def _handle_streaming(self, ctx, adapter, target_url, translated_body,
                                 translated_headers, session, cb, endpoint_id,
-                                cost_ref: "dict[str, float] | None" = None):
+                                cost_ref: "dict[str, Any] | None" = None):
         """Handle streaming response with TTFT tracking and post-stream budget charging."""
         ttft_start = time.perf_counter()
         first_chunk_seen = False

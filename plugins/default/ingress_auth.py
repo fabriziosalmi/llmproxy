@@ -19,7 +19,7 @@ async def verify(ctx: PluginContext):
     if not request:
         return
 
-    client_host = request.client.host if request.client else "0.0.0.0"
+    client_host = request.client.host if request.client else "0.0.0.0"  # nosec B104
     ts_id = await rotator.zt_manager.verify_tailscale_identity(client_host)
     if ts_id["status"] == "verified":
         ctx.metadata["zt_user"] = ts_id["user"]

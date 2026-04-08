@@ -233,13 +233,13 @@ class TestZeroTrustManager:
 
     def test_enabled_no_cert_returns_no_ssl(self):
         from core.zero_trust import ZeroTrustManager
-        with patch.dict(os.environ, {"LLM_PROXY_IDENTITY_SECRET": "test-secret"}):
+        with patch.dict(os.environ, {"LLM_PROXY_IDENTITY_SECRET": "test-secret-that-is-at-least-32-bytes-long"}):
             zt = ZeroTrustManager({"security": {"zero_trust": {"enabled": True}}})
             assert zt.get_ssl_context() is None
 
     def test_enabled_generates_jwt_headers(self):
         from core.zero_trust import ZeroTrustManager
-        with patch.dict(os.environ, {"LLM_PROXY_IDENTITY_SECRET": "test-secret-key"}):
+        with patch.dict(os.environ, {"LLM_PROXY_IDENTITY_SECRET": "test-secret-that-is-at-least-32-bytes-long"}):
             zt = ZeroTrustManager({"security": {"zero_trust": {"enabled": True}}})
             headers = zt.get_identity_headers()
             assert "X-Proxy-Identity" in headers

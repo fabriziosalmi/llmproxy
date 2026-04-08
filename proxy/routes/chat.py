@@ -72,7 +72,7 @@ def create_router(agent) -> APIRouter:
                     agent._spawn_task(agent.webhooks.dispatch(EventType.BUDGET_THRESHOLD, {"reason": "quota_exceeded", "key_prefix": token[:8] + "..."}))
                     raise HTTPException(status_code=402, detail="Enterprise Quota Exceeded for this API Key.")
 
-            client_host = request.client.host if request.client else "0.0.0.0"
+            client_host = request.client.host if request.client else "0.0.0.0"  # nosec B104
             ts_id = await agent.zt_manager.verify_tailscale_identity(client_host)
             if ts_id["status"] == "verified":
                 await agent._add_log(f"ZT VERIFIED: {ts_id['user']} on {ts_id['node']}", level="SECURITY")

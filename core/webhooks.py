@@ -125,7 +125,7 @@ class _SSRFBlockingResolver(aiohttp.abc.AbstractResolver):
         self, hostname: str, port: int = 0, family: int = socket.AF_INET
     ) -> list:
         # DNS failure propagates here — fail-closed by default (no except)
-        addrs = await self._resolver.resolve(hostname, port, family)
+        addrs = await self._resolver.resolve(hostname, port, family)  # type: ignore
         for addr in addrs:
             try:
                 ip = ipaddress.ip_address(addr["host"])

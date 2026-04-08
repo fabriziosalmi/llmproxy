@@ -527,7 +527,7 @@ class SecurityShield:
         )
 
         timeout = ai_cfg.get("timeout_seconds", 5)
-        fail_policy = ai_cfg.get("fail_policy", "block")
+        fail_policy = str(ai_cfg.get("fail_policy", "block"))
 
         try:
             judgment = await asyncio.wait_for(

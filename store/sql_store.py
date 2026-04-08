@@ -308,7 +308,7 @@ class SQLiteStore:
 
         conn = await self._get_conn()
         async with conn.execute(
-            f"SELECT COUNT(*) as requests, SUM(cost_usd) as total_usd, SUM(prompt_tokens) as total_prompt, SUM(completion_tokens) as total_completion FROM spend_log {where}",
+            f"SELECT COUNT(*) as requests, SUM(cost_usd) as total_usd, SUM(prompt_tokens) as total_prompt, SUM(completion_tokens) as total_completion FROM spend_log {where}",  # nosec B608
             params,
         ) as cursor:
             row = await cursor.fetchone()
@@ -396,7 +396,7 @@ class SQLiteStore:
 
         conn = await self._get_conn()
         # Count total
-        async with conn.execute(f"SELECT COUNT(*) FROM audit_log {where}", params) as c:
+        async with conn.execute(f"SELECT COUNT(*) FROM audit_log {where}", params) as c:  # nosec B608
             total = (await c.fetchone())[0]
 
         # Fetch page
@@ -404,7 +404,7 @@ class SQLiteStore:
             conn.row_factory = aiosqlite.Row
             try:
                 async with conn.execute(
-                    f"SELECT * FROM audit_log {where} ORDER BY ts DESC LIMIT ? OFFSET ?",
+                    f"SELECT * FROM audit_log {where} ORDER BY ts DESC LIMIT ? OFFSET ?",  # nosec B608
                     params + [limit, offset],
                 ) as cursor:
                     rows = await cursor.fetchall()

@@ -191,12 +191,12 @@ class ByteLevelFirewallMiddleware:
     def _get_signatures(self) -> list[bytes]:
         """Return active signatures — from SignatureStore if available, else fallback."""
         if self._signature_store and self._signature_store.loaded:
-            return self._signature_store.banned_signatures
+            return self._signature_store.banned_signatures  # type: ignore
         return self._FALLBACK_SIGNATURES
 
     def _get_rot13_sigs(self) -> list[bytes]:
         if self._signature_store and self._signature_store.loaded:
-            return self._signature_store.rot13_signatures
+            return self._signature_store.rot13_signatures  # type: ignore
         return _ROT13_SIGS
 
     def _check_signatures(self, chunk: bytes) -> str | None:

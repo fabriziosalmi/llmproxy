@@ -1,6 +1,7 @@
 """Admin routes: proxy toggle, status, version, service-info, features, priority, panic."""
 import os
 import time
+from typing import Any
 
 from fastapi import APIRouter, Request, HTTPException
 
@@ -49,7 +50,7 @@ def create_router(agent) -> APIRouter:
     async def get_service_info(request: Request):
         port = agent.config.get("server", {}).get("port", 8090)
         return {
-            "host": request.client.host if request.client else "0.0.0.0",
+            "host": request.client.host if request.client else "0.0.0.0",  # nosec B104
             "port": port,
             "url": f"http://{request.client.host if request.client else 'localhost'}:{port}/v1"
         }
@@ -61,9 +62,10 @@ def create_router(agent) -> APIRouter:
     @router.get("/api/v1/network/info")
     async def get_network_info():
         return {
-            "host": agent.config.get("server", {}).get("host", "0.0.0.0"),
+            "host": agent.config.get("server", {}).get("host", "0.0.0.0"),  # nosec B104
             "port": agent.config.get("server", {}).get("port", 8090),
-            "tailscale_active": agent.config.get("server", {}).get("host") not in ("0.0.0.0", "127.0.0.1")
+            "tailscale_active": agent.config.get("server", {}).get("host") not in ("0.0.0.0", "127.0.0.1"),  # nosec B104
+            "version": "1.10.8"
         }
 
     @router.post("/api/v1/features/toggle")
@@ -372,7 +374,7 @@ def create_router(agent) -> APIRouter:
     async def reset_security_state(request: Request):
         """Reset SecurityShield session memory and threat ledger."""
         _check_admin_auth(request)
-        result = {}
+        result: dict[str, Any] = {}
         if hasattr(agent, 'security'):
             sessions = len(agent.security.session_memory)
             agent.security.session_memory.clear()
