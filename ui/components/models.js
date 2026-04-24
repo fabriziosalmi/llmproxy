@@ -91,8 +91,8 @@ function renderModelsTable(chatModels, embeddingModels) {
     }
 
     container.innerHTML = `
-        <div class="overflow-hidden rounded-xl">
-            <table class="w-full">
+        <div class="overflow-x-auto rounded-xl">
+            <table class="w-full min-w-[480px]">
                 <thead>
                     <tr class="border-b border-white/[0.08]">
                         <th class="text-left text-[9px] font-bold text-slate-500 uppercase tracking-widest px-4 py-3">Model ID</th>
