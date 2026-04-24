@@ -68,8 +68,8 @@ function renderEfficiency(data) {
                 <span class="text-[9px] font-mono text-rose-400">Most expensive: ${mostExpensive}</span>
             </div>
         </div>
-        <div class="overflow-hidden rounded-xl">
-            <table class="w-full">
+        <div class="overflow-x-auto rounded-xl">
+            <table class="w-full min-w-[640px]">
                 <thead>
                     <tr class="border-b border-white/[0.08]">
                         <th class="text-left text-[9px] font-bold text-slate-500 uppercase px-3 py-2">Model</th>
@@ -109,8 +109,8 @@ function renderBreakdown(containerId, title, rows, groupCol) {
 
     container.innerHTML = `
         <h3 class="text-xs font-bold text-white mb-4">${title}</h3>
-        <div class="overflow-hidden rounded-xl">
-            <table class="w-full">
+        <div class="overflow-x-auto rounded-xl">
+            <table class="w-full min-w-[640px]">
                 <thead>
                     <tr class="border-b border-white/[0.08]">
                         <th class="text-left text-[9px] font-bold text-slate-500 uppercase tracking-widest px-3 py-2">${groupCol}</th>

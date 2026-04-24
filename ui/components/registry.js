@@ -27,15 +27,58 @@ export function initRegistry() {
     // Add endpoint submit
     const addBtn = document.getElementById('ep-add-btn');
     if (addBtn) {
+        const fields = [
+            { input: 'ep-name', err: 'ep-name-err' },
+            { input: 'ep-url',  err: 'ep-url-err' },
+        ];
+        // Clear the error decoration as soon as the user types — lets the
+        // alert text disappear without waiting for another submit round.
+        fields.forEach(f => {
+            const el = document.getElementById(f.input);
+            if (el) el.addEventListener('input', () => _clearFieldError(f.input, f.err));
+        });
+
         addBtn.addEventListener('click', async () => {
-            const id = document.getElementById('ep-name')?.value?.trim();
-            const url = document.getElementById('ep-url')?.value?.trim();
+            const id = document.getElementById('ep-name')?.value?.trim() || '';
+            const url = document.getElementById('ep-url')?.value?.trim() || '';
             const provider = document.getElementById('ep-provider')?.value;
             const priority = document.getElementById('ep-priority')?.value || '0';
             const apiKey = document.getElementById('ep-api-key')?.value || '';
             const modelsRaw = document.getElementById('ep-models')?.value || '';
             const models = modelsRaw.split(',').map(s => s.trim()).filter(Boolean);
-            if (!id || !url) { toast('Name and URL are required', 'warning'); return; }
+
+            let firstInvalid = null;
+            // ID: non-empty, alphanumeric + dash/underscore only
+            if (!id) {
+                _setFieldError('ep-name', 'ep-name-err', 'Required.');
+                firstInvalid = firstInvalid || 'ep-name';
+            } else if (!/^[a-z0-9][a-z0-9_-]*$/i.test(id)) {
+                _setFieldError('ep-name', 'ep-name-err', 'Use letters, digits, - or _ (must start with a letter or digit).');
+                firstInvalid = firstInvalid || 'ep-name';
+            } else {
+                _clearFieldError('ep-name', 'ep-name-err');
+            }
+            // URL: non-empty, must parse, must be http(s)
+            if (!url) {
+                _setFieldError('ep-url', 'ep-url-err', 'Required.');
+                firstInvalid = firstInvalid || 'ep-url';
+            } else {
+                try {
+                    const u = new URL(url);
+                    if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+                        throw new Error('Only http:// and https:// are supported.');
+                    }
+                    _clearFieldError('ep-url', 'ep-url-err');
+                } catch (err) {
+                    _setFieldError('ep-url', 'ep-url-err', err.message || 'Not a valid URL.');
+                    firstInvalid = firstInvalid || 'ep-url';
+                }
+            }
+
+            if (firstInvalid) {
+                document.getElementById(firstInvalid)?.focus();
+                return;
+            }
             addBtn.textContent = 'Adding...';
             addBtn.disabled = true;
             try {
@@ -51,6 +94,7 @@ export function initRegistry() {
                 document.getElementById('ep-url').value = '';
                 if (document.getElementById('ep-api-key')) document.getElementById('ep-api-key').value = '';
                 if (document.getElementById('ep-models')) document.getElementById('ep-models').value = '';
+                fields.forEach(f => _clearFieldError(f.input, f.err));
                 await fetchRegistry();
             } catch (e) {
                 toast(`Failed: ${e.message}`, 'error');
@@ -59,6 +103,28 @@ export function initRegistry() {
             addBtn.disabled = false;
         });
     }
+}
+
+function _setFieldError(inputId, errId, msg) {
+    const input = document.getElementById(inputId);
+    const err = document.getElementById(errId);
+    if (!input || !err) return;
+    input.setAttribute('aria-invalid', 'true');
+    input.classList.add('border-rose-500/50');
+    input.classList.remove('border-white/10');
+    err.textContent = msg;
+    err.classList.remove('hidden');
+}
+
+function _clearFieldError(inputId, errId) {
+    const input = document.getElementById(inputId);
+    const err = document.getElementById(errId);
+    if (!input || !err) return;
+    input.removeAttribute('aria-invalid');
+    input.classList.remove('border-rose-500/50');
+    input.classList.add('border-white/10');
+    err.classList.add('hidden');
+    err.textContent = '';
 }
 
 const CIRCUIT_STATES = {
@@ -123,17 +189,31 @@ LLM_PROXY_ENDPOINT_LOCAL_MODELS=llama-3.3-70b</code></pre>
         return;
     }
 
+    const sortCell = (key, label) => {
+        const ariaSort = _sortKey === key ? (_sortAsc ? 'ascending' : 'descending') : 'none';
+        const indicator = _sortKey === key ? (_sortAsc ? ' ▲' : ' ▼') : '';
+        // The <th> carries aria-sort (ARIA grid pattern). The inner <button>
+        // takes the click/Enter/Space, so keyboard users get the same affordance
+        // as mouse users without custom tabindex/role plumbing.
+        return `
+            <th scope="col" aria-sort="${ariaSort}" class="text-left text-[9px] font-bold text-slate-500 uppercase tracking-widest px-4 py-3">
+                <button type="button" data-sort="${key}" class="flex items-center gap-1 uppercase tracking-widest font-bold text-slate-500 hover:text-white transition-colors focus:border-cyan-500/50">
+                    <span>${label}</span><span aria-hidden="true" class="text-[8px]">${indicator}</span>
+                </button>
+            </th>`;
+    };
+
     container.innerHTML = `
-        <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] overflow-hidden">
-            <table class="w-full">
+        <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] overflow-x-auto">
+            <table class="w-full min-w-[640px]">
                 <thead>
                     <tr class="border-b border-white/[0.06]">
-                        <th data-sort="id" class="text-left text-[9px] font-bold text-slate-500 uppercase tracking-widest px-4 py-3 cursor-pointer hover:text-white transition-colors">Endpoint ${_sortKey === 'id' ? (_sortAsc ? '&#9650;' : '&#9660;') : ''}</th>
-                        <th data-sort="status" class="text-left text-[9px] font-bold text-slate-500 uppercase tracking-widest px-4 py-3 cursor-pointer hover:text-white transition-colors">Status ${_sortKey === 'status' ? (_sortAsc ? '&#9650;' : '&#9660;') : ''}</th>
-                        <th data-sort="circuit_state" class="text-left text-[9px] font-bold text-slate-500 uppercase tracking-widest px-4 py-3 cursor-pointer hover:text-white transition-colors">Circuit ${_sortKey === 'circuit_state' ? (_sortAsc ? '&#9650;' : '&#9660;') : ''}</th>
-                        <th data-sort="latency" class="text-left text-[9px] font-bold text-slate-500 uppercase tracking-widest px-4 py-3 cursor-pointer hover:text-white transition-colors">Latency ${_sortKey === 'latency' ? (_sortAsc ? '&#9650;' : '&#9660;') : ''}</th>
-                        <th data-sort="priority" class="text-left text-[9px] font-bold text-slate-500 uppercase tracking-widest px-4 py-3 cursor-pointer hover:text-white transition-colors">Priority ${_sortKey === 'priority' ? (_sortAsc ? '&#9650;' : '&#9660;') : ''}</th>
-                        <th class="text-right text-[9px] font-bold text-slate-500 uppercase tracking-widest px-4 py-3">Actions</th>
+                        ${sortCell('id', 'Endpoint')}
+                        ${sortCell('status', 'Status')}
+                        ${sortCell('circuit_state', 'Circuit')}
+                        ${sortCell('latency', 'Latency')}
+                        ${sortCell('priority', 'Priority')}
+                        <th scope="col" class="text-right text-[9px] font-bold text-slate-500 uppercase tracking-widest px-4 py-3">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="registry-body"></tbody>
@@ -184,10 +264,12 @@ LLM_PROXY_ENDPOINT_LOCAL_MODELS=llama-3.3-70b</code></pre>
         tbody.appendChild(row);
     });
 
-    // Wire sort headers
-    container.querySelectorAll('th[data-sort]').forEach(th => {
-        th.addEventListener('click', () => {
-            const key = th.dataset.sort;
+    // Wire sort headers — <button> natively handles Enter/Space, so no
+    // extra keydown handler is needed. Column becomes accessible for
+    // keyboard users at zero custom cost.
+    container.querySelectorAll('button[data-sort]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const key = btn.dataset.sort;
             if (_sortKey === key) { _sortAsc = !_sortAsc; } else { _sortKey = key; _sortAsc = true; }
             renderRegistry();
         });
