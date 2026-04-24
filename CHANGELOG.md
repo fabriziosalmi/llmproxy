@@ -2,6 +2,13 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.10.18] — 2026-04-24
+
+### Auto-discovery
+- **Periodic re-discovery of local + Tailscale peers** — a new `local_discovery_loop` runs the probe every 5 minutes (configurable via `discovery.scan_interval_s`, default 300). Peers that come back online after the boot probe are picked up automatically: no more `docker compose up --force-recreate` to notice that a Mac woke from sleep or that LM Studio was restarted. New responders are seeded into the persistence store so they show up in the UI registry on next poll. Existing entries are kept as-is — the circuit breaker already handles transient outages, and churning the registry mid-flight would race in-progress requests. Honours the same disable flags as the boot probe (`LLM_PROXY_LOCAL_DISCOVERY=0` or `discovery.local_scan: false`). Set `discovery.scan_interval_s: 0` for boot-only.
+
+---
+
 ## [1.10.17] — 2026-04-24
 
 ### Supply chain
