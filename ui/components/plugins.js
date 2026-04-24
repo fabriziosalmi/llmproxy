@@ -80,16 +80,40 @@ export async function initPlugins() {
     // Install submit
     const submitBtn = document.getElementById('install-submit-btn');
     if (submitBtn) {
+        // Clear the inline error on first keystroke after a failed submit.
+        ['install-name', 'install-entrypoint'].forEach(id => {
+            document.getElementById(id)?.addEventListener('input', () => _clearPluginFieldError(id));
+        });
+
         submitBtn.addEventListener('click', async () => {
-            const name = document.getElementById('install-name')?.value?.trim();
+            const name = document.getElementById('install-name')?.value?.trim() || '';
             const hook = document.getElementById('install-hook')?.value;
-            const entrypoint = document.getElementById('install-entrypoint')?.value?.trim();
+            const entrypoint = document.getElementById('install-entrypoint')?.value?.trim() || '';
             const timeout = parseInt(document.getElementById('install-timeout')?.value || '500');
             const failPolicy = document.getElementById('install-fail-policy')?.value || 'open';
             const description = document.getElementById('install-description')?.value?.trim() || '';
 
-            if (!name || !hook || !entrypoint) {
-                toast('Name, Hook, and Entrypoint are required.', 'warning');
+            let firstInvalid = null;
+            if (!name) {
+                _setPluginFieldError('install-name', 'Required.');
+                firstInvalid = firstInvalid || 'install-name';
+            } else if (!/^[a-z_][a-z0-9_]*$/i.test(name)) {
+                _setPluginFieldError('install-name', 'Use letters, digits or underscore. Must start with a letter or underscore (Python module convention).');
+                firstInvalid = firstInvalid || 'install-name';
+            } else {
+                _clearPluginFieldError('install-name');
+            }
+            if (!entrypoint) {
+                _setPluginFieldError('install-entrypoint', 'Required.');
+                firstInvalid = firstInvalid || 'install-entrypoint';
+            } else if (!/:/.test(entrypoint)) {
+                _setPluginFieldError('install-entrypoint', "Expected 'module.path:ClassName'.");
+                firstInvalid = firstInvalid || 'install-entrypoint';
+            } else {
+                _clearPluginFieldError('install-entrypoint');
+            }
+            if (firstInvalid) {
+                document.getElementById(firstInvalid)?.focus();
                 return;
             }
 
@@ -264,4 +288,24 @@ function renderConfigFields(plugin) {
             ${fields}
         </div>
     `;
+}
+
+function _setPluginFieldError(inputId, msg) {
+    const input = document.getElementById(inputId);
+    const err = document.getElementById(`${inputId}-err`);
+    if (!input) return;
+    input.setAttribute('aria-invalid', 'true');
+    input.classList.add('border-rose-500/50');
+    input.classList.remove('border-white/10');
+    if (err) { err.textContent = msg; err.classList.remove('hidden'); }
+}
+
+function _clearPluginFieldError(inputId) {
+    const input = document.getElementById(inputId);
+    const err = document.getElementById(`${inputId}-err`);
+    if (!input) return;
+    input.removeAttribute('aria-invalid');
+    input.classList.remove('border-rose-500/50');
+    input.classList.add('border-white/10');
+    if (err) { err.classList.add('hidden'); err.textContent = ''; }
 }
