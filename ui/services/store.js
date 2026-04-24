@@ -10,6 +10,7 @@ export const store = {
         proxyEnabled: true,
         priorityMode: false,
         features: {},
+        firewall: { enabled: true, disabled_reason: null },
         logSource: null,
         // Security metrics
         securityStats: {

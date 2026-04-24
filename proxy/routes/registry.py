@@ -1,4 +1,7 @@
 """Registry routes: endpoint CRUD (toggle, delete, priority, list)."""
+import os
+from typing import Any
+
 from fastapi import APIRouter, Request, HTTPException
 
 from models import EndpointStatus
@@ -74,25 +77,65 @@ def create_router(agent) -> APIRouter:
 
     @router.post("/api/v1/registry")
     async def add_endpoint_api(request: Request):
-        """Add a new LLM endpoint to the registry."""
+        """Add a new LLM endpoint to the registry.
+
+        Writes to the persistence store AND mirrors the entry into the live
+        ``config['endpoints']`` dictionary so the forwarder can route to it
+        immediately without a restart. Accepts optional ``api_key`` (set as
+        a process-local env var) and ``models`` (list of model ids) to make
+        the onboarding wizard end-to-end usable from the UI.
+        """
         _check_admin_auth(request)
         data = await request.json()
-        ep_id = data.get("id", "").strip()
+        ep_id = data.get("id", "").strip().lower()
         url = data.get("url", "").strip()
-        provider = data.get("provider", "openai")
+        provider = (data.get("provider") or "openai-compatible").strip()
         priority = int(data.get("priority", 0))
+        raw_models = data.get("models", [])
+        if isinstance(raw_models, str):
+            models = [m.strip() for m in raw_models.split(",") if m.strip()]
+        else:
+            models = [str(m).strip() for m in raw_models if str(m).strip()]
+        api_key = (data.get("api_key") or "").strip()
         if not ep_id or not url:
             raise HTTPException(status_code=400, detail="id and url are required")
+
+        # Mirror into live config so forwarder.resolve_endpoint_for_provider finds it
+        endpoints_cfg = agent.config.setdefault("endpoints", {})
+        if ep_id in endpoints_cfg:
+            raise HTTPException(status_code=409, detail=f"Endpoint '{ep_id}' already exists")
+
+        entry: dict[str, Any] = {
+            "provider": provider,
+            "base_url": url,
+            "models": models,
+            "_source": "ui",
+        }
+        if api_key:
+            # Key is held in a process-local env var so adapters keep using
+            # the api_key_env indirection uniformly. It is NOT persisted to
+            # disk — operators who want durable keys should set them in .env.
+            key_env = f"LLM_PROXY_EP_{ep_id.upper()}_KEY"
+            os.environ[key_env] = api_key
+            entry["api_key_env"] = key_env
+            entry["auth_type"] = "bearer"
+        else:
+            entry["auth_type"] = "none"
+        endpoints_cfg[ep_id] = entry
+
         from models import LLMEndpoint, EndpointStatus
         ep = LLMEndpoint(
             id=ep_id,
             url=url,
             status=EndpointStatus.VERIFIED,
-            metadata={"provider": provider, "priority": priority},
+            metadata={"provider": provider, "priority": priority, "models": models},
         )
         await agent.store.add_endpoint(ep)
-        await agent._add_log(f"ENDPOINT: {ep_id} ADDED ({provider} @ {url})", level="SYSTEM")
-        return {"status": "added", "id": ep_id}
+        await agent._add_log(
+            f"ENDPOINT: {ep_id} ADDED ({provider} @ {url}, {len(models)} models)",
+            level="SYSTEM",
+        )
+        return {"status": "added", "id": ep_id, "models": models}
 
     @router.delete("/api/v1/registry/{endpoint_id}")
     async def delete_endpoint(endpoint_id: str, request: Request):

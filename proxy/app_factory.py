@@ -207,11 +207,28 @@ def create_app(agent) -> FastAPI:
         allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
     )
-    app.add_middleware(
-        ByteLevelFirewallMiddleware,
-        max_body_bytes=max_payload_bytes,
-        signature_store=getattr(agent, 'signature_store', None),
-    )
+    firewall_cfg = agent.config.get("security", {}).get("firewall", {})
+    firewall_enabled = firewall_cfg.get("enabled", True)
+    # Track the active state on the agent so the UI/admin API can surface
+    # an accurate read-only status and the reason it is off (env vs. config).
+    agent.firewall_enabled = firewall_enabled
+    agent.firewall_disabled_reason = None
+    if not firewall_enabled:
+        if os.environ.get("LLM_PROXY_FIREWALL_ENABLED") is not None:
+            agent.firewall_disabled_reason = "env:LLM_PROXY_FIREWALL_ENABLED"
+        else:
+            agent.firewall_disabled_reason = "config:security.firewall.enabled=false"
+        logger.warning(
+            "ASGI byte-level firewall is DISABLED (%s). L1 injection defense is OFF; "
+            "responses will not be blocked by the WAF. Use only in trusted environments.",
+            agent.firewall_disabled_reason,
+        )
+    else:
+        app.add_middleware(
+            ByteLevelFirewallMiddleware,
+            max_body_bytes=max_payload_bytes,
+            signature_store=getattr(agent, 'signature_store', None),
+        )
     app.add_middleware(RateLimitMiddleware, config=agent.config)
 
     from .routes import (
