@@ -132,6 +132,31 @@ async def select_endpoint(ctx: PluginContext):
         if pinned:
             healthy = pinned
 
+    # Model-aware filtering: prefer endpoints that actually advertise the
+    # requested model in their catalog. Without this filter the router picks
+    # among ALL healthy endpoints and often routes 'qwen/qwen3-4b' to an
+    # OpenAI/Ollama endpoint that has no such model → upstream 404 → circuit
+    # breaker churn. Endpoints with empty `models: []` (e.g. OpenRouter, the
+    # openai-compatible catch-all) stay eligible as wildcards of last resort.
+    requested_model = (ctx.body.get("model") or "").strip()
+    if requested_model:
+        exact = [e for e in healthy if requested_model in ((e.metadata or {}).get("models") or [])]
+        wildcard = [e for e in healthy if not ((e.metadata or {}).get("models") or [])]
+        if exact:
+            healthy = exact
+        elif wildcard:
+            healthy = wildcard
+        else:
+            # No endpoint admits this model. Fail fast with a useful error
+            # instead of rolling the dice and waiting for the upstream 404.
+            ctx.error = (
+                f"No configured endpoint advertises model '{requested_model}'. "
+                f"Check /v1/models for the list of routable models, or add the "
+                f"model to the desired endpoint's `models:` list in config.yaml."
+            )
+            ctx.stop_chain = True
+            return
+
     # Steering strategy selection
     if rotator.priority_mode:
         # Priority mode: highest-priority endpoint wins
