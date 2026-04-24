@@ -330,7 +330,7 @@ class ProxyOrchestrator(BaseAgent):
         from .background import (
             config_watch_loop, write_flush_loop,
             cache_eviction_loop, dedup_cleanup_loop,
-            retention_purge_loop,
+            retention_purge_loop, local_discovery_loop,
         )
 
         await self.store.init()
@@ -382,6 +382,17 @@ class ProxyOrchestrator(BaseAgent):
         from core.health_prober import EndpointHealthProber
         self._health_prober = EndpointHealthProber(self.config, self.circuit_manager, self._get_session)
         self._spawn_task(self._health_prober.start())
+
+        # Periodic local/peer re-discovery — catches peers that come back
+        # online after the boot probe. Honours the same disable flag as the
+        # boot-time scan (LLM_PROXY_LOCAL_DISCOVERY=0 / discovery.local_scan=false).
+        disc_cfg = self.config.get("discovery", {}) or {}
+        import os as _os
+        _disabled = _os.environ.get("LLM_PROXY_LOCAL_DISCOVERY", "").strip().lower() in ("0", "false", "off", "no")
+        if not _disabled and disc_cfg.get("local_scan", True):
+            scan_interval = int(disc_cfg.get("scan_interval_s", 300))
+            if scan_interval > 0:
+                self._spawn_task(local_discovery_loop(self, scan_interval))
 
         # Dedup cleanup
         self._spawn_task(dedup_cleanup_loop(self.deduplicator, 60))
