@@ -2,6 +2,21 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.10.13] — 2026-04-24
+
+### UI operability (P1 from review)
+- **No more silent operational failures** — the proxy-enable and priority-steering toggles in the Guards view now surface backend errors as `toast.error` instead of swallowing them into `console.error`. Success transitions also emit a confirmation toast. Combined with the earlier P0 fix to the kill switch and plugin reload/rollback, every user-initiated mutating control reports its outcome.
+- **Per-field inline validation** — the Add Endpoint and Install Plugin forms now mark invalid fields with `aria-invalid="true"`, a rose border, and an inline `role="alert"` message describing the fix. On submit, focus jumps to the first invalid field. The alert clears on the next keystroke. No more guessing which input was wrong from a generic toast.
+- **Registry sort is keyboard-accessible** — sortable column headers are now `<th aria-sort>` containing a proper `<button>`. Tab/Enter/Space cycle through the same sort behavior mouse users had. Screen readers announce the current sort direction.
+- **Mobile tables no longer clip** — Endpoints, Models, and Analytics tables wrap in `overflow-x-auto` with a `min-width` guard so narrow viewports get horizontal scroll instead of squished unreadable columns. A proper card alternative for mobile remains a future design pass.
+- **Explicit form labels** — every `<select>` and unlabelled `<input>` in the audit filter, install form, and endpoint form received a visible `<label for>` or `aria-label`. Clears the IDE accessibility diagnostics on these surfaces.
+- **Button defaults** — all 29 buttons missing `type="button"` in `ui/index.html` now declare it. Prevents surprise form submissions and fixes the default-type warning.
+
+### Notes
+Review item #9 (mobile card layout) remains partial — tables scroll horizontally instead of being rewritten as cards. A dedicated design pass for a card/mobile view is tracked but out of scope here.
+
+---
+
 ## [1.10.12] — 2026-04-24
 
 ### UI trust & operability (P0 from review)

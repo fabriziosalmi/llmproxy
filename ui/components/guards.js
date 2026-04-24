@@ -116,8 +116,10 @@ function initProxyToggle() {
             const res = await api.toggleProxy(newState);
             store.update({ proxyEnabled: res.enabled });
             updateToggleUI('proxy-toggle-btn', 'proxy-toggle-dot', res.enabled, 'emerald');
+            toast(`Proxy ${res.enabled ? 'enabled' : 'disabled'}`, 'success');
         } catch (e) {
             console.error('Proxy toggle failed:', e);
+            toast(`Proxy toggle failed: ${e.message || e}`, 'error');
         }
     });
 }
@@ -127,13 +129,14 @@ function initPriorityToggle() {
     if (!btn) return;
 
     btn.addEventListener('click', async () => {
-        const newState = !store.state.priorityMode;
         try {
             const res = await api.togglePriorityMode(!store.state.priorityMode);
             store.update({ priorityMode: res.enabled });
             updateToggleUI('priority-toggle-btn', 'priority-toggle-dot', res.enabled, 'amber');
+            toast(`Priority steering ${res.enabled ? 'enabled' : 'disabled'}`, 'success');
         } catch (e) {
             console.error('Priority toggle failed:', e);
+            toast(`Priority toggle failed: ${e.message || e}`, 'error');
         }
     });
 }
