@@ -158,7 +158,8 @@
                 <h1 id="view-title-text" class="text-sm font-black text-white tracking-tight">Threats</h1>
             </div>
             <div class="flex items-center gap-3">
-                <kbd class="hidden md:inline text-[9px] font-mono text-slate-600 bg-white/5 px-2 py-0.5 rounded border border-white/10">⌘K</kbd>
+                <kbd class="hidden md:inline text-[9px] font-mono text-slate-600 bg-white/5 px-2 py-0.5 rounded border border-white/10" title="Command palette">⌘K</kbd>
+                <kbd class="hidden md:inline text-[9px] font-mono text-slate-600 bg-white/5 px-2 py-0.5 rounded border border-white/10" title="Cinema mode (focus UI)">⇧F</kbd>
             </div>
         </header>
 
@@ -700,7 +701,14 @@
                     <div class="flex items-center justify-between mb-3">
                         <h2 class="text-xs font-bold text-white">Security Audit Log</h2>
                         <div class="flex items-center gap-2">
-                            <input id="log-filter" type="text" placeholder="Filter..." class="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono w-48 focus:border-rose-500/50">
+                            <div id="log-stream-status" class="flex items-center gap-1.5 text-[10px] font-mono" role="status" aria-live="polite">
+                                <span id="log-stream-dot" class="w-1.5 h-1.5 rounded-full bg-slate-600"></span>
+                                <span id="log-stream-label" class="text-slate-500">idle</span>
+                            </div>
+                            <button type="button" id="log-paused-badge" aria-label="Resume log autoscroll" class="hidden opacity-0 transition-opacity px-2 py-1 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 rounded-lg text-[10px] font-bold text-amber-400">
+                                Paused · <span id="log-missed-count">0</span> new
+                            </button>
+                            <input id="log-filter" type="text" placeholder="Filter..." aria-label="Log message filter" class="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono w-48 focus:border-rose-500/50">
                             <button type="button" id="clear-logs-btn" class="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[10px] font-bold text-slate-400">Clear</button>
                         </div>
                     </div>

@@ -77,8 +77,20 @@ async function refreshMetrics() {
         }
 
     } catch {
-        // Backend unavailable
+        // Backend unavailable — replace "Loading..." placeholders with a
+        // visible degraded state so the operator knows the widget is stale
+        // rather than still waiting on a pending fetch.
+        _fallbackUnavailable('budget-gauge');
+        _fallbackUnavailable('firewall-stats');
+        _fallbackUnavailable('endpoint-breakdown');
     }
+}
+
+function _fallbackUnavailable(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (el.dataset.ready === '1') return; // has real content from a prior successful refresh
+    el.innerHTML = `<p class="text-[10px] text-rose-400/80 font-mono" role="alert">Metrics unavailable — backend unreachable.</p>`;
 }
 
 function setText(id, value) {
@@ -104,6 +116,7 @@ function renderBudgetGauge(consumed, limit, totalCost, guardsStatus) {
     // Always render the gauge if we have a configured limit
     if (limit <= 0 && totalCost <= 0 && consumed <= 0) {
         container.innerHTML = `<div class="text-[9px] text-slate-600 font-mono">No budget configured — set <code class="text-slate-500">budget.daily_limit</code> in config.yaml</div>`;
+        container.dataset.ready = '1';
         return;
     }
 
@@ -129,6 +142,7 @@ function renderBudgetGauge(consumed, limit, totalCost, guardsStatus) {
             </div>
         ` : ''}
     `;
+    container.dataset.ready = '1';
 }
 
 function renderEndpointBreakdown(text) {
@@ -157,9 +171,11 @@ function renderEndpointBreakdown(text) {
     const entries = Object.entries(endpoints);
     if (entries.length === 0) {
         container.innerHTML = `<p class="text-[9px] text-slate-600 font-mono">No per-endpoint data yet</p>`;
+        container.dataset.ready = '1';
         return;
     }
 
+    container.dataset.ready = '1';
     container.innerHTML = entries.map(([ep, data]) => {
         const errRate = data.requests > 0 ? ((data.errors / data.requests) * 100).toFixed(1) : '0.0';
         const errColor = parseFloat(errRate) > 5 ? 'text-rose-400' : parseFloat(errRate) > 0 ? 'text-amber-400' : 'text-emerald-400';
@@ -185,6 +201,7 @@ function renderFirewallStats(guardsStatus) {
     const signatures = fw.block_by_signature || {};
     const sigEntries = Object.entries(signatures);
 
+    container.dataset.ready = '1';
     container.innerHTML = `
         <div class="flex items-center gap-6 mb-2">
             <div>
