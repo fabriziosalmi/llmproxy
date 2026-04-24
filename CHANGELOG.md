@@ -2,6 +2,13 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.10.15] — 2026-04-24
+
+### Routing
+- **Model-aware endpoint selection** — `smart_router` now filters healthy endpoints to those that actually advertise the requested model in their catalog before scoring. Before, the router could pick any healthy endpoint at random; asking for `qwen/qwen3-4b` on a pool that included Ollama/OpenAI would route to an endpoint without that model → 502 upstream → circuit breaker churn. Endpoints with an empty `models: []` (OpenRouter, generic `openai-compatible` proxies) stay eligible as wildcards of last resort. If no endpoint advertises the model at all, the request fails fast with an actionable `no configured endpoint advertises model '<id>'` error instead of rolling the dice and waiting for a 502.
+
+---
+
 ## [1.10.14] — 2026-04-24
 
 ### UI polish — review P2/P3 (medium + minor)
