@@ -7,6 +7,7 @@
 import { api } from '../services/api.js';
 import { toast } from '../services/toast.js';
 import { dialog } from '../services/dialog.js';
+import { timerange } from '../services/timerange.js';
 
 let _initialized = false;
 
@@ -269,13 +270,20 @@ function _initListeners() {
 
             try {
                 const data = await _authJson(`/api/v1/audit?${new URLSearchParams(params)}`);
-                const items = data.items || [];
+                // Client-side time-range filter. The backend currently returns the
+                // latest N entries regardless; we filter by the global window here so
+                // the Audit table respects the same range users picked in the header.
+                const sinceMs = timerange.sinceEpochMs();
+                const untilMs = timerange.untilEpochMs();
+                let items = data.items || [];
+                if (sinceMs != null) items = items.filter(r => (r.ts || 0) * 1000 >= sinceMs);
+                if (untilMs != null) items = items.filter(r => (r.ts || 0) * 1000 <= untilMs);
                 if (!items.length) {
-                    resultsEl.innerHTML = '<p class="text-[10px] text-slate-600 font-mono">No entries found.</p>';
+                    resultsEl.innerHTML = `<p class="text-[10px] text-slate-600 font-mono">No entries found${sinceMs != null ? ` in ${timerange.label()}` : ''}.</p>`;
                     return;
                 }
                 resultsEl.innerHTML = `
-                    <div class="text-[9px] text-slate-600 font-mono mb-2">${data.total || items.length} total entries (showing ${items.length})</div>
+                    <div class="text-[9px] text-slate-600 font-mono mb-2">${items.length} entries · ${timerange.label()}</div>
                     <table class="w-full">
                         <thead>
                             <tr class="border-b border-white/[0.06]">
@@ -292,7 +300,11 @@ function _initListeners() {
                                 const ts = r.ts ? new Date(r.ts * 1000).toLocaleString() : '--';
                                 const blocked = r.blocked ? '<span class="text-rose-400">YES</span>' : '<span class="text-emerald-400">no</span>';
                                 const cost = r.cost_usd ? `$${r.cost_usd.toFixed(4)}` : '--';
-                                return `<tr class="border-b border-white/[0.03] hover:bg-white/[0.02]">
+                                return `<tr class="border-b border-white/[0.03] hover:bg-white/[0.02] cursor-pointer"
+                                           data-drilldown="request:${r.req_id}"
+                                           tabindex="0"
+                                           role="button"
+                                           aria-label="Inspect request ${r.req_id}">
                                     <td class="px-2 py-1 text-[9px] font-mono text-slate-500">${ts}</td>
                                     <td class="px-2 py-1 text-[10px] font-mono text-white">${r.model || '--'}</td>
                                     <td class="px-2 py-1 text-[10px] font-mono ${r.status >= 400 ? 'text-rose-400' : 'text-emerald-400'}">${r.status || '--'}</td>

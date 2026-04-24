@@ -194,7 +194,8 @@ export function renderGuards() {
                         <div class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full transition-transform ${enabled ? `bg-${c}-400 translate-x-5` : 'bg-slate-500 translate-x-0'}"></div>
                     </button>
                 ` : `
-                    <span class="text-[10px] font-bold font-mono ${enabled ? `text-${c}-400/60 bg-${c}-500/10` : 'text-slate-500 bg-slate-500/10'} px-2 py-0.5 rounded">${statusLabel}</span>
+                    <span class="text-[10px] font-bold font-mono ${enabled ? `text-${c}-400/60 bg-${c}-500/10` : 'text-slate-500 bg-slate-500/10'} px-2 py-0.5 rounded"
+                          data-explain="${key === 'firewall' ? 'firewall' : 'guard:' + key}">${statusLabel}</span>
                 `}
             </div>
             <p class="text-[10px] text-slate-400 leading-relaxed">${info.desc}</p>

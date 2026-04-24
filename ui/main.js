@@ -17,6 +17,9 @@ import { initSecurity, renderSecurity } from './components/security.js';
 import { auth } from './services/auth.js';
 import { dialog } from './services/dialog.js';
 import { toast } from './services/toast.js';
+import { initExplain } from './services/explain.js';
+import { initDrilldown } from './services/drilldown.js';
+import { initTimerange, timerange } from './services/timerange.js';
 
 // Global state listener — only re-render what changed (audit #24)
 let _prevState = { ...store.state };
@@ -198,6 +201,17 @@ async function init() {
             console.warn(`UI Component [${w.name}] failed to initialize:`, e);
         }
     });
+
+    // Delegated handler for [data-explain] — attaches once on document.
+    // Does NOT require per-component wiring; views just stamp the attribute
+    // on status elements and this service does the rest.
+    initExplain();
+
+    // Same pattern for [data-drilldown] — entity investigation surface.
+    initDrilldown();
+
+    // Mount the global time-range selector in the header context bar.
+    initTimerange();
 
     // Init HUD global features (Cmd+K, Drawer, Cinema Mode)
     initHUD();

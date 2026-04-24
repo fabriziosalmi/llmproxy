@@ -2,6 +2,34 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.11.0] — 2026-04-24
+
+### UI elevation — operator console, Sprint 1
+Lifts the frontend from "admin dashboard" to "investigation surface" by introducing three cross-cutting primitives. No new backend routes — the primitives consume data already exposed today.
+
+**Trust by explanation (`ui/services/explain.js` + `ui/services/drawer.js`)**
+- Any element carrying `data-explain="<kind>[:<id>]"` becomes a clickable/focusable affordance that opens a side drawer with the *why*: current status, source rule, timestamp, recent evidence, and a pointer to the full drilldown.
+- Wired on: ASGI firewall status (`data-explain="firewall"`), per-guard cards (`data-explain="guard:injection_guard"`), per-endpoint circuit state in the registry (`data-explain="circuit:<id>"`).
+- Subtle dotted-underline + ℹ glyph marks explainable surfaces without making every status badge look like a link (`style.css`).
+- Keyboard-accessible: `Enter` / `Space` open the drawer on tab-focused elements, Tab traps inside the drawer, Escape closes and restores focus to the trigger.
+
+**Universal entity drilldown (`ui/services/drilldown.js`)**
+- Single tab grammar — `overview | timeline | config | related | actions` — across supported entities, so the operator doesn't relearn the UI jumping between views.
+- MVP kinds: `endpoint` (from registry rows) and `request` (from audit rows). Model / plugin kinds deferred to Sprint 2.
+- Registry table gains an `Inspect` action per row; Security audit table rows are now fully clickable (aria-label + role=button for screen readers) and route through drilldown.
+- Related-entity navigation: request → other requests in same session, endpoint → sibling endpoints of the same type.
+
+**Global time range (`ui/services/timerange.js`)**
+- Preset selector (1h / 4h / 24h / 7d / all) in the page header context bar. Persisted in URL hash (`?tr=24h` on top of `#/audit`) and localStorage so reloads and shareable links land in the same window.
+- Audit Log query now filters client-side by the active range and surfaces the label ("12 entries · Last 24 hours").
+- Views without time-aware data (Threats KPI counters, Analytics) keep their own period — wiring them is a backend-side change out of scope for this ship.
+
+### Internal
+- New side-panel primitive (`ui/services/drawer.js`) shared by explain + drilldown. Same focus-trap pattern as `dialog.js` but non-modal — in-drawer links are operable without closing.
+- Delegated document-level click handlers — views just stamp `data-explain` / `data-drilldown` attributes; no per-component wiring needed.
+
+---
+
 ## [1.10.18] — 2026-04-24
 
 ### Auto-discovery
