@@ -354,6 +354,290 @@ function _requestActions(r) {
     return el;
 }
 
+// ── Model kind ─────────────────────────────────────────────────────────────
+
+async function _modelTabs(modelId) {
+    // Which endpoints advertise this model?
+    const registry = store.state.registry || [];
+    const allModels = await api.fetchModels().catch(() => ({ data: [] }));
+    const seen = (allModels.data || []).filter(m => m.id === modelId);
+    if (!seen.length) throw new Error(`Model '${modelId}' not in /v1/models. Is any endpoint advertising it?`);
+
+    // Providers reported via owned_by — can repeat (same model on multiple endpoints).
+    const providers = [...new Set(seen.map(m => m.owned_by))];
+
+    // Endpoints from registry whose type matches one of the providers OR
+    // whose id contains the provider name (handles auto-discovery tags like
+    // 'lmstudio-100-98-112-23').
+    const candidates = registry.filter(ep =>
+        providers.includes(ep.type) ||
+        providers.some(p => ep.id === p || ep.id.startsWith(p + '-'))
+    );
+
+    // Recent audit slice for this model.
+    let auditRows = [];
+    try {
+        const data = await _authFetch(`/api/v1/audit?model=${encodeURIComponent(modelId)}&limit=100`);
+        auditRows = data.items || [];
+    } catch { /* audit optional */ }
+
+    return {
+        overview: () => _modelOverview(modelId, providers, candidates, auditRows),
+        timeline: () => _modelTimeline(auditRows),
+        config: () => _modelConfig(modelId, providers),
+        related: () => _modelRelated(candidates),
+        actions: () => _modelActions(modelId),
+    };
+}
+
+function _modelOverview(modelId, providers, candidates, auditRows) {
+    const successes = auditRows.filter(r => !r.blocked && (r.status || 0) < 400).length;
+    const blocked = auditRows.filter(r => r.blocked).length;
+    const errors = auditRows.filter(r => !r.blocked && (r.status || 0) >= 400).length;
+    const avgLatency = auditRows.length
+        ? (auditRows.reduce((s, r) => s + (r.latency_ms || 0), 0) / auditRows.length).toFixed(0)
+        : '—';
+    const totalCost = auditRows.reduce((s, r) => s + (r.cost_usd || 0), 0);
+
+    const el = document.createElement('div');
+    el.innerHTML = `
+        ${_kv('Model', modelId)}
+        ${_kv('Providers', providers.join(', ') || '—')}
+        ${_kv('Routable via', `${candidates.length} endpoint${candidates.length === 1 ? '' : 's'}`)}
+        ${_kv('Recent requests', `${auditRows.length} (${successes} ok · ${errors} err · ${blocked} blocked)`)}
+        ${_kv('Avg latency', avgLatency === '—' ? '—' : `${avgLatency} ms`)}
+        ${_kv('Recent cost', `$${totalCost.toFixed(6)}`)}
+    `;
+    return el;
+}
+
+function _modelTimeline(rows) {
+    const el = document.createElement('div');
+    if (!rows.length) {
+        el.innerHTML = '<p class="text-[11px] text-slate-600 font-mono">No audit entries for this model.</p>';
+        return el;
+    }
+    el.innerHTML = rows.slice(0, 30).map(r => {
+        const ok = !r.blocked && (r.status || 0) < 400;
+        return `
+            <div class="py-2 border-b border-white/[0.04] last:border-0 cursor-pointer hover:bg-white/[0.02] -mx-2 px-2 rounded"
+                 data-drilldown="request:${r.req_id}">
+                <div class="flex items-center justify-between mb-0.5">
+                    <span class="text-[9px] font-mono text-slate-500">${_fmtTs(r.ts)}</span>
+                    <span class="text-[10px] font-mono ${ok ? 'text-emerald-400' : 'text-rose-400'}">${r.blocked ? 'BLOCK' : (r.status || '—')}</span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-mono text-slate-300">${r.provider || '—'}</span>
+                    <span class="text-[10px] font-mono text-slate-500">${(r.latency_ms || 0).toFixed(0)}ms</span>
+                </div>
+            </div>`;
+    }).join('');
+    return el;
+}
+
+function _modelConfig(modelId, providers) {
+    const el = document.createElement('div');
+    el.innerHTML = `
+        <p class="text-[11px] text-slate-400 leading-relaxed mb-3">
+            A model is routable if at least one endpoint advertises it in its <code>models:</code>
+            list (config.yaml / .env / UI / auto-discovery). The smart router filters the pool to
+            those endpoints before scoring by success² / latency × cost_factor.
+        </p>
+        ${_kv('Model ID', modelId)}
+        ${_kv('Advertised by', providers.join(', ') || '—')}
+        ${_kv('Alias?', 'Check config.yaml → model_aliases (e.g. "fast", "cheap")')}
+    `;
+    return el;
+}
+
+function _modelRelated(candidates) {
+    const el = document.createElement('div');
+    if (!candidates.length) {
+        el.innerHTML = '<p class="text-[11px] text-slate-600 font-mono">No endpoint advertises this model. The router will return a no-endpoint error.</p>';
+        return el;
+    }
+    el.innerHTML = `
+        <p class="text-[11px] text-slate-400 mb-3">Endpoints that can serve this model:</p>
+        ${candidates.map(ep => `
+            <div class="py-2 border-b border-white/[0.04] last:border-0 cursor-pointer hover:bg-white/[0.02] -mx-2 px-2 rounded"
+                 data-drilldown="endpoint:${ep.id}">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-mono text-white">${ep.id}</span>
+                    <span class="text-[9px] font-mono ${ep.status === 'Live' ? 'text-emerald-400' : 'text-slate-500'}">${ep.status}</span>
+                </div>
+                <p class="text-[9px] font-mono text-slate-500 truncate">${ep.url}</p>
+            </div>`).join('')}
+    `;
+    return el;
+}
+
+function _modelActions(modelId) {
+    const el = document.createElement('div');
+    el.innerHTML = `
+        <p class="text-[11px] text-slate-400 leading-relaxed mb-3">
+            To change which endpoints serve this model, edit the endpoint's <code>models:</code>
+            list. Cloud: <code>config.yaml</code>. Local: <code>LLM_PROXY_ENDPOINT_&lt;NAME&gt;_MODELS</code>
+            in <code>.env</code>. Auto-discovered entries re-populate on each probe cycle.
+        </p>
+        <p class="text-[11px] text-slate-500 font-mono">
+            Smoke-test: <br>
+            <code class="text-cyan-400">curl $URL/v1/chat/completions -d '{"model":"${modelId}", ...}'</code>
+        </p>
+    `;
+    return el;
+}
+
+// ── Plugin kind ────────────────────────────────────────────────────────────
+
+async function _pluginTabs(name) {
+    const [plugins, stats] = await Promise.all([
+        api.fetchPlugins().catch(() => ({ plugins: [] })),
+        api.fetchPluginStats().catch(() => ({})),
+    ]);
+    // /api/v1/plugins can return {plugins: [...]} OR an array at some points —
+    // accept both so the drilldown survives shape drift.
+    const list = Array.isArray(plugins) ? plugins : (plugins.plugins || plugins.data || []);
+    const p = list.find(x => x.name === name);
+    if (!p) throw new Error(`Plugin '${name}' not found in pipeline.`);
+    const s = (stats && (stats[name] || (stats.stats && stats.stats[name]))) || {};
+    return {
+        overview: () => _pluginOverview(p, s),
+        timeline: () => _pluginTimeline(s),
+        config: () => _pluginConfig(p),
+        related: () => _pluginRelated(p, list),
+        actions: () => _pluginActions(p),
+    };
+}
+
+function _pluginOverview(p, stats) {
+    const el = document.createElement('div');
+    const enabled = p.enabled !== false;
+    el.innerHTML = `
+        <div class="mb-4">
+            <span class="text-2xl font-black ${enabled ? 'text-emerald-400' : 'text-slate-500'}">${enabled ? 'ENABLED' : 'DISABLED'}</span>
+            <span class="text-[10px] text-slate-500 ml-2 font-mono uppercase">Ring: ${p.hook || p.ring || '—'}</span>
+        </div>
+        ${_kv('Name', p.name)}
+        ${_kv('Description', p.description || '—')}
+        ${_kv('Fail policy', p.fail_policy || 'open')}
+        ${_kv('Timeout', (p.timeout_ms || p.timeout || '—') + (p.timeout_ms ? ' ms' : ''))}
+        ${_kv('Executions', stats.executions || stats.total || 0)}
+        ${_kv('Avg latency', stats.avg_latency_ms ? `${stats.avg_latency_ms.toFixed(1)} ms` : '—')}
+        ${_kv('Last error', stats.last_error || '—')}
+    `;
+    return el;
+}
+
+function _pluginTimeline(stats) {
+    const el = document.createElement('div');
+    const ev = stats.recent_executions || stats.recent || [];
+    if (!ev.length) {
+        el.innerHTML = '<p class="text-[11px] text-slate-600 font-mono">No recent executions recorded.</p>';
+        return el;
+    }
+    el.innerHTML = ev.slice(0, 20).map(e => `
+        <div class="py-2 border-b border-white/[0.04] last:border-0">
+            <div class="flex items-center justify-between mb-0.5">
+                <span class="text-[9px] font-mono text-slate-500">${_fmtTs(e.ts)}</span>
+                <span class="text-[10px] font-mono ${e.ok === false ? 'text-rose-400' : 'text-emerald-400'}">${e.ok === false ? 'FAIL' : 'OK'}</span>
+            </div>
+            ${e.latency_ms != null ? `<span class="text-[10px] font-mono text-slate-500">${e.latency_ms.toFixed(1)}ms</span>` : ''}
+            ${e.error ? `<p class="text-[10px] text-rose-400 font-mono mt-1">${e.error}</p>` : ''}
+        </div>`).join('');
+    return el;
+}
+
+function _pluginConfig(p) {
+    const el = document.createElement('div');
+    const cfg = p.config || p.settings || {};
+    if (!Object.keys(cfg).length) {
+        el.innerHTML = `
+            <p class="text-[11px] text-slate-400 mb-3">
+                Plugin has no declared config. Defaults applied from the marketplace manifest.
+            </p>
+            ${_kv('Entrypoint', p.entrypoint || '—')}
+            ${_kv('Type', p.type || 'python')}
+            ${_kv('Version', p.version || '—')}
+        `;
+        return el;
+    }
+    const rows = Object.entries(cfg).map(([k, v]) => _kv(k, typeof v === 'object' ? JSON.stringify(v) : v)).join('');
+    el.innerHTML = `
+        ${_kv('Entrypoint', p.entrypoint || '—')}
+        ${_kv('Type', p.type || 'python')}
+        <div class="mt-3">
+            <h4 class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Runtime config</h4>
+            ${rows}
+        </div>
+    `;
+    return el;
+}
+
+function _pluginRelated(p, list) {
+    const el = document.createElement('div');
+    const siblings = list.filter(x => x.name !== p.name && (x.hook === p.hook || x.ring === p.ring)).slice(0, 10);
+    if (!siblings.length) {
+        el.innerHTML = `<p class="text-[11px] text-slate-600 font-mono">No other plugin in the ${p.hook || p.ring} ring.</p>`;
+        return el;
+    }
+    el.innerHTML = `
+        <p class="text-[11px] text-slate-400 mb-3">Other plugins in the same ring — they execute in sequence.</p>
+        ${siblings.map(s => `
+            <div class="py-2 border-b border-white/[0.04] last:border-0 cursor-pointer hover:bg-white/[0.02] -mx-2 px-2 rounded"
+                 data-drilldown="plugin:${s.name}">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-mono text-white">${s.name}</span>
+                    <span class="text-[9px] font-mono ${s.enabled !== false ? 'text-emerald-400' : 'text-slate-500'}">${s.enabled !== false ? 'ACTIVE' : 'DISABLED'}</span>
+                </div>
+                <p class="text-[9px] font-mono text-slate-500 truncate">${s.description || ''}</p>
+            </div>`).join('')}
+    `;
+    return el;
+}
+
+function _pluginActions(p) {
+    const el = document.createElement('div');
+    el.innerHTML = `<div class="flex flex-col gap-2"></div>`;
+    const wrap = el.firstElementChild;
+
+    const btn = (label, tone, handler) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = label;
+        b.className = `px-3 py-2 rounded-lg text-[11px] font-bold transition-colors border ${
+            tone === 'danger' ? 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border-rose-500/30'
+            : 'bg-white/5 hover:bg-white/10 text-slate-300 border-white/10'
+        }`;
+        b.addEventListener('click', handler);
+        return b;
+    };
+
+    wrap.appendChild(btn(p.enabled === false ? 'Enable plugin' : 'Disable plugin', 'default', async () => {
+        try {
+            await api.togglePlugin(p.name, p.enabled === false);
+            toast(`Plugin "${p.name}" toggled`, 'success');
+        } catch (e) {
+            toast(`Toggle failed: ${e.message}`, 'error');
+        }
+    }));
+    wrap.appendChild(btn('Uninstall', 'danger', async () => {
+        const ok = await dialog.confirm({
+            title: 'Uninstall plugin',
+            message: `Remove "${p.name}" from the pipeline? The proxy will hot-swap — in-flight requests finish through the old ring, new requests use the new one.`,
+            confirmLabel: 'Uninstall',
+            danger: true,
+        });
+        if (!ok) return;
+        try {
+            await api.uninstallPlugin(p.name);
+            toast(`Plugin "${p.name}" uninstalled`, 'success');
+        } catch (e) {
+            toast(`Uninstall failed: ${e.message}`, 'error');
+        }
+    }));
+    return el;
+}
+
 // ── Dispatcher ─────────────────────────────────────────────────────────────
 
 const TABS = ['overview', 'timeline', 'config', 'related', 'actions'];
@@ -361,6 +645,8 @@ const TABS = ['overview', 'timeline', 'config', 'related', 'actions'];
 function _titleFor(kind, id) {
     if (kind === 'endpoint') return `Endpoint · ${id}`;
     if (kind === 'request') return `Request · ${id}`;
+    if (kind === 'model') return `Model · ${id}`;
+    if (kind === 'plugin') return `Plugin · ${id}`;
     return `${kind} · ${id}`;
 }
 
@@ -371,6 +657,8 @@ async function _open(kind, id) {
     try {
         if (kind === 'endpoint') tabs = await _endpointTabs(id);
         else if (kind === 'request') tabs = await _requestTabs(id);
+        else if (kind === 'model') tabs = await _modelTabs(id);
+        else if (kind === 'plugin') tabs = await _pluginTabs(id);
         else {
             handle.setBody(_errorBody(`No drilldown available for '${kind}'.`));
             return;
