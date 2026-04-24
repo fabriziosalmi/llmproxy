@@ -18,7 +18,7 @@ import { auth } from './services/auth.js';
 import { dialog } from './services/dialog.js';
 import { toast } from './services/toast.js';
 import { initExplain } from './services/explain.js';
-import { initDrilldown } from './services/drilldown.js';
+import { initDrilldown, drilldown } from './services/drilldown.js';
 import { initTimerange, timerange } from './services/timerange.js';
 
 // Global state listener — only re-render what changed (audit #24)
@@ -340,7 +340,14 @@ function initHUD() {
                     </div>
                     <div class="text-[9px] font-mono text-slate-500 bg-white/5 px-2 py-1 rounded">ENTER</div>
                 `;
-                item.onclick = () => { executeCommand(res.id); togglePalette(); };
+                item.onclick = () => {
+                    if (res.id.startsWith('__jump:') || res.id.startsWith('__hint:')) {
+                        _executeJump(res.id);
+                    } else {
+                        executeCommand(res.id);
+                        togglePalette();
+                    }
+                };
                 cmdList.appendChild(item);
             });
         }
@@ -356,8 +363,109 @@ function initHUD() {
             });
         }
 
-        input.addEventListener('input', () => {
-            const query = input.value.toLowerCase();
+        // Jump-to commands: typing `>` switches the palette into entity
+        // search mode. Syntax:
+        //   >          list the kinds (ep / model / plugin / req)
+        //   >ep <q>    filter endpoints by id / url / type
+        //   >model <q> filter /v1/models entries
+        //   >plugin <q> filter loaded plugins by name
+        //   >req <id>  direct drilldown on a request id
+        // Selecting a result opens the drilldown instead of executing a
+        // navigation command.
+        //
+        // Cache so the palette isn't slow on repeat opens.
+        const _jumpCache = { models: null, plugins: null };
+        async function _loadJumpCaches() {
+            if (!_jumpCache.models) {
+                _jumpCache.models = api.fetchModels().then(d => d.data || []).catch(() => []);
+            }
+            if (!_jumpCache.plugins) {
+                _jumpCache.plugins = api.fetchPlugins().then(d => Array.isArray(d) ? d : (d.plugins || d.data || [])).catch(() => []);
+            }
+        }
+
+        async function _jumpResults(raw) {
+            // Input: "ep ollama" / "model qwen" / "plugin smart" / "req abc"
+            // Or just "" → list kinds. Or "ep" with no arg → list all endpoints.
+            _loadJumpCaches();
+            const [kind, ...rest] = raw.trim().split(/\s+/);
+            const q = rest.join(' ').toLowerCase();
+
+            if (!kind) {
+                return [
+                    { id: '__hint:ep',     name: '> ep <query>',     desc: 'Jump to an endpoint drilldown' },
+                    { id: '__hint:model',  name: '> model <query>',  desc: 'Jump to a model drilldown' },
+                    { id: '__hint:plugin', name: '> plugin <query>', desc: 'Jump to a plugin drilldown' },
+                    { id: '__hint:req',    name: '> req <req_id>',   desc: 'Open a request audit entry' },
+                ];
+            }
+
+            if (kind === 'ep' || kind === 'endpoint') {
+                const registry = store.state.registry || [];
+                const matches = registry.filter(e =>
+                    !q || e.id.toLowerCase().includes(q)
+                       || (e.url || '').toLowerCase().includes(q)
+                       || (e.type || '').toLowerCase().includes(q));
+                return matches.slice(0, 8).map(e => ({
+                    id: `__jump:endpoint:${e.id}`, name: e.id, desc: `${e.status} · ${e.url}`,
+                }));
+            }
+
+            if (kind === 'model') {
+                const models = await _jumpCache.models;
+                const matches = (models || []).filter(m => !q || m.id.toLowerCase().includes(q));
+                return matches.slice(0, 8).map(m => ({
+                    id: `__jump:model:${m.id}`, name: m.id, desc: `owned_by: ${m.owned_by}`,
+                }));
+            }
+
+            if (kind === 'plugin') {
+                const plugins = await _jumpCache.plugins;
+                const matches = (plugins || []).filter(p => !q || p.name.toLowerCase().includes(q));
+                return matches.slice(0, 8).map(p => ({
+                    id: `__jump:plugin:${p.name}`, name: p.name,
+                    desc: `${p.hook || p.ring || ''} · ${p.enabled === false ? 'disabled' : 'active'}`,
+                }));
+            }
+
+            if (kind === 'req' || kind === 'request') {
+                if (!q) return [{ id: '__hint:req', name: '> req <req_id>', desc: 'Paste a request id from the audit log' }];
+                return [{ id: `__jump:request:${q}`, name: q, desc: 'Open audit drilldown (pulled from last 500 entries)' }];
+            }
+
+            return [];
+        }
+
+        // When Enter is pressed on an input like '>req abc123' without a
+        // concrete match in the list (direct jump), fall back to the typed id.
+        function _executeJump(pseudoId) {
+            // Format: __jump:<kind>:<id>
+            const m = pseudoId.match(/^__jump:([a-z]+):(.+)$/);
+            if (m) {
+                drilldown.open(m[1], m[2]);
+                togglePalette();
+                return true;
+            }
+            // Hints just leave the palette open with a prefilled prefix so the
+            // user can continue typing.
+            const h = pseudoId.match(/^__hint:([a-z]+)$/);
+            if (h) {
+                input.value = `>${h[1]} `;
+                input.focus();
+                input.dispatchEvent(new Event('input'));
+                return true;
+            }
+            return false;
+        }
+
+        input.addEventListener('input', async () => {
+            const raw = input.value;
+            if (raw.startsWith('>')) {
+                const results = await _jumpResults(raw.slice(1));
+                renderResults(results);
+                return;
+            }
+            const query = raw.toLowerCase();
             const results = commands.filter(c =>
                 c.name.toLowerCase().includes(query) ||
                 c.desc.toLowerCase().includes(query)
@@ -370,8 +478,13 @@ function initHUD() {
             else if (e.key === 'ArrowUp') { e.preventDefault(); highlightIdx(selectedIdx - 1); }
             else if (e.key === 'Enter' && lastResults[selectedIdx]) {
                 e.preventDefault();
-                executeCommand(lastResults[selectedIdx].id);
-                togglePalette();
+                const sel = lastResults[selectedIdx];
+                if (sel.id.startsWith('__jump:') || sel.id.startsWith('__hint:')) {
+                    _executeJump(sel.id);
+                } else {
+                    executeCommand(sel.id);
+                    togglePalette();
+                }
             }
         });
     }
