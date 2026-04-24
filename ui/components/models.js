@@ -80,7 +80,11 @@ function renderModelsTable(chatModels, embeddingModels) {
             ? '<span class="ml-2 px-1.5 py-0.5 text-[10px] font-bold bg-violet-500/20 text-violet-400 rounded">EMB</span>'
             : '';
         return `
-            <tr class="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors">
+            <tr class="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors cursor-pointer"
+                data-drilldown="model:${m.id}"
+                tabindex="0"
+                role="button"
+                aria-label="Inspect model ${m.id}">
                 <td class="px-4 py-2.5">
                     <span class="text-[11px] font-bold text-white font-mono">${m.id}</span>${badge}
                 </td>
