@@ -2,6 +2,22 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.11.1] — 2026-04-24
+
+### UI elevation — Sprint 2
+- **Drilldown `model` kind** — `/v1/models` rows and palette jump-tos (`>model <q>`) now open an entity drawer with: overview (providers, routable-via count, recent success / error / blocked / avg-latency / cost), timeline (audit slice for that model), config (advertised-by + routing rationale), related endpoints (clickable → endpoint drilldown), actions (edit guidance + curl smoke template).
+- **Drilldown `plugin` kind** — Plugin grid "Inspect" action + palette `>plugin <q>` open the same tab grammar: overview (enabled state, ring, fail policy, timeout, execution count), timeline (recent executions, fail reasons), config (entrypoint, type, runtime settings), related (other plugins in same ring), actions (toggle enable/disable, uninstall with hot-swap confirmation).
+- **Command palette is now a control surface** — typing `>` enters jump-to mode: `>ep ollama`, `>model qwen`, `>plugin smart_router`, `>req <id>`. Results are pulled live from the registry and cached across palette opens. Selection routes through the drilldown system without navigating away from the current view.
+
+### Validation
+- **Backend contract tests** (`tests/test_ui_backend_contract.py`) — pin the response shape of every endpoint the UI services consume (`/api/v1/guards/status`, `/api/v1/registry`, `/v1/models`, `/api/v1/plugins`, `/api/v1/audit`). If a backend refactor drops or renames a field the UI reads, CI fails before the regression reaches prod.
+- **UI service contract tests** (`tests/test_ui_service_contracts.py`) — static checks on `ui/services/*.js`: each service exports the symbols its consumers import; every relative service import resolves to a real export; key surfaces (guards, registry, models, plugins, security) actually carry `data-explain` / `data-drilldown` attributes.
+
+### Internal
+- Palette result click path distinguishes navigation commands (`view-*`) from jump-to commands (`__jump:<kind>:<id>`) so explore-style palette use stays keyboard-first.
+
+---
+
 ## [1.11.0] — 2026-04-24
 
 ### UI elevation — operator console, Sprint 1

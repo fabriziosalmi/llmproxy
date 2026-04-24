@@ -225,8 +225,9 @@ async function renderPluginList() {
                 ` : ''}
                 ${renderConfigFields(p)}
                 <div class="mt-2 pt-2 border-t border-white/[0.04] flex items-center justify-end gap-2">
-                    <button data-action="toggle-plugin" data-name="${p.name}" class="text-[10px] text-slate-500 hover:text-amber-400 px-2 py-0.5 rounded hover:bg-white/5 transition-colors">${enabled ? 'Disable' : 'Enable'}</button>
-                    <button data-action="uninstall-plugin" data-name="${p.name}" class="text-[10px] text-slate-500 hover:text-rose-400 px-2 py-0.5 rounded hover:bg-white/5 transition-colors">Uninstall</button>
+                    <button type="button" data-drilldown="plugin:${p.name}" class="text-[10px] text-slate-500 hover:text-cyan-400 px-2 py-0.5 rounded hover:bg-white/5 transition-colors">Inspect</button>
+                    <button type="button" data-action="toggle-plugin" data-name="${p.name}" class="text-[10px] text-slate-500 hover:text-amber-400 px-2 py-0.5 rounded hover:bg-white/5 transition-colors">${enabled ? 'Disable' : 'Enable'}</button>
+                    <button type="button" data-action="uninstall-plugin" data-name="${p.name}" class="text-[10px] text-slate-500 hover:text-rose-400 px-2 py-0.5 rounded hover:bg-white/5 transition-colors">Uninstall</button>
                 </div>
             `;
             grid.appendChild(card);
