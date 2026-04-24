@@ -106,6 +106,40 @@ async def dedup_cleanup_loop(deduplicator, interval: int = 60):
             logger.debug(f"Dedup cleanup error: {e}")
 
 
+async def local_discovery_loop(agent, interval: int = 300):
+    """Periodically re-probe local + peer OpenAI-compatible endpoints.
+
+    The boot-time auto-discovery only sees peers that are online at startup.
+    This loop re-runs the probe every ``interval`` seconds so endpoints that
+    come back online (peer reboot, LM Studio restarted, Ollama pulled a new
+    model, ...) get picked up without operator intervention.
+
+    Existing entries are kept as-is: the circuit breaker already handles
+    transient outages, and removing a registered endpoint mid-flight would
+    race in-progress requests. Only *new* responders are injected and
+    seeded into the persistence store for UI registry visibility.
+    """
+    from core.local_probe import discover_local_endpoints
+
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            before = set(agent.config.get("endpoints", {}).keys())
+            injected = await discover_local_endpoints(agent.config)
+            if injected:
+                new_ids = [ep_id for ep_id in injected if ep_id not in before]
+                if new_ids:
+                    await agent._seed_endpoints_from_config()
+                    logger.info(
+                        "Re-discovery added %d new endpoint(s): %s",
+                        len(new_ids), ", ".join(new_ids),
+                    )
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.warning("Local discovery loop failure: %s", e)
+
+
 async def retention_purge_loop(store, retention_days: int = 90, interval: int = 86400):
     """GDPR: periodically purge audit/spend records older than retention period.
 
