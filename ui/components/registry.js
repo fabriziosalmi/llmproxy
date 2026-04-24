@@ -4,6 +4,7 @@
 import { store } from '../services/store.js';
 import { api } from '../services/api.js';
 import { toast } from '../services/toast.js';
+import { dialog } from '../services/dialog.js';
 
 export async function fetchRegistry() {
     try {
@@ -205,7 +206,13 @@ LLM_PROXY_ENDPOINT_LOCAL_MODELS=llama-3.3-70b</code></pre>
                     await api.toggleEndpoint(id);
                     toast(`Endpoint ${id} toggled`, 'success');
                 } else if (action === 'delete') {
-                    if (!confirm(`Delete endpoint ${id}?`)) return;
+                    const ok = await dialog.confirm({
+                        title: 'Delete endpoint',
+                        message: `Remove "${id}" from the registry? Active traffic will be re-routed via the fallback chain.`,
+                        confirmLabel: 'Delete',
+                        danger: true,
+                    });
+                    if (!ok) return;
                     await api.deleteEndpoint(id);
                     toast(`Endpoint ${id} deleted`, 'success');
                 } else if (action === 'priority-up') {

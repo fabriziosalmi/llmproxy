@@ -3,6 +3,7 @@
  */
 import { api } from '../services/api.js';
 import { toast } from '../services/toast.js';
+import { dialog } from '../services/dialog.js';
 
 const RING_COLORS = {
     ingress: 'rose',
@@ -22,10 +23,13 @@ export async function initPlugins() {
             btn.textContent = 'Reloading...';
             btn.disabled = true;
             try {
-                await fetch(`${window.location.origin}/api/v1/plugins/hot-swap`, { method: 'POST' });
+                const res = await fetch(`${window.location.origin}/api/v1/plugins/hot-swap`, { method: 'POST' });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 await renderPluginList();
+                toast('Plugins hot-swapped', 'success');
             } catch (e) {
                 console.error('Plugin reload failed:', e);
+                toast(`Plugin reload failed: ${e.message || e}`, 'error');
             }
             btn.textContent = 'Reload';
             btn.disabled = false;
@@ -36,14 +40,22 @@ export async function initPlugins() {
     const rollbackBtn = document.getElementById('rollback-plugins-btn');
     if (rollbackBtn) {
         rollbackBtn.addEventListener('click', async () => {
-            if (!confirm('Rollback to previous plugin configuration?')) return;
+            const ok = await dialog.confirm({
+                title: 'Rollback plugin configuration',
+                message: 'Revert to the previous plugin configuration snapshot? Any changes made since will be lost.',
+                confirmLabel: 'Rollback',
+                danger: true,
+            });
+            if (!ok) return;
             rollbackBtn.textContent = 'Rolling back...';
             rollbackBtn.disabled = true;
             try {
                 await api.rollbackPlugins();
                 await renderPluginList();
+                toast('Plugin configuration rolled back', 'success');
             } catch (e) {
                 console.error('Rollback failed:', e);
+                toast(`Rollback failed: ${e.message || e}`, 'error');
             }
             rollbackBtn.textContent = 'Rollback';
             rollbackBtn.disabled = false;
@@ -208,7 +220,13 @@ async function renderPluginList() {
                         toast(`Plugin "${name}" ${plugin.enabled === false ? 'enabled' : 'disabled'}`, 'success');
                     }
                 } else if (action === 'uninstall-plugin') {
-                    if (!confirm(`Uninstall plugin "${name}"? This will hot-swap.`)) return;
+                    const ok = await dialog.confirm({
+                        title: 'Uninstall plugin',
+                        message: `Remove "${name}" from the pipeline? The proxy will hot-swap — in-flight requests finish through the old ring, new requests go through the new one.`,
+                        confirmLabel: 'Uninstall',
+                        danger: true,
+                    });
+                    if (!ok) return;
                     await api.uninstallPlugin(name);
                     await renderPluginList();
                     toast(`Plugin "${name}" uninstalled`, 'success');
