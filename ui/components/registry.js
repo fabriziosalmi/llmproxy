@@ -31,15 +31,25 @@ export function initRegistry() {
             const url = document.getElementById('ep-url')?.value?.trim();
             const provider = document.getElementById('ep-provider')?.value;
             const priority = document.getElementById('ep-priority')?.value || '0';
+            const apiKey = document.getElementById('ep-api-key')?.value || '';
+            const modelsRaw = document.getElementById('ep-models')?.value || '';
+            const models = modelsRaw.split(',').map(s => s.trim()).filter(Boolean);
             if (!id || !url) { toast('Name and URL are required', 'warning'); return; }
             addBtn.textContent = 'Adding...';
             addBtn.disabled = true;
             try {
-                await api.addEndpoint({ id, url, provider, priority: parseInt(priority) });
+                await api.addEndpoint({
+                    id, url, provider,
+                    priority: parseInt(priority),
+                    models,
+                    api_key: apiKey,
+                });
                 toast(`Endpoint "${id}" added`, 'success');
                 form.classList.add('hidden');
                 document.getElementById('ep-name').value = '';
                 document.getElementById('ep-url').value = '';
+                if (document.getElementById('ep-api-key')) document.getElementById('ep-api-key').value = '';
+                if (document.getElementById('ep-models')) document.getElementById('ep-models').value = '';
                 await fetchRegistry();
             } catch (e) {
                 toast(`Failed: ${e.message}`, 'error');
@@ -80,11 +90,35 @@ export function renderRegistry() {
 
     if (endpoints.length === 0) {
         container.innerHTML = `
-            <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-12 text-center">
-                <p class="text-sm text-slate-500">No endpoints registered</p>
-                <p class="text-[10px] text-slate-600 mt-1">Endpoints appear here when discovered or manually added.</p>
+            <div class="bg-gradient-to-br from-cyan-500/[0.06] to-violet-500/[0.06] backdrop-blur-xl rounded-2xl border border-cyan-500/20 p-10 text-center">
+                <div class="flex items-center justify-center mb-4">
+                    <div class="w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center">
+                        <svg class="w-6 h-6 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                    </div>
+                </div>
+                <h3 class="text-sm font-bold text-white mb-1">Welcome to LLMProxy</h3>
+                <p class="text-[11px] text-slate-400 mb-5 max-w-md mx-auto">No endpoints yet. Add your first provider to start routing requests. The proxy is running in onboarding mode &mdash; inference calls will 503 until an endpoint is added.</p>
+                <div class="flex items-center justify-center gap-2 mb-5">
+                    <button id="onboarding-add-ep" class="bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 text-[11px] font-bold px-4 py-2 rounded-lg transition-colors">
+                        Add first endpoint
+                    </button>
+                </div>
+                <details class="text-left max-w-lg mx-auto">
+                    <summary class="text-[10px] text-slate-500 cursor-pointer hover:text-slate-300">Prefer env vars? (LM Studio, vLLM, Ollama)</summary>
+                    <pre class="text-[10px] text-slate-400 mt-2 bg-black/30 rounded p-3 overflow-x-auto"><code># In .env then restart
+LLM_PROXY_ENDPOINT_LOCAL_URL=http://192.168.1.50:1234/v1
+LLM_PROXY_ENDPOINT_LOCAL_MODELS=llama-3.3-70b</code></pre>
+                </details>
             </div>
         `;
+        const onboardBtn = document.getElementById('onboarding-add-ep');
+        if (onboardBtn) {
+            onboardBtn.addEventListener('click', () => {
+                const form = document.getElementById('add-endpoint-form');
+                if (form) { form.classList.remove('hidden'); form.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+                document.getElementById('ep-name')?.focus();
+            });
+        }
         return;
     }
 

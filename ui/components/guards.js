@@ -38,10 +38,10 @@ const GUARD_INFO = {
     firewall: {
         name: 'ASGI Firewall',
         icon: `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z"/></svg>`,
-        desc: 'Byte-level ASGI middleware. 11 banned injection signatures scanned at L7 before any route handler. Kill-switch capable.',
+        desc: 'Byte-level ASGI middleware. 11 banned injection signatures scanned at L7 before any route handler. Toggle via LLM_PROXY_FIREWALL_ENABLED env var or security.firewall.enabled in config.yaml (restart required).',
         color: 'red',
         toggleable: false,
-        status: 'ALWAYS ON',
+        // status is computed dynamically from store.state.firewall — see renderGuards()
     },
     rate_limiter: {
         name: 'Rate Limiter',
@@ -158,10 +158,24 @@ export function renderGuards() {
     if (!grid) return;
 
     const features = store.state.features || {};
+    const firewallState = store.state.firewall || { enabled: true, disabled_reason: null };
     grid.innerHTML = '';
 
     for (const [key, info] of Object.entries(GUARD_INFO)) {
-        const enabled = info.toggleable ? features[key] !== false : true;
+        // The ASGI firewall is not user-toggleable from the UI (by design — a click
+        // would take L1 injection defense offline). Its live status is driven by
+        // env/config and surfaced read-only with the reason when disabled.
+        let enabled;
+        let statusLabel;
+        if (key === 'firewall') {
+            enabled = firewallState.enabled !== false;
+            statusLabel = enabled
+                ? 'ALWAYS ON'
+                : `OFF &middot; ${firewallState.disabled_reason || 'config'}`;
+        } else {
+            enabled = info.toggleable ? features[key] !== false : true;
+            statusLabel = info.status;
+        }
         const c = info.color;
 
         const card = document.createElement('div');
@@ -177,7 +191,7 @@ export function renderGuards() {
                         <div class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full transition-transform ${enabled ? `bg-${c}-400 translate-x-5` : 'bg-slate-500 translate-x-0'}"></div>
                     </button>
                 ` : `
-                    <span class="text-[10px] font-bold font-mono text-${c}-400/60 bg-${c}-500/10 px-2 py-0.5 rounded">${info.status}</span>
+                    <span class="text-[10px] font-bold font-mono ${enabled ? `text-${c}-400/60 bg-${c}-500/10` : 'text-slate-500 bg-slate-500/10'} px-2 py-0.5 rounded">${statusLabel}</span>
                 `}
             </div>
             <p class="text-[10px] text-slate-400 leading-relaxed">${info.desc}</p>

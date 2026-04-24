@@ -33,16 +33,22 @@ def validate_config(config: dict) -> list[str]:
                 f"  3. Restart the proxy"
             )
 
-    # 2. At least one endpoint configured
+    # 2. At least one endpoint configured — soft requirement.
+    #
+    # Zero endpoints is a legitimate first-run state: the user runs the
+    # installer, authenticates to the admin UI, and adds the first provider
+    # through the onboarding wizard. We warn loudly but do NOT abort —
+    # the UI and /health must stay reachable so the wizard can finish.
     endpoints = config.get("endpoints", {})
     if not endpoints:
-        raise StartupError(
-            "No LLM endpoints configured in config.yaml.\n"
-            "  Add at least one provider under 'endpoints:'.\n"
-            "  Quickstart: cp config.minimal.yaml config.yaml"
+        warnings.append(
+            "No LLM endpoints configured — starting in ONBOARDING MODE.\n"
+            "  Inference requests will 503 until at least one endpoint is added.\n"
+            "  Open http://<host>:<port>/ui and use the onboarding wizard,\n"
+            "  or set LLM_PROXY_ENDPOINT_<NAME>_URL=... in .env and restart."
         )
 
-    # 3. Provider API keys
+    # 3. Provider API keys — soft requirement, same rationale as above.
     active_providers = []
     for name, ep_cfg in endpoints.items():
         api_key_env = ep_cfg.get("api_key_env")
@@ -64,12 +70,11 @@ def validate_config(config: dict) -> list[str]:
                     f"  Set in .env: {api_key_env}=your-api-key"
                 )
 
-    if not active_providers:
-        raise StartupError(
-            "No endpoints have valid API keys configured.\n"
-            "  Set at least one provider key in .env. Example:\n"
-            "    OPENAI_API_KEY=sk-proj-...\n"
-            "  Then restart the proxy."
+    if endpoints and not active_providers:
+        warnings.append(
+            "No endpoints have valid API keys yet — starting in ONBOARDING MODE.\n"
+            "  Set a provider key in .env (e.g. OPENAI_API_KEY) and restart,\n"
+            "  or complete setup from the admin UI."
         )
 
     # 4. Config file sanity

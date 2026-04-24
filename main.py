@@ -29,7 +29,16 @@ async def main():
 
     config_file = os.environ.get("CONFIG_FILE", "config.yaml")
     with open(config_file, 'r') as f:
-        config = yaml.safe_load(f)
+        config = yaml.safe_load(f) or {}
+
+    # Apply env-based endpoint + WAF overlays so startup validation sees the
+    # same merged view the orchestrator will use (see ProxyOrchestrator._load_config).
+    from core.env_endpoints import inject_env_endpoints
+    inject_env_endpoints(config)
+    _firewall_env = os.environ.get("LLM_PROXY_FIREWALL_ENABLED")
+    if _firewall_env is not None:
+        _enabled = _firewall_env.strip().lower() not in ("0", "false", "off", "no", "")
+        config.setdefault("security", {}).setdefault("firewall", {})["enabled"] = _enabled
 
     # Validate configuration before proceeding
     from core.startup_checks import run_startup_checks

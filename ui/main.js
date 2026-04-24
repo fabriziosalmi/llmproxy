@@ -25,7 +25,7 @@ store.subscribe((state) => {
 
     // Only re-render view-specific components when relevant state changes
     if (state.registry !== _prevState.registry) renderRegistry();
-    if (state.features !== _prevState.features || state.proxyEnabled !== _prevState.proxyEnabled || state.priorityMode !== _prevState.priorityMode) renderGuards();
+    if (state.features !== _prevState.features || state.proxyEnabled !== _prevState.proxyEnabled || state.priorityMode !== _prevState.priorityMode || state.firewall !== _prevState.firewall) renderGuards();
     if (state.currentTab === 'security' && state.currentTab !== _prevState.currentTab) renderSecurity();
 
     _prevState = { ...state };

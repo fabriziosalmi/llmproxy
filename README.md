@@ -26,10 +26,15 @@ Security gateway for Large Language Models. Routes requests across 15 providers 
 
 ```bash
 git clone https://github.com/fabriziosalmi/llmproxy && cd llmproxy
-make setup                          # Install deps, create .env
-# Edit .env -- set LLM_PROXY_API_KEYS and at least one provider key
-make run                            # Start on port 8090
+./install.sh                        # Interactive — checks Python/Docker, creates .env, starts the proxy
+```
 
+The installer detects your platform, verifies prerequisites, generates a proxy auth key, and boots the service via Docker Compose v2 (preferred) or a local Python 3.12+ virtualenv. You can also run `./install.sh --docker`, `./install.sh --local`, or `./install.sh --check` for non-interactive use.
+
+**Start in onboarding mode with zero endpoints.** The proxy boots even without provider keys; open `http://localhost:8090/ui` and use the first-run wizard to add your first endpoint. Inference calls return 503 until an endpoint is configured.
+
+```bash
+# Once running
 curl http://localhost:8090/health
 curl http://localhost:8090/v1/chat/completions \
   -H "Authorization: Bearer $YOUR_KEY" \
@@ -37,12 +42,34 @@ curl http://localhost:8090/v1/chat/completions \
   -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}'
 ```
 
-Or with Docker:
+### Prerequisites
+
+- **Docker path**: Docker Engine + **Docker Compose v2 plugin** (`docker compose`). The legacy `docker-compose` v1 (Debian/Ubuntu apt) is NOT supported — it's incompatible with modern urllib3. On Debian/Ubuntu: `sudo apt install docker-compose-plugin`.
+- **Local path**: Python 3.12+ (Ubuntu 22.04 only ships 3.10 — install from the [deadsnakes PPA](https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa) or use the Docker path).
+
+### Local / self-hosted OpenAI-compatible endpoints via `.env`
+
+Declare LM Studio, vLLM, TGI, Ollama, or any OpenAI-compatible endpoint directly in `.env` — no YAML editing required:
 
 ```bash
-cp .env.example .env                # Edit with your API keys
-docker compose up -d
+LLM_PROXY_ENDPOINT_LMSTUDIO_URL=http://192.168.1.50:1234/v1
+LLM_PROXY_ENDPOINT_LMSTUDIO_MODELS=llama-3.3-70b,qwen-2.5-coder-32b
+# LLM_PROXY_ENDPOINT_LMSTUDIO_KEY=  # leave blank for no-auth local servers
 ```
+
+### Disabling the WAF (dev / integration tests)
+
+The byte-level ASGI firewall is on by default. Disable via env or config when fronting the proxy with another WAF or debugging a false positive:
+
+```bash
+LLM_PROXY_FIREWALL_ENABLED=0        # in .env, or
+# config.yaml:
+#   security:
+#     firewall:
+#       enabled: false
+```
+
+The admin UI reflects the live WAF state and the reason it's off. The switch is env/config-only by design — a one-click UI toggle would make L1 injection defense trivially removable.
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/fabriziosalmi/llmproxy)
 
