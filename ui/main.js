@@ -13,7 +13,7 @@ import { initLogs } from './components/logs.js';
 import { initPlugins } from './components/plugins.js';
 import { initModels } from './components/models.js';
 import { initAnalytics } from './components/analytics.js';
-import { renderSecurity } from './components/security.js';
+import { initSecurity, renderSecurity } from './components/security.js';
 import { auth } from './services/auth.js';
 import { dialog } from './services/dialog.js';
 import { toast } from './services/toast.js';
@@ -188,6 +188,7 @@ async function init() {
         { name: 'plugins', fn: initPlugins },
         { name: 'models', fn: initModels },
         { name: 'analytics', fn: initAnalytics },
+        { name: 'security', fn: initSecurity },
     ];
 
     initWrappers.forEach(w => {
