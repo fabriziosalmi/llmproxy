@@ -22,27 +22,28 @@
     <div class="nebula-grain"></div>
 
     <!-- Login Overlay -->
-    <div id="login-overlay" class="hidden fixed inset-0 z-[100] bg-[#050506]/98 backdrop-blur-2xl flex items-center justify-center">
+    <div id="login-overlay" class="hidden fixed inset-0 z-[100] bg-[#050506]/98 backdrop-blur-2xl flex items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="login-overlay-title" aria-describedby="login-overlay-desc">
         <div class="w-full max-w-sm mx-4">
             <div class="flex items-center justify-center gap-3 mb-8">
                 <div class="w-10 h-10 flex items-center justify-center">
-                    <svg class="w-10 h-10" viewBox="0 0 32 32">
+                    <svg class="w-10 h-10" viewBox="0 0 32 32" aria-hidden="true">
                         <circle cx="16" cy="16" r="14" fill="#0a0a0c" stroke="#f43f5e" stroke-width="1.5"/>
                         <ellipse cx="16" cy="16" rx="10" ry="7" fill="none" stroke="#f43f5e" stroke-width="1.5"/>
                         <circle cx="16" cy="16" r="3.5" fill="#f43f5e"/>
                         <circle cx="17.2" cy="14.8" r="1.2" fill="#fff" opacity="0.9"/>
                     </svg>
                 </div>
-                <span class="text-xl font-black text-white tracking-tight">LLMProxy</span>
+                <h1 id="login-overlay-title" class="text-xl font-black text-white tracking-tight">LLMProxy</h1>
             </div>
             <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6">
+                <p id="login-overlay-desc" class="sr-only">Sign in to LLMProxy. Choose an SSO provider or paste your API key.</p>
                 <div id="login-providers" class="space-y-3 mb-4"></div>
-                <div id="login-error" class="hidden mb-3 px-3 py-2 bg-rose-500/10 border border-rose-500/20 rounded-lg text-[10px] text-rose-400 font-mono"></div>
+                <div id="login-error" class="hidden mb-3 px-3 py-2 bg-rose-500/10 border border-rose-500/20 rounded-lg text-[10px] text-rose-400 font-mono" role="alert" aria-live="polite"></div>
                 <div class="border-t border-white/10 pt-4">
-                    <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">API Key</label>
+                    <label for="login-api-key" class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">API Key</label>
                     <div class="flex gap-2">
-                        <input id="login-api-key" type="password" placeholder="sk-..." class="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-rose-500/50">
-                        <button id="login-api-key-btn" class="px-4 py-2 bg-rose-500/20 text-rose-400 rounded-lg text-xs font-bold hover:bg-rose-500/30 transition-colors">Enter</button>
+                        <input id="login-api-key" type="password" placeholder="sk-..." autocomplete="current-password" aria-describedby="login-error" class="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white font-mono focus:border-rose-500/50">
+                        <button id="login-api-key-btn" class="px-4 py-2 bg-rose-500/20 text-rose-400 rounded-lg text-xs font-bold hover:bg-rose-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">Enter</button>
                     </div>
                 </div>
             </div>
@@ -436,11 +437,11 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                         <div>
                             <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Name *</label>
-                            <input id="install-name" type="text" placeholder="my_plugin" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50">
+                            <input id="install-name" type="text" placeholder="my_plugin" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:border-emerald-500/50">
                         </div>
                         <div>
                             <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Hook (Ring) *</label>
-                            <select id="install-hook" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50 bg-[#0a0a0c]">
+                            <select id="install-hook" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:border-emerald-500/50 bg-[#0a0a0c]">
                                 <option value="ingress">ingress (Ring 1)</option>
                                 <option value="pre_flight">pre_flight (Ring 2)</option>
                                 <option value="routing">routing (Ring 3)</option>
@@ -450,24 +451,24 @@
                         </div>
                         <div>
                             <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Entrypoint *</label>
-                            <input id="install-entrypoint" type="text" placeholder="marketplace/my_plugin:MyPlugin" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50">
+                            <input id="install-entrypoint" type="text" placeholder="marketplace/my_plugin:MyPlugin" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:border-emerald-500/50">
                         </div>
                         <div>
                             <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Timeout (ms)</label>
-                            <input id="install-timeout" type="number" value="500" min="10" max="5000" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50">
+                            <input id="install-timeout" type="number" value="500" min="10" max="5000" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:border-emerald-500/50">
                         </div>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                         <div>
                             <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Fail Policy</label>
-                            <select id="install-fail-policy" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50 bg-[#0a0a0c]">
+                            <select id="install-fail-policy" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:border-emerald-500/50 bg-[#0a0a0c]">
                                 <option value="open">open (fail-open)</option>
                                 <option value="closed">closed (fail-closed)</option>
                             </select>
                         </div>
                         <div>
                             <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Description</label>
-                            <input id="install-description" type="text" placeholder="What does this plugin do?" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50">
+                            <input id="install-description" type="text" placeholder="What does this plugin do?" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:border-emerald-500/50">
                         </div>
                     </div>
                     <div class="flex items-center justify-end gap-2">
@@ -493,15 +494,15 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                         <div>
                             <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Name / ID *</label>
-                            <input id="ep-name" type="text" placeholder="my-openai" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50">
+                            <input id="ep-name" type="text" placeholder="my-openai" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:border-emerald-500/50">
                         </div>
                         <div>
                             <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Base URL *</label>
-                            <input id="ep-url" type="text" placeholder="https://api.openai.com/v1" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50">
+                            <input id="ep-url" type="text" placeholder="https://api.openai.com/v1" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:border-emerald-500/50">
                         </div>
                         <div>
                             <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Provider *</label>
-                            <select id="ep-provider" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none bg-[#0a0a0c]">
+                            <select id="ep-provider" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono bg-[#0a0a0c]">
                                 <option value="openai-compatible">OpenAI-compatible (local / vLLM / LM Studio)</option>
                                 <option value="openai">OpenAI</option>
                                 <option value="anthropic">Anthropic</option>
@@ -517,15 +518,15 @@
                         </div>
                         <div>
                             <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Priority</label>
-                            <input id="ep-priority" type="number" value="0" min="0" max="100" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none">
+                            <input id="ep-priority" type="number" value="0" min="0" max="100" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono">
                         </div>
                         <div class="md:col-span-2">
                             <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">API Key <span class="text-slate-600 normal-case tracking-normal">(optional &mdash; leave blank for no-auth local servers)</span></label>
-                            <input id="ep-api-key" type="password" placeholder="sk-..." autocomplete="new-password" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50">
+                            <input id="ep-api-key" type="password" placeholder="sk-..." autocomplete="new-password" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:border-emerald-500/50">
                         </div>
                         <div class="md:col-span-2">
                             <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Models <span class="text-slate-600 normal-case tracking-normal">(comma-separated)</span></label>
-                            <input id="ep-models" type="text" placeholder="gpt-4o, gpt-4o-mini" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-emerald-500/50">
+                            <input id="ep-models" type="text" placeholder="gpt-4o, gpt-4o-mini" class="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono focus:border-emerald-500/50">
                         </div>
                     </div>
                     <div class="flex items-center justify-end gap-2">
@@ -555,7 +556,7 @@
                     </div>
                 </div>
                 <div class="mb-4">
-                    <input id="models-search" type="text" placeholder="Filter models..." class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-[10px] text-white font-mono w-64 focus:outline-none focus:border-sky-500/50">
+                    <input id="models-search" type="text" placeholder="Filter models..." class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-[10px] text-white font-mono w-64 focus:border-sky-500/50">
                 </div>
                 <div id="models-table" class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6">
                 </div>
@@ -642,7 +643,7 @@
                         <div>
                             <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Export Subject Data (DSAR)</label>
                             <div class="flex gap-2">
-                                <input id="sec-gdpr-subject" type="text" placeholder="session_id or email..." class="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-[10px] text-white font-mono focus:outline-none focus:border-rose-500/50">
+                                <input id="sec-gdpr-subject" type="text" placeholder="session_id or email..." class="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-[10px] text-white font-mono focus:border-rose-500/50">
                                 <button id="sec-gdpr-export-btn" class="px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[10px] font-bold text-slate-400 transition-colors">Export</button>
                             </div>
                         </div>
@@ -674,14 +675,14 @@
                         <button id="sec-audit-query-btn" class="px-3 py-1.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 rounded-lg text-[10px] font-bold transition-colors">Query</button>
                     </div>
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
-                        <input id="audit-model" type="text" placeholder="Model filter..." class="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-sky-500/50">
-                        <input id="audit-key" type="text" placeholder="Key prefix..." class="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-[10px] text-white font-mono focus:outline-none focus:border-sky-500/50">
-                        <select id="audit-blocked" class="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-[10px] text-white font-mono focus:outline-none bg-[#0a0a0c]">
+                        <input id="audit-model" type="text" placeholder="Model filter..." class="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-[10px] text-white font-mono focus:border-sky-500/50">
+                        <input id="audit-key" type="text" placeholder="Key prefix..." class="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-[10px] text-white font-mono focus:border-sky-500/50">
+                        <select id="audit-blocked" class="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-[10px] text-white font-mono bg-[#0a0a0c]">
                             <option value="-1">All requests</option>
                             <option value="1">Blocked only</option>
                             <option value="0">Passed only</option>
                         </select>
-                        <input id="audit-limit" type="number" value="25" min="1" max="500" class="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-[10px] text-white font-mono focus:outline-none">
+                        <input id="audit-limit" type="number" value="25" min="1" max="500" class="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-[10px] text-white font-mono">
                     </div>
                     <div id="sec-audit-results" class="max-h-80 overflow-y-auto">
                         <p class="text-[10px] text-slate-600 font-mono">Click "Query" to load audit entries.</p>
@@ -695,7 +696,7 @@
                     <div class="flex items-center justify-between mb-3">
                         <h2 class="text-xs font-bold text-white">Security Audit Log</h2>
                         <div class="flex items-center gap-2">
-                            <input id="log-filter" type="text" placeholder="Filter..." class="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono w-48 focus:outline-none focus:border-rose-500/50">
+                            <input id="log-filter" type="text" placeholder="Filter..." class="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono w-48 focus:border-rose-500/50">
                             <button id="clear-logs-btn" class="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[10px] font-bold text-slate-400">Clear</button>
                         </div>
                     </div>
@@ -773,7 +774,7 @@
     <div id="cmd-palette-overlay" class="hidden fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm items-center justify-center" role="dialog" aria-modal="true" aria-label="Command palette">
         <div id="cmd-palette-box" class="w-full max-w-lg mx-4 bg-[#0a0a0c]/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl scale-95 opacity-0 transition-all duration-200">
             <div class="p-4 border-b border-white/[0.06]">
-                <input id="cmd-input" type="text" placeholder="Search commands..." class="w-full bg-transparent text-sm text-white placeholder-slate-500 focus:outline-none font-mono" role="combobox" aria-expanded="true" aria-controls="cmd-list" aria-autocomplete="list">
+                <input id="cmd-input" type="text" placeholder="Search commands..." class="w-full bg-transparent text-sm text-white placeholder-slate-500 font-mono" role="combobox" aria-expanded="true" aria-controls="cmd-list" aria-autocomplete="list">
             </div>
             <div id="cmd-list" class="p-2 max-h-64 overflow-y-auto" role="listbox"></div>
         </div>
