@@ -47,20 +47,26 @@ class TestStartupChecks:
         with pytest.raises(StartupError, match="LLM_PROXY_API_KEYS"):
             validate_config(self._valid_config())
 
-    def test_no_endpoints_raises(self):
-        from core.startup_checks import validate_config, StartupError
+    def test_no_endpoints_warns(self):
+        """Zero endpoints is a valid onboarding state — warn, never abort.
+
+        The admin UI must be reachable so the first-run wizard can register
+        the first provider without patching files.
+        """
+        from core.startup_checks import validate_config
         os.environ["LLM_PROXY_API_KEYS"] = "sk-proxy-test"
         config = self._valid_config()
         config["endpoints"] = {}
-        with pytest.raises(StartupError, match="No LLM endpoints"):
-            validate_config(config)
+        warnings = validate_config(config)
+        assert any("ONBOARDING" in w for w in warnings)
 
-    def test_no_active_providers_raises(self):
-        from core.startup_checks import validate_config, StartupError
+    def test_no_active_providers_warns(self):
+        """Endpoints declared but no API keys yet — still start in onboarding mode."""
+        from core.startup_checks import validate_config
         os.environ["LLM_PROXY_API_KEYS"] = "sk-proxy-test"
         os.environ.pop("OPENAI_API_KEY", None)
-        with pytest.raises(StartupError, match="No endpoints have valid"):
-            validate_config(self._valid_config())
+        warnings = validate_config(self._valid_config())
+        assert any("ONBOARDING" in w for w in warnings)
 
     def test_auth_disabled_skips_key_check(self):
         from core.startup_checks import validate_config

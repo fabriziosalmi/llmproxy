@@ -181,8 +181,23 @@ class ProxyOrchestrator(BaseAgent):
     def _load_config(self):
         if os.path.exists(self.config_path):
             with open(self.config_path, 'r') as f:
-                return yaml.safe_load(f)
-        return {"server": {"auth": {"enabled": False}}}
+                cfg = yaml.safe_load(f) or {}
+        else:
+            cfg = {"server": {"auth": {"enabled": False}}}
+
+        # Env-based endpoint overlay — runs on every config reload (boot + hot
+        # reload watcher). Keeps LLM_PROXY_ENDPOINT_<NAME>_* declarations in
+        # sync with the live config without requiring YAML edits.
+        from core.env_endpoints import inject_env_endpoints
+        inject_env_endpoints(cfg)
+
+        # Env override for the WAF toggle. Applied after YAML so env wins.
+        firewall_env = os.environ.get("LLM_PROXY_FIREWALL_ENABLED")
+        if firewall_env is not None:
+            enabled = firewall_env.strip().lower() not in ("0", "false", "off", "no", "")
+            cfg.setdefault("security", {}).setdefault("firewall", {})["enabled"] = enabled
+
+        return cfg
 
     def _compute_config_hash_sync(self) -> str:
         """Blocking hash — must run via to_thread() from async context."""
@@ -348,6 +363,17 @@ class ProxyOrchestrator(BaseAgent):
         self._spawn_task(config_watch_loop(self, 30))
         self._spawn_task(write_flush_loop(self, 0.25))
 
+        # Auto-discover local OpenAI-compatible providers (Ollama, LM Studio,
+        # vLLM, LiteLLM) before seeding. Zero-config path for the developer
+        # who already has a local provider running — no YAML or .env edits.
+        try:
+            from core.local_probe import discover_local_endpoints
+            discovered = await discover_local_endpoints(self.config)
+            if discovered:
+                self._discovered_local = discovered
+        except Exception as e:
+            logger.debug("Local discovery skipped: %s", e)
+
         # Seed endpoints from config.yaml into the database
         # so they appear in the UI registry and are available for routing.
         await self._seed_endpoints_from_config()
@@ -373,6 +399,17 @@ class ProxyOrchestrator(BaseAgent):
             port = self.config.get("server", {}).get("port", 8090)
         host = self.config.get("server", {}).get("host", "0.0.0.0")  # nosec B104
         await self.setup()
+        try:
+            from core.ready_banner import print_ready_banner
+            print_ready_banner(
+                self.config,
+                bind_host=host,
+                bind_port=port,
+                firewall_enabled=getattr(self, "firewall_enabled", True),
+                firewall_reason=getattr(self, "firewall_disabled_reason", None),
+            )
+        except Exception as e:  # banner is informational — never fail startup on it
+            self.logger.debug("Ready banner skipped: %s", e)
         config = uvicorn.Config(self.app, host=host, port=port, log_level="info")
         server = uvicorn.Server(config)
         await server.serve()

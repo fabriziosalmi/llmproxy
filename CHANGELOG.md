@@ -2,6 +2,43 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.10.11] — 2026-04-24
+
+### Zero-friction onboarding
+- **Guided installer** — new `./install.sh` detects OS/distro, verifies Python 3.12+ and Docker Compose v2, blocks legacy `docker-compose` v1 (broken against modern urllib3), generates a random proxy auth key into `.env`, and starts the service with a post-boot health probe. Non-interactive modes: `--docker`, `--local`, `--check`, `--yes`.
+- **Onboarding mode** — the proxy no longer aborts when zero providers are configured. `/health`, the admin UI, and `POST /api/v1/registry` stay reachable so the first-run wizard can complete setup from the browser. Inference requests return 503 until an endpoint is ready.
+- **Boot banner** — at startup the proxy prints a copy-paste-ready summary: listening URL, active providers tagged by source (`[config]`/`[env]`/`[ui]`/`[auto-discovery]`) with model samples, WAF state + reason, auth state, and a runnable smoke-test curl using the first available model.
+
+### Auto-discovery of local and Tailscale LLM hosts
+- **Loopback probe** — new `core/local_probe.py` scans `127.0.0.1` and `host.docker.internal` on ports 11434 (Ollama), 1234 (LM Studio), 8000 (vLLM), 4000 (LiteLLM). Responders register automatically as `openai-compatible` endpoints with their real model list.
+- **Remote peers** — `LLM_PROXY_DISCOVERY_PEERS=host[,host:port,...]` extends the probe to Tailscale peers, LAN nodes, or any reachable host. Discovered entries get a stable host-tagged id (`lmstudio-100-98-112-23`) so multiple peers never collide.
+- **Collision-safe** — user-configured endpoints are never clobbered; discovered duplicates register as `<provider>-auto` so both remain visible.
+- **Docker bridge** — `docker-compose.yml` now sets `extra_hosts: host.docker.internal:host-gateway` so Linux containers reach host-bound providers without manual setup.
+
+### Env-based OpenAI-compatible endpoints
+- New `core/env_endpoints.py` parses `LLM_PROXY_ENDPOINT_<NAME>_URL/KEY/MODELS/PROVIDER` at every config load and merges results into `config['endpoints']`. No YAML edits needed to bring up LM Studio, vLLM, TGI, Ollama, or private OpenAI-compatible APIs.
+
+### WAF toggle
+- **Env + config surface** — `LLM_PROXY_FIREWALL_ENABLED=0` or `security.firewall.enabled: false` skips the `ByteLevelFirewallMiddleware` with a visible startup warning.
+- **Admin API** — `GET /api/v1/guards/status` now exposes `firewall.enabled` and `firewall.disabled_reason`.
+- **UI** — Guards view reflects live WAF state with the origin of the decision (`env:…` / `config:…`). Read-only by design — no click-to-disable from the browser.
+
+### UI improvements
+- **Endpoints empty state** — redesigned as an onboarding wizard card ("Add first endpoint" CTA plus an env-var snippet) instead of a plain message.
+- **Add-endpoint form** — now accepts API key (optional, held in a process-local env var) and model list. `POST /api/v1/registry` mirrors the new entry into live `config['endpoints']` so the forwarder can route to it without restart.
+- **Provider dropdown** — OpenAI-compatible (local / vLLM / LM Studio) is now the first option.
+
+### Observability hygiene
+- **Health prober** — skips endpoints with unresolved placeholders in `base_url` (`{resource}`, `CHANGE-ME`) with a single informative log line at startup.
+- **Rate-limited probe logs** — repeated steady-state failures are demoted to DEBUG; only state transitions (OK↔FAIL) log at WARNING. Fixes the ~20 WARN-per-minute noise on misconfigured defaults.
+- **Skip open circuits** — the prober no longer hammers endpoints whose circuit breaker is open.
+
+### Breaking-ish
+- `startup_checks.validate_config` no longer raises on missing endpoints / missing provider keys — it returns warnings instead. Callers that relied on the exception (only `test_no_endpoints_raises` / `test_no_active_providers_raises` in the internal suite) have been updated to assert on the new "ONBOARDING MODE" warning text.
+- `docker-compose.yml` dropped the obsolete `version:` key (Compose v2 emits a warning). An explicit comment forbids legacy `docker-compose` v1 usage.
+
+---
+
 ## [1.10.8] — 2026-03-30
 
 ### UI: Full Gap Analysis Closure

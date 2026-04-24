@@ -1,5 +1,8 @@
-version: "3.9"
-
+# Requires Docker Compose v2 (`docker compose`, the plugin).
+# Legacy `docker-compose` v1 is NOT supported — it breaks with modern
+# urllib3 (HTTPConnection.request() got an unexpected keyword argument 'chunked').
+# Install the plugin: sudo apt install docker-compose-plugin (Debian/Ubuntu)
+# or see https://docs.docker.com/compose/install/linux/
 services:
   llmproxy:
     build: .
@@ -17,6 +20,11 @@ services:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
+    # Make the Docker host reachable as `host.docker.internal` from inside the
+    # container on Linux (macOS/Windows Desktop already provide this alias).
+    # Needed for auto-discovery of locally-running Ollama/LM Studio/vLLM.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/health')"]
       interval: 30s
