@@ -10,11 +10,24 @@ import { dialog } from '../services/dialog.js';
 
 let _initialized = false;
 
+/**
+ * Wire Security-view event listeners at page load, matching the init/render
+ * split used by every other component. Previously the listeners were lazy-
+ * attached only when renderSecurity() fired on a tab transition — so if the
+ * user landed directly on #/security (reload, deep link, stale cache) the
+ * subscribe transition could be missed and the Audit Query / GDPR buttons
+ * would silently do nothing.
+ */
+export function initSecurity() {
+    if (_initialized) return;
+    _initListeners();
+    _initialized = true;
+}
+
 export async function renderSecurity() {
-    if (!_initialized) {
-        _initListeners();
-        _initialized = true;
-    }
+    // Defensive: if main.js ever drops initSecurity from the initWrappers
+    // list, we still attach listeners before the first data load.
+    initSecurity();
     await Promise.allSettled([
         _loadGuardsStatus(),
         _loadRetention(),
