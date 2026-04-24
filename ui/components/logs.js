@@ -68,6 +68,7 @@ export function initLogs() {
     // Connect Log Stream — defer until auth token is available
     const BASE_URL = window.location.origin;
     term.writeln('\x1b[32m[SYSTEM]\x1b[0m Waiting for neural traffic link...');
+    setStreamStatus('waiting', 'waiting for auth');
 
     function connectLogStream() {
         const token = localStorage.getItem('proxy_key') || '';
@@ -77,13 +78,37 @@ export function initLogs() {
             return;
         }
         if (store.state.logSource) store.state.logSource.close();
+        setStreamStatus('connecting', 'connecting…');
         const logSource = new EventSource(`${BASE_URL}/api/v1/logs?token=${encodeURIComponent(token)}`);
         store.update({ logSource });
-        logSource.onmessage = onLogMessage;
+        logSource.onopen = () => setStreamStatus('live', 'live');
+        logSource.onmessage = (ev) => {
+            setStreamStatus('live', 'live');
+            onLogMessage(ev);
+        };
         logSource.onerror = () => {
-            // Reconnect after delay (token may have expired)
+            // Explicitly tell the operator the stream dropped — prior behavior
+            // silently retried and the terminal looked merely quiet.
+            setStreamStatus('reconnect', 'reconnecting in 5s…');
+            term.writeln('\x1b[33m[SYSTEM]\x1b[0m Log stream disconnected — reconnecting in 5s.');
             setTimeout(connectLogStream, 5000);
         };
+    }
+
+    function setStreamStatus(state, label) {
+        const dot = document.getElementById('log-stream-dot');
+        const text = document.getElementById('log-stream-label');
+        if (!dot || !text) return;
+        const map = {
+            waiting:   { color: 'bg-slate-500',    tone: 'text-slate-500' },
+            connecting:{ color: 'bg-amber-400 animate-pulse', tone: 'text-amber-400' },
+            live:      { color: 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]', tone: 'text-emerald-400' },
+            reconnect: { color: 'bg-rose-500 animate-pulse',  tone: 'text-rose-400' },
+        };
+        const cfg = map[state] || map.waiting;
+        dot.className = `w-1.5 h-1.5 rounded-full ${cfg.color}`;
+        text.className = `font-mono ${cfg.tone}`;
+        text.textContent = label;
     }
 
     function onLogMessage(event) {
@@ -104,6 +129,18 @@ export function initLogs() {
                 term.clear();
                 term.writeln('\x1b[33m[SYSTEM] Terminal buffer cleared.\x1b[0m');
             }
+        });
+    }
+
+    // Click the Paused badge to jump back to bottom and resume autoscroll.
+    const pausedBadge = document.getElementById('log-paused-badge');
+    if (pausedBadge) {
+        pausedBadge.addEventListener('click', () => {
+            if (!term) return;
+            term.scrollToBottom();
+            pausedBadge.classList.add('hidden', 'opacity-0');
+            const count = document.getElementById('log-missed-count');
+            if (count) count.textContent = '0';
         });
     }
 }
