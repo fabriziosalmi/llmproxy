@@ -237,7 +237,7 @@ LLM_PROXY_ENDPOINT_LOCAL_MODELS=llama-3.3-70b</code></pre>
                 <span class="text-[9px] font-bold text-${statusColor}-400 bg-${statusColor}-500/10 px-2 py-0.5 rounded">${ep.status}</span>
             </td>
             <td class="px-4 py-3">
-                <div class="flex items-center gap-1.5">
+                <div class="flex items-center gap-1.5" data-explain="circuit:${ep.id}">
                     <div class="w-2 h-2 rounded-full ${circuit.dot} shadow-[0_0_6px]"></div>
                     <span class="text-[9px] font-bold font-mono ${circuit.text}">${circuit.label}</span>
                     ${(ep.failure_count || 0) > 0 ? `<span class="text-[10px] font-mono text-slate-600">${ep.failure_count}/${ep.failure_threshold || 5}</span>` : ''}
@@ -256,9 +256,10 @@ LLM_PROXY_ENDPOINT_LOCAL_MODELS=llama-3.3-70b</code></pre>
                 </div>
             </td>
             <td class="px-4 py-3 text-right">
-                <button data-action="reset-cb" data-id="${ep.id}" class="text-[9px] text-slate-500 hover:text-emerald-400 px-2 py-1 rounded hover:bg-white/5 transition-colors">Reset CB</button>
-                <button data-action="toggle" data-id="${ep.id}" class="text-[9px] text-slate-500 hover:text-amber-400 px-2 py-1 rounded hover:bg-white/5 transition-colors">Toggle</button>
-                <button data-action="delete" data-id="${ep.id}" class="text-[9px] text-slate-500 hover:text-rose-400 px-2 py-1 rounded hover:bg-white/5 transition-colors">Delete</button>
+                <button type="button" data-drilldown="endpoint:${ep.id}" class="text-[9px] text-slate-500 hover:text-cyan-400 px-2 py-1 rounded hover:bg-white/5 transition-colors">Inspect</button>
+                <button type="button" data-action="reset-cb" data-id="${ep.id}" class="text-[9px] text-slate-500 hover:text-emerald-400 px-2 py-1 rounded hover:bg-white/5 transition-colors">Reset CB</button>
+                <button type="button" data-action="toggle" data-id="${ep.id}" class="text-[9px] text-slate-500 hover:text-amber-400 px-2 py-1 rounded hover:bg-white/5 transition-colors">Toggle</button>
+                <button type="button" data-action="delete" data-id="${ep.id}" class="text-[9px] text-slate-500 hover:text-rose-400 px-2 py-1 rounded hover:bg-white/5 transition-colors">Delete</button>
             </td>
         `;
         tbody.appendChild(row);
