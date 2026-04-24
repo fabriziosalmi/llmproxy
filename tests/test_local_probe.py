@@ -1,7 +1,6 @@
 """Unit tests for core/local_probe.py — local + peer auto-discovery."""
 
 import asyncio
-import os
 from unittest.mock import patch
 
 import pytest
