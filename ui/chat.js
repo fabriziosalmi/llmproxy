@@ -3,6 +3,8 @@
  * Safe markdown rendering (no innerHTML on user content), TPS metrics, provider labels.
  */
 
+import { dialog } from './services/dialog.js';
+
 const BASE = window.location.origin;
 const messagesEl = document.getElementById('messages');
 const inputEl = document.getElementById('input');
@@ -78,30 +80,60 @@ function renderMarkdown(text) {
 
 // ── Init ──
 
-async function init() {
+async function loadModels() {
     try {
         const res = await fetch(`${BASE}/v1/models`, { headers: authHeaders() });
-        if (res.ok) {
-            const data = await res.json();
-            const models = (data.data || []).filter(m => !m.id.includes('embed'));
-            models.forEach(m => {
-                const opt = document.createElement('option');
-                opt.value = m.id;
-                opt.textContent = `${m.id} (${m.owned_by})`;
-                modelSelect.appendChild(opt);
-            });
-            setStatus('live');
-        } else {
-            setStatus('offline');
-        }
-    } catch {
-        setStatus('offline');
+        if (!res.ok) return { ok: false, status: res.status };
+        const data = await res.json();
+        const models = (data.data || []).filter(m => !m.id.includes('embed'));
+        // Clear any pre-existing entries so re-bootstrapping after a key
+        // change doesn't duplicate the list.
+        modelSelect.innerHTML = '';
+        models.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.id;
+            opt.textContent = `${m.id} (${m.owned_by})`;
+            modelSelect.appendChild(opt);
+        });
+        return { ok: true, count: models.length };
+    } catch (e) {
+        return { ok: false, error: e };
     }
+}
 
-    if (!getToken()) {
-        const key = prompt('Enter your LLMProxy API key:');
-        if (key) localStorage.setItem('proxy_key', key);
+async function bootstrap() {
+    const result = await loadModels();
+    if (result.ok) {
+        setStatus('live');
+        return true;
     }
+    // 401/403 means we need a key; network failures go to Offline.
+    if (result.status === 401 || result.status === 403 || !getToken()) {
+        const key = await dialog.prompt({
+            title: 'LLMProxy API key required',
+            message: 'Paste the Bearer key the proxy gave you at install (see $LLM_PROXY_API_KEYS in .env).',
+            label: 'API key',
+            inputType: 'password',
+            placeholder: 'sk-proxy-…',
+            confirmLabel: 'Connect',
+            validate: (v) => v.trim() ? null : 'Key is required',
+        });
+        if (!key) { setStatus('offline'); return false; }
+        localStorage.setItem('proxy_key', key.trim());
+        // Re-run: load models with the new key, update status. Fixes the
+        // dead-end state where saving a valid key still left the UI marked
+        // Offline until a full page reload.
+        const retry = await loadModels();
+        if (retry.ok) { setStatus('live'); return true; }
+        setStatus('offline');
+        return false;
+    }
+    setStatus('offline');
+    return false;
+}
+
+async function init() {
+    await bootstrap();
 }
 
 function setStatus(state) {

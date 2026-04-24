@@ -2,6 +2,21 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.10.12] — 2026-04-24
+
+### UI trust & operability (P0 from review)
+- **Login actually validates** — the dashboard API-key login used to save any non-empty string to `localStorage` and close the overlay, surfacing auth failures only in later silent 401s. It now probes `GET /api/v1/version` with the Bearer token, shows a loading state, inline error message on invalid key, and keeps the overlay open until the backend accepts the key.
+- **Login overlay is a real dialog** — added `role="dialog"`, `aria-modal="true"`, `aria-labelledby`, initial focus on the API-key field, and a keyboard focus trap. The backdrop no longer lets Tab escape into the dim-but-reachable UI underneath.
+- **Chat first-run no longer dead-ends** — `ui/chat.js` previously marked the UI Offline on the initial unauthenticated `/v1/models` probe and never re-ran bootstrap after the user typed a key. Re-bootstrap is now explicit: save key → reload models → update status without a page reload.
+- **In-app modal primitives** — new `ui/services/dialog.js` exposes promise-based `dialog.confirm()` and `dialog.prompt()` matching the product's glassmorphic style, with `role="dialog"`, focus trap, Escape-to-cancel, Enter-to-confirm, restored focus on close. Native `window.prompt()` / `window.confirm()` removed from chat key capture, kill switch, delete endpoint, rollback plugins, uninstall plugin, and GDPR erase.
+- **Keyboard focus indicators restored** — `focus:outline-none` stripped from 22 input / select / textarea elements across `ui/index.html` and `ui/chat.html` (auth, install plugin, add endpoint, filter, GDPR, audit, chat composer). The global `*:focus-visible` rule in `style.css` now draws the 2 px Apple-blue outline on keyboard focus for the core forms.
+
+### Internal
+- `ui/chat.html` now loads `chat.js` as an ES module so it can import the shared dialog primitive.
+- `ui/main.js` imports `dialog` and `toast`; the kill-switch button surfaces failures as a `toast.error` instead of swallowing them in `console.error`.
+
+---
+
 ## [1.10.11] — 2026-04-24
 
 ### Zero-friction onboarding
