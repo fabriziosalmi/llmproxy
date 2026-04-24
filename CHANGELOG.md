@@ -2,6 +2,13 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.10.16] — 2026-04-24
+
+### UI — Security view listeners attach unconditionally
+- The Security view previously wired its listeners (Audit Log query, GDPR erase/export/purge, chain verification) lazily inside `renderSecurity()`, which ran only when the store's `currentTab` transitioned TO `security`. If the user landed directly on `#/security` (reload, deep link, hash already active at boot, stale cache), that transition could be missed and the Query button silently did nothing — every click appeared inert. `security.js` now exports a real `initSecurity()` that attaches listeners eagerly on page load, matching the init/render split used by every other component. Listed in `main.js` `initWrappers` so it runs on `DOMContentLoaded` regardless of navigation state. `renderSecurity()` still calls `initSecurity()` defensively.
+
+---
+
 ## [1.10.15] — 2026-04-24
 
 ### Routing
