@@ -98,6 +98,8 @@ def create_router(agent) -> APIRouter:
             "features": agent.features,
             "circuit_breakers": agent.circuit_manager.get_all_states(),
             "firewall": {
+                "enabled": getattr(agent, "firewall_enabled", True),
+                "disabled_reason": getattr(agent, "firewall_disabled_reason", None),
                 "total_scanned": ByteLevelFirewallMiddleware.total_scanned,
                 "total_blocked": ByteLevelFirewallMiddleware.total_blocked,
                 "block_by_signature": ByteLevelFirewallMiddleware.block_by_signature,

@@ -19,6 +19,14 @@ logger = logging.getLogger("llmproxy.health_prober")
 PROBE_INTERVAL = 60   # seconds between probe rounds
 PROBE_TIMEOUT = 10    # max seconds per probe request
 
+# URL fragments that indicate the endpoint was never actually configured
+# (left as a template in config.yaml). Probing these only produces noise.
+_UNCONFIGURED_MARKERS = ("{", "}", "CHANGE-ME", "your-resource", "your-deployment")
+
+
+def _looks_unconfigured(url: str) -> bool:
+    return any(m in url for m in _UNCONFIGURED_MARKERS)
+
 
 class EndpointHealthProber:
     """Background health prober for configured endpoints."""
@@ -28,6 +36,13 @@ class EndpointHealthProber:
         self.circuit_manager = circuit_manager
         self._get_session = get_session_fn
         self._running = False
+        # Track the last-logged state per endpoint so we warn on the transition
+        # (OK→FAIL and FAIL→OK) and stay silent on steady-state repeats. This is
+        # what keeps a misconfigured/offline endpoint from flooding logs every
+        # minute. We also remember the set of endpoints we've already refused
+        # to probe so startup-time skips are announced exactly once.
+        self._last_state: Dict[str, str] = {}
+        self._warned_unprobeable: set[str] = set()
 
     async def start(self, interval: int = PROBE_INTERVAL):
         """Start the background probe loop with jitter to prevent thundering herd."""
@@ -57,6 +72,25 @@ class EndpointHealthProber:
             models = ep_config.get("models", [])
 
             if not base_url or not models:
+                continue
+
+            # Skip endpoints that still look like a template in config.yaml
+            # (placeholder '{resource}', 'CHANGE-ME', etc.). Warn once so the
+            # operator sees it, then stay silent — no value in hammering DNS.
+            if _looks_unconfigured(base_url):
+                if ep_name not in self._warned_unprobeable:
+                    logger.info(
+                        "Probe skip: %s — base_url still has a placeholder "
+                        "('%s'). Fill in config.yaml to enable health probes.",
+                        ep_name, base_url,
+                    )
+                    self._warned_unprobeable.add(ep_name)
+                continue
+
+            # Skip endpoints where the circuit breaker is already open — the
+            # breaker will run its own half-open probe when it is ready.
+            cb = await self.circuit_manager.get_breaker(ep_name)
+            if getattr(cb, "state", "closed") == "open":
                 continue
 
             # Skip local endpoints unless probe_local is enabled
@@ -99,6 +133,15 @@ class EndpointHealthProber:
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
 
+        def _record(new_state: str, msg: str, level: int = logging.WARNING) -> None:
+            """Log only on state transition — steady-state noise goes to DEBUG."""
+            prev = self._last_state.get(ep_name)
+            self._last_state[ep_name] = new_state
+            if prev != new_state:
+                logger.log(level, msg)
+            else:
+                logger.debug(msg)
+
         try:
             url, body, hdrs = adapter.translate_request(base_url, probe_body, headers)
             session = await self._get_session()
@@ -112,16 +155,16 @@ class EndpointHealthProber:
             if response.status_code < 500:
                 await cb.report_success()
                 await update_endpoint_stats(ep_name, latency_ms, True)
-                logger.debug(f"Probe OK: {ep_name} ({latency_ms:.0f}ms)")
+                _record("ok", f"Probe OK: {ep_name} ({latency_ms:.0f}ms)", logging.INFO)
             else:
                 await cb.report_failure()
                 await update_endpoint_stats(ep_name, latency_ms, False)
-                logger.warning(f"Probe FAIL: {ep_name} → {response.status_code}")
+                _record(f"http:{response.status_code}", f"Probe FAIL: {ep_name} → {response.status_code}")
 
         except asyncio.TimeoutError:
             await cb.report_failure()
             await update_endpoint_stats(ep_name, PROBE_TIMEOUT * 1000, False)
-            logger.warning(f"Probe TIMEOUT: {ep_name} (>{PROBE_TIMEOUT}s)")
+            _record("timeout", f"Probe TIMEOUT: {ep_name} (>{PROBE_TIMEOUT}s)")
         except Exception as e:
             await cb.report_failure()
-            logger.warning(f"Probe ERROR: {ep_name} → {e}")
+            _record(f"error:{type(e).__name__}", f"Probe ERROR: {ep_name} → {e}")

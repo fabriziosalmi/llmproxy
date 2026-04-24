@@ -1,60 +1,106 @@
 # Quick Start
 
-Get LLMProxy running in under 5 minutes.
+Get LLMProxy running in under 60 seconds.
 
-## Prerequisites
-
-- Python 3.12+
-- At least one LLM provider API key (OpenAI, Anthropic, etc.)
-
-## Installation
+## One command
 
 ```bash
-# Clone the repository
-git clone https://github.com/fabriziosalmi/llmproxy
-cd llmproxy
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Copy environment template
-cp .env.example .env
+git clone https://github.com/fabriziosalmi/llmproxy && cd llmproxy
+./install.sh
 ```
 
-## Configuration
+The installer detects your platform, verifies prerequisites, generates a proxy auth key in `.env`, and boots the service via Docker Compose v2 (recommended) or a local Python 3.12+ virtualenv. For CI or scripted use, `./install.sh --docker`, `./install.sh --local`, or `./install.sh --check` skip the interactive prompt.
 
-Edit `.env` with your API keys:
+### Prerequisites
+
+| Install path | Requirements |
+|---|---|
+| **Docker** (recommended) | Docker Engine + **Docker Compose v2 plugin** (`docker compose`). Legacy `docker-compose` v1 is unsupported — it breaks against modern urllib3. On Debian/Ubuntu: `sudo apt install docker-compose-plugin`. |
+| **Local venv** | Python 3.12+ (Ubuntu 22.04 ships 3.10 — use [deadsnakes PPA](https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa) or the Docker path). |
+
+`./install.sh --check` reports the exact command needed to satisfy any missing prerequisite before committing to an install mode.
+
+## Onboarding mode
+
+The proxy **starts even with zero providers configured**. Inference requests return 503 until at least one endpoint is active, but the admin UI, health probe, and `POST /api/v1/registry` are all reachable immediately so you can finish setup from the browser.
+
+On first boot you get four ways to add a provider — pick whichever hurts least:
+
+### 1. Auto-discovery (zero config)
+
+If Ollama, LM Studio, vLLM, or LiteLLM is already running on the host, the proxy probes `127.0.0.1` and `host.docker.internal` on the standard ports and registers the responders automatically. No YAML, no env var.
+
+To extend discovery to remote hosts (Tailscale peers, LAN nodes), set:
 
 ```bash
-# Required: at least one provider
-OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=sk-ant-...
-GOOGLE_API_KEY=AIza...
-
-# Required: proxy authentication
-LLM_PROXY_API_KEYS=your-secret-key-1,your-secret-key-2
+# in .env
+LLM_PROXY_DISCOVERY_PEERS=100.98.112.23,100.66.12.82,100.108.97.78:8000
 ```
 
-## Start the Proxy
+Each entry can be a bare host (probes all four standard ports) or `host:port` (probes that port only, against every supported protocol signature). Discovered entries get a stable id like `lmstudio-100-98-112-23` so multiple peers never collide.
+
+Disable entirely with `LLM_PROXY_LOCAL_DISCOVERY=0`.
+
+### 2. Env-declared endpoints (no YAML)
+
+Declare any OpenAI-compatible endpoint directly in `.env`:
 
 ```bash
-python main.py
+LLM_PROXY_ENDPOINT_LOCAL_URL=http://192.168.1.50:1234/v1
+LLM_PROXY_ENDPOINT_LOCAL_MODELS=llama-3.3-70b,qwen-2.5-coder-32b
+# LLM_PROXY_ENDPOINT_LOCAL_KEY=sk-…    # leave blank for no-auth servers
 ```
 
-The proxy starts on port **8090** by default:
+The env-declared endpoint becomes the `local` provider on next boot.
 
-- **API**: `http://localhost:8090/v1/chat/completions`
-- **SOC Dashboard**: `http://localhost:8090/ui`
-- **Health**: `http://localhost:8090/health`
-- **Metrics**: `http://localhost:8090/metrics`
+### 3. Cloud provider keys
 
-## First Request
+Set any of the standard keys in `.env` (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, …) and the matching entry from `config.yaml` activates. No YAML edits required unless you want to change defaults.
 
-Send a request using the OpenAI-compatible API:
+### 4. Admin UI wizard
+
+Open `http://localhost:8090/ui`, go to **Endpoints**, and fill the form — name, URL, provider, optional API key and model list. New entries take effect live without restart.
+
+## Boot banner
+
+On startup the proxy prints a summary to stdout — visible in `docker compose logs llmproxy` or the terminal:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  LLMProxy is ready   http://localhost:8090/v1
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Active providers (3):
+    [config]          openai         (openai)
+      gpt-5.4, gpt-5.4-mini
+    [auto-discovery]  ollama-auto    (ollama)
+      llama3.2:3b, qwen2.5-coder:7b
+    [auto-discovery]  lmstudio-100-98-112-23 (openai-compatible)
+      qwen/qwen2.5-coder-14b, +3 more
+
+  WAF:    ON   (byte-level ASGI injection firewall)
+  Auth:   required   Bearer key in $LLM_PROXY_API_KEYS → sk-proxy-a…7890
+
+  Smoke test:
+    curl http://localhost:8090/v1/chat/completions \
+      -H 'Authorization: Bearer $(grep -oP "^LLM_PROXY_API_KEYS=\K[^,]+" .env | head -1)' \
+      -H 'Content-Type: application/json' \
+      -d '{"model":"gpt-5.4-mini","messages":[{"role":"user","content":"hi"}]}'
+
+  Admin UI: http://localhost:8090/ui
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+The smoke-test curl uses the first available model, so it runs successfully after copy-paste.
+
+## First request
 
 ```bash
+# Your proxy key was generated by install.sh; read it from .env:
+export LLMPROXY_KEY=$(grep -oP '^LLM_PROXY_API_KEYS=\K[^,]+' .env | head -1)
+
 curl http://localhost:8090/v1/chat/completions \
-  -H "Authorization: Bearer your-secret-key-1" \
+  -H "Authorization: Bearer $LLMPROXY_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "gpt-4o",
@@ -62,23 +108,22 @@ curl http://localhost:8090/v1/chat/completions \
   }'
 ```
 
-### Using Model Aliases
+### Model aliases
 
-LLMProxy supports shorthand aliases:
+Shorthand names resolve to real model ids:
 
 ```bash
-# "fast" resolves to gpt-4o-mini
 curl http://localhost:8090/v1/chat/completions \
-  -H "Authorization: Bearer your-secret-key-1" \
+  -H "Authorization: Bearer $LLMPROXY_KEY" \
   -H "Content-Type: application/json" \
   -d '{"model": "fast", "messages": [{"role": "user", "content": "Hello!"}]}'
 ```
 
-Default aliases: `gpt4` → gpt-4o, `claude` → claude-sonnet, `fast` → gpt-4o-mini, `cheap` → gemini-2.0-flash
+Defaults: `gpt4` → gpt-4o, `claude` → claude-sonnet, `fast` → gpt-4o-mini, `cheap` → gemini-2.5-flash-lite.
 
-### Cross-Provider Fallback
+### Cross-provider fallback
 
-If OpenAI is down, LLMProxy automatically falls back to the next provider in the chain:
+If OpenAI is down, LLMProxy walks the configured fallback chain automatically:
 
 ```
 gpt-4o → claude-sonnet → gemini-2.5-pro
@@ -109,14 +154,33 @@ Point any OpenAI-compatible client to:
 
 ```
 Base URL: http://localhost:8090/v1
-API Key: your-secret-key-1
+API Key:  (contents of LLM_PROXY_API_KEYS)
 ```
 
 LLMProxy exposes `/v1/models` for automatic model discovery.
 
-## Next Steps
+## Disabling the WAF
 
-- [Configuration](/guide/configuration) — Full config.yaml reference
+The byte-level ASGI firewall is enabled by default. Disable via env or config when fronting the proxy with another WAF or debugging a false positive:
+
+```bash
+LLM_PROXY_FIREWALL_ENABLED=0        # in .env — restart required
+```
+
+Or in `config.yaml`:
+
+```yaml
+security:
+  firewall:
+    enabled: false
+```
+
+The admin UI surfaces the live state and the reason it is off (`env:…` or `config:…`). The toggle is env/config-only by design — a one-click UI switch would make L1 injection defense trivially removable.
+
+## Next steps
+
+- [Configuration](/guide/configuration) — Full `config.yaml` reference
+- [Endpoints](/reference/endpoints) — Provider matrix and env-based endpoint syntax
 - [Security](/security/overview) — Understanding the security pipeline
 - [Plugins](/plugins/overview) — Enable marketplace plugins
 - [SOC Dashboard](/soc/overview) — Real-time monitoring

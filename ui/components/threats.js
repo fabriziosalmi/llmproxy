@@ -62,7 +62,19 @@ async function refreshMetrics() {
         }
 
         // Firewall stats
-        if (guardsStatus) renderFirewallStats(guardsStatus);
+        if (guardsStatus) {
+            renderFirewallStats(guardsStatus);
+            // Propagate live firewall status (enabled + disabled_reason) into the
+            // shared store so the Guards view reflects whether the WAF is running.
+            if (guardsStatus.firewall) {
+                store.update({
+                    firewall: {
+                        enabled: guardsStatus.firewall.enabled !== false,
+                        disabled_reason: guardsStatus.firewall.disabled_reason || null,
+                    },
+                });
+            }
+        }
 
     } catch {
         // Backend unavailable
