@@ -2,6 +2,13 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.10.17] — 2026-04-24
+
+### Supply chain
+- **Removed dead `KNOWN_VERSIONS` coupling in `scripts/verify_deps.py`**. The dict hardcoded the same version pins already present in `requirements.txt`, so every Dependabot pip bump produced a `VERSION MISMATCH` error that failed the Supply Chain Integrity CI job — blocking every patch PR including security bumps. There was no real signal: attackers can publish tampered wheels at any version. The defense value is in the `.pth` file content scan + the `BLOCKED_PACKAGES` allow-list, both untouched. Published CVEs are caught by the existing `pip-audit` job.
+
+---
+
 ## [1.10.16] — 2026-04-24
 
 ### UI — Security view listeners attach unconditionally
