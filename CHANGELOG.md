@@ -2,6 +2,18 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.10.14] — 2026-04-24
+
+### UI polish — review P2/P3 (medium + minor)
+- **Command palette — no more blank-first-open** (review #10/#17). Opening the palette now pre-seeds the full command list so the first `⌘K` shows every action immediately. An empty query returns the full list; a query with no matches shows a dedicated "No matching commands" state instead of a blank panel. Query and selection reset between opens — each `⌘K` lands on a clean palette.
+- **Mobile sidebar backdrop is interactive** (review #11). The full-screen dim backdrop used to be decorative; tap-outside didn't close the drawer. Now it does. `Escape` also dismisses when the drawer is open on narrow viewports.
+- **No more "Loading…" purgatory** (review #12). Budget gauge, firewall stats, per-endpoint breakdown, analytics breakdowns, and the cost-efficiency card now swap their `Loading…` placeholder for a visible `role="alert"` "Unavailable — backend unreachable" state on fetch failure. Settings (system info, auth-mode, SSO status) fall back to a concrete "unavailable" / "unknown" label. A `data-ready` marker prevents the fallback from clobbering good data that was already fetched on a prior tick.
+- **Settings no longer goes stale** (review #13). Clicking the Settings nav item re-runs the identity / RBAC / webhooks / export / system-info loaders so the view reflects the backend without a full page reload.
+- **Log viewer stream status is visible** (review #14/#16). A new `Paused · N new` badge (wired to the existing autoscroll freeze logic) appears when the user scrolls up and disappears on click, jumping the terminal back to bottom. A status indicator (`waiting` / `connecting` / `live` / `reconnecting`) now lives in the log header, and SSE disconnects announce themselves in the terminal instead of silently retrying.
+- **Cinema mode is discoverable + safer** (review #15). The shortcut was bound to plain `f`, which fired for any non-input focus — easy to hit by accident. It now requires `Shift+F`, skips `contenteditable`, and a `⇧F` `<kbd>` hint sits next to `⌘K` in the header. A brief toast confirms on/off.
+
+---
+
 ## [1.10.13] — 2026-04-24
 
 ### UI operability (P1 from review)

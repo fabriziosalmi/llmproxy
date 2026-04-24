@@ -234,6 +234,10 @@ function initHUD() {
             if (palette.classList.contains('hidden')) {
                 palette.classList.remove('hidden');
                 palette.classList.add('flex');
+                // Seed the full command list and focus the input so the palette
+                // is immediately useful without requiring the user to type first.
+                input.value = '';
+                renderResults(commands);
                 setTimeout(() => {
                     box.classList.remove('scale-95', 'opacity-0');
                     box.classList.add('scale-100', 'opacity-100');
@@ -245,6 +249,12 @@ function initHUD() {
                 setTimeout(() => {
                     palette.classList.add('hidden');
                     palette.classList.remove('flex');
+                    // Reset query + selection between opens — every Cmd+K
+                    // should land on a clean palette, not a sticky filter.
+                    input.value = '';
+                    lastResults = [];
+                    selectedIdx = -1;
+                    cmdList.innerHTML = '';
                 }, 200);
             }
         };
@@ -286,6 +296,18 @@ function initHUD() {
             lastResults = results;
             selectedIdx = results.length > 0 ? 0 : -1;
             cmdList.innerHTML = '';
+            if (results.length === 0) {
+                // Empty-state makes the distinction between "nothing matches"
+                // and "palette never populated" explicit.
+                const empty = document.createElement('div');
+                empty.className = 'p-6 text-center';
+                empty.innerHTML = `
+                    <p class="text-[11px] font-bold text-slate-500">No matching commands</p>
+                    <p class="text-[9px] text-slate-600 mt-1 font-mono">Try a different query or clear the input.</p>
+                `;
+                cmdList.appendChild(empty);
+                return;
+            }
             results.forEach((res, i) => {
                 const item = document.createElement('div');
                 item.className = `flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all border border-transparent group ${i === selectedIdx ? 'bg-white/5 border-white/10' : 'hover:bg-white/5 hover:border-white/10'}`;
@@ -358,11 +380,21 @@ function initHUD() {
         console.info(`Executed HUD command: ${id}`);
     }
 
-    // UX Feature 21: Cinema Mode (Focus UI)
+    // Cinema mode (Shift+F). Uppercase-F removes the ambiguity with
+    // plain 'f' typed inside select elements, contenteditable areas, and
+    // password managers that steal keydown events. Also avoids triggering
+    // when a modifier (Cmd/Ctrl/Alt) is held for another shortcut.
     document.addEventListener('keydown', (e) => {
-        if (e.key.toLowerCase() === 'f' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
-            document.body.classList.toggle('cinema-mode');
-        }
+        if (e.key !== 'F') return;
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
+        const t = e.target;
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+        document.body.classList.toggle('cinema-mode');
+        toast(
+            document.body.classList.contains('cinema-mode') ? 'Cinema mode on' : 'Cinema mode off',
+            'info',
+            1500,
+        );
     });
 
     // 15.15 Copy-to-id (One-Click)
