@@ -479,3 +479,27 @@ tr {
 #cmd-palette-box {
     will-change: transform, opacity;
 }
+
+/* 7. Explain-target affordance — elements with data-explain become inspectable.
+   Subtle dotted underline signals the status badge is actionable without making
+   every <span> look like a link. */
+.explain-target {
+    cursor: help;
+    position: relative;
+}
+.explain-target:hover,
+.explain-target:focus-visible {
+    text-decoration: underline dotted currentColor;
+    text-underline-offset: 3px;
+}
+.explain-target::after {
+    content: "ℹ";
+    margin-left: 0.25rem;
+    font-size: 0.7em;
+    color: rgba(148, 163, 184, 0.5);
+    vertical-align: baseline;
+}
+.explain-target:hover::after,
+.explain-target:focus-visible::after {
+    color: rgb(148, 163, 184);
+}
