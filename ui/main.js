@@ -15,6 +15,8 @@ import { initModels } from './components/models.js';
 import { initAnalytics } from './components/analytics.js';
 import { renderSecurity } from './components/security.js';
 import { auth } from './services/auth.js';
+import { dialog } from './services/dialog.js';
+import { toast } from './services/toast.js';
 
 // Global state listener — only re-render what changed (audit #24)
 let _prevState = { ...store.state };
@@ -72,20 +74,99 @@ async function init() {
         logoutBtn.addEventListener('click', () => auth.logout());
     }
 
-    // Wire API key login button
+    // Wire API key login button — validates the key against the backend
+    // before closing the overlay. Prevents the prior false-positive where
+    // any non-empty string was accepted and later calls silently 401'd.
     const apiKeyBtn = document.getElementById('login-api-key-btn');
     const apiKeyInput = document.getElementById('login-api-key');
+    const apiKeyErr = document.getElementById('login-error');
     if (apiKeyBtn && apiKeyInput) {
-        const doApiKeyLogin = () => {
+        const showErr = (msg) => {
+            if (!apiKeyErr) return;
+            apiKeyErr.textContent = msg;
+            apiKeyErr.classList.remove('hidden');
+            apiKeyInput.setAttribute('aria-invalid', 'true');
+        };
+        const clearErr = () => {
+            if (!apiKeyErr) return;
+            apiKeyErr.classList.add('hidden');
+            apiKeyInput.removeAttribute('aria-invalid');
+        };
+        apiKeyInput.addEventListener('input', clearErr);
+
+        const doApiKeyLogin = async () => {
             const key = apiKeyInput.value.trim();
-            if (key) {
+            if (!key) { showErr('API key is required.'); apiKeyInput.focus(); return; }
+            const originalLabel = apiKeyBtn.textContent;
+            apiKeyBtn.disabled = true;
+            apiKeyInput.disabled = true;
+            apiKeyBtn.textContent = 'Checking…';
+            clearErr();
+            try {
+                // /api/v1/version is cheap, auth-gated, and always mounted —
+                // a 200 proves the key is accepted by the running proxy.
+                const res = await fetch(`${window.location.origin}/api/v1/version`, {
+                    headers: { 'Authorization': `Bearer ${key}` },
+                });
+                if (res.status === 401 || res.status === 403) {
+                    showErr('Invalid API key. Check $LLM_PROXY_API_KEYS in your .env.');
+                    apiKeyInput.focus();
+                    apiKeyInput.select();
+                    return;
+                }
+                if (!res.ok) {
+                    showErr(`Backend returned HTTP ${res.status}. Try again.`);
+                    return;
+                }
                 localStorage.setItem('proxy_key', key);
                 const overlay = document.getElementById('login-overlay');
                 if (overlay) overlay.classList.add('hidden');
+                toast('Signed in', 'success');
+            } catch (e) {
+                showErr('Network error — is the proxy reachable?');
+            } finally {
+                apiKeyBtn.disabled = false;
+                apiKeyInput.disabled = false;
+                apiKeyBtn.textContent = originalLabel;
             }
         };
         apiKeyBtn.addEventListener('click', doApiKeyLogin);
         apiKeyInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doApiKeyLogin(); });
+
+        // Focus trap + initial focus while the overlay is shown. The overlay
+        // is a real dialog (role="dialog" aria-modal="true"); Tab stays
+        // inside until authenticated, Escape is ignored because there is no
+        // safe fallback when the app itself is the thing being gated.
+        const overlay = document.getElementById('login-overlay');
+        if (overlay) {
+            const focusable = () => Array.from(overlay.querySelectorAll(
+                'button:not([disabled]), input:not([disabled]):not([type="hidden"])'
+            ));
+            overlay.addEventListener('keydown', (e) => {
+                if (e.key !== 'Tab' || overlay.classList.contains('hidden')) return;
+                const nodes = focusable();
+                if (!nodes.length) return;
+                const first = nodes[0];
+                const last = nodes[nodes.length - 1];
+                if (e.shiftKey && document.activeElement === first) {
+                    e.preventDefault(); last.focus();
+                } else if (!e.shiftKey && document.activeElement === last) {
+                    e.preventDefault(); first.focus();
+                }
+            });
+            // Send focus to the key input whenever the overlay becomes
+            // visible — MutationObserver catches both initial paint and
+            // auth.logout() re-opens.
+            const obs = new MutationObserver(() => {
+                if (!overlay.classList.contains('hidden')) {
+                    setTimeout(() => apiKeyInput.focus(), 50);
+                }
+            });
+            obs.observe(overlay, { attributes: true, attributeFilter: ['class'] });
+            if (!overlay.classList.contains('hidden')) {
+                setTimeout(() => apiKeyInput.focus(), 50);
+            }
+        }
     }
 
     // Show user section if authenticated
@@ -304,20 +385,29 @@ function initHUD() {
     const panicBtn = document.getElementById('panic-btn');
     if (panicBtn) {
         panicBtn.addEventListener('click', async () => {
-            if (confirm("EMERGENCY KILL SWITCH\n\nThis will immediately halt ALL proxy traffic.\nAre you sure?")) {
-                try {
-                    const data = await api.panic();
-                    if (data.status === 'HALTED') {
-                        store.update({ proxyEnabled: false });
-                        panicBtn.innerHTML = `
-                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
-                            HALTED`;
-                        panicBtn.classList.add('bg-rose-500/30', 'border-rose-500/50');
-                        document.getElementById('nav-guards')?.click();
-                    }
-                } catch (e) {
-                    console.error('Kill switch failed:', e);
+            const ok = await dialog.confirm({
+                title: 'Emergency kill switch',
+                message: 'This will immediately halt ALL proxy traffic. In-flight requests drop. Are you sure?',
+                confirmLabel: 'Halt proxy',
+                cancelLabel: 'Cancel',
+                danger: true,
+            });
+            if (!ok) return;
+            try {
+                const data = await api.panic();
+                if (data.status === 'HALTED') {
+                    store.update({ proxyEnabled: false });
+                    panicBtn.innerHTML = `
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+                        HALTED`;
+                    panicBtn.classList.add('bg-rose-500/30', 'border-rose-500/50');
+                    document.getElementById('nav-guards')?.click();
+                } else {
+                    toast(`Kill switch returned unexpected status: ${data.status || 'unknown'}`, 'warning');
                 }
+            } catch (e) {
+                console.error('Kill switch failed:', e);
+                toast(`Kill switch failed: ${e.message || e}`, 'error');
             }
         });
     }

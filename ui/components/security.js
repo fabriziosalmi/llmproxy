@@ -6,6 +6,7 @@
  */
 import { api } from '../services/api.js';
 import { toast } from '../services/toast.js';
+import { dialog } from '../services/dialog.js';
 
 let _initialized = false;
 
@@ -171,7 +172,13 @@ function _initListeners() {
             if (!subjectInput || !resultEl) return;
             const subject = subjectInput.value.trim();
             if (!subject) { toast('Enter a subject ID first', 'warning'); return; }
-            if (!confirm(`GDPR ERASE: Permanently delete ALL data for "${subject}"?\nThis cannot be undone.`)) return;
+            const ok = await dialog.confirm({
+                title: 'GDPR — right to erasure (Article 17)',
+                message: `Permanently delete ALL data for "${subject}" across the audit ledger, cache, and threat intel. This operation is irreversible. Type the subject ID exactly as shown in audit logs.`,
+                confirmLabel: 'Erase subject',
+                danger: true,
+            });
+            if (!ok) return;
             resultEl.classList.remove('hidden');
             resultEl.textContent = 'Erasing...';
             resultEl.className = 'mt-3 font-mono text-[10px] text-slate-400';
