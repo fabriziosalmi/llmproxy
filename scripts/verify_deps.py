@@ -2,21 +2,25 @@
 """
 Supply Chain Integrity Verifier
 
-Checks installed dependencies against known-good SHA256 hashes.
-Run at container startup and in CI to detect tampered packages.
+Defends the install against known supply-chain attack patterns.
 
-Inspired by the litellm 1.82.8 supply chain attack (2026-03-24)
-where a compromised PyPI release stole credentials and spread
-to Kubernetes clusters via a malicious .pth file.
+Inspired by the litellm 1.82.8 incident (2026-03-24) where a compromised
+PyPI release stole credentials and spread via a malicious .pth file.
 
 Defense layers:
-  1. Hash verification of core dependencies (this script)
-  2. .pth file detection (malicious auto-exec on import)
-  3. Zero litellm dependency (we are self-contained)
+  1. .pth file content scan (malicious auto-exec on interpreter startup)
+  2. Blocked-package allow-list (typosquats + known-compromised names)
+
+Deliberately NOT checking pinned versions — requirements.txt already pins
+them and the pip-audit job in CI catches published CVEs. Maintaining a
+second source-of-truth for expected versions just created a hard coupling
+with Dependabot (every bump required a matching edit here) without adding
+any real security signal: attackers can publish tampered wheels at any
+version, and version numbers aren't a tamper indicator.
 
 Usage:
-  python scripts/verify_deps.py          # verify + .pth scan
-  python scripts/verify_deps.py --strict # exit 1 on any failure
+  python scripts/verify_deps.py          # scan + warn
+  python scripts/verify_deps.py --strict # exit 1 on any finding
 """
 
 import sys
@@ -26,49 +30,12 @@ import logging
 
 logger = logging.getLogger("llmproxy.verify_deps")
 
-# ── Known-good package versions ──
-# These are the versions we ship with. If a dependency is upgraded,
-# update the hash here AFTER verifying the release on PyPI + GitHub.
-# NOTE: Hashes are platform-specific (wheels differ per OS/arch).
-# We verify version + .pth scan on all platforms; hash check is
-# best-effort (warns but doesn't block on hash mismatch from
-# platform wheel differences).
-KNOWN_VERSIONS = {
-    "fastapi": "0.135.2",
-    "uvicorn": "0.42.0",
-    "pyyaml": "6.0.3",
-    "aiohttp": "3.13.3",
-    "aiosqlite": "0.22.1",
-    "prometheus-client": "0.24.1",
-    "cryptography": "46.0.5",
-    "pyjwt": "2.12.1",
-    "aiofiles": "25.1.0",
-    "sentry-sdk": "2.55.0",
-    "cachetools": "6.2.4",
-}
-
 # Packages that MUST NOT be installed (known-compromised or dangerous in proxy context)
 BLOCKED_PACKAGES = {
     "litellm",      # Supply chain attack 2026-03-24
     "openai-proxy",  # Typosquat risk
     "llm-proxy",     # Typosquat risk
 }
-
-
-def check_versions() -> list[str]:
-    """Verify installed package versions match known-good versions."""
-    issues = []
-    for pkg, expected_version in KNOWN_VERSIONS.items():
-        try:
-            installed = importlib.metadata.version(pkg)
-            if installed != expected_version:
-                issues.append(
-                    f"VERSION MISMATCH: {pkg} installed={installed} expected={expected_version}"
-                )
-        except importlib.metadata.PackageNotFoundError:
-            # Optional deps may not be installed
-            pass
-    return issues
 
 
 def check_blocked_packages() -> list[str]:
@@ -208,15 +175,11 @@ def verify_all(strict: bool = False) -> bool:
 
     logger.info("Supply chain integrity check starting...")
 
-    # 1. Version verification
-    version_issues = check_versions()
-    all_issues.extend(version_issues)
-
-    # 2. Blocked packages
+    # 1. Blocked packages
     blocked_issues = check_blocked_packages()
     all_issues.extend(blocked_issues)
 
-    # 3. .pth file scan
+    # 2. .pth file scan
     pth_issues = scan_pth_files()
     all_issues.extend(pth_issues)
 
