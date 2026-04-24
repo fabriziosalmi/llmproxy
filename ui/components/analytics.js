@@ -33,7 +33,19 @@ async function refreshAnalytics() {
         renderEfficiency(efficiency);
     } catch (e) {
         console.error('Failed to load analytics:', e);
+        _analyticsFallback('analytics-by-model', 'Spend by Model');
+        _analyticsFallback('analytics-by-provider', 'Spend by Provider');
+        _analyticsFallback('analytics-efficiency', 'Cost Efficiency');
     }
+}
+
+function _analyticsFallback(id, title) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = `
+        <h3 class="text-xs font-bold text-white mb-2">${title}</h3>
+        <p class="text-[10px] text-rose-400/80 font-mono" role="alert">Unavailable — analytics backend unreachable.</p>
+    `;
 }
 
 async function _fetchEfficiency() {

@@ -4,15 +4,25 @@
 import { api } from '../services/api.js';
 import { toast } from '../services/toast.js';
 
-export async function initSettings() {
-    const tasks = [
+async function refreshAll() {
+    await Promise.allSettled([
         loadSystemInfo(),
         loadIdentity(),
         loadRbac(),
         loadWebhooks(),
         loadExport(),
-    ];
-    await Promise.allSettled(tasks);
+    ]);
+}
+
+export async function initSettings() {
+    await refreshAll();
+
+    // Settings is not a live dashboard, but identity / webhooks / RBAC can
+    // drift between reloads. Re-fetch whenever the user opens the tab so the
+    // surface doesn't go stale after bootstrap.
+    document.getElementById('nav-settings')?.addEventListener('click', () => {
+        refreshAll().catch(() => {});
+    });
 
     // Webhook test-fire
     const testBtn = document.getElementById('test-webhook-btn');
@@ -40,7 +50,12 @@ async function loadSystemInfo() {
         ]);
         setText('sys-version', version.version || '--');
         setText('sys-url', info.url || '--');
-    } catch {}
+    } catch {
+        // Degraded state beats permanent "Loading…" — fields still read as
+        // text, just not as live data.
+        setText('sys-version', 'unavailable');
+        setText('sys-url', 'unavailable');
+    }
 }
 
 async function loadIdentity() {
@@ -48,7 +63,10 @@ async function loadIdentity() {
         const config = await fetch(`${window.location.origin}/api/v1/identity/config`).then(r => r.json());
         setText('auth-mode', config.enabled ? 'SSO / OIDC' : 'API Key');
         setText('sso-status', config.enabled ? 'Enabled' : 'Disabled');
-    } catch {}
+    } catch {
+        setText('auth-mode', 'unknown');
+        setText('sso-status', 'unknown');
+    }
 
     try {
         const me = await api.fetchIdentityMe();

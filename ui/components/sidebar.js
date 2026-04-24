@@ -29,6 +29,10 @@ export function initSidebar() {
     const mobileBtn = document.getElementById('mobile-menu-btn');
     const sidebar = document.getElementById('sidebar');
     const backdrop = document.getElementById('sidebar-backdrop');
+    const closeMobileDrawer = () => {
+        if (sidebar) sidebar.classList.add('mobile-hidden');
+        if (backdrop) backdrop.classList.add('hidden');
+    };
     if (mobileBtn && sidebar && backdrop) {
         mobileBtn.addEventListener('click', () => {
             const isHidden = sidebar.classList.contains('mobile-hidden');
@@ -36,8 +40,16 @@ export function initSidebar() {
                 sidebar.classList.remove('mobile-hidden');
                 backdrop.classList.remove('hidden');
             } else {
-                sidebar.classList.add('mobile-hidden');
-                backdrop.classList.add('hidden');
+                closeMobileDrawer();
+            }
+        });
+        // Standard mobile drawer affordance: tap outside closes. The
+        // backdrop existed but had no handler, so the gesture was inert.
+        backdrop.addEventListener('click', closeMobileDrawer);
+        // Escape dismisses too, matching the command palette convention.
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !sidebar.classList.contains('mobile-hidden') && window.innerWidth < 768) {
+                closeMobileDrawer();
             }
         });
     }
