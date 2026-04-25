@@ -2,6 +2,38 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.11.2] — 2026-04-25
+
+### Frontend foundation — Phase A
+Lays the groundwork that previous UI sprints were missing: a real build pipeline, type checking, lint/format, unit + e2e tests, and CI. Backend is unchanged. Net result: the frontend can now be refactored aggressively without flying blind.
+
+**Build pipeline (`ui/vite.config.ts`, `ui/tsconfig.json`, `ui/tailwind.config.js`)**
+- Vite 5 bundler with `index.html`, `chat.html`, `oauth-callback.html` as entry points. Output to `ui/dist/` (~140 KB main JS gzipped to 38 KB, ~40 KB CSS gzipped to 9 KB, source maps included).
+- Tailwind 3 via PostCSS at build time. The `vendor/tailwind.js` JIT CDN is kept as a fallback so `python main.py` without `npm run build` still produces a usable UI; CSP `unsafe-eval` removal is queued behind the cutover.
+- TypeScript medium-strict (`strict: true`, `noImplicitAny: false`, `allowJs: true`). Existing `.js` files keep working; new code is fully typed; gradual migration via JSDoc + per-file conversion.
+- Vendored assets relocated from `ui/vendor/` to `ui/public/vendor/` so Vite passes them through unchanged. URLs (`/ui/vendor/...`) unaffected.
+
+**Lint + format + pre-commit (`ui/eslint.config.js`, `ui/.prettierrc.json`, `lefthook.yml`)**
+- ESLint 9 flat config, TypeScript-aware, browser/node globals. Pragmatic rules — errors block, warnings warn (existing codebase: 0 errors, 13 warnings to clean up gradually).
+- Prettier 3 with project conventions (4-space indent, single quotes, 120 cols).
+- Lefthook pre-commit: `ruff` + `py-syntax` for Python, `eslint --fix` + `prettier --write` + `tsc --noEmit` for the UI, all scoped to staged files. Activate with `brew install lefthook && lefthook install`.
+
+**Unit tests (`ui/vitest.config.ts`, `ui/__tests__/`)**
+- Vitest 2 with happy-dom + v8 coverage.
+- First suite: `__tests__/store.test.ts` exercises pub/sub, polling visibility-pause, requiredTab gating, and stop() — 7 tests, ~500 ms.
+
+**End-to-end tests (`ui/playwright.config.ts`, `ui/e2e/`)**
+- Playwright with auto-started backend in dev (override via `LLMPROXY_SKIP_WEB_SERVER=1`), retain trace/video/screenshot on failure.
+- 5 spec files: app boot smoke (3 tests, run today), login overlay (2 tests, run today), add-endpoint / threats-drilldown / command-palette stubbed pending an auth fixture from Phase C.
+
+**Wiring (`Dockerfile`, `Makefile`, `install.sh`, `proxy/app_factory.py`, `.github/workflows/frontend.yml`)**
+- Multi-stage Dockerfile: Node 20 builds `ui/dist/`, Python 3.12 stage `COPY --from=ui-builder` brings it in.
+- `app_factory` prefers `ui/dist/` when present; fallback to source tree mounts `ui/public/*` overlays so static assets keep their pre-Vite URLs.
+- Makefile: `build-ui`, `dev-ui`, `lint-ui`, `test-ui`, `e2e-ui`. `install.sh --local` builds the bundle when `npm` is available, warns and continues otherwise.
+- New CI workflow `frontend.yml`: lint, typecheck, unit tests with coverage upload, build artifact, e2e against a live backend on `:8090`.
+
+---
+
 ## [1.11.1] — 2026-04-24
 
 ### UI elevation — Sprint 2

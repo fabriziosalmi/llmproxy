@@ -23,3 +23,11 @@ smoke_test.py
 validate_bootstrap*.py
 bootstrap_results*.json
 distillation_data.jsonl
+
+# UI build artifacts — re-introduced via multi-stage COPY --from=ui-builder
+ui/node_modules/
+ui/dist/
+ui/.vite/
+ui/coverage/
+ui/playwright-report/
+ui/test-results/
