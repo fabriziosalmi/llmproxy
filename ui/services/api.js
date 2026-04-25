@@ -114,6 +114,7 @@ export const api = {
     async installPlugin(data) { return _post(`${BASE_URL}/api/v1/plugins/install`, data); },
     async uninstallPlugin(name) { return _json(`${BASE_URL}/api/v1/plugins/${name}`, { method: 'DELETE' }); },
     async rollbackPlugins() { return _json(`${BASE_URL}/api/v1/plugins/rollback`, { method: 'POST' }); },
+    async reloadPlugins() { return _json(`${BASE_URL}/api/v1/plugins/hot-swap`, { method: 'POST' }); },
 
     async sendChatMessage(text, model = 'auto') {
         return _json(`${BASE_URL}/v1/chat/completions`, {
