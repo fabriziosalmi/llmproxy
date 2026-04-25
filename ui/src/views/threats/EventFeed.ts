@@ -1,5 +1,6 @@
 import { createBadge, createButton, createEmptyState, createErrorState, createSkeleton, cx } from '../../ui';
 import type { BadgeIntent } from '../../ui';
+import { rum } from '../../services/rum';
 import type { EventFeedStatus, SecurityEvent } from './types';
 
 const MUTE_STORAGE_KEY = 'llmproxy:muted-threats';
@@ -181,8 +182,10 @@ export class ThreatEventFeed {
     /** Toggle the mute state for an event's category. */
     toggleMute(event: SecurityEvent): void {
         const key = muteKeyFor(event);
-        if (this.muted.has(key)) this.muted.delete(key);
-        else this.muted.add(key);
+        const next = !this.muted.has(key);
+        if (next) this.muted.add(key);
+        else this.muted.delete(key);
+        rum.action('threat_mute_toggle', { key, muted: next });
         this.persistMuted();
         this.renderList();
     }

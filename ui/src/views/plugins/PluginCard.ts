@@ -5,6 +5,7 @@
  * Inspect (drilldown), Toggle (enable/disable), Uninstall (confirm).
  */
 import { createBadge, createButton, createCard, cx } from '../../ui';
+import { rum } from '../../services/rum';
 import type { Plugin, PluginStats, UiSchemaField } from './types';
 import { ringIntent, ringLabel } from './types';
 
@@ -194,6 +195,7 @@ export function createPluginCard(plugin: Plugin, stats: PluginStats | undefined,
         testId: `plugin-toggle-${plugin.name}`,
     });
     toggle.addEventListener('click', async () => {
+        rum.action('plugin_toggle', { name: plugin.name, next: !enabled });
         try {
             await deps.onToggle(plugin.name, !enabled);
             deps.toast?.(`Plugin "${plugin.name}" ${enabled ? 'disabled' : 'enabled'}`, 'success');
@@ -219,6 +221,7 @@ export function createPluginCard(plugin: Plugin, stats: PluginStats | undefined,
             danger: true,
         });
         if (!ok) return;
+        rum.action('plugin_uninstall', { name: plugin.name });
         try {
             await deps.onUninstall(plugin.name);
             deps.toast?.(`Plugin "${plugin.name}" uninstalled`, 'success');

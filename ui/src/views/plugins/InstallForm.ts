@@ -4,6 +4,7 @@
  * for the text inputs and styled native <select>s for the two enums.
  */
 import { createButton, createCard, createInput, cx } from '../../ui';
+import { rum } from '../../services/rum';
 import { RING_OPTIONS, type InstallPluginInput, type RingHook } from './types';
 
 export interface InstallFormDeps {
@@ -191,6 +192,7 @@ export function createInstallPluginForm(deps: InstallFormDeps): InstallFormHandl
         const original = labelSpan?.textContent ?? 'Install & Hot-Swap';
         if (labelSpan) labelSpan.textContent = 'Installing…';
 
+        rum.action('plugin_install', { name, hook: payload.hook });
         try {
             const result = (await deps.submit(payload)) as { status?: string; detail?: string };
             if (result?.status === 'installed') {
