@@ -20,6 +20,8 @@ import {
     createInput,
     createMetricTile,
     createSkeleton,
+    createTable,
+    createTabs,
     createToggle,
     prompt,
 } from '../ui';
@@ -396,5 +398,87 @@ export const stories: Story[] = [
         variant: 'disabled',
         render: () =>
             createToggle({ label: 'Zero-trust mode', description: 'Requires plan upgrade', disabled: true }).root,
+    },
+
+    // Table
+    {
+        primitive: 'Table',
+        variant: 'sortable · with renderer',
+        description: 'Click "Requests" to sort. Health uses a custom renderer.',
+        render: () =>
+            createTable<{ id: string; requests: number; healthy: boolean }>({
+                columns: [
+                    { key: 'id', label: 'Endpoint', sortable: true },
+                    { key: 'requests', label: 'Requests', align: 'right', sortable: true },
+                    {
+                        key: 'healthy',
+                        label: 'Health',
+                        render: (row) => {
+                            const span = document.createElement('span');
+                            span.className = row.healthy ? 'text-emerald-300' : 'text-rose-300';
+                            span.textContent = row.healthy ? 'OK' : 'DEAD';
+                            return span;
+                        },
+                    },
+                ],
+                rows: [
+                    { id: 'openai-mini', requests: 1240, healthy: true },
+                    { id: 'anthropic', requests: 8731, healthy: true },
+                    { id: 'ollama-local', requests: 17, healthy: false },
+                ],
+            }).root,
+    },
+    {
+        primitive: 'Table',
+        variant: 'empty state',
+        render: () => {
+            const empty = document.createElement('p');
+            empty.textContent = 'No endpoints registered yet.';
+            empty.className = 'text-slate-500 text-[11px] font-mono';
+            return createTable({ columns: [{ key: 'x', label: 'Empty' }], rows: [], emptyState: empty }).root;
+        },
+    },
+
+    // Tabs
+    {
+        primitive: 'Tabs',
+        variant: 'three panes · lazy render',
+        description: 'Arrow keys + Home/End walk the list. Each pane renders the first time it is activated.',
+        render: () =>
+            createTabs({
+                tabs: [
+                    {
+                        id: 'overview',
+                        label: 'Overview',
+                        render: () => {
+                            const p = document.createElement('p');
+                            p.className = 'text-[11px] text-slate-300';
+                            p.textContent = 'Overview pane content. Cheap to render.';
+                            return p;
+                        },
+                    },
+                    {
+                        id: 'timeline',
+                        label: 'Timeline',
+                        badge: { label: '3', intent: 'primary' },
+                        render: () => {
+                            const p = document.createElement('p');
+                            p.className = 'text-[11px] text-slate-300';
+                            p.textContent = 'Timeline pane (rendered lazily on first click).';
+                            return p;
+                        },
+                    },
+                    {
+                        id: 'config',
+                        label: 'Config',
+                        render: () => {
+                            const pre = document.createElement('pre');
+                            pre.className = 'text-[10px] font-mono text-slate-300 bg-black/40 rounded-md p-3';
+                            pre.textContent = '{ "ring": "routing", "enabled": true }';
+                            return pre;
+                        },
+                    },
+                ],
+            }).root,
     },
 ];
