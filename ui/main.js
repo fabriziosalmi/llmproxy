@@ -16,8 +16,8 @@ import { initAnalytics } from './components/analytics.js';
 import { initSecurity, renderSecurity } from './components/security.js';
 import { auth } from './services/auth.js';
 import { toast } from './services/toast.js';
-import { initExplain } from './services/explain.js';
-import { initDrilldown, drilldown } from './services/drilldown.js';
+import { initExplain } from './src/services/explain';
+import { initDrilldown, drilldown } from './src/services/drilldown';
 import { initTimerange } from './services/timerange.js';
 
 // Global state listener — only re-render what changed (audit #24)
