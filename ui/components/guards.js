@@ -1,9 +1,16 @@
 /**
  * Guards View — All security subsystem toggles (8 guards + master + priority).
+ *
+ * Strangler fig: the guards grid + master/priority toggles have been
+ * migrated to TypeScript primitives in src/views/guards/. The Cache
+ * Performance card and the Operations buttons (reset firewall, clear
+ * caches, etc.) still live here — they migrate when each becomes painful.
  */
 import { store } from '../services/store.js';
 import { api } from '../services/api.js';
 import { toast } from '../services/toast.js';
+
+let _tsMounted = false;
 
 const GUARD_INFO = {
     injection_guard: {
@@ -70,12 +77,50 @@ const GUARD_INFO = {
 };
 
 export function initGuards() {
+    // Legacy renders first so the page is functional during the dynamic
+    // import roundtrip (~50ms). The TS module then replaces the markup once
+    // the chunk lands.
     renderGuards();
     initProxyToggle();
     initPriorityToggle();
     initOperations();
     refreshCacheStats();
     store.poll(refreshCacheStats, 10000, 'guards');
+
+    // Take over with the TS view (master toggle + priority toggle + grid).
+    // Bare path lets Vite resolve to the .ts source during build; the
+    // source-tree fallback (no Vite) gets a 404 here and the legacy markup
+    // and listeners stay live.
+    import('../src/views/guards/index')
+        .then(({ mountGuardsView }) => {
+            _tsMounted = true;
+            mountGuardsView(
+                {
+                    master: document.getElementById('guards-master-host'),
+                    priority: document.getElementById('guards-priority-host'),
+                    grid: document.getElementById('guards-grid'),
+                },
+                {
+                    api: {
+                        fetchGuardsStatus: api.fetchGuardsStatus,
+                        toggleProxy: api.toggleProxy,
+                        togglePriorityMode: api.togglePriorityMode,
+                        toggleFeature: api.toggleFeature,
+                    },
+                    toast,
+                    initial: {
+                        features: store.state.features,
+                        proxyEnabled: store.state.proxyEnabled,
+                        priorityMode: store.state.priorityMode,
+                        firewall: store.state.firewall,
+                    },
+                    poll: (fn, intervalMs) => store.poll(fn, intervalMs, 'guards'),
+                },
+            );
+        })
+        .catch(() => {
+            // No TS chunk available — legacy listeners already wired.
+        });
 }
 
 function initOperations() {
@@ -157,6 +202,9 @@ function updateToggleUI(btnId, dotId, enabled, color) {
 }
 
 export function renderGuards() {
+    // The TS view owns the grid + master + priority toggles once it has
+    // mounted. Bail early so store-driven re-renders don't overwrite it.
+    if (_tsMounted) return;
     const grid = document.getElementById('guards-grid');
     if (!grid) return;
 
