@@ -2,6 +2,27 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.1] — 2026-04-25
+
+### K.1 — Runtime-tunable cost weight + routing block in spend endpoints
+
+The smart router's `cost_weight` (bias toward cheaper models, 0.0 = ignore cost, 1.0 = full bias) used to be config-only — operators had to edit `config.yaml` and reload to dial cost preference. Three changes land together:
+
+**Live attribute on the orchestrator**
+- `ProxyOrchestrator.routing_cost_weight` hydrates from config in `__init__`, then from store in `setup()` so restarts survive runtime changes.
+- `smart_router.select_endpoint` reads the agent attribute first, falls back to config. Uses an explicit `is None` check (not truthy) so `cost_weight=0.0` is honored — that's the operator's escape hatch when pricing data is wrong or unavailable.
+
+**Two new admin endpoints**
+- `GET /api/v1/routing/config` → `{cost_weight, priority_mode, strategy}` where `strategy ∈ {smart_weighted, priority, performance}`. Surfaces the live routing decision rule, not just the raw config value.
+- `POST /api/v1/routing/cost-weight` → accepts `{cost_weight: float in [0,1]}`. Validates range + type, persists to store via `routing:cost_weight` key, logs at `SYSTEM` level.
+
+**`/analytics/spend` + `/analytics/cost-efficiency` now embed routing block**
+The two spend endpoints return the same `{cost_weight, priority_mode, strategy}` block alongside the spend numbers, so the dashboard can show "active cost bias: 0.3 (smart_weighted)" next to the dollars — operators see the setting that produced the spend, not just the spend.
+
+8 new tests cover spend response shape, GET routing config across all three strategies, POST happy path, zero-weight round-trip (regression-guards the truthy-check bug), out-of-range rejection, and type rejection.
+
+---
+
 ## [1.21.0] — 2026-04-25
 
 ### Phase J — telemetry, last legacy services, mobile paper-cuts
