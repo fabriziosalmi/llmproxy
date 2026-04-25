@@ -1,6 +1,9 @@
 /**
  * Models View — Aggregated model registry from all configured providers.
- * Fetches from GET /v1/models and displays in a sortable table.
+ *
+ * Strangler fig: KPIs + table + search migrated to src/views/models/.
+ * The legacy renderer below stays for the source-tree fallback (no Vite
+ * build) and bails when the TS view has mounted.
  */
 import { api } from '../services/api.js';
 import { store } from '../services/store.js';
@@ -13,6 +16,7 @@ function isEmbeddingModel(id) {
 
 let _allChat = [];
 let _allEmbed = [];
+let _tsMounted = false;
 
 export function initModels() {
     refreshModels();
@@ -31,6 +35,28 @@ export function initModels() {
             }, 150);
         });
     }
+
+    // Take over with the TS view (KPIs + search + tables). Bare path lets
+    // Vite resolve to .ts at build; the source-tree fallback gets a 404
+    // and the legacy renderer stays live.
+    import('../src/views/models/index')
+        .then(({ mountModelsView }) => {
+            _tsMounted = true;
+            mountModelsView(
+                {
+                    kpis: document.getElementById('models-kpi-grid-host'),
+                    search: document.getElementById('models-search'),
+                    table: document.getElementById('models-table'),
+                },
+                {
+                    api: { fetchModels: api.fetchModels },
+                    poll: (fn, intervalMs) => store.poll(fn, intervalMs, 'models'),
+                },
+            );
+        })
+        .catch(() => {
+            // No TS chunk available — legacy listeners already wired above.
+        });
 }
 
 export function renderModels() {
@@ -38,6 +64,7 @@ export function renderModels() {
 }
 
 async function refreshModels() {
+    if (_tsMounted) return; // TS view drives its own polling.
     try {
         const data = await api.fetchModels();
         const models = data.data || [];
@@ -57,6 +84,7 @@ async function refreshModels() {
 }
 
 function renderModelsTable(chatModels, embeddingModels) {
+    if (_tsMounted) return; // TS view owns the table container.
     const container = document.getElementById('models-table');
     if (!container) return;
 
