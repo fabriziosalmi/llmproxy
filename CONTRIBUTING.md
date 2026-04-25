@@ -54,6 +54,20 @@ make bench          # Performance benchmarks
 - Aim for: unit tests on business logic, integration tests on pipelines
 - Security tests: add adversarial inputs to `tests/test_security.py`
 
+## UI / Frontend Development
+
+See **[docs/ui/contributing.md](docs/ui/contributing.md)** for the full UI guide — the architecture (primitives + views + strangler-fig), how to add a primitive, how to migrate a tab, test patterns, conventions. The TL;DR:
+
+```bash
+make build-ui       # Install + Vite production build
+make dev-ui         # Vite dev server with HMR on :5173
+make test-ui        # Vitest (~2s)
+make e2e-ui         # Playwright (auto-starts backend)
+make lint-ui        # ESLint + Prettier (zero-warning)
+```
+
+New code lives in `ui/src/`. Legacy `.js` in `ui/components/` is the source-tree fallback shell — never accumulate new features there.
+
 ## Plugin Development
 
 See [Plugin SDK docs](docs/plugins/sdk.md) for the full guide. Quick version:
