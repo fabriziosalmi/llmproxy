@@ -1,5 +1,9 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+    // L.3: opt-in light theme. The default theme stays dark — the operator
+    // console is dark by design — and `.theme-light` on <html> flips the
+    // surface overrides defined in src/ui/tokens.css.
+    darkMode: 'class',
     content: [
         './index.html',
         './chat.html',
@@ -7,6 +11,7 @@ export default {
         './chat.js',
         './components/**/*.{js,ts}',
         './services/**/*.{js,ts}',
+        './src/**/*.{ts,tsx}',
     ],
     theme: {
         extend: {
