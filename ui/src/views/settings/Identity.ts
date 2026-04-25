@@ -90,7 +90,7 @@ export function mountIdentity(host: HTMLElement, api: IdentityApi): () => Promis
                 return;
             }
             const grid = document.createElement('div');
-            grid.className = 'grid grid-cols-2 md:grid-cols-4 gap-4';
+            grid.className = 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4';
             grid.appendChild(field('Provider', me.provider ?? '--'));
             grid.appendChild(field('Email', me.email ?? '--'));
             grid.appendChild(rolesField(me.roles ?? []));
