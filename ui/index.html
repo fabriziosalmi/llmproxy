@@ -739,62 +739,76 @@
 
             <!-- SETTINGS VIEW -->
             <div id="view-settings" class="content-view hidden">
+                <!-- Each section is mounted independently by src/views/settings/*.
+                     The legacy markup nested inside each *-host wrapper is the
+                     fallback shown without a Vite build. -->
+
                 <!-- Identity & Access -->
-                <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-4">
-                    <h2 class="text-xs font-bold text-white mb-4">Identity & Access</h2>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                        <div>
-                            <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Auth Mode</label>
-                            <p id="auth-mode" class="text-xs text-white font-mono">--</p>
+                <div id="settings-identity-host" class="mb-4">
+                    <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6">
+                        <h2 class="text-xs font-bold text-white mb-4">Identity & Access</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div>
+                                <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Auth Mode</label>
+                                <p id="auth-mode" class="text-xs text-white font-mono">--</p>
+                            </div>
+                            <div>
+                                <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">SSO Status</label>
+                                <p id="sso-status" class="text-xs text-white font-mono">--</p>
+                            </div>
                         </div>
-                        <div>
-                            <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">SSO Status</label>
-                            <p id="sso-status" class="text-xs text-white font-mono">--</p>
+                        <div id="identity-me" class="pt-3 border-t border-white/[0.04]">
+                            <p class="text-[9px] text-slate-600 font-mono">Loading identity...</p>
                         </div>
-                    </div>
-                    <div id="identity-me" class="pt-3 border-t border-white/[0.04]">
-                        <p class="text-[9px] text-slate-600 font-mono">Loading identity...</p>
                     </div>
                 </div>
 
                 <!-- RBAC Role Matrix -->
-                <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-4">
-                    <h2 class="text-xs font-bold text-white mb-4">RBAC Role Matrix</h2>
-                    <div id="rbac-matrix">
-                        <p class="text-[9px] text-slate-600 font-mono">Loading...</p>
+                <div id="settings-rbac-host" class="mb-4">
+                    <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6">
+                        <h2 class="text-xs font-bold text-white mb-4">RBAC Role Matrix</h2>
+                        <div id="rbac-matrix">
+                            <p class="text-[9px] text-slate-600 font-mono">Loading...</p>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Webhooks -->
-                <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-4">
-                    <div class="flex items-center justify-between mb-4">
-                        <h2 class="text-xs font-bold text-white">Webhooks</h2>
-                        <button type="button" id="test-webhook-btn" class="px-3 py-1.5 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20 rounded-lg text-[10px] font-bold text-violet-400 transition-colors">Test Fire</button>
-                    </div>
-                    <div id="webhooks-status">
-                        <p class="text-[9px] text-slate-600 font-mono">Loading...</p>
+                <div id="settings-webhooks-host" class="mb-4">
+                    <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="text-xs font-bold text-white">Webhooks</h2>
+                            <button type="button" id="test-webhook-btn" class="px-3 py-1.5 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20 rounded-lg text-[10px] font-bold text-violet-400 transition-colors">Test Fire</button>
+                        </div>
+                        <div id="webhooks-status">
+                            <p class="text-[9px] text-slate-600 font-mono">Loading...</p>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Data Export -->
-                <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-4">
-                    <h2 class="text-xs font-bold text-white mb-4">Data Export</h2>
-                    <div id="export-status">
-                        <p class="text-[9px] text-slate-600 font-mono">Loading...</p>
+                <div id="settings-export-host" class="mb-4">
+                    <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6">
+                        <h2 class="text-xs font-bold text-white mb-4">Data Export</h2>
+                        <div id="export-status">
+                            <p class="text-[9px] text-slate-600 font-mono">Loading...</p>
+                        </div>
                     </div>
                 </div>
 
                 <!-- System Info -->
-                <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6">
-                    <h2 class="text-xs font-bold text-white mb-2">System Info</h2>
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Version</label>
-                            <p id="sys-version" class="text-xs text-white font-mono skeleton">v0.0.0</p>
-                        </div>
-                        <div>
-                            <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Endpoint</label>
-                            <p id="sys-url" class="text-xs text-white font-mono skeleton">https://localhost:0000</p>
+                <div id="settings-system-host">
+                    <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6">
+                        <h2 class="text-xs font-bold text-white mb-2">System Info</h2>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Version</label>
+                                <p id="sys-version" class="text-xs text-white font-mono skeleton">v0.0.0</p>
+                            </div>
+                            <div>
+                                <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Endpoint</label>
+                                <p id="sys-url" class="text-xs text-white font-mono skeleton">https://localhost:0000</p>
+                            </div>
                         </div>
                     </div>
                 </div>
