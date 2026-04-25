@@ -1,17 +1,19 @@
 /**
  * Threats View — Security dashboard.
  *
- * KPI grid + live event feed have been migrated to TypeScript primitives in
- * `src/views/threats/`. The remaining sections (budget gauge, firewall stats,
- * per-endpoint breakdown, ring latency, ring timeline, threat chart, security
- * pipeline) still live here and migrate incrementally — this is the
- * strangler-fig handoff point.
+ * Phase G.5 closed the strangler-fig loop: KPI grid + live event feed +
+ * every sub-section (budget gauge, firewall stats, per-endpoint breakdown,
+ * ring latency, TTFT, ring timeline, 24h threat chart) all delegate to
+ * TypeScript modules in `src/views/threats/`. Legacy renderers below are
+ * the source-tree fallback (no Vite build) — they bail when the TS view
+ * has mounted.
  */
 import { store } from '../services/store.js';
 import { api } from '../services/api.js';
 
 let chart = null;
 let eventSource = null;
+let _tsMounted = false;
 
 export function initThreats() {
     initChart();
@@ -20,12 +22,12 @@ export function initThreats() {
     store.poll(refreshMetrics, 10000, 'threats');
     store.poll(refreshLatencyData, 10000, 'threats');
 
-    // Try the TypeScript Threats view (KPI grid + live event feed). Bare
-    // path (no extension) lets Vite resolve to the .ts source during build;
-    // the source-tree fallback browser fetches the path literally, gets a
-    // 404, and we drop into the legacy SSE handler.
+    // Try the TypeScript Threats view. Bare path (no extension) lets Vite
+    // resolve to the .ts source during build; the source-tree fallback
+    // gets a 404 here and the legacy renderers + legacy SSE stay live.
     import('../src/views/threats/index')
-        .then(({ mountThreatsKpis, mountThreatsEventFeed }) => {
+        .then(({ mountThreatsKpis, mountThreatsEventFeed, mountThreatsSections }) => {
+            _tsMounted = true;
             const kpiHost = document.getElementById('threats-kpi-grid');
             if (kpiHost) {
                 mountThreatsKpis(kpiHost, {
@@ -35,16 +37,37 @@ export function initThreats() {
             }
             const feedHost = document.getElementById('threats-event-feed');
             if (feedHost) mountThreatsEventFeed(feedHost);
-            // Bridge: feed events into the legacy hourly chart while it remains.
-            window.addEventListener('llmproxy:threat-event', (ev) => updateChart(ev.detail));
+
+            mountThreatsSections(
+                {
+                    budget: document.getElementById('budget-gauge'),
+                    firewall: document.getElementById('firewall-stats'),
+                    breakdown: document.getElementById('endpoint-breakdown'),
+                    ringLatency: document.getElementById('ring-latency-bars'),
+                    ttft: document.getElementById('ttft-metrics'),
+                    ringTimeline: document.getElementById('ring-timeline'),
+                    chartCanvas: document.getElementById('threat-chart'),
+                },
+                {
+                    api: {
+                        fetchMetrics: api.fetchMetrics,
+                        fetchGuardsStatus: api.fetchGuardsStatus,
+                        fetchLatencyMetrics: api.fetchLatencyMetrics,
+                        fetchRingTimeline: api.fetchRingTimeline,
+                    },
+                    poll: (fn, intervalMs) => store.poll(fn, intervalMs, 'threats'),
+                    onFirewallState: (state) => store.update({ firewall: state }),
+                },
+            );
         })
         .catch(() => {
-            // Fallback: no build present — legacy SSE + legacy KPI setText path.
+            // Fallback: no build present — legacy SSE + legacy renderers stay live.
             initEventFeed();
         });
 }
 
 async function refreshMetrics() {
+    if (_tsMounted) return; // TS sections drive their own polling.
     try {
         const [text, guardsStatus, health] = await Promise.all([
             api.fetchMetrics().catch(() => ''),
@@ -262,6 +285,7 @@ const RING_COLORS = {
 };
 
 async function refreshLatencyData() {
+    if (_tsMounted) return; // TS sections drive their own polling.
     try {
         const [latency, timeline] = await Promise.all([
             api.fetchLatencyMetrics().catch(() => null),
@@ -404,6 +428,7 @@ function extractMetric(text, name) {
 }
 
 function initChart() {
+    if (_tsMounted) return; // TS chart will mount after dynamic-import.
     const canvas = document.getElementById('threat-chart');
     if (!canvas) return;
 
