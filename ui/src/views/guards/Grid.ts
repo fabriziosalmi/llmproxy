@@ -1,4 +1,5 @@
 import { createEmptyState, createErrorState, createSkeleton } from '../../ui';
+import { rum } from '../../services/rum';
 import { createGuardCard } from './GuardCard';
 import { GUARDS } from './catalog';
 import type { GuardsState } from './types';
@@ -93,6 +94,7 @@ export function mountGuardsGrid(
                 statusOverride,
                 onToggle: spec.toggleable
                     ? async (next: boolean) => {
+                          rum.action('guard_toggle', { guard: spec.key, next });
                           try {
                               const res = await deps.toggleGuard(spec.key, next);
                               if (state) {
