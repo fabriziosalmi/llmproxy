@@ -165,7 +165,14 @@ async def select_endpoint(ctx: PluginContext):
     elif any(e.id in _endpoint_stats for e in healthy):
         # Smart weighted: score-based selection using real performance data + cost
         model = ctx.body.get("model", "")
-        cost_weight = rotator.config.get("routing", {}).get("cost_weight", 0.3)
+        # Prefer the runtime-tunable attribute (set via /api/v1/routing/cost-weight);
+        # fall back to config so older deployments keep working. Use getattr+None
+        # check rather than `or` so cost_weight=0.0 (ignore cost) is honored.
+        runtime_weight = getattr(rotator, "routing_cost_weight", None)
+        cost_weight = float(
+            runtime_weight if runtime_weight is not None
+            else rotator.config.get("routing", {}).get("cost_weight", 0.3)
+        )
 
         scored = []
         for e in healthy:

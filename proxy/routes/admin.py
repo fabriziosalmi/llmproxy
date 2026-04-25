@@ -90,6 +90,55 @@ def create_router(agent) -> APIRouter:
         await agent._add_log(f"SYSTEM: Priority Steering {'ENABLED' if agent.priority_mode else 'DISABLED'}")
         return {"enabled": agent.priority_mode}
 
+    # ── Routing config (cost weight + strategy) ──
+
+    def _routing_block() -> dict:
+        cw = getattr(agent, "routing_cost_weight", None)
+        if cw is None:
+            cw = float(agent.config.get("routing", {}).get("cost_weight", 0.3))
+        if agent.priority_mode:
+            strategy = "priority"
+        elif cw <= 0.0:
+            strategy = "performance"
+        else:
+            strategy = "smart_weighted"
+        return {
+            "cost_weight": round(float(cw), 4),
+            "priority_mode": bool(agent.priority_mode),
+            "strategy": strategy,
+        }
+
+    @router.get("/api/v1/routing/config")
+    async def get_routing_config(request: Request):
+        """Read the live routing configuration: cost_weight + active strategy."""
+        _check_admin_auth(request)
+        return _routing_block()
+
+    @router.post("/api/v1/routing/cost-weight")
+    async def set_routing_cost_weight(request: Request):
+        """Update the cost-bias weight at runtime.
+
+        Accepts {"cost_weight": float in [0.0, 1.0]}. 0.0 ignores cost (pure
+        performance), 1.0 fully biases toward cheaper models. Persisted to
+        the store so restarts survive; smart_router picks up the change on
+        the very next request.
+        """
+        _check_admin_auth(request)
+        data = await request.json()
+        try:
+            new_weight = float(data.get("cost_weight"))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="cost_weight must be a number")
+        if not 0.0 <= new_weight <= 1.0:
+            raise HTTPException(status_code=400, detail="cost_weight must be in [0.0, 1.0]")
+        agent.routing_cost_weight = new_weight
+        await agent.store.set_state("routing:cost_weight", new_weight)
+        await agent._add_log(
+            f"SYSTEM: Routing cost_weight set to {new_weight:.2f}",
+            level="SYSTEM",
+        )
+        return _routing_block()
+
     @router.get("/api/v1/guards/status")
     async def get_guards_status():
         """Consolidated security subsystem status."""
@@ -259,7 +308,7 @@ def create_router(agent) -> APIRouter:
             date_from=params.get("from", ""),
             date_to=params.get("to", ""),
         )
-        return {"total": total, "breakdown": result}
+        return {"total": total, "breakdown": result, "routing": _routing_block()}
 
     @router.get("/api/v1/analytics/spend/topmodels")
     async def analytics_top_models(request: Request):
@@ -309,6 +358,7 @@ def create_router(agent) -> APIRouter:
             "models": efficiency,
             "cheapest_model": efficiency[0]["model"] if efficiency else None,
             "most_expensive_model": efficiency[-1]["model"] if efficiency else None,
+            "routing": _routing_block(),
         }
 
     # ── Audit Log (R2.10) ──
