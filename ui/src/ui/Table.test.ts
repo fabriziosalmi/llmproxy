@@ -99,4 +99,38 @@ describe('createTable', () => {
         const keys = Array.from(t.root.querySelectorAll('tbody tr')).map((tr) => (tr as HTMLElement).dataset.key);
         expect(keys).toEqual(['openai', 'anthropic', 'mistral']);
     });
+
+    // L.2 — hideBelow stamps Tailwind responsive classes on header AND every cell
+    // so the column collapses cleanly on phones (no half-rendered rows).
+
+    it('hideBelow="sm" applies hidden + sm:table-cell to header and every body cell', () => {
+        const cols: TableColumn<Endpoint>[] = [
+            { key: 'id', label: 'Endpoint' },
+            { key: 'requests', label: 'Requests', hideBelow: 'sm' },
+        ];
+        const t = createTable({ columns: cols, rows: ROWS });
+
+        const ths = t.root.querySelectorAll<HTMLTableCellElement>('thead th');
+        expect(ths[0]?.className).not.toContain('hidden');
+        expect(ths[1]?.className).toContain('hidden');
+        expect(ths[1]?.className).toContain('sm:table-cell');
+
+        const tds = t.root.querySelectorAll<HTMLTableCellElement>('tbody tr td:nth-child(2)');
+        expect(tds.length).toBe(ROWS.length);
+        tds.forEach((td) => {
+            expect(td.className).toContain('hidden');
+            expect(td.className).toContain('sm:table-cell');
+        });
+    });
+
+    it('hideBelow="md" uses md: breakpoint instead of sm:', () => {
+        const cols: TableColumn<Endpoint>[] = [
+            { key: 'id', label: 'Endpoint' },
+            { key: 'requests', label: 'Requests', hideBelow: 'md' },
+        ];
+        const t = createTable({ columns: cols, rows: ROWS });
+        const th = t.root.querySelectorAll<HTMLTableCellElement>('thead th')[1];
+        expect(th?.className).toContain('md:table-cell');
+        expect(th?.className).not.toContain('sm:');
+    });
 });

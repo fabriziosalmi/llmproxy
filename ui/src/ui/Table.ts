@@ -20,6 +20,15 @@ export interface TableColumn<T> {
     /** CSS width for the column (e.g. '8rem'). */
     width?: string;
     sortable?: boolean;
+    /**
+     * Hide this column below the given Tailwind breakpoint. Maps to
+     *   sm → `hidden sm:table-cell` (visible from 640px up)
+     *   md → `hidden md:table-cell` (visible from 768px up)
+     * The header AND every cell get the class so colspan stays honest.
+     * Use sparingly — operators on phones still need the data, just not
+     * every column at once.
+     */
+    hideBelow?: 'sm' | 'md';
     /** Returns a string or DOM node for the cell. Falls back to String(row[key]). */
     render?: (row: T) => string | HTMLElement;
     /** Pulls a comparable value out of the row when sorting on this column. */
@@ -51,6 +60,11 @@ const ALIGN_CLASS: Record<CellAlign, string> = {
     center: 'text-center',
 };
 
+const HIDE_BELOW_CLASS: Record<NonNullable<TableColumn<unknown>['hideBelow']>, string> = {
+    sm: 'hidden sm:table-cell',
+    md: 'hidden md:table-cell',
+};
+
 export function createTable<T>(opts: TableOptions<T>): TableHandle<T> {
     let rows = opts.rows;
     let sort: { key: string; direction: SortDirection } | null = opts.initialSort ?? null;
@@ -75,7 +89,8 @@ export function createTable<T>(opts: TableOptions<T>): TableHandle<T> {
         th.className = cx(
             'px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-slate-500 select-none',
             ALIGN_CLASS[col.align ?? 'left'],
-            col.sortable && 'cursor-pointer hover:text-slate-200'
+            col.sortable && 'cursor-pointer hover:text-slate-200',
+            col.hideBelow && HIDE_BELOW_CLASS[col.hideBelow]
         );
         if (col.width) th.style.width = col.width;
         th.dataset.key = col.key;
@@ -182,7 +197,11 @@ export function createTable<T>(opts: TableOptions<T>): TableHandle<T> {
 
             for (const col of opts.columns) {
                 const td = document.createElement('td');
-                td.className = cx('px-3 py-2 text-slate-300 align-middle', ALIGN_CLASS[col.align ?? 'left']);
+                td.className = cx(
+                    'px-3 py-2 text-slate-300 align-middle',
+                    ALIGN_CLASS[col.align ?? 'left'],
+                    col.hideBelow && HIDE_BELOW_CLASS[col.hideBelow]
+                );
                 if (col.render) {
                     const out = col.render(row);
                     if (typeof out === 'string') td.innerHTML = out;
