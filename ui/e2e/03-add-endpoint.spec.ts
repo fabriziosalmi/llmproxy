@@ -5,21 +5,24 @@ import { test, expect } from './fixtures/auth';
  * journey. Asserts the form's client-side validation as well, because that's
  * the second thing operators hit and the regression risk is high (the
  * registry view is one of the heaviest legacy components).
+ *
+ * Selectors deliberately use data-testid so the same spec passes against
+ * both the legacy markup (1.14.0 and earlier) and the TS-mounted form
+ * shipped in 1.15.0 — the testids are stable across both layers.
  */
 test.describe('add endpoint', () => {
     test.beforeEach(async ({ authedPage }) => {
         await authedPage.goto('/ui/#/endpoints');
-        // The login overlay should have stayed hidden because the auth fixture
-        // pre-seeded localStorage with a valid token.
         await expect(authedPage.locator('#login-overlay')).not.toBeVisible();
     });
 
     test('refuses an invalid id with an inline error and keeps the form open', async ({ authedPage }) => {
         await authedPage.locator('#add-endpoint-toggle').click();
-        await expect(authedPage.locator('#add-endpoint-form')).toBeVisible();
+        const form = authedPage.locator('[data-testid="add-endpoint-form"]');
+        await expect(form).toBeVisible();
 
         // Submit with empty fields — both errors should surface.
-        await authedPage.locator('#ep-add-btn').click();
+        await authedPage.locator('[data-testid="ep-add-btn"]').click();
 
         const nameErr = authedPage.locator('#ep-name-err');
         const urlErr = authedPage.locator('#ep-url-err');
@@ -28,14 +31,14 @@ test.describe('add endpoint', () => {
         await expect(urlErr).toBeVisible();
 
         // Form is still open — submission was rejected client-side.
-        await expect(authedPage.locator('#add-endpoint-form')).toBeVisible();
+        await expect(form).toBeVisible();
     });
 
     test('rejects a non-http URL', async ({ authedPage }) => {
         await authedPage.locator('#add-endpoint-toggle').click();
-        await authedPage.locator('#ep-name').fill('e2e-bad-url');
-        await authedPage.locator('#ep-url').fill('ftp://example.com/v1');
-        await authedPage.locator('#ep-add-btn').click();
+        await authedPage.locator('input#ep-name').fill('e2e-bad-url');
+        await authedPage.locator('input#ep-url').fill('ftp://example.com/v1');
+        await authedPage.locator('[data-testid="ep-add-btn"]').click();
         await expect(authedPage.locator('#ep-url-err')).toBeVisible();
     });
 
@@ -62,6 +65,8 @@ test.describe('add endpoint', () => {
                         id,
                         url: 'https://api.openai.com/v1',
                         provider: 'openai',
+                        status: 'Live',
+                        circuit_state: 'closed',
                         priority: 0,
                         models: ['gpt-4o-mini'],
                         enabled: true,
@@ -72,14 +77,14 @@ test.describe('add endpoint', () => {
         });
 
         await authedPage.locator('#add-endpoint-toggle').click();
-        await authedPage.locator('#ep-name').fill(id);
-        await authedPage.locator('#ep-url').fill('https://api.openai.com/v1');
-        await authedPage.locator('#ep-provider').selectOption('openai');
-        await authedPage.locator('#ep-models').fill('gpt-4o-mini');
-        await authedPage.locator('#ep-add-btn').click();
+        await authedPage.locator('input#ep-name').fill(id);
+        await authedPage.locator('input#ep-url').fill('https://api.openai.com/v1');
+        await authedPage.locator('select#ep-provider').selectOption('openai');
+        await authedPage.locator('input#ep-models').fill('gpt-4o-mini');
+        await authedPage.locator('[data-testid="ep-add-btn"]').click();
 
-        // Form collapses; toast confirms; row appears in the registry container.
-        await expect(authedPage.locator('#add-endpoint-form')).toBeHidden();
+        // Form collapses; row appears in the registry container.
+        await expect(authedPage.locator('[data-testid="add-endpoint-form"]')).toBeHidden();
         await expect(authedPage.locator('#registry-container')).toContainText(id);
     });
 });
