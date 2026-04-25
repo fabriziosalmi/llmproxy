@@ -101,6 +101,29 @@ def create_router(agent) -> APIRouter:
         scrubbed_audit = [scrub_dict(r) for r in data.get("audit", [])]
         scrubbed_spend = [scrub_dict(r) for r in data.get("spend", [])]
 
+        # GDPR Article 15: log who accessed which subject's data + when, in
+        # the same hash-chained audit log so the access trail is tamper-
+        # evident. Erase already does this; export was missing the trail.
+        await agent.store.log_audit(
+            ts=int(time.time()),
+            req_id=f"gdpr-export-{subject[:16]}",
+            session_id="GDPR_SYSTEM",
+            key_prefix="GDPR",
+            model="",
+            provider="",
+            status=200,
+            prompt_tokens=0,
+            completion_tokens=0,
+            cost_usd=0.0,
+            latency_ms=0.0,
+            blocked=False,
+            block_reason="",
+            metadata=json.dumps(
+                {"action": "export", "subject": subject, "records": total_records},
+                separators=(",", ":"),
+            ),
+        )
+
         return {
             "subject": subject,
             "exported_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),

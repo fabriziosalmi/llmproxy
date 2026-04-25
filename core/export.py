@@ -24,11 +24,36 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# PII patterns to scrub
+# PII patterns to scrub. The set is the union of `core/security.py`
+# `_REGEX_PII_PATTERNS` (used at log time / mask_pii in the security shield)
+# and the export-specific secret patterns (Bearer, JWT). Keeping the export
+# scrubber strictly broader than the runtime masker is intentional: GDPR
+# Article 15 responses must not leak categories that the security shield
+# could have missed (e.g. when Presidio is not installed, or when a row was
+# logged before masking ran).
+#
+# Specific Amex pattern is listed before the generic 16-digit one because
+# 16-digit credit cards do not match the 15-digit Amex shape.
 PII_PATTERNS = [
+    # Communications / identifiers
     (re.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'), '<EMAIL>'),
     (re.compile(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b'), '<IP>'),
-    # API keys: OpenAI (sk-...), Anthropic (sk-ant-...), generic long secrets
+    # Government / financial identifiers (mirrored from core.security regex set).
+    # Order matters: IBAN must run BEFORE the 16-digit credit-card pattern,
+    # because IBANs embed a 4×4-digit body that would otherwise get masked
+    # as <CREDIT_CARD> and leak the country/check prefix.
+    # Pattern is intentionally looser than core.security's IBAN regex (which
+    # over-fits a 24-char Spanish-style shape and misses 22-char German ones)
+    # — for an export scrubber, false-positives are fine, false-negatives are not.
+    (re.compile(r'\b[A-Z]{2}\d{2}(?:[\s-]?[\dA-Z]{4}){3,7}(?:[\s-]?\d{1,2})?\b'), '<IBAN>'),
+    (re.compile(r'\b\d{3}-\d{2}-\d{4}\b'), '<SSN>'),
+    (re.compile(r'\b3[47]\d{2}[\s-]?\d{6}[\s-]?\d{5}\b'), '<CREDIT_CARD>'),
+    (re.compile(r'\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b'), '<CREDIT_CARD>'),
+    # Phone numbers — international (E.164-ish) before US so a "+1 ..." form
+    # is recognized as international, not as an unrelated US 7-digit run.
+    (re.compile(r'\+\d{1,3}[\s.-]?\(?\d{1,4}\)?[\s.-]?\d{2,4}[\s.-]?\d{2,4}[\s.-]?\d{0,4}\b'), '<PHONE>'),
+    (re.compile(r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b'), '<PHONE>'),
+    # Secrets — keep AFTER PII so a bearer-shaped string isn't shadowed by phone matches.
     (re.compile(r'sk-ant-[a-zA-Z0-9_\-]{20,}'), '<API_KEY>'),
     (re.compile(r'sk-[a-zA-Z0-9]{20,}'), '<API_KEY>'),
     (re.compile(r'Bearer\s+[a-zA-Z0-9._\-]+'), 'Bearer <REDACTED>'),
