@@ -136,4 +136,44 @@ test.describe('settings view', () => {
         await expect(card).toContainText('1.18.0-test');
         await expect(card).toContainText('https://proxy.local:8090');
     });
+
+    test('Config Warnings widget shows the green badge when startup checks pass', async ({ authedPage }) => {
+        await authedPage.unroute('**/api/v1/config/warnings').catch(() => {});
+        await authedPage.route('**/api/v1/config/warnings', async (route) => {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({ warnings: [] }),
+            });
+        });
+        await authedPage.reload();
+        await expect(authedPage.locator('#login-overlay')).not.toBeVisible();
+        const card = authedPage.locator('[data-testid="settings-config-warnings"]');
+        await expect(card).toBeVisible({ timeout: 10_000 });
+        await expect(authedPage.locator('[data-testid="config-warnings-ok"]')).toBeVisible();
+        await expect(authedPage.locator('[data-testid="config-warnings-empty"]')).toBeVisible();
+    });
+
+    test('Config Warnings widget surfaces a row per warning when startup checks flagged drift', async ({ authedPage }) => {
+        await authedPage.unroute('**/api/v1/config/warnings').catch(() => {});
+        await authedPage.route('**/api/v1/config/warnings', async (route) => {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    warnings: [
+                        "Endpoint 'openai' needs OPENAI_API_KEY — skipped.\n  Set in .env: OPENAI_API_KEY=your-api-key",
+                        'No LLM endpoints configured — starting in ONBOARDING MODE.',
+                    ],
+                }),
+            });
+        });
+        await authedPage.reload();
+        await expect(authedPage.locator('#login-overlay')).not.toBeVisible();
+        const list = authedPage.locator('[data-testid="config-warnings-list"]');
+        await expect(list).toBeVisible({ timeout: 10_000 });
+        await expect(list).toContainText('OPENAI_API_KEY');
+        await expect(list).toContainText('ONBOARDING MODE');
+        await expect(authedPage.locator('[data-testid="config-warnings-count"]')).toContainText(/2 warnings/);
+    });
 });
