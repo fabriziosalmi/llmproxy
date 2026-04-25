@@ -4,6 +4,10 @@
  * Glassmorphism + Grain + Sub-pixel Glow
  */
 
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
     --apple-blue: #007aff;
     --apple-green: #34c759;

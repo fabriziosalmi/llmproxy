@@ -1,0 +1,7 @@
+dist/
+public/
+node_modules/
+coverage/
+playwright-report/
+test-results/
+*.min.js
