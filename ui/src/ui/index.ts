@@ -35,3 +35,12 @@ export type { CreateModalOptions, ModalButton, ConfirmOptions, PromptOptions, Bu
 
 export { createDrawer } from './Drawer';
 export type { CreateDrawerOptions, DrawerHandle } from './Drawer';
+
+export { attachTooltip } from './Tooltip';
+export type { AttachTooltipOptions, TooltipPlacement } from './Tooltip';
+
+export { createInput } from './Input';
+export type { InputFieldOptions, InputFieldHandle, InputType } from './Input';
+
+export { createToggle } from './Toggle';
+export type { ToggleOptions, ToggleHandle } from './Toggle';

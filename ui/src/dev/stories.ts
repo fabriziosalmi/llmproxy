@@ -8,6 +8,7 @@
  * one when the variant is retired so the gallery stays curated, not a dump.
  */
 import {
+    attachTooltip,
     confirm,
     createBadge,
     createButton,
@@ -16,8 +17,10 @@ import {
     createDrawer,
     createEmptyState,
     createErrorState,
+    createInput,
     createMetricTile,
     createSkeleton,
+    createToggle,
     prompt,
 } from '../ui';
 
@@ -309,5 +312,89 @@ export const stories: Story[] = [
                     }, 1_500);
                 },
             }),
+    },
+
+    // Tooltip
+    {
+        primitive: 'Tooltip',
+        variant: 'neutral · top placement',
+        description: 'Hover or focus to show. 200ms delay on mouse, immediate on focus.',
+        render: () => {
+            const btn = createButton({ label: 'Hover or tab to me', size: 'sm', variant: 'ghost' });
+            attachTooltip(btn, { content: 'I appear after a short hover delay, immediately on keyboard focus.' });
+            return btn;
+        },
+    },
+    {
+        primitive: 'Tooltip',
+        variant: 'danger intent',
+        description: 'Used to flag warnings (rose tint) without changing the trigger.',
+        render: () => {
+            const badge = createBadge({ label: 'EXPERIMENTAL', intent: 'warning' });
+            attachTooltip(badge as HTMLElement, {
+                content: 'Behavior may change between minor versions until ZT mode is GA.',
+                intent: 'danger',
+            });
+            // Badges aren't naturally focusable — wrap in a focusable button for keyboard users.
+            const wrap = document.createElement('button');
+            wrap.type = 'button';
+            wrap.className = 'inline-flex';
+            wrap.appendChild(badge);
+            attachTooltip(wrap, {
+                content: 'Behavior may change between minor versions until ZT mode is GA.',
+                intent: 'danger',
+            });
+            return wrap;
+        },
+    },
+
+    // Input / FormField
+    {
+        primitive: 'Input',
+        variant: 'with label + help',
+        render: () =>
+            createInput({
+                name: 'demo-name',
+                label: 'Endpoint id',
+                helpText: 'letters, digits, - or _',
+                placeholder: 'my-openai',
+            }).root,
+    },
+    {
+        primitive: 'Input',
+        variant: 'required · with error',
+        render: () =>
+            createInput({ name: 'demo-required', label: 'Base URL', required: true, error: 'Required.' }).root,
+    },
+    {
+        primitive: 'Input',
+        variant: 'password · autoComplete',
+        render: () =>
+            createInput({
+                name: 'demo-pwd',
+                label: 'API key',
+                type: 'password',
+                placeholder: 'sk-…',
+                autoComplete: 'new-password',
+                helpText: 'Pasted in cleartext — keep this tab private.',
+            }).root,
+    },
+
+    // Toggle
+    {
+        primitive: 'Toggle',
+        variant: 'unchecked',
+        render: () => createToggle({ label: 'Block prompt injection', description: 'Ring 1 · pre-flight' }).root,
+    },
+    {
+        primitive: 'Toggle',
+        variant: 'checked',
+        render: () => createToggle({ label: 'PII redaction', checked: true }).root,
+    },
+    {
+        primitive: 'Toggle',
+        variant: 'disabled',
+        render: () =>
+            createToggle({ label: 'Zero-trust mode', description: 'Requires plan upgrade', disabled: true }).root,
     },
 ];
