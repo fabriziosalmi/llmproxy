@@ -208,7 +208,7 @@ export function createRegistryTable(initial: Endpoint[], deps: RegistryTableDeps
                 name.className = 'text-[11px] font-bold text-white';
                 name.textContent = row.name ?? row.id;
                 const url = document.createElement('p');
-                url.className = 'text-[9px] text-slate-500 font-mono truncate max-w-xs';
+                url.className = 'text-[9px] text-slate-500 font-mono truncate max-w-[140px] sm:max-w-xs';
                 url.textContent = row.url;
                 wrap.appendChild(name);
                 wrap.appendChild(url);
@@ -227,6 +227,9 @@ export function createRegistryTable(initial: Endpoint[], deps: RegistryTableDeps
             key: 'latency',
             label: 'Latency',
             sortable: true,
+            // Hidden on phones — operators on small viewports get Endpoint /
+            // Status / Circuit / Actions; latency drilldown is a tap away.
+            hideBelow: 'sm',
             sortValue: (r) =>
                 typeof r.latency === 'number' ? r.latency : Number.parseFloat(String(r.latency ?? '0')) || 0,
             render: (row) => {
@@ -236,7 +239,14 @@ export function createRegistryTable(initial: Endpoint[], deps: RegistryTableDeps
                 return span;
             },
         },
-        { key: 'priority', label: 'Priority', sortable: true, render: (row) => renderPriorityCell(row, deps) },
+        {
+            key: 'priority',
+            label: 'Priority',
+            sortable: true,
+            // Same rationale as latency — secondary on phones.
+            hideBelow: 'sm',
+            render: (row) => renderPriorityCell(row, deps),
+        },
         { key: '__actions', label: 'Actions', align: 'right', render: (row) => renderActionsCell(row, deps) },
     ];
 
