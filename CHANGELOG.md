@@ -2,6 +2,35 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.16.0] — 2026-04-25
+
+### Operator console — Models vertical slice (Phase G.2)
+Fourth tab migrated to the C.2 pattern. `components/models.js` (127 LoC) now delegates the KPI grid + the chat/embedding tables to TypeScript views. Smaller scope than Endpoints — Models is read-only — but it consolidates the search-and-filter pattern the upcoming Plugins / Logs migrations will need.
+
+**Catalog + types — `ui/src/views/models/types.ts`**
+- `Model` shape (id, owned_by, …), `EMBEDDING_PREFIXES` shared with the legacy detector, plus the bespoke provider-color palette (eleven providers, finer-grained than the Badge primitive's six intents).
+
+**KPI tiles — `ui/src/views/models/Kpi.ts`**
+- Three MetricTiles (Active Models / Providers / Embedding Models) with provenance text per tile naming the source field on `/v1/models` and the embedding-prefix list. Loading skeleton on first paint, em-dash + tooltip on backend error.
+
+**Models table — `ui/src/views/models/ModelsTable.ts`**
+- Wraps the Table primitive with two cell renderers: id with an inline `EMB` badge for embeddings, and provider name in its bespoke color. Per-row Inspect button forwards `data-drilldown="model:<id>"` to the existing drilldown service.
+
+**Orchestrator — `ui/src/views/models/index.ts`**
+- `mountModelsView({ kpis, search, table }, { api, poll, initial })`. Splits visible models into chat + embedding, renders two tables (the embedding table only mounts when `embedding.length > 0`), and pins a footer line with the visible count.
+- Search input is debounced 150ms (matches the legacy 1:1). Empty + filter-empty + error states each have their own surface.
+
+**Strangler fig**
+- `components/models.js` keeps the legacy renderer as the source-tree fallback. `_tsMounted` flag bails its renderModelsTable / refreshModels once the TS chunk lands.
+- `index.html` wraps the legacy KPI grid in `#models-kpi-grid-host` so the markup is functional even without a Vite build.
+
+**Tests**
+- 14 new unit tests across types / Kpi / ModelsTable.
+- One new e2e spec (`e2e/08-models.spec.ts`) — five tests covering KPI population, EMB badge presence, drilldown attribute, debounced search round-trip, no-match empty state.
+- Total tally: 172 / 172 unit tests (was 157), 31 active e2e tests (was 26).
+
+---
+
 ## [1.15.0] — 2026-04-25
 
 ### Operator console — Endpoints vertical slice (Phase G.1)
