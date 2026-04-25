@@ -2,6 +2,26 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.5] — 2026-04-25
+
+### L.2 — Responsive table primitive + RegistryTable column hides
+
+Closes the registry-table-on-phones gap left out of Phase J.4 (the audit had it as the one high-severity item deferred as "needs a real responsive-table redesign"). Turns out the redesign isn't needed; a `hideBelow` opt on the Table primitive does the job.
+
+**Table primitive**
+- New `TableColumn` opt: `hideBelow?: 'sm' | 'md'`. Stamps `hidden sm:table-cell` (or `md:`) on the header AND every cell in that column so it collapses cleanly below the breakpoint — no half-rendered rows.
+- Two new unit tests pin the contract for both breakpoints.
+
+**RegistryTable**
+- Latency + Priority marked `hideBelow='sm'`. Operators on phones keep Endpoint / Status / Circuit / Actions; the secondary metrics are one tap away via Inspect.
+- URL truncation tightened: `max-w-[140px] sm:max-w-xs` (was `max-w-xs` hardcoded — half the viewport on a 320px phone).
+
+ModelsTable left alone — only 3 columns, already mobile-friendly.
+
+Pipeline: 251/251 unit tests (was 249), lint+typecheck clean, build OK.
+
+---
+
 ## [1.21.4] — 2026-04-25
 
 ### L.1 — `core/security.py` IBAN regex order + format coverage
