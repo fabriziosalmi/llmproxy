@@ -2,6 +2,43 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.12.0] — 2026-04-25
+
+### UI elevation — Phase C, vertical slice on Threats
+Builds on the 1.11.2 foundation. Lifts Threats from "metrics dashboard" toward "operator console" by introducing reusable primitives, rewriting the heaviest sections in TypeScript, and wiring real end-to-end coverage for the two journeys that were stubbed last sprint.
+
+**Design tokens + UI primitives (`ui/src/ui/`)**
+- Semantic tokens layered on top of `style.css`: spacing scale, radius, elevation, intent palette (rose/emerald/amber/red/blue/slate), motion durations + easings, z-scale.
+- 6 primitives — each a factory function returning an `HTMLElement`, no virtual DOM, no framework: `Button` (4 variants × 3 sizes, focus-visible ring, leading icon, aria-pressed), `Card` (flat/raised, optional interactive role=button + Enter/Space), `Badge` (6 intents, optional indicator dot), `EmptyState` (role=status + primary/secondary CTAs), `ErrorState` (role=alert, collapsible detail block, retry CTA), `Skeleton` (line/block/circle, repeat for lists).
+- 7th primitive `MetricTile` lives alongside the others — surfaces a "Why this metric?" ℹ button per tile with a native title-attribute tooltip naming the source counter and time window.
+- `cx()` class composer (string | array | dict, dedup) keeps the composition pure and unit-testable.
+- 36 unit tests across the 7 primitives + composer, all in happy-dom.
+
+**Threats view rewrite (`ui/src/views/threats/`)**
+- KPI grid now renders 8 `MetricTile`s with provenance tooltips (`Sum of llm_proxy_requests_total since boot`, `1 - (blocked / requests)`, etc.). Loading skeletons show on first paint; em-dash + tooltip surface on backend errors.
+- Live event feed (`ThreatEventFeed` class) replaces the legacy SSE renderer. Each event row carries three actions:
+  - **Investigate** — wires `data-drilldown="request:<id>"` to the existing drilldown service. Shown only when the event has a request id.
+  - **Explain** — wires `data-explain="rule:<signature>"` to the existing explain pane. Shown only when the event names a signature.
+  - **Mute** — toggles a category-level mute (level + signature, or level + truncated message). Persists to `localStorage["llmproxy:muted-threats"]`. Aria-pressed reflects state. Muted events are filtered locally and a footer "X muted hidden" line summarizes.
+- Connection state is now visible: a `Badge` in the feed header shows `idle / connecting / live / disconnected / reconnecting / awaiting auth`. Repeated SSE errors flip to an `ErrorState` with a Reconnect button.
+- Empty state appears the moment the feed has no events to show — with copy that reflects whether the silence is genuine or a side effect of mutes.
+- Strangler fig: budget gauge, firewall stats, per-endpoint breakdown, ring latency, ring timeline, threat chart and security pipeline still render through `components/threats.js`. They migrate incrementally; the chart receives event updates through a new `window 'llmproxy:threat-event'` `CustomEvent` dispatched by the new feed.
+- Source-tree fallback (no `npm run build`) keeps working: `components/threats.js` uses a `try/catch`'d dynamic import; missing chunks fall back to the legacy SSE handler and the original DOM markup is preserved as a fallback inside the new mount points.
+
+**End-to-end coverage (`ui/e2e/`)**
+- New `fixtures/auth.ts` — Playwright extension that pre-seeds `localStorage.proxy_key` so authed tests skip the login overlay. Reads `LLMPROXY_E2E_KEY` from env, falls back to the CI key.
+- New `fixtures/sseMock.ts` — replaces `window.EventSource` with a fake driven from tests via `window.__sseEmit(data)` / `window.__sseError()`. Lets the threat-feed flow run deterministically without a real backend SSE source.
+- `03-add-endpoint.spec.ts` — three new specs covering empty-id rejection, non-http URL rejection, and the success path (registry POST stubbed via `page.route`, asserts the new id appears in `#registry-container`).
+- `04-threats-drilldown.spec.ts` — three new specs covering the KPI provenance ℹ button, the actions wired to a streamed event (`data-drilldown` / `data-explain` / mute aria-pressed), and the mute → empty-state → localStorage round trip.
+- E2E tally: 11 active + 1 stub (palette spec deferred behind the keybinding contract), up from 5 active + 3 stub in 1.11.2.
+
+**Numbers — local pipeline**
+- Unit tests: 68 / 68 (was 7).
+- Lint: 0 errors, 13 legacy warnings (down from 16; logs.js regex escapes were fixed in 1.11.2).
+- Build: 44 modules transformed, `dist/assets/main-*.js` 142 KB / 38 KB gzip; new dynamic-imported `dist/assets/index-*.js` 22 KB / 7 KB gzip.
+
+---
+
 ## [1.11.2] — 2026-04-25
 
 ### Frontend foundation — Phase A
