@@ -2,6 +2,41 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.17.0] — 2026-04-25
+
+### Operator console — Plugins vertical slice (Phase G.3)
+Fifth tab migrated to the C.2 pattern. `components/plugins.js` (312 LoC) now delegates the toolbar (Rollback / + Install / Reload), the install form, and the plugin grid to TypeScript views in `src/views/plugins/`.
+
+**Catalog + types — `ui/src/views/plugins/types.ts`**
+- `Plugin` shape (name, hook, entrypoint, timeout_ms, fail_policy, version, ui_schema), `PluginStats` (invocations, errors, blocks, avg_latency_ms, latency_percentiles), `RING_OPTIONS` for the install dropdown, `RING_INTENT` mapping each ring to its closest Badge intent.
+
+**Plugin card — `ui/src/views/plugins/PluginCard.ts`**
+- Card primitive wrapping a header (ring badge, timeout, fail-policy, version, enabled dot), description, four-stat row (calls / blocks / err% / avg ms with tone tied to value), optional latency P50/P95/P99, optional read-only `ui_schema` block, and three actions:
+  - **Inspect** forwards `data-drilldown="plugin:<name>"` to the existing service.
+  - **Toggle** flips its label with the enabled state; calls `togglePlugin`, refreshes, toasts the result.
+  - **Uninstall** opens a Modal confirm with `danger: true` before calling DELETE.
+
+**Install form — `ui/src/views/plugins/InstallForm.ts`**
+- Input primitives + two styled native `<select>`s (hook + fail policy). Same validation as legacy: name must match `^[a-z_][a-z0-9_]*$/i` (Python identifier convention), entrypoint must contain `:` (module:Class).
+- Busy state during submit. Two distinct toast paths: backend `status: "failed"` surfaces `result.detail`; thrown error surfaces the exception message.
+
+**Orchestrator — `ui/src/views/plugins/index.ts`**
+- `mountPluginsView({ grid, formHost, rollbackBtn, installToggle, reloadBtn }, { api, toast, poll })`.
+- Plugins + stats fetched in parallel — cards render even when `/stats` 503s.
+- Re-clones the three toolbar buttons to strip legacy listeners. Skeleton on first load, ErrorState on registry fetch failure.
+
+**Strangler fig**
+- `components/plugins.js` keeps the legacy renderer behind a `_tsMounted` flag.
+- `index.html` wraps the legacy install form in `#plugin-install-form-host` so the markup is functional even without a Vite build.
+- `services/api.js` gains `reloadPlugins()` (POST `/api/v1/plugins/hot-swap`) so the orchestrator doesn't issue raw fetch calls.
+
+**Tests**
+- 18 new unit tests across PluginCard + InstallForm.
+- One new e2e spec (`e2e/09-plugins.spec.ts`) — 6 tests covering card rendering, Inspect drilldown, Toggle POST shape, Uninstall confirm cancel, Install happy path, Reload hot-swap.
+- Total tally: 190 / 190 unit tests (was 172), 37 active e2e tests (was 31).
+
+---
+
 ## [1.16.0] — 2026-04-25
 
 ### Operator console — Models vertical slice (Phase G.2)
