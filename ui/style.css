@@ -4,6 +4,8 @@
  * Glassmorphism + Grain + Sub-pixel Glow
  */
 
+@import './src/ui/tokens.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
