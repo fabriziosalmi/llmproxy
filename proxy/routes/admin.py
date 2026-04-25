@@ -5,6 +5,55 @@ from typing import Any
 
 from fastapi import APIRouter, Request, HTTPException
 
+
+# ── Spend forecasting math (M.2) ────────────────────────────────────────
+# Pure helper so tests can drive elapsed_hours / spent / daily_limit
+# directly without monkey-patching wall-clock time.
+
+# Below this many hours elapsed since midnight, a burn-rate forecast is
+# noise (one cheap call right after midnight extrapolates to wild
+# numbers). Return null fields rather than mislead operators.
+_FORECAST_MIN_HOURS = 5.0 / 60.0  # 5 minutes
+
+
+def _compute_forecast(*, spent: float, daily_limit: float, elapsed_hours: float) -> dict:
+    """Return today's spend forecast block.
+
+    All money fields are USD. None values mean "not enough data yet" or
+    "not applicable" — the consumer should render those as `—`.
+    """
+    block: dict[str, Any] = {
+        "current_spend_usd": round(spent, 6),
+        "daily_limit_usd": round(daily_limit, 4) if daily_limit > 0 else None,
+        "elapsed_hours": round(elapsed_hours, 3),
+        "burn_rate_usd_per_hour": None,
+        "projected_daily_total_usd": None,
+        "headroom_usd": None,
+        "time_to_limit_hours": None,
+    }
+
+    if elapsed_hours < _FORECAST_MIN_HOURS:
+        return block
+
+    burn_rate = spent / elapsed_hours
+    block["burn_rate_usd_per_hour"] = round(burn_rate, 6)
+    block["projected_daily_total_usd"] = round(burn_rate * 24, 4)
+
+    if daily_limit > 0:
+        headroom = daily_limit - spent
+        block["headroom_usd"] = round(headroom, 4)
+        if headroom <= 0:
+            # Already over — surface a hard zero so the UI can render
+            # "limit exceeded" without dividing by zero.
+            block["time_to_limit_hours"] = 0.0
+        elif burn_rate > 0:
+            block["time_to_limit_hours"] = round(headroom / burn_rate, 3)
+        # burn_rate == 0 with headroom > 0: leave time_to_limit None — the
+        # forecast is "indefinite at zero rate".
+
+    return block
+
+
 def create_router(agent) -> APIRouter:
     router = APIRouter()
 
@@ -89,6 +138,34 @@ def create_router(agent) -> APIRouter:
         await agent.store.set_state("priority_mode", agent.priority_mode)
         await agent._add_log(f"SYSTEM: Priority Steering {'ENABLED' if agent.priority_mode else 'DISABLED'}")
         return {"enabled": agent.priority_mode}
+
+    # ── Spend forecasting (M.2) ──
+
+    def _forecast_block() -> dict:
+        """Project today's spend forward at the current burn rate.
+
+        Embedded in /analytics/spend and exposed standalone at /analytics/forecast.
+        Time-to-limit is the most actionable single number for an operator —
+        it's what they'd compute by hand otherwise.
+        """
+        import datetime as _dt
+        daily_limit = float(agent.config.get("budget", {}).get("daily_limit", 0.0))
+        spent = float(getattr(agent, "total_cost_today", 0.0))
+        now = _dt.datetime.now()
+        midnight = _dt.datetime.combine(now.date(), _dt.time.min)
+        elapsed_hours = max((now - midnight).total_seconds() / 3600.0, 0.0)
+        return _compute_forecast(spent=spent, daily_limit=daily_limit, elapsed_hours=elapsed_hours)
+
+    @router.get("/api/v1/analytics/forecast")
+    async def get_spend_forecast(request: Request):
+        """Today's forecast: burn rate, projected total, headroom, time-to-limit.
+
+        Numbers are derived from agent.total_cost_today and the wall-clock
+        elapsed since local midnight. The same block is embedded in
+        /analytics/spend so existing dashboards pick it up for free.
+        """
+        _check_admin_auth(request)
+        return _forecast_block()
 
     # ── Routing config (cost weight + strategy) ──
 
@@ -308,7 +385,12 @@ def create_router(agent) -> APIRouter:
             date_from=params.get("from", ""),
             date_to=params.get("to", ""),
         )
-        return {"total": total, "breakdown": result, "routing": _routing_block()}
+        return {
+            "total": total,
+            "breakdown": result,
+            "routing": _routing_block(),
+            "forecast": _forecast_block(),
+        }
 
     @router.get("/api/v1/analytics/spend/topmodels")
     async def analytics_top_models(request: Request):

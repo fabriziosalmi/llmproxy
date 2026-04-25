@@ -294,6 +294,93 @@ class TestAdminRoutes:
             resp = await c.post("/api/v1/routing/cost-weight", json={"cost_weight": "fast"})
         assert resp.status_code == 400
 
+    # ── M.2 Spend forecasting ───────────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_forecast_endpoint_returns_block(self):
+        app, agent = _make_admin_app()
+        # Fixture has total_cost_today=5.67, daily_limit=50.0
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.get("/api/v1/analytics/forecast")
+        assert resp.status_code == 200
+        body = resp.json()
+        # Shape contract — operators consume these names directly.
+        assert set(body.keys()) == {
+            "current_spend_usd",
+            "daily_limit_usd",
+            "elapsed_hours",
+            "burn_rate_usd_per_hour",
+            "projected_daily_total_usd",
+            "headroom_usd",
+            "time_to_limit_hours",
+        }
+        assert body["current_spend_usd"] == pytest.approx(5.67)
+        assert body["daily_limit_usd"] == pytest.approx(50.0)
+
+    @pytest.mark.asyncio
+    async def test_spend_endpoint_embeds_forecast_block(self):
+        app, agent = _make_admin_app()
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.get("/api/v1/analytics/spend")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "forecast" in body
+        assert body["forecast"]["current_spend_usd"] == pytest.approx(5.67)
+
+
+# ── M.2 — _compute_forecast pure-math suite ──────────────────────────
+
+
+class TestForecastMath:
+    """Drive the forecast helper directly so we don't depend on wall-clock time."""
+
+    def _import(self):
+        from proxy.routes.admin import _compute_forecast
+        return _compute_forecast
+
+    def test_typical_midday_burn(self):
+        f = self._import()(spent=12.0, daily_limit=50.0, elapsed_hours=12.0)
+        assert f["burn_rate_usd_per_hour"] == pytest.approx(1.0)
+        assert f["projected_daily_total_usd"] == pytest.approx(24.0)
+        assert f["headroom_usd"] == pytest.approx(38.0)
+        assert f["time_to_limit_hours"] == pytest.approx(38.0)
+
+    def test_below_min_elapsed_returns_nulls_for_rate_fields(self):
+        """Just past midnight — one cheap call shouldn't extrapolate to wild
+        projections."""
+        f = self._import()(spent=0.05, daily_limit=50.0, elapsed_hours=0.01)
+        assert f["burn_rate_usd_per_hour"] is None
+        assert f["projected_daily_total_usd"] is None
+        assert f["time_to_limit_hours"] is None
+        # But the raw inputs are still surfaced.
+        assert f["current_spend_usd"] == pytest.approx(0.05)
+        assert f["daily_limit_usd"] == pytest.approx(50.0)
+        assert f["elapsed_hours"] == pytest.approx(0.01)
+
+    def test_already_over_limit_pins_time_to_zero(self):
+        """Headroom <= 0 surfaces a hard zero so the UI can render 'over limit'
+        without div-by-zero."""
+        f = self._import()(spent=60.0, daily_limit=50.0, elapsed_hours=10.0)
+        assert f["headroom_usd"] == pytest.approx(-10.0)
+        assert f["time_to_limit_hours"] == 0.0
+
+    def test_zero_burn_rate_leaves_time_null(self):
+        """Zero spend → no rate → indefinite, not infinity."""
+        f = self._import()(spent=0.0, daily_limit=50.0, elapsed_hours=4.0)
+        assert f["burn_rate_usd_per_hour"] == 0.0
+        assert f["headroom_usd"] == pytest.approx(50.0)
+        assert f["time_to_limit_hours"] is None  # would be ∞ — express as null
+
+    def test_no_daily_limit_skips_headroom(self):
+        """No budget configured → forecast still computes burn rate but limit
+        fields stay null."""
+        f = self._import()(spent=5.0, daily_limit=0.0, elapsed_hours=5.0)
+        assert f["daily_limit_usd"] is None
+        assert f["headroom_usd"] is None
+        assert f["time_to_limit_hours"] is None
+        assert f["burn_rate_usd_per_hour"] == pytest.approx(1.0)
+        assert f["projected_daily_total_usd"] == pytest.approx(24.0)
+
     @pytest.mark.asyncio
     async def test_analytics_top_models(self):
         app, agent = _make_admin_app()
