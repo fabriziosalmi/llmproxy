@@ -110,8 +110,22 @@ ALLOWED_MODULES = {
 
 
 class PluginSecurityError(Exception):
-    """Raised when a plugin fails AST lint scan."""
+    """Raised when a plugin fails AST lint scan or SHA-256 pin verification."""
     pass
+
+
+def compute_plugin_sha256(source: str) -> str:
+    """SHA-256 of the plugin source bytes — UTF-8 encoded.
+
+    Used by install_plugin() to record the trusted hash and by _load_plugin()
+    to verify the file on disk hasn't been swapped out post-install. This is
+    a tampering check, not a sandbox: the proxy still loads + executes the
+    code in-process, so the threat model is "trusted plugin, untrusted disk"
+    (insider modification, supply-chain swap, disk corruption), not
+    "untrusted plugin author".
+    """
+    import hashlib
+    return hashlib.sha256(source.encode("utf-8")).hexdigest()
 
 
 def ast_scan(source: str, plugin_name: str) -> bool:
@@ -406,6 +420,28 @@ class PluginManager:
             with open(file_path, 'r') as f:
                 source = f.read()
             ast_scan(source, name)
+
+            # SHA-256 pin verification (M.1) — when the manifest entry carries
+            # a recorded hash, refuse to load a file that doesn't match. This
+            # detects on-disk tampering between install and load (insider,
+            # supply chain, disk corruption). Bundled plugins without a pin
+            # log a one-shot warning so operators can opt in by adding sha256
+            # to the bundled manifest.
+            recorded = p_info.get("sha256")
+            actual = compute_plugin_sha256(source)
+            if recorded:
+                if recorded != actual:
+                    raise PluginSecurityError(
+                        f"Plugin '{name}': SHA-256 pin mismatch "
+                        f"(expected {recorded[:12]}…, got {actual[:12]}…). "
+                        "File on disk has changed since install."
+                    )
+            else:
+                self.logger.warning(
+                    f"Plugin '{name}' loaded without a SHA-256 pin "
+                    f"(actual: {actual[:12]}…). Add `sha256: {actual}` to "
+                    f"the manifest entry to enable tampering detection."
+                )
 
             spec = importlib.util.spec_from_file_location(name, file_path)
             if spec is None or spec.loader is None:
@@ -775,6 +811,20 @@ class PluginManager:
         if existing:
             self.logger.warning(f"Plugin '{manifest_entry['name']}' already installed, updating...")
             manifest["plugins"] = [p for p in manifest["plugins"] if p.get("name") != manifest_entry["name"]]
+
+        # M.1 — record SHA-256 of the plugin source so subsequent loads can
+        # detect tampering. Only Python plugins go through this path; WASM
+        # uses its own file extension and is loaded by the WASM runner.
+        if manifest_entry.get("type", "python") == "python" and "sha256" not in manifest_entry:
+            entrypoint = manifest_entry.get("entrypoint", "")
+            if ":" in entrypoint:
+                module_path = entrypoint.split(":", 1)[0]
+                src_path = os.path.join(self.plugins_dir, f"{module_path.replace('.', '/')}.py")
+                # Same containment guard as _load_plugin — never read outside plugins_dir.
+                safe_base = os.path.abspath(self.plugins_dir) + os.sep
+                if os.path.abspath(src_path).startswith(safe_base) and os.path.exists(src_path):
+                    with open(src_path, "r") as src_file:
+                        manifest_entry["sha256"] = compute_plugin_sha256(src_file.read())
 
         manifest["plugins"].append(manifest_entry)
 
