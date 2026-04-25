@@ -5,6 +5,7 @@
  */
 import { createBadge, createButton, createTable, cx } from '../../ui';
 import type { TableColumn, TableHandle } from '../../ui';
+import { rum } from '../../services/rum';
 import type { CircuitState, Endpoint } from './types';
 
 export interface RegistryTableDeps {
@@ -135,6 +136,7 @@ function renderActionsCell(row: Endpoint, deps: RegistryTableDeps): HTMLElement 
         testId: `ep-reset-cb-${row.id}`,
     });
     resetCb.addEventListener('click', async () => {
+        rum.action('endpoint_reset_cb', { id: row.id });
         try {
             await deps.onResetCircuitBreaker(row.id);
             deps.toast?.(`Circuit breaker ${row.id} reset to CLOSED`, 'success');
@@ -152,6 +154,7 @@ function renderActionsCell(row: Endpoint, deps: RegistryTableDeps): HTMLElement 
         testId: `ep-toggle-${row.id}`,
     });
     toggle.addEventListener('click', async () => {
+        rum.action('endpoint_toggle', { id: row.id });
         try {
             await deps.onToggleEndpoint(row.id);
             deps.toast?.(`Endpoint ${row.id} toggled`, 'success');
@@ -178,6 +181,7 @@ function renderActionsCell(row: Endpoint, deps: RegistryTableDeps): HTMLElement 
             danger: true,
         });
         if (!ok) return;
+        rum.action('endpoint_delete', { id: row.id });
         try {
             await deps.onDeleteEndpoint(row.id);
             deps.toast?.(`Endpoint ${row.id} deleted`, 'success');
