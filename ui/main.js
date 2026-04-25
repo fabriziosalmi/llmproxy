@@ -15,7 +15,6 @@ import { initModels } from './components/models.js';
 import { initAnalytics } from './components/analytics.js';
 import { initSecurity, renderSecurity } from './components/security.js';
 import { auth } from './services/auth.js';
-import { dialog } from './services/dialog.js';
 import { toast } from './services/toast.js';
 import { initExplain } from './services/explain.js';
 import { initDrilldown, drilldown } from './services/drilldown.js';
@@ -534,7 +533,8 @@ function initHUD() {
     const panicBtn = document.getElementById('panic-btn');
     if (panicBtn) {
         panicBtn.addEventListener('click', async () => {
-            const ok = await dialog.confirm({
+            const { confirm } = await import('./src/ui');
+            const ok = await confirm({
                 title: 'Emergency kill switch',
                 message: 'This will immediately halt ALL proxy traffic. In-flight requests drop. Are you sure?',
                 confirmLabel: 'Halt proxy',

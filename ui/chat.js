@@ -3,7 +3,6 @@
  * Safe markdown rendering (no innerHTML on user content), TPS metrics, provider labels.
  */
 
-import { dialog } from './services/dialog.js';
 
 const BASE = window.location.origin;
 const messagesEl = document.getElementById('messages');
@@ -109,7 +108,8 @@ async function bootstrap() {
     }
     // 401/403 means we need a key; network failures go to Offline.
     if (result.status === 401 || result.status === 403 || !getToken()) {
-        const key = await dialog.prompt({
+        const { prompt } = await import('./src/ui');
+        const key = await prompt({
             title: 'LLMProxy API key required',
             message: 'Paste the Bearer key the proxy gave you at install (see $LLM_PROXY_API_KEYS in .env).',
             label: 'API key',
