@@ -1,6 +1,11 @@
 /**
- * Threats View — Security dashboard with KPI cards, budget gauge, per-endpoint
- * breakdown, latency percentiles, threat timeline, and live event feed.
+ * Threats View — Security dashboard.
+ *
+ * KPI grid + live event feed have been migrated to TypeScript primitives in
+ * `src/views/threats/`. The remaining sections (budget gauge, firewall stats,
+ * per-endpoint breakdown, ring latency, ring timeline, threat chart, security
+ * pipeline) still live here and migrate incrementally — this is the
+ * strangler-fig handoff point.
  */
 import { store } from '../services/store.js';
 import { api } from '../services/api.js';
@@ -10,11 +15,33 @@ let eventSource = null;
 
 export function initThreats() {
     initChart();
-    initEventFeed();
     refreshMetrics();
     refreshLatencyData();
     store.poll(refreshMetrics, 10000, 'threats');
     store.poll(refreshLatencyData, 10000, 'threats');
+
+    // Try the TypeScript Threats view (KPI grid + live event feed). Bare
+    // path (no extension) lets Vite resolve to the .ts source during build;
+    // the source-tree fallback browser fetches the path literally, gets a
+    // 404, and we drop into the legacy SSE handler.
+    import('../src/views/threats/index')
+        .then(({ mountThreatsKpis, mountThreatsEventFeed }) => {
+            const kpiHost = document.getElementById('threats-kpi-grid');
+            if (kpiHost) {
+                mountThreatsKpis(kpiHost, {
+                    api: { fetchMetrics: api.fetchMetrics, fetchHealth: api.fetchHealth },
+                    poll: (fn, intervalMs) => store.poll(fn, intervalMs, 'threats'),
+                });
+            }
+            const feedHost = document.getElementById('threats-event-feed');
+            if (feedHost) mountThreatsEventFeed(feedHost);
+            // Bridge: feed events into the legacy hourly chart while it remains.
+            window.addEventListener('llmproxy:threat-event', (ev) => updateChart(ev.detail));
+        })
+        .catch(() => {
+            // Fallback: no build present — legacy SSE + legacy KPI setText path.
+            initEventFeed();
+        });
 }
 
 async function refreshMetrics() {
