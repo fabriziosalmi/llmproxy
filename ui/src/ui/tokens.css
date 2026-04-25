@@ -1,0 +1,85 @@
+/*
+ * LLMProxy — Semantic design tokens
+ *
+ * Layer on top of style.css (which holds typography + brand). Use these
+ * tokens for spacing, elevation, and intent-coded colors so primitives stay
+ * consistent across views.
+ */
+
+:root {
+    /* Spacing scale (4px base) */
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.25rem;
+    --space-6: 1.5rem;
+    --space-8: 2rem;
+    --space-10: 2.5rem;
+    --space-12: 3rem;
+    --space-16: 4rem;
+
+    /* Radius */
+    --radius-sm: 0.375rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
+    --radius-2xl: 1.25rem;
+
+    /* Elevation — mostly subtle in dark glassmorphism */
+    --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.2);
+    --shadow-sm: 0 2px 4px rgb(0 0 0 / 0.25);
+    --shadow-md: 0 4px 12px rgb(0 0 0 / 0.3);
+    --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.4);
+
+    /* Surface tokens (glassmorphism) */
+    --surface-0: rgb(5 6 8);
+    --surface-1: rgb(255 255 255 / 0.03);
+    --surface-2: rgb(255 255 255 / 0.05);
+    --surface-3: rgb(255 255 255 / 0.08);
+    --border-1: rgb(255 255 255 / 0.06);
+    --border-2: rgb(255 255 255 / 0.1);
+    --border-3: rgb(255 255 255 / 0.15);
+
+    /* Intent (semantic) colors — paired with bg/text/border tokens for AA contrast */
+    --intent-primary: 244 63 94; /* rose-500 */
+    --intent-success: 52 199 89; /* apple-green */
+    --intent-warning: 245 158 11; /* amber-500 */
+    --intent-danger: 255 59 48; /* apple-red */
+    --intent-info: 0 122 255; /* apple-blue */
+    --intent-neutral: 142 142 147; /* apple-gray */
+
+    /* Motion */
+    --duration-fast: 120ms;
+    --duration-base: 200ms;
+    --duration-slow: 320ms;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* Z-index scale */
+    --z-base: 0;
+    --z-sticky: 10;
+    --z-overlay: 50;
+    --z-drawer: 60;
+    --z-modal: 70;
+    --z-toast: 80;
+    --z-login: 100;
+}
+
+/* Skeleton pulse keyframe — used by Skeleton primitive */
+@keyframes llm-skeleton-pulse {
+    0%,
+    100% {
+        opacity: 0.6;
+    }
+    50% {
+        opacity: 0.3;
+    }
+}
+
+/* Subtle ring on focus-visible — accessibility win */
+.llm-focus-ring:focus-visible {
+    outline: 2px solid rgb(var(--intent-primary));
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+}
