@@ -3,7 +3,6 @@
  */
 import { api } from '../services/api.js';
 import { toast } from '../services/toast.js';
-import { dialog } from '../services/dialog.js';
 
 const RING_COLORS = {
     ingress: 'rose',
@@ -40,7 +39,8 @@ export async function initPlugins() {
     const rollbackBtn = document.getElementById('rollback-plugins-btn');
     if (rollbackBtn) {
         rollbackBtn.addEventListener('click', async () => {
-            const ok = await dialog.confirm({
+            const { confirm } = await import('../src/ui');
+            const ok = await confirm({
                 title: 'Rollback plugin configuration',
                 message: 'Revert to the previous plugin configuration snapshot? Any changes made since will be lost.',
                 confirmLabel: 'Rollback',
@@ -244,7 +244,8 @@ async function renderPluginList() {
                         toast(`Plugin "${name}" ${plugin.enabled === false ? 'enabled' : 'disabled'}`, 'success');
                     }
                 } else if (action === 'uninstall-plugin') {
-                    const ok = await dialog.confirm({
+                    const { confirm } = await import('../src/ui');
+                    const ok = await confirm({
                         title: 'Uninstall plugin',
                         message: `Remove "${name}" from the pipeline? The proxy will hot-swap — in-flight requests finish through the old ring, new requests go through the new one.`,
                         confirmLabel: 'Uninstall',
