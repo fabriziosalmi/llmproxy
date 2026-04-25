@@ -1,11 +1,19 @@
 /**
  * Endpoints View — LLM endpoint registry with circuit breaker state.
+ *
+ * Strangler fig: the registry list + add-endpoint form have been migrated
+ * to TypeScript primitives in src/views/endpoints/. Legacy renderers below
+ * stay for the source-tree fallback (no Vite build) — they bail when the
+ * TS view has mounted to avoid clobbering its DOM on store updates.
  */
 import { store } from '../services/store.js';
 import { api } from '../services/api.js';
 import { toast } from '../services/toast.js';
 
+let _tsMounted = false;
+
 export async function fetchRegistry() {
+    if (_tsMounted) return; // TS view drives its own polling.
     try {
         const data = await api.fetchRegistry();
         store.update({ registry: data });
@@ -14,6 +22,38 @@ export async function fetchRegistry() {
 
 export function initRegistry() {
     fetchRegistry();
+
+    // Take over with the TS view (registry table + add-endpoint form). Bare
+    // path lets Vite resolve to the .ts source during build; the source-tree
+    // fallback gets a 404 here and the legacy listeners stay live.
+    import('../src/views/endpoints/index')
+        .then(({ mountEndpointsView }) => {
+            _tsMounted = true;
+            mountEndpointsView(
+                {
+                    view: document.getElementById('view-endpoints'),
+                    addToggle: document.getElementById('add-endpoint-toggle'),
+                    registry: document.getElementById('registry-container'),
+                    formHost: document.getElementById('add-endpoint-form-host'),
+                },
+                {
+                    api: {
+                        fetchRegistry: api.fetchRegistry,
+                        addEndpoint: api.addEndpoint,
+                        toggleEndpoint: api.toggleEndpoint,
+                        deleteEndpoint: api.deleteEndpoint,
+                        updatePriority: api.updatePriority,
+                        resetCircuitBreaker: api.resetCircuitBreaker,
+                    },
+                    toast,
+                    initial: store.state.registry || [],
+                    poll: (fn, intervalMs) => store.poll(fn, intervalMs, 'endpoints'),
+                },
+            );
+        })
+        .catch(() => {
+            // No TS chunk available — legacy listeners already wired below.
+        });
 
     // Add endpoint form toggle
     const toggleBtn = document.getElementById('add-endpoint-toggle');
@@ -149,6 +189,7 @@ function sortEndpoints(endpoints) {
 }
 
 export function renderRegistry() {
+    if (_tsMounted) return; // TS view owns the registry container.
     const container = document.getElementById('registry-container');
     if (!container) return;
 
