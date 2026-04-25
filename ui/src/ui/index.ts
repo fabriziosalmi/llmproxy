@@ -44,3 +44,9 @@ export type { InputFieldOptions, InputFieldHandle, InputType } from './Input';
 
 export { createToggle } from './Toggle';
 export type { ToggleOptions, ToggleHandle } from './Toggle';
+
+export { createTable } from './Table';
+export type { TableColumn, TableOptions, TableHandle, CellAlign, SortDirection } from './Table';
+
+export { createTabs } from './Tabs';
+export type { TabSpec, TabsOptions, TabsHandle } from './Tabs';
