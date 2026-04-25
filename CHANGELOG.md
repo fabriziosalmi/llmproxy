@@ -2,6 +2,36 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.8] — 2026-04-25
+
+### M.2 — Spend forecasting (burn rate + time-to-limit + projection)
+
+The spend endpoints surfaced what the operator already paid; the most actionable single number — "at this rate, the daily limit hits in N hours" — was not exposed. Trivial math, never implemented. Now it is.
+
+**Pure helper** at module scope:
+```
+_compute_forecast(spent, daily_limit, elapsed_hours) → block
+```
+
+**Block fields** (all USD, `null` means insufficient data / not applicable):
+`current_spend_usd`, `daily_limit_usd`, `elapsed_hours`, `burn_rate_usd_per_hour`, `projected_daily_total_usd`, `headroom_usd`, `time_to_limit_hours`.
+
+**Edge cases pinned**
+- Elapsed < 5 min → rate fields null. One cheap call right after midnight extrapolates to wild numbers; surface "not enough data", not fake confidence.
+- Already over limit (`headroom <= 0`) → `time_to_limit_hours = 0.0`, not negative. UI renders "limit exceeded" without div-by-zero.
+- Zero burn rate with headroom → `time_to_limit_hours` stays null. The forecast is "indefinite at zero rate" — null, not infinity.
+- No `daily_limit` configured → limit/headroom/time-to-limit nulls; burn rate + projected total still computed.
+
+**Two surfaces**
+- `GET /api/v1/analytics/forecast` — standalone, returns the block.
+- `/api/v1/analytics/spend` — embeds the same block as `forecast` next to the existing `routing` block. Dashboards calling `/spend` pick it up for free, no client change needed.
+
+7 new tests — 5 cover the pure math (typical / below-min-elapsed / over-limit / zero-rate / no-limit), 2 cover the HTTP surface.
+
+Wider regression: 151 backend tests across the touched suites all green.
+
+---
+
 ## [1.21.7] — 2026-04-25
 
 ### M.1 — SHA-256 plugin pinning (tampering detection, not sandbox)
