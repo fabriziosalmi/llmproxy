@@ -342,29 +342,34 @@
 
             <!-- GUARDS VIEW -->
             <div id="view-guards" class="content-view hidden">
-                <!-- Master Toggle -->
-                <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-6">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <h2 class="text-sm font-bold text-white">Gateway Status</h2>
-                            <p class="text-[10px] text-slate-500 mt-0.5">Master proxy enable/disable</p>
+                <!-- Master Toggle (mounted by src/views/guards/Toggles.ts; legacy
+                     markup below renders when no Vite build is present). -->
+                <div id="guards-master-host" data-testid="guards-master-host">
+                    <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h2 class="text-sm font-bold text-white">Gateway Status</h2>
+                                <p class="text-[10px] text-slate-500 mt-0.5">Master proxy enable/disable</p>
+                            </div>
+                            <button type="button" id="proxy-toggle-btn" role="switch" aria-checked="true" aria-label="Enable proxy gateway" class="relative w-14 h-7 rounded-full transition-colors bg-emerald-500/20 border border-emerald-500/30">
+                                <div id="proxy-toggle-dot" class="absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-emerald-400 transition-transform translate-x-7 shadow-lg shadow-emerald-500/30"></div>
+                            </button>
                         </div>
-                        <button type="button" id="proxy-toggle-btn" role="switch" aria-checked="true" aria-label="Enable proxy gateway" class="relative w-14 h-7 rounded-full transition-colors bg-emerald-500/20 border border-emerald-500/30">
-                            <div id="proxy-toggle-dot" class="absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-emerald-400 transition-transform translate-x-7 shadow-lg shadow-emerald-500/30"></div>
-                        </button>
                     </div>
                 </div>
 
-                <!-- Priority Steering -->
-                <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-6">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <h2 class="text-sm font-bold text-white">Priority Steering</h2>
-                            <p class="text-[10px] text-slate-500 mt-0.5">Route to highest-priority endpoint only</p>
+                <!-- Priority Steering (mounted by src/views/guards/Toggles.ts; legacy fallback inside). -->
+                <div id="guards-priority-host" data-testid="guards-priority-host">
+                    <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h2 class="text-sm font-bold text-white">Priority Steering</h2>
+                                <p class="text-[10px] text-slate-500 mt-0.5">Route to highest-priority endpoint only</p>
+                            </div>
+                            <button type="button" id="priority-toggle-btn" role="switch" aria-checked="false" aria-label="Enable priority steering" class="relative w-14 h-7 rounded-full transition-colors bg-slate-700/50 border border-slate-600/30">
+                                <div id="priority-toggle-dot" class="absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-slate-500 transition-transform translate-x-0"></div>
+                            </button>
                         </div>
-                        <button type="button" id="priority-toggle-btn" role="switch" aria-checked="false" aria-label="Enable priority steering" class="relative w-14 h-7 rounded-full transition-colors bg-slate-700/50 border border-slate-600/30">
-                            <div id="priority-toggle-dot" class="absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-slate-500 transition-transform translate-x-0"></div>
-                        </button>
                     </div>
                 </div>
 
