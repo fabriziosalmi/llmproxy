@@ -8,6 +8,7 @@
  * one when the variant is retired so the gallery stays curated, not a dump.
  */
 import {
+    confirm,
     createBadge,
     createButton,
     createCard,
@@ -16,6 +17,7 @@ import {
     createErrorState,
     createMetricTile,
     createSkeleton,
+    prompt,
 } from '../ui';
 
 export interface Story {
@@ -206,6 +208,65 @@ export const stories: Story[] = [
                 sub: 'since 2026-04-25 03:55 UTC',
                 intent: 'info',
                 size: 'sm',
+            }),
+    },
+
+    // Modal — interactive samples; click the button to see it open.
+    {
+        primitive: 'Modal',
+        variant: 'confirm()',
+        description: 'Click to open a yes/no modal. Resolves the promise with true/false.',
+        render: () =>
+            createButton({
+                label: 'Open confirm',
+                size: 'sm',
+                onClick: async () => {
+                    const ok = await confirm({
+                        title: 'Restart proxy?',
+                        message: 'In-flight requests finish, then the proxy restarts.',
+                    });
+                    console.log('[gallery] confirm result =', ok);
+                },
+            }),
+    },
+    {
+        primitive: 'Modal',
+        variant: 'confirm() · danger',
+        description: 'Destructive variant — rose-coloured panel border + primary button.',
+        render: () =>
+            createButton({
+                label: 'Open destructive',
+                size: 'sm',
+                variant: 'destructive',
+                onClick: async () => {
+                    const ok = await confirm({
+                        title: 'Delete endpoint',
+                        message: 'Remove "openai-mini" from the registry? Traffic falls back through the chain.',
+                        confirmLabel: 'Delete',
+                        danger: true,
+                    });
+                    console.log('[gallery] danger confirm =', ok);
+                },
+            }),
+    },
+    {
+        primitive: 'Modal',
+        variant: 'prompt() · password',
+        description: 'Single-line input with focus trap and Enter-to-confirm.',
+        render: () =>
+            createButton({
+                label: 'Open prompt',
+                size: 'sm',
+                onClick: async () => {
+                    const value = await prompt({
+                        title: 'API key',
+                        label: 'Bearer token',
+                        inputType: 'password',
+                        placeholder: 'sk-…',
+                        validate: (v) => (v.startsWith('sk-') ? null : 'Token must start with "sk-".'),
+                    });
+                    console.log('[gallery] prompt result =', value);
+                },
             }),
     },
 ];
