@@ -30,6 +30,7 @@ def _make_admin_app():
 
     agent.proxy_enabled = True
     agent.priority_mode = False
+    agent.routing_cost_weight = 0.3
     agent.features = {"language_guard": True, "injection_guard": True, "link_sanitizer": True}
     agent.total_cost_today = 5.67
     agent._budget_date = "2026-03-25"
@@ -220,6 +221,78 @@ class TestAdminRoutes:
         data = resp.json()
         assert "total" in data
         assert "breakdown" in data
+        # K.1: spend now surfaces the active routing config so dashboards can
+        # show the cost-bias setting alongside the spend numbers.
+        assert data["routing"] == {
+            "cost_weight": 0.3,
+            "priority_mode": False,
+            "strategy": "smart_weighted",
+        }
+
+    @pytest.mark.asyncio
+    async def test_get_routing_config(self):
+        app, agent = _make_admin_app()
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.get("/api/v1/routing/config")
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "cost_weight": 0.3,
+            "priority_mode": False,
+            "strategy": "smart_weighted",
+        }
+
+    @pytest.mark.asyncio
+    async def test_get_routing_config_strategy_priority(self):
+        app, agent = _make_admin_app()
+        agent.priority_mode = True
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.get("/api/v1/routing/config")
+        assert resp.json()["strategy"] == "priority"
+
+    @pytest.mark.asyncio
+    async def test_get_routing_config_strategy_performance(self):
+        app, agent = _make_admin_app()
+        agent.routing_cost_weight = 0.0
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.get("/api/v1/routing/config")
+        assert resp.json()["strategy"] == "performance"
+
+    @pytest.mark.asyncio
+    async def test_set_routing_cost_weight_valid(self):
+        app, agent = _make_admin_app()
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.post("/api/v1/routing/cost-weight", json={"cost_weight": 0.7})
+        assert resp.status_code == 200
+        assert resp.json()["cost_weight"] == 0.7
+        assert agent.routing_cost_weight == 0.7
+        agent.store.set_state.assert_awaited_with("routing:cost_weight", 0.7)
+
+    @pytest.mark.asyncio
+    async def test_set_routing_cost_weight_zero(self):
+        app, agent = _make_admin_app()
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.post("/api/v1/routing/cost-weight", json={"cost_weight": 0.0})
+        assert resp.status_code == 200
+        # 0.0 must round-trip — the smart_router fallback uses `is None`
+        # specifically so 0.0 (ignore cost) is honored.
+        assert agent.routing_cost_weight == 0.0
+        assert resp.json()["strategy"] == "performance"
+
+    @pytest.mark.asyncio
+    async def test_set_routing_cost_weight_out_of_range(self):
+        app, agent = _make_admin_app()
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp_high = await c.post("/api/v1/routing/cost-weight", json={"cost_weight": 1.5})
+            resp_low = await c.post("/api/v1/routing/cost-weight", json={"cost_weight": -0.1})
+        assert resp_high.status_code == 400
+        assert resp_low.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_set_routing_cost_weight_invalid_type(self):
+        app, agent = _make_admin_app()
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.post("/api/v1/routing/cost-weight", json={"cost_weight": "fast"})
+        assert resp.status_code == 400
 
     @pytest.mark.asyncio
     async def test_analytics_top_models(self):
