@@ -25,7 +25,8 @@ const TARGET_INTENT: Record<string, BadgeIntent> = {
 
 function endpointRow(name: string, target: string, events: string[]): HTMLElement {
     const row = document.createElement('div');
-    row.className = 'flex items-center justify-between p-2 bg-white/[0.02] rounded-lg';
+    row.className =
+        'flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2 p-2 bg-white/[0.02] rounded-lg';
     const left = document.createElement('div');
     left.className = 'flex items-center gap-2';
     left.appendChild(

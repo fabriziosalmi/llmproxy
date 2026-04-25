@@ -88,7 +88,7 @@ export function mountDataExport(host: HTMLElement, api: ExportApi): () => Promis
                 tail.setAttribute('data-testid', 'export-files');
                 for (const f of files) {
                     const row = document.createElement('div');
-                    row.className = 'flex items-center justify-between';
+                    row.className = 'flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-2';
                     const name = document.createElement('span');
                     name.className = 'text-[9px] font-mono text-slate-400';
                     name.textContent = f.name;

@@ -33,7 +33,7 @@ export function mountSystemInfo(host: HTMLElement, api: SystemInfoApi): () => Pr
     heading.textContent = 'System Info';
 
     const grid = document.createElement('div');
-    grid.className = 'grid grid-cols-2 gap-4';
+    grid.className = 'grid grid-cols-1 sm:grid-cols-2 gap-4';
     grid.appendChild(makeField('Version', 'sys-version'));
     grid.appendChild(makeField('Endpoint', 'sys-url'));
 
