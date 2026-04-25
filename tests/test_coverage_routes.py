@@ -98,6 +98,90 @@ class TestTelemetryRoutes:
 
         assert resp.status_code == 200
 
+    @pytest.mark.asyncio
+    async def test_client_logs_ingest_accepts_batch(self):
+        from proxy.routes.telemetry import create_router
+        app, agent = _make_app_with_routes(create_router)
+        agent._add_log = AsyncMock()
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/v1/logs/client",
+                json={
+                    "session": "abc-123",
+                    "records": [
+                        {"level": "error", "message": "boom", "ts": 1234567890, "context": {"a": 1}},
+                        {"level": "warn", "message": "soft", "ts": 1234567891},
+                    ],
+                },
+            )
+
+        assert resp.status_code == 202
+        body = resp.json()
+        assert body["accepted"] == 2
+        assert body["dropped"] == 0
+        assert agent._add_log.await_count == 2
+        # Verify metadata was attached and level normalized.
+        first_call = agent._add_log.await_args_list[0]
+        assert first_call.args[0].startswith("CLIENT: ")
+        assert first_call.kwargs["level"] == "ERROR"
+        meta = first_call.kwargs["metadata"]
+        assert meta["source"] == "client"
+        assert meta["session"] == "abc-123"
+        # Second record was warn → normalized to WARNING.
+        assert agent._add_log.await_args_list[1].kwargs["level"] == "WARNING"
+
+    @pytest.mark.asyncio
+    async def test_client_logs_drops_invalid_records(self):
+        from proxy.routes.telemetry import create_router
+        app, agent = _make_app_with_routes(create_router)
+        agent._add_log = AsyncMock()
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/v1/logs/client",
+                json={
+                    "records": [
+                        {"level": "info", "message": "ok"},
+                        "not-a-dict",
+                        {"level": "info", "message": ""},  # empty msg → dropped
+                        {"level": "garbage", "message": "still ok, level coerced to INFO"},
+                    ],
+                },
+            )
+
+        assert resp.status_code == 202
+        body = resp.json()
+        assert body["accepted"] == 2
+        assert body["dropped"] == 2
+
+    @pytest.mark.asyncio
+    async def test_client_logs_rejects_oversized_batch(self):
+        from proxy.routes.telemetry import create_router
+        app, agent = _make_app_with_routes(create_router)
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/v1/logs/client",
+                json={"records": [{"level": "info", "message": "x"}] * 101},
+            )
+
+        assert resp.status_code == 413
+
+    @pytest.mark.asyncio
+    async def test_client_logs_404_when_disabled(self):
+        from proxy.routes.telemetry import create_router
+        app, agent = _make_app_with_routes(create_router)
+        agent.config["security"] = {"client_logs": {"enabled": False}}
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/v1/logs/client",
+                json={"records": [{"level": "info", "message": "x"}]},
+            )
+
+        assert resp.status_code == 404
+
 
 # ── Models Routes ─────────────────────────────────────────────
 
