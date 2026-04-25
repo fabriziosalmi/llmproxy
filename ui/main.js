@@ -19,6 +19,32 @@ import { toast } from './services/toast.js';
 import { initExplain } from './src/services/explain';
 import { initDrilldown, drilldown } from './src/services/drilldown';
 import { initTimerange } from './services/timerange.js';
+import { initTheme, getTheme, setTheme } from './src/services/theme';
+
+// Apply persisted theme before any render so we don't flash dark→light.
+initTheme();
+
+// Header theme toggle: button shows the icon for the theme it WILL switch TO,
+// not the active theme — same affordance as macOS appearance.
+function refreshThemeIcons() {
+    const theme = getTheme();
+    const moon = document.getElementById('theme-icon-dark');
+    const sun = document.getElementById('theme-icon-light');
+    if (!moon || !sun) return;
+    moon.classList.toggle('hidden', theme === 'dark');
+    sun.classList.toggle('hidden', theme === 'light');
+}
+window.addEventListener('DOMContentLoaded', () => {
+    refreshThemeIcons();
+    const btn = document.getElementById('theme-toggle');
+    if (btn) {
+        btn.addEventListener('click', () => {
+            setTheme(getTheme() === 'dark' ? 'light' : 'dark');
+            refreshThemeIcons();
+            if (_rumRef) { try { _rumRef.action('theme_toggle', { to: getTheme() }); } catch { /* silent */ } }
+        });
+    }
+});
 
 // Global state listener — only re-render what changed (audit #24)
 let _prevState = { ...store.state };
