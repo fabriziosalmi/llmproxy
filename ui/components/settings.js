@@ -1,10 +1,21 @@
 /**
- * Settings View — Identity, RBAC, webhooks, export, rate limiting, system info.
+ * Settings View — Identity, RBAC, webhooks, export, system info.
+ *
+ * Strangler fig: all five sections migrated to TS modules in
+ * src/views/settings/. Legacy renderers below stay for the source-tree
+ * fallback (no Vite build) and bail when the TS view has mounted.
  */
 import { api } from '../services/api.js';
 import { toast } from '../services/toast.js';
 
+let _tsMounted = false;
+let _tsRefresh = null;
+
 async function refreshAll() {
+    if (_tsMounted) {
+        if (_tsRefresh) await _tsRefresh();
+        return;
+    }
     await Promise.allSettled([
         loadSystemInfo(),
         loadIdentity(),
@@ -16,6 +27,40 @@ async function refreshAll() {
 
 export async function initSettings() {
     await refreshAll();
+
+    // Take over with the TS view. Bare path lets Vite resolve to .ts at
+    // build; the source-tree fallback gets a 404 here and the legacy
+    // listeners stay live.
+    import('../src/views/settings/index')
+        .then(({ mountSettingsView }) => {
+            const refreshTs = mountSettingsView(
+                {
+                    identity: document.getElementById('settings-identity-host'),
+                    rbac: document.getElementById('settings-rbac-host'),
+                    webhooks: document.getElementById('settings-webhooks-host'),
+                    export: document.getElementById('settings-export-host'),
+                    system: document.getElementById('settings-system-host'),
+                },
+                {
+                    api: {
+                        fetchVersion: api.fetchVersion,
+                        fetchServiceInfo: api.fetchServiceInfo,
+                        fetchIdentityConfig: api.fetchIdentityConfig,
+                        fetchIdentityMe: api.fetchIdentityMe,
+                        fetchRbacRoles: api.fetchRbacRoles,
+                        fetchWebhooks: api.fetchWebhooks,
+                        testWebhook: api.testWebhook,
+                        fetchExportStatus: api.fetchExportStatus,
+                    },
+                    toast,
+                },
+            );
+            _tsRefresh = refreshTs;
+            _tsMounted = true;
+        })
+        .catch(() => {
+            // No TS chunk available — legacy listeners already wired below.
+        });
 
     // Settings is not a live dashboard, but identity / webhooks / RBAC can
     // drift between reloads. Re-fetch whenever the user opens the tab so the
