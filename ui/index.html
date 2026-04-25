@@ -160,6 +160,10 @@
             </div>
             <div class="flex items-center gap-3">
                 <div id="timerange-slot" class="hidden md:flex items-center" aria-label="Active time range"></div>
+                <button type="button" id="theme-toggle" class="p-1.5 rounded-lg hover:bg-white/5 text-slate-500 hover:text-white transition-colors" title="Toggle light / dark theme" aria-label="Toggle theme">
+                    <svg id="theme-icon-dark" class="w-4 h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+                    <svg id="theme-icon-light" class="w-4 h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v2m0 14v2M5.64 5.64l1.41 1.41m9.9 9.9l1.41 1.41M3 12h2m14 0h2M5.64 18.36l1.41-1.41m9.9-9.9l1.41-1.41M12 8a4 4 0 100 8 4 4 0 000-8z"/></svg>
+                </button>
                 <kbd class="hidden md:inline text-[9px] font-mono text-slate-600 bg-white/5 px-2 py-0.5 rounded border border-white/10" title="Command palette">⌘K</kbd>
                 <kbd class="hidden md:inline text-[9px] font-mono text-slate-600 bg-white/5 px-2 py-0.5 rounded border border-white/10" title="Cinema mode (focus UI)">⇧F</kbd>
             </div>
