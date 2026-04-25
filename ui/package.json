@@ -11,7 +11,7 @@
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"**/*.{js,ts,html,css,json,md}\"",
-    "format:check": "prettier --check \"__tests__/**/*.{js,ts}\" \"e2e/**/*.{js,ts}\" \"*.config.{js,ts}\" \"package.json\" \".prettierrc.json\"",
+    "format:check": "prettier --check \"__tests__/**/*.{js,ts}\" \"e2e/**/*.{js,ts}\" \"src/**/*.{js,ts}\" \"*.config.{js,ts}\" \"package.json\" \".prettierrc.json\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
