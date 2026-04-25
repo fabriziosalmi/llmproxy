@@ -109,6 +109,12 @@ class ProxyOrchestrator(BaseAgent):
         # Gateway state
         self.proxy_enabled = True
         self.priority_mode = False
+        # Runtime-tunable routing cost weight (0.0=ignore cost, 1.0=full bias).
+        # Smart router reads this directly so /api/v1/routing/cost-weight can
+        # adjust without a config reload.
+        self.routing_cost_weight: float = float(
+            self.config.get("routing", {}).get("cost_weight", 0.3)
+        )
         self.features = {
             "language_guard": True,
             "injection_guard": True,
@@ -340,6 +346,9 @@ class ProxyOrchestrator(BaseAgent):
         # Hydrate persisted state
         self.proxy_enabled = await self.store.get_state("proxy_enabled", True)
         self.priority_mode = await self.store.get_state("priority_mode", False)
+        self.routing_cost_weight = float(
+            await self.store.get_state("routing:cost_weight", self.routing_cost_weight)
+        )
         for f in self.features:
             self.features[f] = await self.store.get_state(f"feature_{f}", self.features[f])
             self.security.config[f] = {"enabled": self.features[f]}
