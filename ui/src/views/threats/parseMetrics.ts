@@ -20,10 +20,7 @@ export function extractMetric(promText: string, name: string): number {
     return total;
 }
 
-export function buildKpiData(
-    promText: string,
-    health: RawHealth | null,
-): ThreatsKpiData {
+export function buildKpiData(promText: string, health: RawHealth | null): ThreatsKpiData {
     const requests = extractMetric(promText, 'llm_proxy_requests_total');
     const blocked = extractMetric(promText, 'llm_proxy_injection_blocked_total');
     const authFails = extractMetric(promText, 'llm_proxy_auth_failures_total');
@@ -32,9 +29,7 @@ export function buildKpiData(
     const tokens = extractMetric(promText, 'llm_proxy_token_usage_total');
     const passRatePct = requests > 0 ? Math.max(0, (1 - totalBlocked / requests) * 100) : 100;
     const uptimeSeconds = health?.uptime_seconds ?? null;
-    const pool = health
-        ? { healthy: health.pool_healthy ?? 0, total: health.pool_size ?? 0 }
-        : null;
+    const pool = health ? { healthy: health.pool_healthy ?? 0, total: health.pool_size ?? 0 } : null;
     return {
         requests,
         blocked: totalBlocked,

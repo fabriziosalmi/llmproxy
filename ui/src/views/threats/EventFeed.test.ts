@@ -47,13 +47,18 @@ describe('muteKeyFor()', () => {
     });
 
     it('falls back to a truncated message hash', () => {
-        const k = muteKeyFor({ level: 'WARNING', message: 'Auth failed for user fab — bad credentials provided yet again' });
+        const k = muteKeyFor({
+            level: 'WARNING',
+            message: 'Auth failed for user fab — bad credentials provided yet again',
+        });
         expect(k.startsWith('WARNING:')).toBe(true);
         expect(k.length).toBeLessThanOrEqual('WARNING:'.length + 32);
     });
 
     it('upper-cases the level so case differences collapse', () => {
-        expect(muteKeyFor({ level: 'security', signature: 's' })).toBe(muteKeyFor({ level: 'SECURITY', signature: 's' }));
+        expect(muteKeyFor({ level: 'security', signature: 's' })).toBe(
+            muteKeyFor({ level: 'SECURITY', signature: 's' })
+        );
     });
 });
 
@@ -81,11 +86,11 @@ describe('ThreatEventFeed', () => {
         document.body.appendChild(container);
         storage = makeStorage();
         createdSources = [];
-        factory = ((url: string) => {
+        factory = (url: string) => {
             const es = new FakeEventSource(url);
             createdSources.push(es);
             return es as unknown as EventSource;
-        });
+        };
         vi.useFakeTimers();
     });
 

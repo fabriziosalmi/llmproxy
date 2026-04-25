@@ -72,15 +72,18 @@ export class ThreatEventFeed {
         this.container = container;
         this.deps = {
             eventSourceFactory: deps.eventSourceFactory,
-            getToken: deps.getToken ?? (() => (typeof localStorage !== 'undefined' ? localStorage.getItem('proxy_key') ?? '' : '')),
-            storage: deps.storage ?? (typeof localStorage !== 'undefined' ? localStorage : (undefined as unknown as Storage)),
+            getToken:
+                deps.getToken ??
+                (() => (typeof localStorage !== 'undefined' ? (localStorage.getItem('proxy_key') ?? '') : '')),
+            storage:
+                deps.storage ??
+                (typeof localStorage !== 'undefined' ? localStorage : (undefined as unknown as Storage)),
             windowLabel: deps.windowLabel ?? 'live',
         };
         this.muted = this.loadMuted();
 
         const wrap = document.createElement('div');
-        wrap.className =
-            'bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6';
+        wrap.className = 'bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6';
 
         const header = document.createElement('div');
         header.className = 'flex items-center justify-between mb-4';
@@ -261,9 +264,10 @@ export class ThreatEventFeed {
             this.listEl.replaceChildren(
                 createEmptyState({
                     title: 'No security events yet',
-                    description: this.events.length > 0
-                        ? `${mutedCount} muted. Adjust filters or unmute below.`
-                        : 'When the WAF or guards block a request, it lands here in real time.',
+                    description:
+                        this.events.length > 0
+                            ? `${mutedCount} muted. Adjust filters or unmute below.`
+                            : 'When the WAF or guards block a request, it lands here in real time.',
                     testId: 'threat-feed-empty',
                 })
             );
