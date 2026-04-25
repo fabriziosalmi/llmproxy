@@ -75,7 +75,9 @@ export function createDrawer(opts: CreateDrawerOptions = {}): DrawerHandle {
     panel.setAttribute('role', 'dialog');
     panel.setAttribute('aria-modal', 'true');
     panel.setAttribute('aria-labelledby', titleId);
-    panel.style.width = `min(${width}px, 95vw)`;
+    // On phones, claim the full viewport — a 5vw gutter is cosmetic and
+    // costs us readable line length inside drilldown panels.
+    panel.style.width = `min(${width}px, 100vw)`;
     panel.className = cx(
         'fixed top-0 right-0 h-full bg-[#0a0a0c] border-l border-white/[0.08] shadow-2xl overflow-y-auto',
         'translate-x-full transition-transform duration-200 ease-out'
