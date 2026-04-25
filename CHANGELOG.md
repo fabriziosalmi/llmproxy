@@ -2,6 +2,35 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.19.0] — 2026-04-25
+
+### Operator console — Threats strangler-fig closed (Phase G.5)
+Last leg of Phase G. Every Threats sub-section that was left in `components/threats.js` after Phase C.2 has been migrated to a TS module under `src/views/threats/sections/`. Threats is now the first tab fully migrated end-to-end: KPI grid (C.2) + event feed (C.2) + sections (G.5).
+
+**Sections — `ui/src/views/threats/sections/`**
+- `BudgetGauge.ts` — pure `computeBudget()` + renderer that flips emerald → amber → rose with usage. Tracking-only mode when `limit=0`; "no budget" hint when nothing is configured.
+- `FirewallStats.ts` — scanned + blocked counters with rose/emerald tone on blocked, optional signature breakdown table.
+- `EndpointBreakdown.ts` — pure `parseEndpointBreakdown()` + renderer that tiers err% with rose / amber / emerald. Aggregates per-endpoint counters from a Prometheus text exposition.
+- `RingLatency.ts` — bars per ring (ingress / pre_flight / routing / post_flight / background) with P50/P95/P99/count, and a separate `renderTtft()` for the streaming card. TTFT P95 color flips above 500ms / 1000ms.
+- `RingTimeline.ts` — last-N traces with width-proportional segments per ring + a separate upstream segment, TTFT badge when streaming.
+- `ThreatChart.ts` — wraps the Chart.js bar-chart over 24 hours, subscribes to `window 'llmproxy:threat-event'` dispatched by the EventFeed.
+
+**Orchestrator — `ui/src/views/threats/index.ts`**
+- New `mountThreatsSections({ budget, firewall, breakdown, ringLatency, ttft, ringTimeline, chartCanvas }, { api, poll, onFirewallState })`.
+- Polls `/metrics`, `/api/v1/guards/status`, `/api/v1/metrics/latency`, `/api/v1/metrics/ring-timeline` in parallel — each section degrades independently when its source 503s.
+- `onFirewallState` bridges live firewall status into the shared store so the Guards view reflects whether the WAF is running.
+
+**Strangler fig**
+- `components/threats.js` bails `refreshMetrics`, `refreshLatencyData`, and `initChart` when `_tsMounted` is true. Legacy renderers stay only as the source-tree fallback.
+
+**Tests**
+- 25 new unit tests across the five rendered sections + the two pure helpers (`computeBudget`, `parseEndpointBreakdown`). ThreatChart skipped — depends on the Chart.js global; exercised through the existing Threats e2e.
+- Total tally: 230 / 230 unit tests (was 205), 42 active e2e tests (unchanged — the existing 04-threats-drilldown spec covers the integration).
+
+**Phase G complete.** Six tabs migrated end-to-end (Threats / Guards / Endpoints / Models / Plugins / Settings); the only legacy `.js` modules left in `components/` are the four shells that own the dynamic-import handoff.
+
+---
+
 ## [1.18.0] — 2026-04-25
 
 ### Operator console — Settings vertical slice (Phase G.4)
