@@ -2,6 +2,38 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.20.0] — 2026-04-25
+
+### UX polish — Phase H
+Five-piece polish pass after Phase G closed the operator-console migration. Each item is isolated, but together they remove real paper-cuts the audit flagged.
+
+**H.1 — Mobile reflow**
+- `Modal`: `max-h-[85vh] overflow-y-auto` so long body content stays scrollable inside the dialog and the action buttons never slip below the fold on small viewports.
+- `Tabs`: tablist now scrolls horizontally (`overflow-x-auto` + `shrink-0` per tab) instead of clipping when labels exceed the row.
+
+**H.2 — Theme toggle: DEFERRED**
+- Honest call: a proper light theme is 2-3 days of class migration (the design uses literal `text-white`, `bg-white/[0.03]`, … not token vars). Operator console — dark is the standard. Captured here so the deferral is explicit, not silent.
+
+**H.3 — Drilldown context loss**
+- `services/drilldown.js` was issuing `/api/v1/audit?limit=N` without the active time-range filter. Three call sites (endpoint / request / model drilldown) now append `&from=<iso>` from `timerange.sinceEpochMs()`. Opening an inspector from a 4h-windowed view no longer silently widens to "all time".
+
+**H.4 — Config warnings UI**
+- `core/startup_checks.py` captures warnings at module scope and exposes `get_startup_warnings()`; `run_startup_checks` stashes both the warnings list and any `StartupError` message.
+- `proxy/routes/admin.py`: new `GET /api/v1/config/warnings` (admin-auth).
+- `ui/src/views/settings/ConfigWarnings.ts`: Settings widget mounted above every other section so config drift is loud. Green badge when none, amber list with ⚠ icon per warning otherwise, ErrorState with retry on backend failure.
+
+**H.5 + H.6 — Frontend telemetry**
+- `ui/src/services/logger.ts`: pluggable sinks (`consoleSink` + `backendSink` with batched POST + `navigator.sendBeacon` on `pagehide`). `createLogger` / `installGlobalErrorHandlers` wire `window.onerror` + `unhandledrejection` into the same funnel. A throwing sink never silences the others.
+- `ui/src/services/rum.ts`: vendor-agnostic facade — `pageView` / `tabChange` / `action` / `error`. Default sink is no-op so the bundle stays vendor-free; operators plug in PostHog / Datadog / self-hosted at boot via `rum.setSink({ track })`. `pageView` records `previous_view_ms` dwell on consecutive views; `tabChange` threads `from` through the sequence.
+- Both modules ship typed tests (19 new). Wiring into `main.js` / view code is a separate phase — the modules are ready to plug in, intentionally not yet imported anywhere so we don't change runtime behavior in this minor.
+
+**Tests + numbers**
+- Unit tests: 249 / 249 (was 230). 19 new across logger + rum.
+- E2E: 42 active (unchanged — Phase H is internal polish, no new user-visible flow).
+- 0 lint warnings, typecheck clean, build OK.
+
+---
+
 ## [1.19.0] — 2026-04-25
 
 ### Operator console — Threats strangler-fig closed (Phase G.5)
