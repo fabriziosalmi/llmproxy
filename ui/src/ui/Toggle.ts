@@ -33,7 +33,6 @@ export function createToggle(opts: ToggleOptions): ToggleHandle {
 
     const root = document.createElement('div');
     root.className = cx('flex items-center justify-between gap-3', opts.className);
-    if (opts.testId) root.setAttribute('data-testid', opts.testId);
 
     // Text column
     const text = document.createElement('div');
@@ -55,6 +54,7 @@ export function createToggle(opts: ToggleOptions): ToggleHandle {
     switchEl.type = 'button';
     switchEl.setAttribute('role', 'switch');
     switchEl.setAttribute('aria-label', opts.label);
+    if (opts.testId) switchEl.setAttribute('data-testid', opts.testId);
     switchEl.className = cx(
         'relative inline-flex shrink-0 h-5 w-9 rounded-full transition-colors',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40',

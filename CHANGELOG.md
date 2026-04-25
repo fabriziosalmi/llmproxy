@@ -2,6 +2,36 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.14.0] — 2026-04-25
+
+### Operator console — Guards vertical slice (Phase F)
+Second view migrated to the C.2 pattern, validating the primitives shipped in 1.13.0 against a new shape. Guards now renders the master toggle, priority steering, and the eight-card guards grid through the TypeScript primitives — provenance ℹ tooltips on every guard, optimistic-revert toggles, and proper empty / loading / error states.
+
+**Catalog with provenance — `ui/src/views/guards/catalog.ts`**
+- Eight guards (injection_guard, language_guard, link_sanitizer, pii_masker, firewall, rate_limiter, zero_trust, circuit_breaker), each carrying a `provenance` line that names the trigger, the threat it counters, and where to flip it when read-only (config key, env var, or "AUTO" for automatic systems).
+- Provenance text surfaces in a Tooltip-primitive popover anchored on each card's ℹ button — replaces the bare `title=""` approach for a focus-accessible explanation.
+
+**Components — `ui/src/views/guards/`**
+- `GuardCard.ts` — one card per spec. Toggleable specs render a Toggle primitive in the header; static specs render a Badge with the catalog `staticStatus` (or a status override for the firewall surface).
+- `Grid.ts` — wraps the eight cards in the responsive grid. Built-in skeleton during initial load, ErrorState with retry on backend failure, optimistic re-render on toggle that reverts on backend rejection.
+- `Toggles.ts` — `mountToggleCard(host, opts)` mounts a single big-toggle card (master proxy, priority steering). Disables the switch while the request is in flight, applies the canonical response on success, and surfaces success / failure toasts.
+- `index.ts` — `mountGuardsView({ master, priority, grid }, { api, toast, initial, poll })`. Single entry point, returns a stop function that kills the polling loop.
+
+**Strangler fig**
+- `components/guards.js` keeps the Cache Performance card and the Operations buttons (reset firewall, clear caches, reset security, reload config). Those migrate when each becomes painful.
+- Legacy `renderGuards()` / `initProxyToggle()` / `initPriorityToggle()` still run during page boot so the markup is functional during the dynamic-import roundtrip (~50ms). The TS module then takes over via `replaceChildren`. A `_tsMounted` flag guards the legacy `renderGuards()` from overwriting TS state on subsequent store updates.
+- `index.html` keeps the legacy markup inside two new mount hosts (`#guards-master-host`, `#guards-priority-host`) — when no Vite build is present, the page still renders something sensible.
+
+**Tests**
+- 16 new unit tests across GuardCard / Grid / Toggles. Covers toggleable vs static specs, the firewall override path, optimistic revert on toggle failure, the in-flight disable state, and the empty / loading / error transitions.
+- One new e2e spec (`e2e/06-guards.spec.ts`) — five tests around card rendering, toggling a guard, master toggle keyboard activation, and the firewall "OFF · <reason>" path.
+- Total tally: 141 / 141 unit tests (was 125), 20 active e2e tests (was 16).
+
+**Knock-on cleanup**
+- `Toggle` primitive's `testId` now lands on the `[role="switch"]` button itself (not the wrapper div), so callers that pluck out the switch keep the test selector. Existing Toggle tests unaffected.
+
+---
+
 ## [1.13.0] — 2026-04-25
 
 ### Component library expansion — Phase E
