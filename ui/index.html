@@ -444,7 +444,9 @@
                     </div>
                 </div>
 
-                <!-- Plugin Install Form (collapsed by default) -->
+                <!-- Plugin Install Form host (mounted by src/views/plugins/InstallForm.ts;
+                     legacy markup below is the fallback shown without a Vite build). -->
+                <div id="plugin-install-form-host" data-testid="plugin-install-form-host">
                 <div id="plugin-install-form" class="hidden bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-emerald-500/20 p-5 mb-4">
                     <h3 class="text-[11px] font-bold text-white mb-3">Install Plugin</h3>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
@@ -491,6 +493,7 @@
                         <button type="button" id="install-submit-btn" class="px-4 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 rounded-lg text-[10px] font-bold text-emerald-400 transition-colors">Install &amp; Hot-Swap</button>
                     </div>
                 </div>
+                </div><!-- /plugin-install-form-host -->
 
                 <div id="plugins-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <!-- Populated by plugins.js -->

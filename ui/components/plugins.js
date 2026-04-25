@@ -1,8 +1,14 @@
 /**
  * Plugins View — Security plugin pipeline with per-plugin stats and config.
+ *
+ * Strangler fig: install form + grid + toolbar migrated to TS primitives
+ * in src/views/plugins/. Legacy renderers below stay for the source-tree
+ * fallback (no Vite build) and bail when the TS view has mounted.
  */
 import { api } from '../services/api.js';
 import { toast } from '../services/toast.js';
+
+let _tsMounted = false;
 
 const RING_COLORS = {
     ingress: 'rose',
@@ -14,6 +20,38 @@ const RING_COLORS = {
 
 export async function initPlugins() {
     await renderPluginList().catch(() => {});
+
+    // Take over with the TS view (toolbar + install form + grid). Bare
+    // path lets Vite resolve to the .ts source at build; the source-tree
+    // fallback gets a 404 here and the legacy listeners stay live.
+    import('../src/views/plugins/index')
+        .then(({ mountPluginsView }) => {
+            _tsMounted = true;
+            mountPluginsView(
+                {
+                    grid: document.getElementById('plugins-grid'),
+                    formHost: document.getElementById('plugin-install-form-host'),
+                    rollbackBtn: document.getElementById('rollback-plugins-btn'),
+                    installToggle: document.getElementById('install-plugin-toggle-btn'),
+                    reloadBtn: document.getElementById('reload-plugins-btn'),
+                },
+                {
+                    api: {
+                        fetchPlugins: api.fetchPlugins,
+                        fetchPluginStats: api.fetchPluginStats,
+                        togglePlugin: api.togglePlugin,
+                        installPlugin: api.installPlugin,
+                        uninstallPlugin: api.uninstallPlugin,
+                        rollbackPlugins: api.rollbackPlugins,
+                        reloadPlugins: api.reloadPlugins,
+                    },
+                    toast,
+                },
+            );
+        })
+        .catch(() => {
+            // No TS chunk available — legacy listeners already wired below.
+        });
 
     // Reload button
     const btn = document.getElementById('reload-plugins-btn');
@@ -148,6 +186,7 @@ export async function initPlugins() {
 }
 
 async function renderPluginList() {
+    if (_tsMounted) return; // TS view owns the grid.
     const grid = document.getElementById('plugins-grid');
     if (!grid) return;
 
