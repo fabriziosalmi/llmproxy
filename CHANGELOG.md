@@ -2,6 +2,41 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.20.1] — 2026-04-25
+
+### Phase I — DX polish, roadmap closing
+Last leg of the original UI-elevation plan. Pure docs + a couple of e2e tests; no runtime change.
+
+**docs/ui/contributing.md** — comprehensive guide for anyone touching `ui/`. Covers the legacy-shell + `src/` TypeScript split, the strangler-fig migration that drove six tab rewrites (Threats → Guards → Endpoints → Models → Plugins → Settings), step-by-step recipes for adding a primitive and migrating a view, the test contract (Vitest unit + Playwright e2e + Storybook-lite stories), and a "where things live" cheat sheet. `CONTRIBUTING.md` now links to it.
+
+**ConfigWarnings e2e** — two new specs in `e2e/10-settings.spec.ts` round out Phase H.4: empty list → green badge + empty surface; non-empty list → row-per-warning amber list with a count badge in the header. E2E tally is now 44 active (was 42).
+
+**CI strict lint** — verified `frontend.yml` already calls `npm run lint` (now strict-by-default since Phase D.3) and `npm run format:check`. No workflow change needed.
+
+### Roadmap closing note
+
+This is the end of the original Phase A → I plan that started at 1.11.1.
+- **Phase A** (1.11.2): build pipeline foundation (Vite + TS + ESLint + Vitest + Playwright + multi-stage Docker + CI).
+- **Phase C** (1.12.0): Threats vertical slice + 7 primitives + auth + e2e fixtures.
+- **Phase D** (1.12.1): hardening — Dependabot bump, CSP cutover, lint:strict, palette e2e.
+- **Phase E** (1.13.0): primitive library — Modal, Drawer, Tooltip, Input, Toggle, Table, Tabs + Storybook-lite.
+- **Phase F** (1.14.0): Guards vertical slice.
+- **Phase G** (1.15.0–1.19.0): Endpoints, Models, Plugins, Settings, Threats sub-sections.
+- **Phase H** (1.20.0): UX polish — mobile reflow, drilldown filter, config warnings UI, telemetry layer.
+- **Phase I** (1.20.1): DX polish — UI contributing guide, e2e coverage closure.
+
+Net delta from 1.11.1 → 1.20.1:
+- 0 → **15 primitives** + the `cx()` composer in `src/ui/`.
+- 0 → **6 tabs** migrated end-to-end to TypeScript.
+- 0 → **249 unit tests** (Vitest, happy-dom).
+- 5 → **44 e2e tests** (Playwright).
+- 13 lint warnings → **0**, with `--max-warnings=0` enforced in CI and pre-commit.
+- 0 → **8 Dependabot alerts cleared** (all dev-only) + CSP `unsafe-eval` removed + Tailwind JIT CDN dropped.
+- 1 → **3 legacy services retired** (`dialog.js`, `drawer.js`, `vendor/tailwind.js`).
+- ~70% of the legacy `components/*.js` LoC migrated; the rest is the source-tree fallback shell that stays by design.
+
+---
+
 ## [1.20.0] — 2026-04-25
 
 ### UX polish — Phase H
