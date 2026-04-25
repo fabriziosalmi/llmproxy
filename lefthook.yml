@@ -1,0 +1,37 @@
+# Pre-commit hooks for LLMProxy.
+# Lefthook runs only against staged files (faster than pre-commit on whole repo).
+#
+# Install once:    brew install lefthook && lefthook install
+# Skip ad-hoc:     LEFTHOOK=0 git commit ...
+# Skip a hook:     LEFTHOOK_EXCLUDE=ruff git commit ...
+
+pre-commit:
+  parallel: true
+  commands:
+    ruff:
+      glob: '*.py'
+      run: . venv/bin/activate && ruff check --fix {staged_files} && git add {staged_files}
+      stage_fixed: true
+
+    py-syntax:
+      glob: '*.py'
+      run: . venv/bin/activate && python -m py_compile {staged_files}
+
+    eslint:
+      root: 'ui/'
+      glob: 'ui/**/*.{js,ts}'
+      # Errors block commits; warnings are non-blocking during the transition.
+      # Tighten to --max-warnings=0 once existing files are cleaned up.
+      run: npx eslint --fix {staged_files}
+      stage_fixed: true
+
+    prettier:
+      root: 'ui/'
+      glob: 'ui/**/*.{js,ts,html,css,json,md}'
+      run: npx prettier --write {staged_files}
+      stage_fixed: true
+
+    typecheck-ui:
+      root: 'ui/'
+      glob: 'ui/**/*.ts'
+      run: npx tsc --noEmit

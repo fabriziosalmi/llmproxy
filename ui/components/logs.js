@@ -185,7 +185,7 @@ function appendLogToTerm(log) {
                 const isAtBottom = term.buffer.active.viewportY >= term.buffer.active.baseY;
                 if (prefix.trim()) term.writeln(`${timestamp} ${level} ${prefix.trim()}`);
                 pretty.split('\n').forEach(line => {
-                    const colored = line.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (m) {
+                    const colored = line.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g, function (m) {
                         if (/^"/.test(m)) {
                             return (/:$/.test(m) ? '\x1b[36m' : '\x1b[32m') + m + '\x1b[0m';
                         } else if (/true|false/.test(m)) return '\x1b[33m' + m + '\x1b[0m';
@@ -203,7 +203,7 @@ function appendLogToTerm(log) {
             }
         }
         // Fallback: inline regex highlighting
-        message = message.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+        message = message.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g, function (match) {
             let cls = '\x1b[32m';
             if (/^"/.test(match)) {
                 if (/:$/.test(match)) cls = '\x1b[36m';
@@ -215,7 +215,7 @@ function appendLogToTerm(log) {
     }
 
     // 5.1: Live Diff — GitHub-style colored lines for prompt-blocked diff output
-    if (message.includes('@@') || /^[\-+]{3}\s/.test(message.trim())) {
+    if (message.includes('@@') || /^[-+]{3}\s/.test(message.trim())) {
         const lines = message.split('\n');
         const isAtBottom = term.buffer.active.viewportY >= term.buffer.active.baseY;
         lines.forEach(line => {

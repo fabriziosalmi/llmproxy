@@ -248,10 +248,30 @@ def create_app(agent) -> FastAPI:
     app.include_router(telemetry_router(agent))
     app.include_router(gdpr_router(agent))
 
-    # Serve frontend
-    ui_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ui")
-    if os.path.exists(ui_path):
-        app.mount("/ui", StaticFiles(directory=ui_path, html=True), name="ui")
+    # Serve frontend. Prefer the Vite build output (`ui/dist/`) when present,
+    # fall back to the source tree (`ui/`) so `python main.py` still produces a
+    # usable UI without a Node toolchain. In fallback mode, `ui/public/` is
+    # overlaid onto `/ui/` so static assets keep their pre-Vite URLs (vendor/*).
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    ui_dist = os.path.join(repo_root, "ui", "dist")
+    ui_src = os.path.join(repo_root, "ui")
+    ui_public = os.path.join(repo_root, "ui", "public")
+    if os.path.exists(ui_dist):
+        app.mount("/ui", StaticFiles(directory=ui_dist, html=True), name="ui")
+        logger.info("UI: serving built assets from %s", ui_dist)
+    elif os.path.exists(ui_src):
+        # Order matters: more specific mounts must come first.
+        if os.path.exists(ui_public):
+            for entry in os.listdir(ui_public):
+                full = os.path.join(ui_public, entry)
+                if os.path.isdir(full):
+                    app.mount(f"/ui/{entry}", StaticFiles(directory=full), name=f"ui-public-{entry}")
+        app.mount("/ui", StaticFiles(directory=ui_src, html=True), name="ui")
+        logger.warning(
+            "UI: no build found at %s — serving source tree directly. Run "
+            "`cd ui && npm install && npm run build` for the optimized bundle.",
+            ui_dist,
+        )
 
     @app.on_event("shutdown")
     async def _shutdown():

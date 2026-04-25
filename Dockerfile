@@ -1,3 +1,16 @@
+# syntax=docker/dockerfile:1.6
+# ── Stage 1 — UI build ────────────────────────────────────────────────────────
+FROM node:20-alpine AS ui-builder
+
+WORKDIR /ui
+
+COPY ui/package.json ui/package-lock.json* ./
+RUN npm ci --no-audit --no-fund
+
+COPY ui/ ./
+RUN npm run build
+
+# ── Stage 2 — Python runtime ──────────────────────────────────────────────────
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -19,8 +32,12 @@ RUN echo "=== .pth file audit ===" && \
         echo "Clean: no malicious .pth files found"; \
     fi
 
-# Copy application source
+# Copy application source (ui/dist and ui/node_modules excluded via .dockerignore)
 COPY . .
+
+# Drop the built UI bundle on top of the source tree so app_factory mounts it.
+COPY --from=ui-builder /ui/dist /app/ui/dist
+
 RUN chown -R llmproxy:llmproxy /app
 
 USER llmproxy
