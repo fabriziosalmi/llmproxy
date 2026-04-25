@@ -2,6 +2,21 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.4] — 2026-04-25
+
+### L.1 — `core/security.py` IBAN regex order + format coverage
+
+Found during the K.3 GDPR audit but kept out of scope at the time. The IBAN regex in `_REGEX_PII_PATTERNS` had two real problems:
+
+1. **Shape over-fitted 24-char Spanish-style IBANs** (5×4 digit groups). 22-char German IBANs (DE + 20) never matched — the Hypothesis test that thought it was exercising IBAN detection was actually exercising the 16-digit credit-card pattern matching the IBAN body.
+2. **Listed AFTER the credit-card pattern**, so even if widened, an IBAN's inner 4×4-digit body would get masked as `<CREDIT_CARD>` first and leak the country/check prefix. Detection returned True (some pattern matched), making the bug silent in tests that only assert is-detected.
+
+Fix: move IBAN before the credit-card patterns and loosen the shape to `\b[A-Z]{2}\d{2}(?:[\s-]?[\dA-Z]{4}){3,7}(?:[\s-]?\d{1,2})?\b` — covers German (22), Spanish (24), through Maltese (31). Also reordered Amex (15) before generic 16-digit CC and dropped the duplicate Amex line at the bottom of the list — it had no effect since the looser pattern above it matched first.
+
+New regression test `test_mask_iban_produces_iban_token` verifies the masked output uses `[PII_IBAN_...]` AND that the country/check prefix is not present anywhere in the masked string. Mirror of the bug we closed in `core/export.py` during K.3.
+
+---
+
 ## [1.21.3] — 2026-04-25
 
 ### K.3 — GDPR audit: close PII-scrub gap + log Article 15 export to audit chain
