@@ -2,6 +2,25 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.2] — 2026-04-25
+
+### K.2 — E2E coverage for shell actions + time-range picker
+
+Five new specs across two files for flows previously running uncovered through CI:
+
+**`11-shell-actions.spec.ts`** (3 tests)
+- **Logout**: `#logout-btn` clears `proxy_key` from localStorage and re-shows the login overlay.
+- **Panic kill-switch**: cancel must skip `POST /api/v1/panic`; confirm must fire it AND transform the button into HALTED. Pins the confirm-modal-before-destructive-action contract.
+- **Action error toast**: a 500 on `DELETE /api/v1/registry/<id>` surfaces a toast in `#toast-container` AND leaves the row in place. Most users hit this before any happy path; the missing coverage was a real gap.
+
+**`12-time-range.spec.ts`** (2 tests)
+- Presets toggle `aria-pressed` correctly so a screen reader knows the active range; localStorage persists.
+- Switching presets broadcasts: `localStorage.llmproxy.timerange` reflects every change AND only one preset is active at a time.
+
+E2E count: 44 → 49.
+
+---
+
 ## [1.21.1] — 2026-04-25
 
 ### K.1 — Runtime-tunable cost weight + routing block in spend endpoints
