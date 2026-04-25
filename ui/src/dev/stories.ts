@@ -13,6 +13,7 @@ import {
     createButton,
     createCard,
     createCardHeader,
+    createDrawer,
     createEmptyState,
     createErrorState,
     createMetricTile,
@@ -266,6 +267,46 @@ export const stories: Story[] = [
                         validate: (v) => (v.startsWith('sk-') ? null : 'Token must start with "sk-".'),
                     });
                     console.log('[gallery] prompt result =', value);
+                },
+            }),
+    },
+
+    // Drawer — non-modal investigation surface (single-drawer model).
+    {
+        primitive: 'Drawer',
+        variant: 'open with body string',
+        description: 'Slides in from the right; Escape / backdrop / ✕ close.',
+        render: () =>
+            createButton({
+                label: 'Open drawer',
+                size: 'sm',
+                onClick: () => {
+                    createDrawer({
+                        title: 'Endpoint · openai-mini',
+                        body: '<p>Drawer body. Replace with rich nodes for tables and code blocks.</p>',
+                    });
+                },
+            }),
+    },
+    {
+        primitive: 'Drawer',
+        variant: 'setBody after open (async fetch)',
+        description: 'Drawer opens with a skeleton, body is replaced once the fetch resolves.',
+        render: () =>
+            createButton({
+                label: 'Simulate fetch',
+                size: 'sm',
+                variant: 'primary',
+                onClick: () => {
+                    const skeleton = createSkeleton({ shape: 'block', height: '5rem', repeat: 3, gap: 'gap-3' });
+                    const handle = createDrawer({ title: 'Plugin · smart_router', body: skeleton, width: 560 });
+                    setTimeout(() => {
+                        if (!handle.isOpen) return;
+                        const body = document.createElement('div');
+                        body.innerHTML =
+                            '<p class="text-emerald-300">Loaded.</p><pre class="mt-3 p-3 rounded-md bg-black/40 text-[11px] font-mono text-slate-300">{\n  "ring": "routing",\n  "enabled": true\n}</pre>';
+                        handle.setBody(body);
+                    }, 1_500);
                 },
             }),
     },
