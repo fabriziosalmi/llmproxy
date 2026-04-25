@@ -32,3 +32,6 @@ export type { MetricTileOptions, MetricIntent, MetricSize } from './MetricTile';
 
 export { createModal, confirm, prompt } from './Modal';
 export type { CreateModalOptions, ModalButton, ConfirmOptions, PromptOptions, ButtonRole } from './Modal';
+
+export { createDrawer } from './Drawer';
+export type { CreateDrawerOptions, DrawerHandle } from './Drawer';

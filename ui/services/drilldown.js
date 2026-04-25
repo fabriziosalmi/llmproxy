@@ -16,7 +16,6 @@
  *   plugin    — hot-swap history + per-plugin stats
  */
 
-import { drawer } from './drawer.js';
 import { api } from './api.js';
 import { store } from './store.js';
 import { toast } from './toast.js';
@@ -652,7 +651,8 @@ function _titleFor(kind, id) {
 }
 
 async function _open(kind, id) {
-    const handle = drawer.open({ title: _titleFor(kind, id), body: _loading(), width: 560 });
+    const { createDrawer } = await import('../src/ui');
+    const handle = createDrawer({ title: _titleFor(kind, id), body: _loading(), width: 560 });
 
     let tabs;
     try {
