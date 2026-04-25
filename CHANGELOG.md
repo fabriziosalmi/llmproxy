@@ -2,6 +2,27 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.6] — 2026-04-25
+
+### L.3 — Light theme foundation (toggle + persistence + key surface overrides)
+
+Phases H.2 and J.5 deferred this twice as "2-3 days of class migration". Both deferrals stand for the FULL migration. This commit ships the foundation only — held at patch-level on purpose. The 1.22.0 minor will land when the light side reaches visual parity with dark.
+
+**Foundation that ships now**
+- `tailwind.config.js`: `darkMode: 'class'` (default = dark, opt-in = light) + add `src/**/*.{ts,tsx}` to content (latent issue — new TS surfaces weren't in the scan list; classes were emitting only because legacy files also referenced them).
+- `src/services/theme.ts`: `getTheme` / `setTheme` / `initTheme`. Persists to `localStorage.llmproxy.theme`. `main.js` calls `initTheme()` before any render so reloads don't flash dark → light.
+- `src/ui/tokens.css`: `html.theme-light` overrides for the dominant surface / border / text classes (~30 rules). Uses `!important` to beat Tailwind's utility specificity in stamp order.
+- `index.html`: `<button id="theme-toggle">` in the header right cluster with sun/moon icon swap. `main.js` wires the click + emits a `rum.action('theme_toggle')` so adoption is observable.
+
+**What does NOT ship**
+- Migration of the hundreds of remaining hardcoded surface colors (`text-emerald-400`, `bg-cyan-500/10`, etc). Many surfaces will look uneven on light until follow-on patches finish the job. The toggle itself is correct end-to-end — it's the visual quality of the light side that's incremental.
+
+7 new theme service unit tests (defaults, persistence, init flash-prevention) — needed a `localStorage` stub because happy-dom 20 ships a no-op storage shape.
+
+Pipeline: 258/258 unit tests (was 251), lint + typecheck clean, build OK.
+
+---
+
 ## [1.21.5] — 2026-04-25
 
 ### L.2 — Responsive table primitive + RegistryTable column hides
