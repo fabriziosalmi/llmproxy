@@ -128,21 +128,36 @@ class SecurityShield:
             # be recalled — the guard aborts future chunks, not past ones.
             await asyncio.sleep(0.01)
 
-    # Regex patterns used when Presidio is not available
+    # Regex patterns used when Presidio is not available.
+    #
+    # Order matters: IBAN runs BEFORE the 16-digit credit-card pattern
+    # because IBANs embed a 4×4-digit body. With the old order, a 22-char
+    # German IBAN like "DE89 3704 0044 0532 0130 00" got masked as
+    # <CREDIT_CARD> on the inner 16 digits and leaked the "DE89 ... 00"
+    # country/check prefix in the masked output. Detection still returned
+    # True (some pattern matched), so the bug was silent in tests that
+    # only assert is-detected.
+    #
+    # The IBAN regex is also looser than the previous version: the old shape
+    # required 5×4 digit groups (24-char Spanish style) and never matched
+    # the 22-char German format that Hypothesis was actually generating.
     _REGEX_PII_PATTERNS = [
         (r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', 'EMAIL'),
+        # IBAN — match 2-letter country code + 2-digit check + 11-30 chars body.
+        (r'\b[A-Z]{2}\d{2}(?:[\s-]?[\dA-Z]{4}){3,7}(?:[\s-]?\d{1,2})?\b', 'IBAN'),
         (r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b', 'PHONE_US'),
         (r'\b\d{3}-\d{2}-\d{4}\b', 'SSN'),
+        # W7: Amex credit cards (15 digits starting with 34/37) — must come
+        # before the 16-digit pattern even though they don't overlap
+        # numerically, because the labels need to be specific.
+        (r'\b3[47]\d{2}[\s-]?\d{6}[\s-]?\d{5}\b', 'CREDIT_CARD'),
         (r'\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b', 'CREDIT_CARD'),
-        (r'\b[A-Z]{2}\d{2}[\s]?[\dA-Z]{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{0,2}\b', 'IBAN'),
         # W7: International phone formats (+CC with 7-15 digits)
         (r'\+\d{1,3}[\s.-]?\(?\d{1,4}\)?[\s.-]?\d{2,4}[\s.-]?\d{2,4}[\s.-]?\d{0,4}\b', 'PHONE_INTL'),
         # W7: IPv4 addresses (avoid matching version numbers like 1.2.3)
         (r'\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b', 'IP_ADDRESS'),
         # W7: API keys / tokens (common patterns: sk-, key-, token-, Bearer)
         (r'\b(?:sk|key|token|bearer|api[_-]?key)[_-][A-Za-z0-9_-]{20,}\b', 'API_KEY'),
-        # W7: Amex credit cards (15 digits starting with 34/37)
-        (r'\b3[47]\d{2}[\s-]?\d{6}[\s-]?\d{5}\b', 'CREDIT_CARD'),
     ]
 
     # Presidio entity types to detect

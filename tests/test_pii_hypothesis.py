@@ -148,6 +148,28 @@ class TestPIIMasking:
         assert cc not in masked, f"Raw CC still present after masking: {cc}"
         assert "[PII_CREDIT_CARD_" in masked, "Vault token not found in masked output"
 
+    @given(iban=iban_strategy)
+    @settings(max_examples=50, deadline=None)
+    def test_mask_iban_produces_iban_token(self, iban):
+        """L.1 regression guard — pre-fix, German IBANs got masked as CREDIT_CARD
+        on the inner 16 digits and leaked the country/check prefix. The label
+        must be IBAN, and the country code must NOT survive masking.
+        """
+        shield = _make_shield()
+        text = f"Transfer to {iban}."
+        masked = shield.mask_pii(text)
+        assert iban not in masked, f"Raw IBAN still present after masking: {iban}"
+        assert "[PII_IBAN_" in masked, f"Wrong label — got {masked!r}"
+        # Country code (first 2 chars) must not leak.
+        country = iban[:2]
+        # The label substring "[PII_IBAN_..." legitimately contains letters,
+        # so we assert the country is gone from the parts that aren't tokens.
+        # Easier: verify there are no two-letter sequences from the IBAN
+        # body left adjacent to bare digits in the masked output.
+        body_4 = iban[:4]  # e.g. 'DE89'
+        assert body_4 not in masked, f"IBAN prefix {body_4!r} leaked: {masked!r}"
+        assert country in iban  # sanity
+
     def test_mask_empty_string(self):
         shield = _make_shield()
         assert shield.mask_pii("") == ""
