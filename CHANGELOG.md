@@ -2,6 +2,45 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.0] — 2026-04-25
+
+### Phase J — telemetry, last legacy services, mobile paper-cuts
+Four-part follow-on after Phase I closed the original roadmap. Each piece is independently shippable; bundled here because they all land in the same window.
+
+**J.1 — Wire RUM telemetry to hot interaction points**
+- Boot `logger` + `rum` singletons in `main.js` and emit `rum.tabChange` via the store subscriber.
+- Add `rum.action()` at the surfaces where adoption matters: guard toggle, endpoint add/toggle/delete/reset-cb, plugin install/toggle/uninstall, webhook test fire, threat mute, palette open + jump + command, panic open + confirm.
+- Telemetry stays no-op until a sink is registered, so the change ships dark — no behavior change for users running on the default config.
+
+**J.2 — Migrate the last two legacy services to TypeScript**
+- `services/explain.js` → `src/services/explain.ts` (~320 LoC).
+- `services/drilldown.js` → `src/services/drilldown.ts` (~720 LoC).
+- Internal type shapes added (`EndpointLike`, `AuditRow`, `PluginLike`, `TabBundle`) so the strangler boundary is type-safe even though the four legacy data services (`api`/`store`/`toast`/`timerange`) remain JS by design — they're stable contracts called from both legacy and modern code.
+- `main.js` updated to import from the new paths. Closes the `.js → .ts` migration for the services layer.
+
+**J.3 — Backend `/api/v1/logs/client` + frontend `backendSink` wired**
+- New POST endpoint in `proxy/routes/telemetry.py`. Accepts `{records: [...], session?: string}` batches; per-batch caps (100 records, 4 KB per message), level normalization, and string-coerced session bound the blast radius if a token leaks.
+- Auth inherited from the global `/api/v1/*` middleware. The path can be hard-disabled via `security.client_logs.enabled=false` in `config.yaml` for hardened deploys.
+- Records flow through `agent._add_log` so the existing SSE stream + DLQ + operator log view all surface client-origin events alongside server events (prefixed `CLIENT:`).
+- `main.js` registers `loggerMod.backendSink` with `minLevel='warn'` (no debug noise on the wire) and the bearer token at flush time. Console sink remains the source of truth — backend is best-effort.
+- Tests cover happy path (level normalization, metadata, session), invalid record drop, oversized batch (413), and the disable-toggle (404).
+
+**J.4 — Mobile-first paper-cuts (focused subset)**
+- `Drawer`: panel claims 100vw on phones (was 95vw) — drilldown content gets back the cosmetic gutter.
+- Identity grid: `grid-cols-1 sm:2 md:4` (was hard-locked at 2 cols, wrapping awkwardly on phones).
+- SystemInfo grid: `grid-cols-1 sm:2`.
+- Webhooks endpoint row + DataExport file row: stack vertically below `sm`, flex-row above.
+- Skipped from the audit: registry table column collapse (separate responsive-table redesign), sidebar/palette modal stacking (legacy `sidebar.js` zone), RBAC sticky-column scroll cue (low-ROI polish).
+
+**J.5 — Light theme: STILL DEFERRED**
+- Honest call (again): a proper light theme is a tokens migration (~500-1000 hardcoded color references — `bg-[#0a0a0c]`, `text-white`, `bg-white/[0.03]`). That's a separate Phase K project with its own version bump, not a rider on this batch.
+
+### Numbers
+- Pipeline: 249 unit tests passing, route+admin+firewall+openapi backend tests passing (68/68), lint+typecheck+build clean.
+- 4 commits land J.1 → J.4; this entry is the J.6 bump.
+
+---
+
 ## [1.20.1] — 2026-04-25
 
 ### Phase I — DX polish, roadmap closing
