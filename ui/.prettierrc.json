@@ -1,0 +1,14 @@
+{
+  "tabWidth": 4,
+  "useTabs": false,
+  "semi": true,
+  "singleQuote": true,
+  "trailingComma": "es5",
+  "printWidth": 120,
+  "arrowParens": "always",
+  "endOfLine": "lf",
+  "overrides": [
+    { "files": "*.{json,yml,yaml,md}", "options": { "tabWidth": 2 } },
+    { "files": "*.{ts,html,css}", "options": { "tabWidth": 4 } }
+  ]
+}

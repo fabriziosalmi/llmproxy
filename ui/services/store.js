@@ -42,6 +42,11 @@ export const store = {
      * - The active tab doesn't match requiredTab (if specified)
      *
      * Returns a cleanup function. Fixes audit #13 — view-scoped polling.
+     *
+     * @param {() => void} fn
+     * @param {number} intervalMs
+     * @param {string | null} [requiredTab]
+     * @returns {() => void}
      */
     poll(fn, intervalMs, requiredTab = null) {
         let timer = null;

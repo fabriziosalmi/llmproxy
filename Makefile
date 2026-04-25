@@ -1,7 +1,8 @@
 # LLMProxy — Common development tasks
 # Usage: make <target>
 
-.PHONY: setup run test bench lint typecheck docker-up docker-build docs clean help
+.PHONY: setup run test bench lint typecheck docker-up docker-build docs clean help \
+        build-ui dev-ui lint-ui test-ui e2e-ui ui-deps
 
 # Default target
 help: ## Show this help
@@ -76,6 +77,26 @@ docker-down: ## Stop Docker Compose
 
 docker-logs: ## Tail Docker logs
 	docker compose logs -f llmproxy
+
+# ── Frontend ──────────────────────────────────────────────────
+
+ui-deps: ## Install UI dependencies (npm)
+	cd ui && npm install --no-audit --no-fund
+
+build-ui: ## Build the UI bundle into ui/dist/
+	cd ui && npm install --no-audit --no-fund && npm run build
+
+dev-ui: ## Run Vite dev server with HMR (proxies /v1, /admin, ... to localhost:8090)
+	cd ui && npm run dev
+
+lint-ui: ## Lint frontend (ESLint + Prettier)
+	cd ui && npm run lint && npm run format:check
+
+test-ui: ## Run frontend unit tests (Vitest)
+	cd ui && npm test
+
+e2e-ui: ## Run end-to-end tests (Playwright). Requires the backend on :8090.
+	cd ui && npm run e2e
 
 # ── Documentation ──────────────────────────────────────────────
 
