@@ -19,7 +19,6 @@
 import { drawer } from './drawer.js';
 import { api } from './api.js';
 import { store } from './store.js';
-import { dialog } from './dialog.js';
 import { toast } from './toast.js';
 
 const BASE_URL = window.location.origin;
@@ -226,7 +225,8 @@ function _endpointActions(ep) {
     }));
 
     wrap.appendChild(btn('Delete endpoint', 'danger', async () => {
-        const ok = await dialog.confirm({
+        const { confirm } = await import('../src/ui');
+        const ok = await confirm({
             title: 'Delete endpoint',
             message: `Remove "${ep.id}" from the registry? Active traffic will fall back via the fallback chain.`,
             confirmLabel: 'Delete',
@@ -621,7 +621,8 @@ function _pluginActions(p) {
         }
     }));
     wrap.appendChild(btn('Uninstall', 'danger', async () => {
-        const ok = await dialog.confirm({
+        const { confirm } = await import('../src/ui');
+        const ok = await confirm({
             title: 'Uninstall plugin',
             message: `Remove "${p.name}" from the pipeline? The proxy will hot-swap — in-flight requests finish through the old ring, new requests use the new one.`,
             confirmLabel: 'Uninstall',

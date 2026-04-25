@@ -29,3 +29,6 @@ export type { SkeletonOptions, SkeletonShape } from './Skeleton';
 
 export { createMetricTile } from './MetricTile';
 export type { MetricTileOptions, MetricIntent, MetricSize } from './MetricTile';
+
+export { createModal, confirm, prompt } from './Modal';
+export type { CreateModalOptions, ModalButton, ConfirmOptions, PromptOptions, ButtonRole } from './Modal';
