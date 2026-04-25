@@ -323,6 +323,19 @@ def create_router(agent) -> APIRouter:
         """
         return await agent.store.verify_audit_chain()
 
+    @router.get("/api/v1/config/warnings")
+    async def get_config_warnings(request: Request):
+        """Surface startup-validation warnings to the admin UI.
+
+        Returns the same list `run_startup_checks` logged at boot so the
+        Settings → Config Warnings widget can show actionable copy
+        ("OPENAI_API_KEY missing", "no endpoints configured", etc.) without
+        requiring operators to grep journalctl.
+        """
+        _check_admin_auth(request)
+        from core.startup_checks import get_startup_warnings
+        return {"warnings": get_startup_warnings()}
+
     @router.get("/api/v1/audit")
     async def query_audit_log(request: Request):
         """Query persistent audit log with filters."""
