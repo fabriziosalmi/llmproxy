@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="robots" content="noindex" />
+        <title>LLMProxy — Primitives gallery (dev only)</title>
+        <link rel="icon" type="image/svg+xml" href="/ui/favicon.svg" />
+    </head>
+    <body class="bg-[#050608] text-slate-200 font-sans">
+        <main class="max-w-6xl mx-auto px-6 py-10 flex flex-col gap-10">
+            <header class="flex items-baseline justify-between gap-6 border-b border-white/[0.06] pb-4">
+                <div>
+                    <h1 class="text-lg font-black tracking-tight text-white">Primitives</h1>
+                    <p class="text-[11px] text-slate-500 font-mono mt-1">
+                        Storybook-lite — dev only. Not bundled in production. Add stories under
+                        <code class="text-slate-400">ui/src/dev/stories.ts</code>.
+                    </p>
+                </div>
+                <a href="/ui/" class="text-[11px] font-mono text-slate-500 hover:text-white transition-colors"
+                    >← back to admin</a
+                >
+            </header>
+
+            <div id="gallery" class="flex flex-col gap-12"></div>
+        </main>
+
+        <script type="module" src="/ui/src/dev/primitives.ts"></script>
+    </body>
+</html>

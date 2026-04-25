@@ -20,7 +20,12 @@ export interface BadgeOptions {
 const INTENT_CLASSES: Record<BadgeIntent, { bg: string; text: string; border: string; dot: string }> = {
     neutral: { bg: 'bg-white/5', text: 'text-slate-300', border: 'border-white/10', dot: 'bg-slate-400' },
     primary: { bg: 'bg-rose-500/15', text: 'text-rose-300', border: 'border-rose-500/25', dot: 'bg-rose-400' },
-    success: { bg: 'bg-emerald-500/15', text: 'text-emerald-300', border: 'border-emerald-500/25', dot: 'bg-emerald-400' },
+    success: {
+        bg: 'bg-emerald-500/15',
+        text: 'text-emerald-300',
+        border: 'border-emerald-500/25',
+        dot: 'bg-emerald-400',
+    },
     warning: { bg: 'bg-amber-500/15', text: 'text-amber-300', border: 'border-amber-500/25', dot: 'bg-amber-400' },
     danger: { bg: 'bg-red-500/15', text: 'text-red-300', border: 'border-red-500/25', dot: 'bg-red-400' },
     info: { bg: 'bg-blue-500/15', text: 'text-blue-300', border: 'border-blue-500/25', dot: 'bg-blue-400' },
