@@ -2,6 +2,33 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.18.0] — 2026-04-25
+
+### Operator console — Settings vertical slice (Phase G.4)
+Sixth tab migrated to the C.2 pattern. `components/settings.js` (230 LoC) now delegates each of its five sections — Identity, RBAC, Webhooks, Data Export, System Info — to its own TS module under `src/views/settings/`. Each section refreshes independently: a 503 on `/rbac/roles` doesn't blank out `/webhooks`.
+
+**Sections — `ui/src/views/settings/`**
+- `SystemInfo.ts` — Card wrapping Version + Endpoint. Skeletons on first paint, "unavailable" fallback when /version or /service-info errors.
+- `Identity.ts` — Auth mode + SSO status + the authenticated-user grid (Provider / Email / Roles / Permissions). Empty state when `/identity/me` reports unauthenticated; per-call fallback when either endpoint errors.
+- `RbacMatrix.ts` — Permission × role table with a check / dash cell per intersection, footer summary with role and permission counts. ErrorState with retry on `/rbac/roles` 503.
+- `Webhooks.ts` — Endpoint list with target Badge per row (slack / teams / discord / generic), available-events chip set, **Test Fire** button that hits `/webhooks/test` with separate success / error toast paths. Empty state when webhooks are disabled in `config.yaml`.
+- `DataExport.ts` — Output dir + PII Scrub / Compress option Badges + recent-files list. Empty state when export is disabled; "no files yet" when enabled but list is empty.
+
+**Orchestrator — `ui/src/views/settings/index.ts`**
+- `mountSettingsView({ identity, rbac, webhooks, export, system }, { api, toast })` returns a `refreshAll()` that fans out to each section's refresh via `Promise.allSettled` so a slow / failing endpoint never blocks the others.
+
+**Strangler fig**
+- `components/settings.js` keeps the legacy renderers behind a `_tsMounted` flag; `refreshAll()` delegates to the TS refresh once mounted. The `nav-settings` click listener still drives a refresh for the source-tree fallback.
+- `index.html` wraps each section in a `*-host` div so source-tree fallback still renders something.
+- `services/api.js` gains `api.fetchIdentityConfig()` so the orchestrator doesn't issue raw fetch calls.
+
+**Tests**
+- 15 new unit tests across Identity / RbacMatrix / Webhooks / DataExport. Covers the disabled / empty / error / happy paths per section, the Test Fire success and failure toasts, and the RBAC matrix rendering.
+- One new e2e spec (`e2e/10-settings.spec.ts`) — 5 tests covering each section end-to-end with stubbed backend responses.
+- Total tally: 205 / 205 unit tests (was 190), 42 active e2e tests (was 37).
+
+---
+
 ## [1.17.0] — 2026-04-25
 
 ### Operator console — Plugins vertical slice (Phase G.3)
