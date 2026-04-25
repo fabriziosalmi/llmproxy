@@ -2,6 +2,24 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.3] — 2026-04-25
+
+### K.3 — GDPR audit: close PII-scrub gap + log Article 15 export to audit chain
+
+Audit of `proxy/routes/gdpr.py` against `core/security.py` regex set + audit-log integrity surfaced two real issues. Both fixed.
+
+**Issue 1 — Export scrubber missing PII categories**
+`core/export.py` `PII_PATTERNS` was a strict subset of `core/security.py` `_REGEX_PII_PATTERNS`. SSN, US/INTL phone, Visa/MC credit card, Amex, and IBAN were absent. If Presidio is not installed AND a log row was written before `mask_pii` ran (e.g. blocked-before-Ring-2 path, or PII embedded in `metadata`), the Article 15 export would leak those categories verbatim. The export scrubber must be strictly **broader** than the runtime masker, not narrower.
+
+Fix: extend `PII_PATTERNS` to cover everything security.py masks, ordered so IBAN runs **before** the 16-digit credit-card pattern (otherwise a German IBAN's 4-digit groups get masked as `<CREDIT_CARD>` and leak the country prefix). IBAN regex is intentionally looser than security.py's — for an export scrubber, false-positives are fine, false-negatives are not.
+
+**Issue 2 — Article 15 access events not in audit chain**
+`erase_subject` logs the action to the hash-chained audit log; `export_subject` did not. A leaked admin token could exfiltrate every subject's data with zero trail. Now export writes a parallel `gdpr-export-<subject>` audit row with the records count, mirroring the erase shape so `verify_audit_chain` covers both.
+
+Tests: 7 new `scrub_pii` cases (SSN / US phone / INTL phone / Visa / Amex / IBAN / nested-dict-multi-category) + 1 new GDPR test pinning the export → audit-row contract.
+
+---
+
 ## [1.21.2] — 2026-04-25
 
 ### K.2 — E2E coverage for shell actions + time-range picker
