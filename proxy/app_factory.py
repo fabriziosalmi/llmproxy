@@ -180,8 +180,8 @@ def create_app(agent) -> FastAPI:
         if request.url.path.startswith("/ui"):
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
-                "script-src 'self' 'unsafe-eval'; "    # Tailwind JIT requires eval
-                "style-src 'self' 'unsafe-inline'; "   # Tailwind JIT injects <style>
+                "script-src 'self'; "                  # Tailwind is compiled at build time — no JIT eval
+                "style-src 'self' 'unsafe-inline'; "   # Inline style attrs (gauge widths, color overrides)
                 "font-src 'self'; "                    # Fonts are local (vendor/fonts/)
                 "img-src 'self' data:; "
                 "connect-src 'self'; "
@@ -268,8 +268,10 @@ def create_app(agent) -> FastAPI:
                     app.mount(f"/ui/{entry}", StaticFiles(directory=full), name=f"ui-public-{entry}")
         app.mount("/ui", StaticFiles(directory=ui_src, html=True), name="ui")
         logger.warning(
-            "UI: no build found at %s — serving source tree directly. Run "
-            "`cd ui && npm install && npm run build` for the optimized bundle.",
+            "UI: no build found at %s — serving source tree directly. Tailwind "
+            "utility classes will NOT be styled in this mode (the proxy still "
+            "works). To get the styled console, run: cd ui && npm install && "
+            "npm run build  (or use ./install.sh which builds automatically).",
             ui_dist,
         )
 

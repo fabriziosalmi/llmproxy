@@ -167,7 +167,6 @@ async function renderPluginList() {
             const inv = s.invocations || 0;
             const errs = s.errors || 0;
             const blocks = s.blocks || 0;
-            const timeouts = s.timeouts || 0;
             const avgLat = s.avg_latency_ms || 0;
             const hasStats = inv > 0;
             const errRate = inv > 0 ? ((errs / inv) * 100).toFixed(1) : '0.0';

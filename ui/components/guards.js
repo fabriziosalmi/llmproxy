@@ -234,7 +234,7 @@ async function refreshCacheStats() {
     try {
         const data = await api.fetchCacheStats();
         renderCacheStats(data);
-    } catch (e) {
+    } catch {
         // API not available yet — show disabled state
         const badge = document.getElementById('cache-status-badge');
         if (badge) {

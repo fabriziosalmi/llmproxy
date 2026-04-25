@@ -2,6 +2,29 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.12.1] — 2026-04-25
+
+### Hardening — Phase D
+Tier-1 cleanup of debt and security paper-cuts surfaced after 1.12.0. No new product surface; the entire diff is "finishing what we started".
+
+**Dev-dependency bumps (D.1)**
+- `vite` 5 → 7, `vitest` 2 → 3, `@vitest/coverage-v8` 2 → 3, `happy-dom` 15 → 20, `postcss` → 8.5.10. Closes 8 GitHub Dependabot alerts (1 critical happy-dom RCE, 2 high happy-dom, 5 moderate vite/esbuild/postcss). All vulnerabilities were dev-only — production never shipped these — but the alerts created noise in the security tab. `npm audit` now reports 0 vulnerabilities. 68 / 68 unit tests still pass; build is unchanged.
+
+**CSP cutover + Tailwind CDN removal (D.2)**
+- The CSP for `/ui/*` no longer allows `script-src 'unsafe-eval'`. The Tailwind JIT CDN script (`ui/public/vendor/tailwind.js`, ~400 KB) is removed. Tailwind is now compiled exclusively at build time via PostCSS — the build was already wired in 1.11.2, this commit retires the runtime fallback.
+- `chat.html` previously relied on the JIT CDN for styling; it now imports the same compiled `style.css` so both pages share a single CSS bundle (`dist/assets/dialog-*.css`).
+- Behavior change: `python main.py` against the source tree (no `npm run build`) still serves the proxy and the admin UI markup — but Tailwind utility classes will no longer be styled. `install.sh`, `Makefile build-ui`, and the multi-stage Dockerfile all build the bundle automatically; the only path that hits the unstyled state is "I cloned and ran main.py without Node available", which is rare and now logs a clear warning naming the fix.
+
+**Legacy lint cleanup (D.3)**
+- 13 lingering ESLint warnings across `chat.js`, `components/{guards,logs,plugins,security}.js`, `services/drilldown.js` and `main.js` cleared: unused imports removed, optional `catch` bindings dropped, dead vars deleted, `let` → `const` where reassignment never happened.
+- `npm run lint` is now strict-by-default (`--max-warnings=0`). The transitional `lint:strict` script is gone. Lefthook pre-commit blocks new warnings rather than just new errors. CI inherits the new floor without any workflow change.
+
+**End-to-end coverage for the command palette (D.4)**
+- `e2e/05-command-palette.spec.ts` lifted out of stub status. Five specs cover Cmd+K open / Escape close, Ctrl+K cross-platform alias, type-to-filter + Enter-to-navigate, the `>` jump-to mode kind hints, and the empty-state copy when no command matches.
+- E2E tally: 16 active (was 11 + 1 stub).
+
+---
+
 ## [1.12.0] — 2026-04-25
 
 ### UI elevation — Phase C, vertical slice on Threats
