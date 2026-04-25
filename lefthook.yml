@@ -20,9 +20,7 @@ pre-commit:
     eslint:
       root: 'ui/'
       glob: 'ui/**/*.{js,ts}'
-      # Errors block commits; warnings are non-blocking during the transition.
-      # Tighten to --max-warnings=0 once existing files are cleaned up.
-      run: npx eslint --fix {staged_files}
+      run: npx eslint --fix --max-warnings=0 {staged_files}
       stage_fixed: true
 
     prettier:

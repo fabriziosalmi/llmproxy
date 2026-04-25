@@ -6,9 +6,9 @@ import { api } from './services/api.js';
 import { renderSidebar, initSidebar } from './components/sidebar.js';
 import { renderContent, initNavigation } from './components/content.js';
 import { renderRegistry, fetchRegistry, initRegistry } from './components/registry.js';
-import { initThreats, renderThreats } from './components/threats.js';
+import { initThreats } from './components/threats.js';
 import { initGuards, renderGuards } from './components/guards.js';
-import { renderSettings, initSettings } from './components/settings.js';
+import { initSettings } from './components/settings.js';
 import { initLogs } from './components/logs.js';
 import { initPlugins } from './components/plugins.js';
 import { initModels } from './components/models.js';
@@ -19,7 +19,7 @@ import { dialog } from './services/dialog.js';
 import { toast } from './services/toast.js';
 import { initExplain } from './services/explain.js';
 import { initDrilldown, drilldown } from './services/drilldown.js';
-import { initTimerange, timerange } from './services/timerange.js';
+import { initTimerange } from './services/timerange.js';
 
 // Global state listener — only re-render what changed (audit #24)
 let _prevState = { ...store.state };
@@ -36,20 +36,9 @@ store.subscribe((state) => {
     _prevState = { ...state };
 });
 
-// Helper function for navigation (assuming it's defined elsewhere or will be added)
-function showSection(sectionId) {
-    document.querySelectorAll('.content-view').forEach(view => {
-        view.classList.add('hidden');
-    });
-    const targetView = document.getElementById(sectionId);
-    if (targetView) {
-        targetView.classList.remove('hidden');
-    }
-}
-
 async function init() {
     // Session C: Initialize auth — check if SSO is required
-    const authenticated = await auth.init();
+    await auth.init();
 
     // Handle fallback from oauth-callback.html (direct navigation, no popup opener)
     const pendingToken = sessionStorage.getItem('_oauth_id_token');
@@ -125,7 +114,7 @@ async function init() {
                 const overlay = document.getElementById('login-overlay');
                 if (overlay) overlay.classList.add('hidden');
                 toast('Signed in', 'success');
-            } catch (e) {
+            } catch {
                 showErr('Network error — is the proxy reachable?');
             } finally {
                 apiKeyBtn.disabled = false;
@@ -583,7 +572,7 @@ function initHUD() {
             statusDot.className = "w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.4)] animate-pulse";
             statusText.innerText = "Live";
             statusText.className = "text-[9px] font-black text-emerald-400 uppercase tracking-widest";
-        } catch (e) {
+        } catch {
             statusDot.className = "w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]";
             statusText.innerText = "Offline";
             statusText.className = "text-[9px] font-black text-rose-500 uppercase tracking-widest";
