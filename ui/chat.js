@@ -14,7 +14,7 @@ const statusEl = document.getElementById('status-indicator');
 const tokenInfo = document.getElementById('token-info');
 const latencyInfo = document.getElementById('latency-info');
 
-let conversationHistory = [];
+const conversationHistory = [];
 let isStreaming = false;
 
 // ── Auth ──

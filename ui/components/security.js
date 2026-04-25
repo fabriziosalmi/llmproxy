@@ -170,7 +170,7 @@ function _initListeners() {
                 resultEl.textContent = `Downloaded ${count} records for "${subject}"`;
                 resultEl.className = 'mt-3 font-mono text-[10px] text-emerald-400';
                 toast(`DSAR export downloaded (${count} records)`, 'success');
-            } catch (e) {
+            } catch {
                 resultEl.textContent = `No data found for "${subject}"`;
                 resultEl.className = 'mt-3 font-mono text-[10px] text-slate-500';
             }
