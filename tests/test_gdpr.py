@@ -231,6 +231,26 @@ class TestDSAR:
         assert "exported_at" in data
         assert "T" in data["exported_at"]  # ISO format
 
+    @pytest.mark.asyncio
+    async def test_export_logs_access_to_audit_chain(self, gdpr_client, gdpr_store):
+        """K.3: Article 15 access events are logged immutably (parallel to erase).
+
+        Without this, a leaked admin token can exfiltrate every subject's data
+        with no trail, defeating the audit/accountability promise.
+        """
+        audit_before = len(gdpr_store.audit_log)
+        resp = await gdpr_client.get("/api/v1/gdpr/export/sk-alice")
+        assert resp.status_code == 200
+        # New audit row appended for the export action.
+        new_rows = gdpr_store.audit_log[audit_before:]
+        export_rows = [r for r in new_rows if r.get("req_id", "").startswith("gdpr-export-")]
+        assert len(export_rows) == 1
+        row = export_rows[0]
+        assert row["session_id"] == "GDPR_SYSTEM"
+        assert row["key_prefix"] == "GDPR"
+        assert "sk-alice" in row["metadata"]
+        assert '"action":"export"' in row["metadata"]
+
 
 # ══════════════════════════════════════════════════════════
 # Retention Policy
