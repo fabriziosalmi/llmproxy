@@ -2,6 +2,46 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.13.0] — 2026-04-25
+
+### Component library expansion — Phase E
+Builds out the primitive set so the upcoming view migrations (Phase F: Guards, Endpoints, Models, Plugins, Settings) compose against a stable surface instead of repeatedly inventing buttons, dialogs, and tables. No user-visible feature is added — this is the runway for Phase F.
+
+**Storybook-lite gallery — `ui/dev/primitives.html` (E.1)**
+Curated visual + interactive gallery, grouped by primitive. Lives in dev only; not registered in `vite.config.rollupOptions.input`, so it never ships in `dist/`. Open with `make dev-ui`, browse `http://localhost:5173/ui/dev/primitives.html`. Stories are typed (`Story` interface) and registered in `ui/src/dev/stories.ts` — adding a story when shipping a new primitive variant is a one-line change.
+
+**Modal primitive — `ui/src/ui/Modal.ts` (E.2)**
+Replaces `services/dialog.js`. Three entry points: `createModal()` for general-purpose dialogs, `confirm()` for boolean prompts, `prompt()` for single-line input. role=dialog + aria-modal=true, focus trap with restoration, Escape / backdrop-click / button cancellation, danger=true accent for destructive actions. The `prompt()` path supports synchronous validation that keeps the modal open until the input clears.
+- Six call-sites refactored: registry / plugins (×2) / security / drilldown (×2) / main (panic btn) / chat (key prompt). Each now uses dynamic import (`const { confirm } = await import('../src/ui')`) — same pattern threats.js already uses to delegate to TS primitives without breaking the source-tree fallback at the entry-point level.
+- `ui/services/dialog.js` deleted (was 226 lines).
+
+**Drawer primitive — `ui/src/ui/Drawer.ts` (E.3)**
+Replaces `services/drawer.js`. Long-lived non-modal investigation surface used by the explain pane and the drilldown inspector. Returns a `DrawerHandle` with `setTitle`, `setBody`, `close`, and an `isOpen` flag. Single-drawer model preserved — opening a second drawer reuses the existing panel rather than stacking.
+- `services/explain.js` and `services/drilldown.js` adopted dynamic import. `ui/services/drawer.js` deleted (was 158 lines).
+
+**Tooltip primitive — `ui/src/ui/Tooltip.ts` (E.4)**
+Popover-style hint anchored to a trigger. `attachTooltip(target, opts)` returns a `destroy()` cleanup. 200ms hover delay, immediate on keyboard focus (a11y win over bare `title=""`). Single shared host so triggers don't pollute their stacking context. Auto-flips top↔bottom when the viewport would clip.
+
+**Input / FormField primitive — `ui/src/ui/Input.ts` (E.5)**
+Labeled form field with help text and inline error. `createInput(opts)` returns the wrapper plus `{ input, setError, setValue, getValue }`. Auto-clears the error on next keystroke (correct-as-you-type UX). aria-describedby flips between help and error ids based on visible state; aria-invalid set on error.
+
+**Toggle / Switch primitive — `ui/src/ui/Toggle.ts` (E.6)**
+Accessible on/off switch using `role="switch"` so screen readers announce "switch on/off" rather than "checkbox". Click + Space + Enter all flip; disabled blocks all three. `setChecked(next, fire?)` lets callers update state programmatically without forcing the listener.
+
+**Table primitive — `ui/src/ui/Table.ts` (E.7)**
+Generic, sortable, with built-in empty state. Each column declares key/label/align/width/sortable/render/sortValue. `setRows()` re-renders the body in place so external scrolling state and the sticky header survive. Sortable headers click-toggle asc/desc with `aria-sort` mirroring the visible indicator.
+
+**Tabs primitive — `ui/src/ui/Tabs.ts` (E.8)**
+Multi-pane navigation with arrow-key support (Left / Right / Home / End), roving tabindex, full ARIA cross-links. Pane render functions are called lazily on first activation and cached, so heavy panes don't pay their cost up front. Optional inline Badge per tab for unread counts.
+
+**Numbers**
+- Primitives shipped in `ui/src/ui/`: 13 (Button, Card, Badge, EmptyState, ErrorState, Skeleton, MetricTile, Modal, Drawer, Tooltip, Input, Toggle, Table, Tabs) plus the `cx` class composer.
+- Unit tests: 125 / 125 (was 68 at 1.12.0).
+- Build: 6 dynamic-imported chunks now (Modal, Drawer, Tooltip, Input, Toggle, Table, Tabs); main bundle is 138 KB (37 KB gzip), down ~3 KB from 1.12.0 due to dialog/drawer code-split out.
+- Three legacy `.js` services deleted (dialog 226 LoC, drawer 158 LoC).
+
+---
+
 ## [1.12.1] — 2026-04-25
 
 ### Hardening — Phase D
