@@ -1,10 +1,10 @@
-"""Telemetry routes: health, metrics, logs SSE stream."""
+"""Telemetry routes: health, metrics, logs SSE stream, client log ingest."""
 import re
 import json
 import asyncio
 
 from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 # Strip ANSI escape sequences and control chars to prevent terminal injection via xterm.js
 _ANSI_RE = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?\x07')
@@ -99,5 +99,85 @@ def create_router(agent) -> APIRouter:
                 _active_log_streams -= 1
 
         return StreamingResponse(log_generator(), media_type="text/event-stream")
+
+    # ── Client-log ingest ──────────────────────────────────────────────────
+    # The browser logger (ui/src/services/logger.ts → backendSink) batches
+    # up to ~50 records and POSTs them here on debounce + sendBeacon at
+    # pagehide. We want the records in agent._add_log so the existing SSE
+    # surface, DLQ overflow, and operator log view all show client errors
+    # alongside server events. Auth + global rate limit already guard this
+    # path; we additionally cap batch size and message length to limit
+    # damage if a token leaks.
+    _MAX_RECORDS_PER_BATCH = 100
+    _MAX_MESSAGE_LEN = 4096
+    _ALLOWED_LEVELS = {"DEBUG", "INFO", "WARN", "WARNING", "ERROR", "CRITICAL"}
+
+    @router.post("/api/v1/logs/client")
+    async def ingest_client_logs(request: Request):
+        _check_auth(request)
+        cfg = agent.config.get("security", {}).get("client_logs", {})
+        if cfg.get("enabled") is False:
+            raise HTTPException(status_code=404, detail="Client log ingest disabled")
+
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid JSON body")
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=400, detail="Body must be an object")
+
+        records = body.get("records") or []
+        if not isinstance(records, list):
+            raise HTTPException(status_code=400, detail="'records' must be an array")
+        if len(records) > _MAX_RECORDS_PER_BATCH:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Batch exceeds {_MAX_RECORDS_PER_BATCH} records",
+            )
+
+        session = body.get("session")
+        if session is not None and not isinstance(session, str):
+            session = None
+        elif isinstance(session, str):
+            session = session[:64]
+
+        accepted = 0
+        dropped = 0
+        for rec in records:
+            if not isinstance(rec, dict):
+                dropped += 1
+                continue
+            level_raw = str(rec.get("level", "INFO")).upper()
+            level = level_raw if level_raw in _ALLOWED_LEVELS else "INFO"
+            if level == "WARN":
+                level = "WARNING"
+            message = str(rec.get("message", ""))[:_MAX_MESSAGE_LEN]
+            if not message:
+                dropped += 1
+                continue
+            ctx_raw = rec.get("context") if isinstance(rec.get("context"), dict) else rec.get("ctx")
+            ctx = ctx_raw if isinstance(ctx_raw, dict) else None
+            metadata: dict = {"source": "client"}
+            if session:
+                metadata["session"] = session
+            if isinstance(rec.get("ts"), (int, float)):
+                metadata["client_ts"] = rec["ts"]
+            if ctx:
+                metadata["ctx"] = ctx
+            sanitized = _sanitize_log({"message": message, "metadata": metadata})
+            try:
+                await agent._add_log(
+                    f"CLIENT: {sanitized['message']}",
+                    level=level,
+                    metadata=sanitized.get("metadata") or metadata,
+                )
+                accepted += 1
+            except Exception:
+                dropped += 1
+
+        return JSONResponse(
+            status_code=202,
+            content={"accepted": accepted, "dropped": dropped},
+        )
 
     return router

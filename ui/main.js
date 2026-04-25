@@ -50,13 +50,19 @@ store.subscribe((state) => {
 function initTelemetry() {
     Promise.all([import('./src/services/logger'), import('./src/services/rum')])
         .then(([loggerMod, rumMod]) => {
-            const logger = loggerMod.createLogger({ sinks: [loggerMod.consoleSink], minLevel: 'info' });
+            const sinks = [loggerMod.consoleSink];
+            // Backend sink: ships error/warn batches to /api/v1/logs/client.
+            // The endpoint is auth-gated, so a missing token simply drops the
+            // batch on the floor (the console sink remains the source of truth).
+            sinks.push(loggerMod.backendSink({
+                endpoint: `${window.location.origin}/api/v1/logs/client`,
+                getToken: () => localStorage.getItem('proxy_key') || '',
+            }));
+            const logger = loggerMod.createLogger({ sinks, minLevel: 'warn' });
             loggerMod.installGlobalErrorHandlers(logger);
-            // Expose so tests / dev tools can plug in a backend sink later.
             window.__llmproxy_logger = logger;
             _rumRef = rumMod.rum;
             window.__llmproxy_rum = rumMod.rum;
-            // Initial page view fires once main.js boots.
             try { rumMod.rum.pageView(store.state.currentTab || 'threats'); } catch { /* silent */ }
         })
         .catch(() => { /* no TS chunk — telemetry stays off */ });
