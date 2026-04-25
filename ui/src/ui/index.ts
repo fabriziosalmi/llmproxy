@@ -26,3 +26,6 @@ export type { ErrorStateOptions } from './ErrorState';
 
 export { createSkeleton } from './Skeleton';
 export type { SkeletonOptions, SkeletonShape } from './Skeleton';
+
+export { createMetricTile } from './MetricTile';
+export type { MetricTileOptions, MetricIntent, MetricSize } from './MetricTile';
