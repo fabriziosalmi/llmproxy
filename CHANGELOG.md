@@ -2,6 +2,40 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.15.0] — 2026-04-25
+
+### Operator console — Endpoints vertical slice (Phase G.1)
+The heaviest legacy view (`components/registry.js`, 314 LoC) now renders through TypeScript primitives. Third tab migrated to the C.2 pattern after Threats and Guards — biggest validation of the primitive set.
+
+**Add-endpoint form — `ui/src/views/endpoints/AddForm.ts`**
+- Composed of Input primitives plus a styled native `<select>` for the provider dropdown (a Select primitive will land later).
+- Exposes a `{ root, open, close, focus, isOpen }` handle so the orchestrator and the onboarding empty-state can drive it without DOM hunting.
+- Same client-side validation as the legacy version: id pattern (`^[a-z0-9][a-z0-9_-]*$`), URL must parse and use http/https. Errors surface inline; Cancel resets the editable fields.
+- Submit shows a busy state and reverts on backend failure, surfacing a toast with the upstream message.
+
+**Registry table — `ui/src/views/endpoints/RegistryTable.ts`**
+- Wraps the Table primitive with endpoint-specific cell renderers: Badge for status (Live/Degraded/Ignored), Badge with optional indicator dot for the circuit state (Closed/Half/Open), inline failure-count ratio when failures > 0, priority +/- controls that floor at 0.
+- Per-row actions through the Button primitive: **Inspect** forwards `data-drilldown="endpoint:<id>"` to the existing drilldown service; **Reset CB / Toggle** call the backend and refresh; **Delete** opens a Modal confirm first (`danger: true`) and only fires the DELETE on confirmation.
+
+**Onboarding empty state — `ui/src/views/endpoints/EmptyState.ts`**
+- Composes the EmptyState primitive plus a collapsed `<details>` block with the env-var path for users who'd rather configure providers via `.env` (LM Studio / vLLM / Ollama).
+
+**Orchestrator — `ui/src/views/endpoints/index.ts`**
+- `mountEndpointsView({ view, addToggle, registry, formHost }, { api, toast, initial, poll })`.
+- Polls `/api/v1/registry` (default 10s, configurable) and re-renders the body in place. ErrorState with retry surfaces when the fetch fails.
+
+**Strangler fig — `components/registry.js`**
+- Legacy `fetchRegistry` / `renderRegistry` still run during the dynamic-import roundtrip so the page is functional from the first paint, then bail (`_tsMounted` flag) once TS has mounted.
+- Source-tree fallback (no Vite build) keeps the original markup live — the `#add-endpoint-form-host` wrapper preserves the original `#add-endpoint-form` inside it as a fallback child.
+
+**Tests**
+- 16 new unit tests across AddForm + RegistryTable.
+- One new e2e spec (`e2e/07-endpoints.spec.ts`) — six tests covering the registry table end-to-end (status/circuit badges, drilldown wiring, Reset CB, Delete cancel + confirm, Priority up).
+- Existing `e2e/03-add-endpoint.spec.ts` switched to data-testid selectors so the same spec passes against both the legacy markup and the TS-mounted form.
+- Total tally: 157 / 157 unit tests (was 141), 26 active e2e tests (was 20).
+
+---
+
 ## [1.14.0] — 2026-04-25
 
 ### Operator console — Guards vertical slice (Phase F)
