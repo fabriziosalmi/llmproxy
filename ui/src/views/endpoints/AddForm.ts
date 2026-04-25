@@ -8,6 +8,7 @@
  */
 import { createButton, createCard, createInput, cx } from '../../ui';
 import type { InputFieldHandle } from '../../ui';
+import { rum } from '../../services/rum';
 import { PROVIDER_OPTIONS, type AddEndpointInput } from './types';
 
 export interface AddFormDeps {
@@ -205,6 +206,7 @@ export function createAddEndpointForm(deps: AddFormDeps): AddFormHandle {
         const originalLabel = labelSpan?.textContent ?? 'Add Endpoint';
         if (labelSpan) labelSpan.textContent = 'Adding…';
 
+        rum.action('endpoint_add', { provider });
         try {
             await deps.submit(payload);
             deps.toast?.(`Endpoint "${id}" added`, 'success');

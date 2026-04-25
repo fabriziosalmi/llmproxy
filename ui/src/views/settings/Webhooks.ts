@@ -8,6 +8,7 @@ import {
     cx,
 } from '../../ui';
 import type { BadgeIntent } from '../../ui';
+import { rum } from '../../services/rum';
 import type { WebhooksConfig } from './types';
 
 export interface WebhooksApi {
@@ -63,6 +64,7 @@ export function mountWebhooks(
     const testBtn = createButton({ label: 'Test Fire', size: 'sm', variant: 'ghost', testId: 'test-webhook-btn' });
     testBtn.classList.add('text-violet-400', 'hover:text-violet-300');
     testBtn.addEventListener('click', async () => {
+        rum.action('webhook_test_fire');
         const btn = testBtn as HTMLButtonElement;
         btn.disabled = true;
         const labelSpan = btn.querySelector('span:last-child');

@@ -22,6 +22,7 @@ import { initTimerange } from './services/timerange.js';
 
 // Global state listener — only re-render what changed (audit #24)
 let _prevState = { ...store.state };
+let _rumRef = null; // Filled lazily by initTelemetry() — no-op until then.
 store.subscribe((state) => {
     // Always update navigation/sidebar (cheap)
     renderSidebar();
@@ -32,8 +33,35 @@ store.subscribe((state) => {
     if (state.features !== _prevState.features || state.proxyEnabled !== _prevState.proxyEnabled || state.priorityMode !== _prevState.priorityMode || state.firewall !== _prevState.firewall) renderGuards();
     if (state.currentTab === 'security' && state.currentTab !== _prevState.currentTab) renderSecurity();
 
+    // Tab navigation telemetry — fires after the tab actually flipped, with
+    // `from` threaded through by the rum facade. No-op until initTelemetry
+    // registers a sink.
+    if (_rumRef && state.currentTab !== _prevState.currentTab) {
+        try { _rumRef.tabChange(state.currentTab); } catch { /* silent */ }
+    }
+
     _prevState = { ...state };
 });
+
+// Boot the telemetry layer — logger with console sink + global error
+// handlers, plus the rum facade with default no-op sink. Bare path lets
+// Vite resolve to .ts at build; the source-tree fallback gets a 404 and
+// we silently skip telemetry, which is fine because it is no-op anyway.
+function initTelemetry() {
+    Promise.all([import('./src/services/logger'), import('./src/services/rum')])
+        .then(([loggerMod, rumMod]) => {
+            const logger = loggerMod.createLogger({ sinks: [loggerMod.consoleSink], minLevel: 'info' });
+            loggerMod.installGlobalErrorHandlers(logger);
+            // Expose so tests / dev tools can plug in a backend sink later.
+            window.__llmproxy_logger = logger;
+            _rumRef = rumMod.rum;
+            window.__llmproxy_rum = rumMod.rum;
+            // Initial page view fires once main.js boots.
+            try { rumMod.rum.pageView(store.state.currentTab || 'threats'); } catch { /* silent */ }
+        })
+        .catch(() => { /* no TS chunk — telemetry stays off */ });
+}
+initTelemetry();
 
 async function init() {
     // Session C: Initialize auth — check if SSO is required
@@ -237,6 +265,7 @@ function initHUD() {
             if (palette.classList.contains('hidden')) {
                 palette.classList.remove('hidden');
                 palette.classList.add('flex');
+                if (_rumRef) { try { _rumRef.action('palette_open'); } catch { /* silent */ } }
                 // Seed the full command list and focus the input so the palette
                 // is immediately useful without requiring the user to type first.
                 input.value = '';
@@ -330,8 +359,10 @@ function initHUD() {
                 `;
                 item.onclick = () => {
                     if (res.id.startsWith('__jump:') || res.id.startsWith('__hint:')) {
+                        if (_rumRef) { try { _rumRef.action('palette_jump', { target: res.id }); } catch { /* silent */ } }
                         _executeJump(res.id);
                     } else {
+                        if (_rumRef) { try { _rumRef.action('palette_command', { id: res.id }); } catch { /* silent */ } }
                         executeCommand(res.id);
                         togglePalette();
                     }
@@ -533,6 +564,7 @@ function initHUD() {
     const panicBtn = document.getElementById('panic-btn');
     if (panicBtn) {
         panicBtn.addEventListener('click', async () => {
+            if (_rumRef) { try { _rumRef.action('panic_open'); } catch { /* silent */ } }
             const { confirm } = await import('./src/ui');
             const ok = await confirm({
                 title: 'Emergency kill switch',
@@ -542,6 +574,7 @@ function initHUD() {
                 danger: true,
             });
             if (!ok) return;
+            if (_rumRef) { try { _rumRef.action('panic_confirm'); } catch { /* silent */ } }
             try {
                 const data = await api.panic();
                 if (data.status === 'HALTED') {
