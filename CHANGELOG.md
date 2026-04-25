@@ -2,6 +2,26 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.7] — 2026-04-25
+
+### M.1 — SHA-256 plugin pinning (tampering detection, not sandbox)
+
+Smallest meaningful slice of the plugin-sandbox menu: detection of post-install file tampering. **Not a sandbox** in the "untrusted plugin author" sense — that still wants WASM and stays deferred. Threat model here is "trusted plugin, untrusted disk": insider modification, supply-chain swap, disk corruption silently changing behavior.
+
+**Two surfaces touched**
+- `install_plugin`: when `type=python` and no `sha256` was supplied, hash the entrypoint source and stamp it into the manifest entry before persisting. Caller-supplied hashes (from a marketplace publish step) are preserved.
+- `_load_plugin`: after the existing AST scan, compare the on-disk file hash against the pinned value. `PluginSecurityError` on mismatch. Plugins without a pin (older bundled manifests) still load with a one-shot warning that includes the actual hash, so an operator can opt in by adding `sha256: <hex>` to the entry.
+
+**What this is NOT**
+- Not a sandbox. The proxy still loads + executes plugin code in-process.
+- Doesn't catch malicious plugins from a hostile author — the existing AST lint + WASM runner are the answers there. WASM is still deferred until a real marketplace exists.
+
+7 new tests cover the pure-helper math (3) and integration via tmp `PluginManager` covering install-records-hash, install-preserves-pre-supplied-hash, load-rejects-tampered-file, load-without-pin-warns-but-succeeds.
+
+Wider regression: 203 backend tests across the touched suites all green.
+
+---
+
 ## [1.21.6] — 2026-04-25
 
 ### L.3 — Light theme foundation (toggle + persistence + key surface overrides)
