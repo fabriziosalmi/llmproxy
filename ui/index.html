@@ -504,6 +504,7 @@
                     <h2 class="text-xs font-bold text-white">Endpoint Registry</h2>
                     <button type="button" id="add-endpoint-toggle" class="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg text-[10px] font-bold text-emerald-400 transition-colors">+ Add Endpoint</button>
                 </div>
+                <div id="add-endpoint-form-host" data-testid="add-endpoint-form-host">
                 <div id="add-endpoint-form" class="hidden bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-emerald-500/20 p-5 mb-4">
                     <h3 class="text-[11px] font-bold text-white mb-3">Add LLM Endpoint</h3>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
@@ -551,8 +552,9 @@
                         <button type="button" id="ep-add-btn" class="px-4 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 rounded-lg text-[10px] font-bold text-emerald-400 transition-colors">Add Endpoint</button>
                     </div>
                 </div>
+                </div><!-- /add-endpoint-form-host -->
                 <div id="registry-container">
-                    <!-- Populated by registry.js -->
+                    <!-- Populated by either legacy registry.js or src/views/endpoints/index.ts -->
                 </div>
             </div>
 
