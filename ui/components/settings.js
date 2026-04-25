@@ -35,6 +35,7 @@ export async function initSettings() {
         .then(({ mountSettingsView }) => {
             const refreshTs = mountSettingsView(
                 {
+                    configWarnings: document.getElementById('settings-config-warnings-host'),
                     identity: document.getElementById('settings-identity-host'),
                     rbac: document.getElementById('settings-rbac-host'),
                     webhooks: document.getElementById('settings-webhooks-host'),
@@ -51,6 +52,7 @@ export async function initSettings() {
                         fetchWebhooks: api.fetchWebhooks,
                         testWebhook: api.testWebhook,
                         fetchExportStatus: api.fetchExportStatus,
+                        fetchConfigWarnings: api.fetchConfigWarnings,
                     },
                     toast,
                 },

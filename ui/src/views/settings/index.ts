@@ -8,13 +8,14 @@
  * skeletons while loading, ErrorState with retry on failure, and
  * EmptyState when the backend reports the feature is disabled.
  */
+import { mountConfigWarnings, type ConfigWarningsApi } from './ConfigWarnings';
 import { mountDataExport, type ExportApi } from './DataExport';
 import { mountIdentity, type IdentityApi } from './Identity';
 import { mountRbacMatrix, type RbacApi } from './RbacMatrix';
 import { mountSystemInfo, type SystemInfoApi } from './SystemInfo';
 import { mountWebhooks, type WebhooksApi } from './Webhooks';
 
-export interface SettingsApi extends SystemInfoApi, IdentityApi, RbacApi, WebhooksApi, ExportApi {}
+export interface SettingsApi extends SystemInfoApi, IdentityApi, RbacApi, WebhooksApi, ExportApi, ConfigWarningsApi {}
 
 export interface MountSettingsOptions {
     api: SettingsApi;
@@ -22,6 +23,8 @@ export interface MountSettingsOptions {
 }
 
 export interface SettingsHosts {
+    /** Optional — when present, mounted above all other sections so config drift is loud. */
+    configWarnings?: HTMLElement | null;
     identity: HTMLElement | null;
     rbac: HTMLElement | null;
     webhooks: HTMLElement | null;
@@ -32,6 +35,7 @@ export interface SettingsHosts {
 export function mountSettingsView(hosts: SettingsHosts, opts: MountSettingsOptions): () => Promise<void> {
     const refreshes: Array<() => Promise<void>> = [];
 
+    if (hosts.configWarnings) refreshes.push(mountConfigWarnings(hosts.configWarnings, opts.api));
     if (hosts.identity) refreshes.push(mountIdentity(hosts.identity, opts.api));
     if (hosts.rbac) refreshes.push(mountRbacMatrix(hosts.rbac, opts.api));
     if (hosts.webhooks) {
@@ -46,6 +50,7 @@ export function mountSettingsView(hosts: SettingsHosts, opts: MountSettingsOptio
     };
 }
 
+export { mountConfigWarnings } from './ConfigWarnings';
 export { mountIdentity } from './Identity';
 export { mountRbacMatrix } from './RbacMatrix';
 export { mountWebhooks } from './Webhooks';

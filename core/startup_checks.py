@@ -2,7 +2,9 @@
 Startup validation — catch config errors before the proxy starts.
 
 Runs immediately after config load and provides actionable error messages
-instead of cryptic KeyError/ValueError tracebacks.
+instead of cryptic KeyError/ValueError tracebacks. The warnings list is
+also stashed at module scope so admin routes can surface it in the UI
+(see /api/v1/config/warnings).
 """
 
 import os
@@ -14,6 +16,16 @@ logger = logging.getLogger("llmproxy.startup")
 
 class StartupError(Exception):
     """Raised when a critical configuration issue prevents startup."""
+
+
+# Captured during run_startup_checks() so the admin UI can surface them
+# in the Settings → Config Warnings widget without re-running validation.
+_LAST_WARNINGS: list[str] = []
+
+
+def get_startup_warnings() -> list[str]:
+    """Return a copy of the most recent run_startup_checks() warnings."""
+    return list(_LAST_WARNINGS)
 
 
 def validate_config(config: dict) -> list[str]:
@@ -99,8 +111,10 @@ def validate_config(config: dict) -> list[str]:
 
 def run_startup_checks(config: dict):
     """Run all startup validations. Exits with clear message on failure."""
+    global _LAST_WARNINGS
     try:
         warnings = validate_config(config)
+        _LAST_WARNINGS = list(warnings)
         for w in warnings:
             logger.warning(f"CONFIG: {w}")
         if warnings:
@@ -108,5 +122,6 @@ def run_startup_checks(config: dict):
         else:
             logger.info("Startup checks passed")
     except StartupError as e:
+        _LAST_WARNINGS = [str(e)]
         logger.critical(f"\n{'='*60}\n  STARTUP FAILED\n{'='*60}\n\n{e}\n")
         sys.exit(1)

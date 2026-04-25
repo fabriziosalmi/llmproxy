@@ -19,8 +19,22 @@
 import { api } from './api.js';
 import { store } from './store.js';
 import { toast } from './toast.js';
+import { timerange } from './timerange.js';
 
 const BASE_URL = window.location.origin;
+
+// H.3: drilldown queries against /api/v1/audit (and any other time-bounded
+// surface) honor the global time-range picker, so opening an inspector
+// from a filtered view doesn't silently widen the window to "all time".
+function _timeFilterParam() {
+    try {
+        const sinceMs = timerange.sinceEpochMs?.();
+        if (!sinceMs) return '';
+        return `&from=${encodeURIComponent(new Date(sinceMs).toISOString())}`;
+    } catch {
+        return '';
+    }
+}
 
 function _authFetch(path, opts = {}) {
     const token = localStorage.getItem('proxy_key') || '';
@@ -92,7 +106,7 @@ async function _endpointTabs(id) {
     try {
         // Coarse filter — audit has no endpoint param, so we pull the top N and
         // filter client-side by provider name that matches the endpoint's type.
-        const recent = await _authFetch(`/api/v1/audit?limit=50`);
+        const recent = await _authFetch(`/api/v1/audit?limit=50${_timeFilterParam()}`);
         const pool = recent.items || [];
         relatedRows = pool.filter(r =>
             r.provider === ep.type || r.provider === ep.id || (ep.id.startsWith(r.provider + '-'))
@@ -248,7 +262,7 @@ async function _requestTabs(reqId) {
     let row = null;
     let related = [];
     try {
-        const data = await _authFetch(`/api/v1/audit?limit=500`);
+        const data = await _authFetch(`/api/v1/audit?limit=500${_timeFilterParam()}`);
         const items = data.items || [];
         row = items.find(r => r.req_id === reqId) || null;
         if (row) {
@@ -376,7 +390,7 @@ async function _modelTabs(modelId) {
     // Recent audit slice for this model.
     let auditRows = [];
     try {
-        const data = await _authFetch(`/api/v1/audit?model=${encodeURIComponent(modelId)}&limit=100`);
+        const data = await _authFetch(`/api/v1/audit?model=${encodeURIComponent(modelId)}&limit=100${_timeFilterParam()}`);
         auditRows = data.items || [];
     } catch { /* audit optional */ }
 

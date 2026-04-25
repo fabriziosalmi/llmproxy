@@ -129,6 +129,9 @@ export function createModal<T = unknown>(opts: CreateModalOptions<T>): Promise<T
     panel.setAttribute('aria-labelledby', labelId);
     panel.className = cx(
         'w-full max-w-md mx-4 bg-[#0a0a0c] border rounded-2xl p-5 shadow-2xl',
+        // H.1: keep tall content scrollable inside the modal so the buttons
+        // don't slip below the fold on small viewports.
+        'max-h-[85vh] overflow-y-auto',
         opts.danger ? 'border-rose-500/30' : 'border-white/[0.08]'
     );
     if (opts.testId) panel.setAttribute('data-testid', opts.testId);
