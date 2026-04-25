@@ -108,6 +108,7 @@ export const api = {
     async fetchRbacRoles() { return _json(`${BASE_URL}/api/v1/rbac/roles`); },
     async fetchIdentityMe() { return _json(`${BASE_URL}/api/v1/identity/me`); },
     async fetchIdentityConfig() { return _json(`${BASE_URL}/api/v1/identity/config`); },
+    async fetchConfigWarnings() { return _json(`${BASE_URL}/api/v1/config/warnings`); },
 
     async fetchLatencyMetrics() { return _json(`${BASE_URL}/api/v1/metrics/latency`); },
     async fetchRingTimeline() { return _json(`${BASE_URL}/api/v1/metrics/ring-timeline`); },

@@ -47,7 +47,9 @@ export function createTabs(opts: TabsOptions): TabsHandle {
 
     const list = document.createElement('div');
     list.setAttribute('role', 'tablist');
-    list.className = 'flex items-center gap-1 border-b border-white/[0.06]';
+    // H.1: long tab labels overflow on narrow viewports — let the tablist
+    // scroll horizontally rather than clipping or breaking the layout.
+    list.className = 'flex items-center gap-1 border-b border-white/[0.06] overflow-x-auto scrollbar-none';
     root.appendChild(list);
 
     const panels = document.createElement('div');
@@ -68,7 +70,7 @@ export function createTabs(opts: TabsOptions): TabsHandle {
         btn.setAttribute('aria-controls', `tabpanel-${tab.id}`);
         btn.setAttribute('data-testid', `tab-${tab.id}`);
         btn.className = cx(
-            'inline-flex items-center gap-2 px-3 py-2 text-[11px] font-semibold border-b-2 -mb-px',
+            'inline-flex shrink-0 items-center gap-2 px-3 py-2 text-[11px] font-semibold border-b-2 -mb-px',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40',
             'transition-colors'
         );
