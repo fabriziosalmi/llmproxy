@@ -289,7 +289,7 @@ function _requestOverview(r) {
     return el;
 }
 
-function _requestTimeline(related, reqId) {
+function _requestTimeline(related, _reqId) {
     const el = document.createElement('div');
     if (!related.length) {
         el.innerHTML = '<p class="text-[11px] text-slate-600 font-mono">No other requests in this session window.</p>';

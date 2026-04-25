@@ -198,7 +198,7 @@ function appendLogToTerm(log) {
                 if (suffix.trim()) term.writeln(`${timestamp} ${level} ${suffix.trim()}`);
                 handleAutoScroll(isAtBottom);
                 return;
-            } catch (_) {
+            } catch {
                 // Not valid JSON, fall through to regex coloring
             }
         }

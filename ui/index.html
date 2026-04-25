@@ -5,11 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <title>LLMProxy — Security Gateway</title>
-    <!-- All assets served locally — zero external CDN dependencies -->
-    <!-- Tailwind JIT (CDN script). Kept as fallback so `python main.py` works
-         without `npm run build`. Phase A.5 removes this in favor of PostCSS
-         build only, plus a tightened CSP without 'unsafe-eval'. -->
-    <script src="vendor/tailwind.js"></script>
+    <!-- All assets served locally — zero external CDN dependencies. Tailwind
+         is compiled at build time via PostCSS; running without `npm run build`
+         leaves utility classes unstyled (the proxy still functions). -->
     <script src="vendor/chart.min.js"></script>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="vendor/fonts.css">

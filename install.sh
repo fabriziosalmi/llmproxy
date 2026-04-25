@@ -249,10 +249,12 @@ install_docker() {
 }
 
 build_ui_if_possible() {
-    # Build the optimized UI bundle when Node is present. The proxy still
-    # works without it via the source-tree fallback (Tailwind JIT CDN).
+    # Build the optimized UI bundle when Node is present. Without a build,
+    # the proxy still works but Tailwind utility classes are unstyled
+    # (CSP no longer allows the JIT CDN — see CHANGELOG 1.12.1).
     if ! command -v npm >/dev/null 2>&1; then
-        warn "npm not found — skipping UI build. Backend will serve the source tree directly."
+        warn "npm not found — skipping UI build."
+        warn "The admin console will load but Tailwind classes will not be styled."
         hint "Install Node 20+ for the optimized bundle: https://nodejs.org/"
         return 0
     fi
@@ -260,7 +262,7 @@ build_ui_if_possible() {
     (cd ui && npm install --no-audit --no-fund >/dev/null 2>&1 && npm run build >/dev/null 2>&1)
     local rc=$?
     if [[ $rc -ne 0 ]]; then
-        warn "UI build failed (rc=$rc) — backend will fall back to the source tree."
+        warn "UI build failed (rc=$rc) — admin console will load unstyled."
         hint "Run 'cd ui && npm install && npm run build' manually to see the error."
     else
         ok "UI bundle ready at ui/dist/"
