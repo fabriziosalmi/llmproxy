@@ -560,18 +560,22 @@
 
             <!-- MODELS VIEW -->
             <div id="view-models" class="content-view hidden">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                    <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-sky-500/20 p-4">
-                        <p class="text-[9px] font-bold text-sky-400 uppercase tracking-widest mb-1">Active Models</p>
-                        <p id="kpi-active-models" class="text-2xl font-black text-sky-400 font-mono">--</p>
-                    </div>
-                    <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-emerald-500/20 p-4">
-                        <p class="text-[9px] font-bold text-emerald-400 uppercase tracking-widest mb-1">Providers</p>
-                        <p id="kpi-providers" class="text-2xl font-black text-emerald-400 font-mono">--</p>
-                    </div>
-                    <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-violet-500/20 p-4">
-                        <p class="text-[9px] font-bold text-violet-400 uppercase tracking-widest mb-1">Embedding Models</p>
-                        <p id="kpi-embedding-models" class="text-2xl font-black text-violet-400 font-mono">--</p>
+                <!-- KPI grid (mounted by src/views/models/Kpi.ts; legacy markup
+                     below is the fallback shown without a Vite build). -->
+                <div id="models-kpi-grid-host" data-testid="models-kpi-grid-host">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-sky-500/20 p-4">
+                            <p class="text-[9px] font-bold text-sky-400 uppercase tracking-widest mb-1">Active Models</p>
+                            <p id="kpi-active-models" class="text-2xl font-black text-sky-400 font-mono">--</p>
+                        </div>
+                        <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-emerald-500/20 p-4">
+                            <p class="text-[9px] font-bold text-emerald-400 uppercase tracking-widest mb-1">Providers</p>
+                            <p id="kpi-providers" class="text-2xl font-black text-emerald-400 font-mono">--</p>
+                        </div>
+                        <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-violet-500/20 p-4">
+                            <p class="text-[9px] font-bold text-violet-400 uppercase tracking-widest mb-1">Embedding Models</p>
+                            <p id="kpi-embedding-models" class="text-2xl font-black text-violet-400 font-mono">--</p>
+                        </div>
                     </div>
                 </div>
                 <div class="mb-4">
