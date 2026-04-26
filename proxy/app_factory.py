@@ -71,6 +71,22 @@ def _read_version() -> str:
         return "0.0.0"
 
 
+def _resolve_cors_origins(config: dict) -> list:
+    """Compute the CORS allow_origins list from server config.
+
+    Default (when `server.cors_origins` is unset): localhost-only on the
+    configured port. The bundled UI lives at `/ui` on the same origin, so
+    cross-origin access is only legitimately needed for loopback. Wildcard
+    is opt-in.
+    """
+    server_cfg = config.get("server", {})
+    explicit = server_cfg.get("cors_origins")
+    if explicit is not None:
+        return explicit
+    port = server_cfg.get("port", 8090)
+    return [f"http://localhost:{port}", f"http://127.0.0.1:{port}"]
+
+
 def create_app(agent) -> FastAPI:
     """App factory: builds the FastAPI application with middleware and routes."""
     from core.rate_limiter import RateLimitMiddleware
@@ -194,11 +210,12 @@ def create_app(agent) -> FastAPI:
             "TLS is DISABLED — all traffic is unencrypted. For production, either "
             "enable TLS in config.yaml or place a reverse proxy (Traefik/Caddy/nginx) in front."
         )
-    cors_origins = agent.config.get("server", {}).get("cors_origins", ["*"])
-    if cors_origins == ["*"]:
+    cors_origins = _resolve_cors_origins(agent.config)
+    if cors_origins == ["*"] or "*" in cors_origins:
         logger.warning(
-            "CORS allow_origins is ['*'] — any website can make authenticated requests "
-            "to this proxy. Set server.cors_origins in config.yaml to restrict in production."
+            "CORS allow_origins includes '*' — any website can make authenticated "
+            "requests to this proxy. Set server.cors_origins in config.yaml to a "
+            "specific origin list for production."
         )
     app.add_middleware(
         CORSMiddleware,

@@ -292,6 +292,53 @@ class TestAppFactory:
         with patch("builtins.open", side_effect=FileNotFoundError):
             assert _read_version() == "0.0.0"
 
+    # ── P0-5: CORS default localhost-only ──────────────────────
+
+    def test_cors_default_is_localhost_only_when_unset(self):
+        """No `server.cors_origins` in config → default to loopback-only.
+        Wildcard ['*'] would let any website make authenticated cross-origin
+        requests to the proxy, which is the wrong default for a security
+        gateway."""
+        from proxy.app_factory import _resolve_cors_origins
+        cfg = {"server": {"port": 8090}}
+        origins = _resolve_cors_origins(cfg)
+        assert origins == [
+            "http://localhost:8090",
+            "http://127.0.0.1:8090",
+        ]
+        assert "*" not in origins
+
+    def test_cors_default_uses_configured_port(self):
+        """Default origins follow `server.port` so a non-default port still
+        gets a working dev UI without manual CORS config."""
+        from proxy.app_factory import _resolve_cors_origins
+        cfg = {"server": {"port": 9000}}
+        origins = _resolve_cors_origins(cfg)
+        assert "http://localhost:9000" in origins
+        assert "http://127.0.0.1:9000" in origins
+
+    def test_cors_explicit_value_respected(self):
+        """An operator who sets `cors_origins` (even to '*') gets exactly
+        that — the default only applies when the key is unset."""
+        from proxy.app_factory import _resolve_cors_origins
+        cfg = {"server": {"port": 8090, "cors_origins": ["https://app.example.com"]}}
+        origins = _resolve_cors_origins(cfg)
+        assert origins == ["https://app.example.com"]
+
+    def test_cors_explicit_wildcard_respected(self):
+        from proxy.app_factory import _resolve_cors_origins
+        cfg = {"server": {"port": 8090, "cors_origins": ["*"]}}
+        assert _resolve_cors_origins(cfg) == ["*"]
+
+    def test_cors_empty_server_block_falls_back_to_loopback(self):
+        """No server section at all → still default to loopback (port 8090)."""
+        from proxy.app_factory import _resolve_cors_origins
+        origins = _resolve_cors_origins({})
+        assert origins == [
+            "http://localhost:8090",
+            "http://127.0.0.1:8090",
+        ]
+
 
 # ── base_agent ────────────────────────────────────────────────
 
