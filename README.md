@@ -127,6 +127,24 @@ See [SECURITY.md](SECURITY.md) for the full security architecture and vulnerabil
 
 ---
 
+## Performance
+
+Single-process throughput on Apple Silicon (M-series, dev mode, no upstream call — proxy stack only):
+
+| Endpoint | Req/s | p50 latency | p99 latency | Conditions |
+|----------|------:|------------:|------------:|------------|
+| `/health` (cold path, no upstream) | **1,313** | 7 ms | 28 ms | wrk · 2t · 10c · 20s |
+| `/health` (saturated) | 1,176 | 82 ms | 149 ms | wrk · 4t · 100c · 30s |
+| `/api/v1/registry` (light DB read) | 1,158 | 81 ms | 188 ms | wrk · 4t · 100c · 30s |
+
+These numbers measure the proxy stack overhead — the auth middleware, ASGI firewall, route dispatch, and JSON serialization — not the cost of a real LLM call (which is dominated by upstream provider latency).
+
+Honest read: ~1.2k req/s on a single process is a **moderate-load** number. For higher throughput, run multiple uvicorn workers behind a load balancer or scale horizontally. The proxy is stateless except for the SQLite store (which can be swapped for Postgres) and the in-memory rate-limit/circuit-breaker state (which is per-process by design).
+
+Reproduce: `python main.py` then `wrk -t4 -c100 -d30s --latency http://localhost:8090/health`.
+
+---
+
 ## API
 
 LLMProxy exposes an OpenAI-compatible API on port 8090.
