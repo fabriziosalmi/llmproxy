@@ -19,6 +19,7 @@ import {
     createErrorState,
     createInput,
     createMetricTile,
+    createSparkline,
     createSkeleton,
     createTable,
     createTabs,
@@ -215,6 +216,53 @@ export const stories: Story[] = [
                 intent: 'info',
                 size: 'sm',
             }),
+    },
+    {
+        primitive: 'MetricTile',
+        variant: 'with sparkline (24h trend)',
+        description:
+            'Pass {sparkline: { data: number[] }} to overlay a 24-point trend strip below the value. ' +
+            'The strip color tracks the tile intent unless overridden.',
+        render: () =>
+            createMetricTile({
+                label: 'Total Spend',
+                value: '$12.43',
+                sub: 'last 24h',
+                intent: 'success',
+                sparkline: {
+                    data: [0.1, 0.3, 0.2, 0.5, 0.8, 1.2, 1.6, 2.0, 2.4, 2.7, 3.1, 3.4, 3.6, 3.9, 4.5, 5.1, 5.8, 6.5, 7.4, 8.6, 9.7, 10.9, 11.8, 12.4],
+                },
+            }),
+    },
+    {
+        primitive: 'MetricTile',
+        variant: 'sparkline · flat series',
+        description: 'Constant data sits on the mid-line, not pinned to top — empty surfaces look intentional.',
+        render: () =>
+            createMetricTile({
+                label: 'Errors',
+                value: '0',
+                intent: 'success',
+                sparkline: { data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+            }),
+    },
+    {
+        primitive: 'Sparkline',
+        variant: 'standalone, no area',
+        description: 'Bare line, no gradient — useful inside dense rows where a fill would be visual noise.',
+        render: () => {
+            const wrap = document.createElement('div');
+            wrap.style.width = '240px';
+            wrap.appendChild(
+                createSparkline({
+                    data: [10, 12, 9, 15, 18, 14, 11, 16, 22, 19, 24, 28],
+                    color: 'rose',
+                    area: false,
+                    height: 24,
+                }),
+            );
+            return wrap;
+        },
     },
 
     // Modal — interactive samples; click the button to see it open.

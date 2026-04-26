@@ -1,5 +1,6 @@
 import { cx } from './classnames';
 import { createSkeleton } from './Skeleton';
+import { createSparkline, type SparklineColor } from './Sparkline';
 
 export type MetricIntent = 'neutral' | 'primary' | 'success' | 'warning' | 'danger' | 'info';
 export type MetricSize = 'sm' | 'md';
@@ -21,9 +22,24 @@ export interface MetricTileOptions {
     error?: string;
     /** Optional click target — usually wires to drilldown. */
     onClick?: (ev: MouseEvent) => void;
+    /**
+     * Optional inline sparkline below the value. Pass the data series
+     * (typically 24 hourly buckets) and the surrounding tile takes care
+     * of color matching the intent.
+     */
+    sparkline?: { data: number[]; color?: SparklineColor };
     className?: string;
     testId?: string;
 }
+
+const INTENT_SPARK: Record<MetricIntent, SparklineColor> = {
+    neutral: 'slate',
+    primary: 'rose',
+    success: 'emerald',
+    warning: 'amber',
+    danger: 'rose',
+    info: 'cyan',
+};
 
 const INTENT_TEXT: Record<MetricIntent, string> = {
     neutral: 'text-white',
@@ -129,6 +145,20 @@ export function createMetricTile(opts: MetricTileOptions): HTMLElement {
         subEl.className = 'text-[10px] font-mono text-slate-500 mt-0.5';
         subEl.textContent = opts.sub;
         tile.appendChild(subEl);
+    }
+
+    // Sparkline strip — sits below the value/sub so the eye lands on the
+    // big number first. Skip when loading/error to avoid stamping a
+    // confusing flat line over a skeleton.
+    if (opts.sparkline && opts.sparkline.data.length >= 2 && !opts.loading && !opts.error) {
+        const spark = createSparkline({
+            data: opts.sparkline.data,
+            color: opts.sparkline.color ?? INTENT_SPARK[intent],
+            height: 28,
+            ariaLabel: `${opts.label} trend`,
+        });
+        spark.classList.add('mt-2');
+        tile.appendChild(spark);
     }
 
     return tile;
