@@ -14,6 +14,7 @@ Extracted modules:
 """
 
 import os
+import hmac
 import json
 import uuid
 import yaml
@@ -271,6 +272,23 @@ class ProxyOrchestrator(BaseAgent):
         env_var = self.config.get("server", {}).get("auth", {}).get("api_keys_env", "LLM_PROXY_API_KEYS")
         raw = SecretManager.get_secret(env_var, "") or ""
         return [k.strip() for k in raw.split(",") if k.strip()]
+
+    def _verify_api_key(self, token: str) -> bool:
+        """Constant-time API-key check.
+
+        `token in valid_keys` short-circuits on the first byte mismatch and on
+        the first match — both leak timing. This OR-aggregates `compare_digest`
+        across every configured key and never breaks early, so total runtime
+        depends only on |valid_keys|, not on which key (if any) matched.
+        """
+        if not token:
+            return False
+        token_b = token.encode("utf-8", errors="replace")
+        matched = False
+        for k in self._get_api_keys():
+            if hmac.compare_digest(token_b, k.encode("utf-8", errors="replace")):
+                matched = True
+        return matched
 
     # ── HTTP Session ──
 

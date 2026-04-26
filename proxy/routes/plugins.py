@@ -19,8 +19,7 @@ def create_router(agent) -> APIRouter:
             return  # Auth disabled — development mode, allow all
         auth_header = request.headers.get("Authorization", "")
         token = auth_header.replace("Bearer ", "").strip()
-        valid_keys = agent._get_api_keys()
-        if not token or token not in valid_keys:
+        if not agent._verify_api_key(token):
             raise HTTPException(status_code=401, detail="Plugins: Unauthorized")
 
     @router.get("/api/v1/plugins")
