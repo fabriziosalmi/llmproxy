@@ -11,7 +11,6 @@ on each request. The orchestrator passes `lambda: self.config` so the
 provider always returns the live agent config.
 """
 
-import pytest
 
 from proxy.forwarder import RequestForwarder
 
