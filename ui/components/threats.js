@@ -48,6 +48,7 @@ export function initThreats() {
                     ringTimeline: document.getElementById('ring-timeline'),
                     chartCanvas: document.getElementById('threat-chart'),
                     trafficFlow: document.getElementById('threats-traffic-flow'),
+                    spendForecast: document.getElementById('threats-spend-forecast'),
                 },
                 {
                     api: {
@@ -55,6 +56,7 @@ export function initThreats() {
                         fetchGuardsStatus: api.fetchGuardsStatus,
                         fetchLatencyMetrics: api.fetchLatencyMetrics,
                         fetchRingTimeline: api.fetchRingTimeline,
+                        fetchSpendForecast: api.fetchSpendForecast,
                     },
                     poll: (fn, intervalMs) => store.poll(fn, intervalMs, 'threats'),
                     onFirewallState: (state) => store.update({ firewall: state }),

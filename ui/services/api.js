@@ -112,6 +112,7 @@ export const api = {
     async fetchConfigYaml() { return _json(`${BASE_URL}/api/v1/config/yaml`); },
     async fetchRateLimitConfig() { return _json(`${BASE_URL}/api/v1/rate-limit/config`); },
     async setRateLimitPreset(preset) { return _post(`${BASE_URL}/api/v1/rate-limit/preset`, { preset }); },
+    async fetchSpendForecast() { return _json(`${BASE_URL}/api/v1/analytics/forecast`); },
 
     async fetchLatencyMetrics() { return _json(`${BASE_URL}/api/v1/metrics/latency`); },
     async fetchRingTimeline() { return _json(`${BASE_URL}/api/v1/metrics/ring-timeline`); },
