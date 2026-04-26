@@ -162,9 +162,13 @@ class ProxyOrchestrator(BaseAgent):
         signing_key = signing_cfg.get("secret") or os.environ.get("LLM_PROXY_SIGNING_KEY", "")
         self.response_signer = ResponseSigner(signing_key)
 
-        # Request forwarder (extracted to proxy/forwarder.py)
+        # Request forwarder (extracted to proxy/forwarder.py).
+        # Pass `config_provider` instead of a snapshot so the forwarder picks
+        # up hot-reloaded `endpoints` and `fallback_chains` after the watcher
+        # rebinds `self.config`. Without the provider, the forwarder would be
+        # permanently stuck on the boot-time config.
         self.forwarder = RequestForwarder(
-            config=self.config,
+            config_provider=lambda: self.config,
             circuit_manager=self.circuit_manager,
             budget_lock=self._budget_lock,
             get_session=self._get_session,
