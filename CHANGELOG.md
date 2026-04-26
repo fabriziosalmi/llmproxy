@@ -2,6 +2,20 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.12] — 2026-04-26
+
+### N.3 — Toggle debouncing (opt-in via `debounceMs`)
+
+`createToggle` gets a new `debounceMs?: number` option (default 0 — fire on every flip, legacy behavior). When set, `onChange` runs trailing-debounced: visual flip stays instant, the side-effect callback is collapsed.
+
+Wired in the canonical consumer — `GuardCard` sets `debounceMs=200` because its `onChange` triggers `POST /api/v1/features/toggle`. A frenzied 10-click run on a guard now produces 1 API call instead of 10. Latest state wins on each rapid succession.
+
+4 new Toggle tests (rapid-clicks → 1 fire, separate-windows → 2 fires, `debounceMs=0` preserves sync, `setChecked(.., fire=true)` honors the debounce). GuardCard + Grid tests updated to drain the 200 ms window via `vi.advanceTimersByTimeAsync`.
+
+262/262 unit tests passing.
+
+---
+
 ## [1.21.11] — 2026-04-26
 
 ### N.2 — Remove redundant Reload Config button
