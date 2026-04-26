@@ -42,13 +42,14 @@ function renderStatusCell(row: Endpoint): HTMLElement {
     return createBadge({ label: row.status ?? '—', intent, size: 'sm', testId: `ep-status-${row.id}` });
 }
 
-function renderCircuitCell(row: Endpoint): HTMLElement {
+function renderCircuitCell(row: Endpoint): DocumentFragment {
+    // N.5: cellClassName on the column carries `flex items-center gap-1.5`
+    // and the data-explain attribute, so we drop the wrap <div> and push
+    // the badge + optional ratio straight into the <td>.
     const stateKey = ((row.circuit_state ?? 'closed') as string).toLowerCase() as CircuitState;
     const conf = CIRCUIT_LABEL[stateKey] ?? CIRCUIT_LABEL.closed;
-    const wrap = document.createElement('div');
-    wrap.className = 'flex items-center gap-1.5';
-    wrap.setAttribute('data-explain', `circuit:${row.id}`);
-    wrap.appendChild(
+    const frag = document.createDocumentFragment();
+    frag.appendChild(
         createBadge({
             label: conf.label,
             intent: conf.intent,
@@ -61,14 +62,15 @@ function renderCircuitCell(row: Endpoint): HTMLElement {
         const ratio = document.createElement('span');
         ratio.className = 'text-[10px] font-mono text-slate-600';
         ratio.textContent = `${row.failure_count}/${row.failure_threshold ?? 5}`;
-        wrap.appendChild(ratio);
+        frag.appendChild(ratio);
     }
-    return wrap;
+    return frag;
 }
 
-function renderPriorityCell(row: Endpoint, deps: RegistryTableDeps): HTMLElement {
-    const wrap = document.createElement('div');
-    wrap.className = 'flex items-center gap-1';
+function renderPriorityCell(row: Endpoint, deps: RegistryTableDeps): DocumentFragment {
+    // N.5: cellClassName on the column does the flex layout; we just
+    // hand the three elements directly to <td>.
+    const frag = document.createDocumentFragment();
 
     const downBtn = createButton({
         label: '',
@@ -110,15 +112,15 @@ function renderPriorityCell(row: Endpoint, deps: RegistryTableDeps): HTMLElement
         }
     });
 
-    wrap.appendChild(downBtn);
-    wrap.appendChild(value);
-    wrap.appendChild(upBtn);
-    return wrap;
+    frag.appendChild(downBtn);
+    frag.appendChild(value);
+    frag.appendChild(upBtn);
+    return frag;
 }
 
-function renderActionsCell(row: Endpoint, deps: RegistryTableDeps): HTMLElement {
-    const wrap = document.createElement('div');
-    wrap.className = 'flex items-center justify-end gap-1';
+function renderActionsCell(row: Endpoint, deps: RegistryTableDeps): DocumentFragment {
+    // N.5: cellClassName provides the flex/justify-end/gap layout on <td>.
+    const wrap = document.createDocumentFragment();
 
     const inspect = createButton({
         label: 'Inspect',
@@ -203,16 +205,17 @@ export function createRegistryTable(initial: Endpoint[], deps: RegistryTableDeps
             sortable: true,
             sortValue: (r) => r.name ?? r.id,
             render: (row) => {
-                const wrap = document.createElement('div');
+                // N.5: name + url <p> tags appended directly to <td> via fragment.
+                const frag = document.createDocumentFragment();
                 const name = document.createElement('p');
                 name.className = 'text-[11px] font-bold text-white';
                 name.textContent = row.name ?? row.id;
                 const url = document.createElement('p');
                 url.className = 'text-[9px] text-slate-500 font-mono truncate max-w-[140px] sm:max-w-xs';
                 url.textContent = row.url;
-                wrap.appendChild(name);
-                wrap.appendChild(url);
-                return wrap;
+                frag.appendChild(name);
+                frag.appendChild(url);
+                return frag;
             },
         },
         { key: 'status', label: 'Status', sortable: true, render: renderStatusCell },
@@ -220,6 +223,9 @@ export function createRegistryTable(initial: Endpoint[], deps: RegistryTableDeps
             key: 'circuit_state',
             label: 'Circuit',
             sortable: true,
+            // N.5: layout + data-explain live on the <td> instead of a wrap div.
+            cellClassName: 'flex items-center gap-1.5',
+            cellAttrs: (row) => ({ 'data-explain': `circuit:${row.id}` }),
             sortValue: (r) => String(r.circuit_state ?? 'closed').toLowerCase(),
             render: renderCircuitCell,
         },
@@ -245,9 +251,16 @@ export function createRegistryTable(initial: Endpoint[], deps: RegistryTableDeps
             sortable: true,
             // Same rationale as latency — secondary on phones.
             hideBelow: 'sm',
+            cellClassName: 'flex items-center gap-1',
             render: (row) => renderPriorityCell(row, deps),
         },
-        { key: '__actions', label: 'Actions', align: 'right', render: (row) => renderActionsCell(row, deps) },
+        {
+            key: '__actions',
+            label: 'Actions',
+            align: 'right',
+            cellClassName: 'flex items-center justify-end gap-1',
+            render: (row) => renderActionsCell(row, deps),
+        },
     ];
 
     return createTable<Endpoint>({
