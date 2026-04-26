@@ -49,21 +49,128 @@ def create_router(agent) -> APIRouter:
 
     @router.get("/health")
     async def health():
+        """Per-component health (M.3).
+
+        Top-level fields preserved for backward compat with existing pollers.
+        New `components` block surfaces per-subsystem state so an operator can
+        see which piece is degrading instead of waiting for the whole proxy to
+        tip. The HTTP status stays 200 always — overall health is in the body.
+        Status semantics:
+          ok       — fully operational
+          degraded — works but something's off (cache disabled, all circuits OPEN, log queue saturated)
+          down     — critical subsystem is unreachable (store, session)
+        """
         import time as _time
-        pool = await agent.store.get_pool()
+        components: dict = {}
+
+        # Endpoints + circuit breakers — coalesce both into a single component
+        # since they're conceptually "upstream availability".
+        pool = []
         healthy_count = 0
-        for e in pool:
-            if await (await agent.circuit_manager.get_breaker(e.id)).can_execute():
-                healthy_count += 1
+        circuits_open = 0
+        try:
+            pool = await agent.store.get_pool()
+            for e in pool:
+                if await (await agent.circuit_manager.get_breaker(e.id)).can_execute():
+                    healthy_count += 1
+            circuit_states = agent.circuit_manager.get_all_states()
+            circuits_open = sum(1 for s in circuit_states.values() if s.get("state") == "open")
+            ep_status = "ok"
+            if pool and healthy_count == 0:
+                ep_status = "degraded"  # Pool exists but every endpoint is gated
+            elif circuits_open > 0:
+                ep_status = "degraded"
+            components["endpoints"] = {
+                "status": ep_status,
+                "total": len(pool),
+                "healthy": healthy_count,
+                "circuits_open": circuits_open,
+            }
+        except Exception as exc:  # noqa: BLE001 — surface, don't crash /health
+            components["endpoints"] = {"status": "down", "detail": str(exc)[:120]}
+
+        # Store — touch a state read so we exercise the actual DB path,
+        # not just object existence.
+        try:
+            _ = await agent.store.get_state("proxy_enabled", True)
+            components["store"] = {"status": "ok"}
+        except Exception as exc:
+            components["store"] = {"status": "down", "detail": str(exc)[:120]}
+
+        # Cache — disabled is "degraded" (we can serve, but slower); a stats()
+        # exception is "down".
+        try:
+            if not getattr(agent.cache_backend, "_enabled", False):
+                components["cache"] = {"status": "degraded", "detail": "cache disabled in config"}
+            else:
+                stats = await agent.cache_backend.stats() if callable(getattr(agent.cache_backend, "stats", None)) else {}
+                components["cache"] = {"status": "ok", **(stats if isinstance(stats, dict) else {})}
+        except Exception as exc:
+            components["cache"] = {"status": "down", "detail": str(exc)[:120]}
+
+        # Plugins — count loaded + per-ring sizes. Empty rings is a config
+        # state, not a fault, so always "ok" unless the manager itself errors.
+        try:
+            rings = getattr(agent.plugin_manager, "rings", {})
+            ring_count = {hook.value if hasattr(hook, "value") else str(hook): len(plugins)
+                          for hook, plugins in rings.items()}
+            instances = getattr(agent.plugin_manager, "_plugin_instances", {})
+            components["plugins"] = {
+                "status": "ok",
+                "loaded": len(instances),
+                "ring_count": ring_count,
+            }
+        except Exception as exc:
+            components["plugins"] = {"status": "down", "detail": str(exc)[:120]}
+
+        # Upstream HTTP session (aiohttp) — required for any forward.
+        sess = getattr(agent, "_session", None)
+        session_active = sess is not None and not getattr(sess, "closed", True)
+        components["session"] = {"status": "ok" if session_active else "down"}
+
+        # Log queue — high saturation means we're about to start dropping
+        # to DLQ on the hot path.
+        try:
+            log_q = getattr(agent, "log_queue", None)
+            if log_q is not None:
+                depth = log_q.qsize() if hasattr(log_q, "qsize") else 0
+                maxsize = getattr(log_q, "maxsize", 0) or 0
+                saturation = (depth / maxsize) if maxsize else 0.0
+                lq_status = "degraded" if saturation >= 0.8 else "ok"
+                components["log_queue"] = {
+                    "status": lq_status,
+                    "depth": depth,
+                    "max": maxsize,
+                    "saturation": round(saturation, 3),
+                }
+            else:
+                components["log_queue"] = {"status": "ok", "detail": "no queue attached"}
+        except Exception as exc:
+            components["log_queue"] = {"status": "down", "detail": str(exc)[:120]}
+
+        # Compute overall — store + session are critical (no proxy without them).
+        critical = {"store", "session"}
+        overall = "ok"
+        for name, comp in components.items():
+            s = comp.get("status", "ok")
+            if s == "down" and name in critical:
+                overall = "down"
+                break
+            if s in ("down", "degraded") and overall == "ok":
+                overall = "degraded"
+
         uptime = _time.time() - getattr(agent, "_start_time", _time.time())
         return {
-            "status": "ok",
+            # Backward-compat top-level fields — existing pollers keep working.
+            "status": overall,
             "version": getattr(agent, "_version", "unknown"),
             "uptime_seconds": round(uptime),
             "pool_size": len(pool),
             "pool_healthy": healthy_count,
-            "session_active": agent._session is not None and not agent._session.closed,
-            "budget_today_usd": round(agent.total_cost_today, 4),
+            "session_active": session_active,
+            "budget_today_usd": round(getattr(agent, "total_cost_today", 0.0), 4),
+            # New per-subsystem block.
+            "components": components,
         }
 
     @router.get("/metrics")
