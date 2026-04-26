@@ -68,6 +68,21 @@ class TestStartupChecks:
         warnings = validate_config(self._valid_config())
         assert any("ONBOARDING" in w for w in warnings)
 
+    def test_missing_key_warning_includes_provider_link(self):
+        """N.1: when an endpoint's key env-var is unset, the warning must
+        include a direct link to the provider's key/billing dashboard so
+        the operator doesn't have to guess where to fix it."""
+        from core.startup_checks import validate_config
+        os.environ["LLM_PROXY_API_KEYS"] = "sk-proxy-test"
+        os.environ.pop("OPENAI_API_KEY", None)
+        warnings = validate_config(self._valid_config())
+        # The endpoint named 'openai' is missing its key — its warning must
+        # carry the OpenAI billing link.
+        ep_warning = next((w for w in warnings if "openai" in w and "needs" in w), None)
+        assert ep_warning is not None, f"Expected per-endpoint missing-key warning, got: {warnings}"
+        assert "platform.openai.com" in ep_warning
+        assert "billing" in ep_warning.lower()
+
     def test_auth_disabled_skips_key_check(self):
         from core.startup_checks import validate_config
         os.environ.pop("LLM_PROXY_API_KEYS", None)
