@@ -298,17 +298,9 @@ class ProxyOrchestrator(BaseAgent):
             self.features[f] = await self.store.get_state(f"feature_{f}", self.features[f])
             self.security.config[f] = {"enabled": self.features[f]}
 
-        # Budget hydration (daily reset)
-        import datetime as _dt
-        today = _dt.date.today().isoformat()
-        saved_date = await self.store.get_state("budget:daily_date", None)
-        if saved_date == today:
-            self.total_cost_today = await self.store.get_state("budget:daily_total", 0.0)
-        else:
-            self.total_cost_today = 0.0
-            await self.store.set_state("budget:daily_date", today)
-            await self.store.set_state("budget:daily_total", 0.0)
-        self._budget_date = today
+        # Budget hydration (daily reset). See proxy/budget.hydrate_daily_total.
+        from .budget import hydrate_daily_total
+        self.total_cost_today, self._budget_date = await hydrate_daily_total(self.store)
 
         # Background loops (extracted to proxy/background.py)
         eviction_interval = self.config.get("caching", {}).get("eviction_interval", 3600)
