@@ -2,6 +2,27 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.19] — 2026-04-26
+
+### O.2 — Pulse on live dots + emerald glow on enabled plugin cards
+
+Two CSS-only animations stamp "this is alive" without competing with the glassmorphism. Both honor `prefers-reduced-motion`. Build size unchanged at 38.61 kB gzip.
+
+**`style.css`** adds two utilities:
+- `.pulse-live` — 2.4s ease-in-out breathing on opacity + scale.
+- `.glow-live` — emerald inset + outer halo. Light-theme variant +50% opacity.
+
+**`Badge`** primitive gets `pulse?: boolean` (only acts when `dot: true`). Gating is intentional: a pulsing warning would read as alarm.
+
+**Wired in three places**:
+1. `RegistryTable` status — Live (success) pulses; DEGRADED / IGNORED stay still.
+2. `EventFeed` status — `streaming` and `connecting` pulse; `reconnecting` stays still.
+3. `PluginCard` — enabled dot pulses + the card gets `.glow-live`. Disabled stays flat + dimmed.
+
+3 new Badge tests; 278/278 unit tests green.
+
+---
+
 ## [1.21.18] — 2026-04-26
 
 ### O.1 — SVG sparkline primitive + MetricTile integration
