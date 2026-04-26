@@ -28,6 +28,12 @@ import type { GuardsStatus, LatencyMetrics, TimelinePayload } from './sections/t
 interface ThreatsApi {
     fetchMetrics: () => Promise<string>;
     fetchHealth: () => Promise<{ uptime_seconds?: number; pool_size?: number; pool_healthy?: number } | null>;
+    /**
+     * Q.3 — optional hourly-bucket time series for KPI sparklines. Optional
+     * so older shells without the route still work; an absent / failing
+     * fetch just means tiles render without sparklines.
+     */
+    fetchHourlyBuckets?: () => Promise<{ series?: Record<string, number[]> } | null>;
 }
 
 interface MountOptions {
@@ -40,22 +46,32 @@ interface MountOptions {
 export function mountThreatsKpis(container: HTMLElement, opts: MountOptions): () => void {
     let lastData: ThreatsKpiData | null = null;
     let lastError: string | undefined;
+    let lastSeries: Record<string, number[]> = {};
 
     renderThreatKpis(container, null);
 
     const refresh = async () => {
         try {
-            const [text, health] = await Promise.all([
+            // Q.3 — fetch hourly buckets in parallel with the existing
+            // metrics + health pull. Buckets are optional; absent or failed
+            // → tiles render without sparklines, no error surfaced.
+            const bucketsFetch = opts.api.fetchHourlyBuckets
+                ? opts.api.fetchHourlyBuckets().catch(() => null)
+                : Promise.resolve(null);
+
+            const [text, health, buckets] = await Promise.all([
                 opts.api.fetchMetrics().catch(() => ''),
                 opts.api.fetchHealth().catch(() => null),
+                bucketsFetch,
             ]);
             lastData = buildKpiData(text, health);
             lastError = undefined;
-            renderThreatKpis(container, lastData);
+            if (buckets && buckets.series) lastSeries = buckets.series;
+            renderThreatKpis(container, lastData, undefined, lastSeries);
         } catch (err) {
             lastError = (err as Error)?.message || 'Backend unreachable';
             // Keep the last good data on screen if we have any; otherwise show errors.
-            renderThreatKpis(container, lastData, lastData ? undefined : lastError);
+            renderThreatKpis(container, lastData, lastData ? undefined : lastError, lastSeries);
         }
     };
 
