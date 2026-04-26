@@ -2,6 +2,16 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.11] — 2026-04-26
+
+### N.2 — Remove redundant Reload Config button
+
+`proxy/background.py:config_watch_loop` already polls `config.yaml` every 30s and hot-reloads the security shield, circuit thresholds, cache TTL, and plugins on hash change. The button only shaved 0-30s off that cycle while taking up real estate next to genuinely destructive actions (Reset WAF / Clear Caches / Reset Sessions), where a misfire is high-cost.
+
+Replaced with a one-line note under the Operations row so operators discover the auto-reload behavior without grep. `POST /api/v1/admin/reload` stays available via curl for the rare force-reload case.
+
+---
+
 ## [1.21.10] — 2026-04-26
 
 ### N.1 — Actionable provider links on missing keys + upstream 429
