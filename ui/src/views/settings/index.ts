@@ -9,13 +9,15 @@
  * EmptyState when the backend reports the feature is disabled.
  */
 import { mountConfigWarnings, type ConfigWarningsApi } from './ConfigWarnings';
+import { mountConfigYaml, type ConfigYamlApi } from './ConfigYaml';
 import { mountDataExport, type ExportApi } from './DataExport';
 import { mountIdentity, type IdentityApi } from './Identity';
 import { mountRbacMatrix, type RbacApi } from './RbacMatrix';
 import { mountSystemInfo, type SystemInfoApi } from './SystemInfo';
 import { mountWebhooks, type WebhooksApi } from './Webhooks';
 
-export interface SettingsApi extends SystemInfoApi, IdentityApi, RbacApi, WebhooksApi, ExportApi, ConfigWarningsApi {}
+export interface SettingsApi
+    extends SystemInfoApi, IdentityApi, RbacApi, WebhooksApi, ExportApi, ConfigWarningsApi, ConfigYamlApi {}
 
 export interface MountSettingsOptions {
     api: SettingsApi;
@@ -30,6 +32,8 @@ export interface SettingsHosts {
     webhooks: HTMLElement | null;
     export: HTMLElement | null;
     system: HTMLElement | null;
+    /** O.5 — Active config (YAML) read-only viewer. Optional so older shells still work. */
+    configYaml?: HTMLElement | null;
 }
 
 export function mountSettingsView(hosts: SettingsHosts, opts: MountSettingsOptions): () => Promise<void> {
@@ -44,6 +48,7 @@ export function mountSettingsView(hosts: SettingsHosts, opts: MountSettingsOptio
     }
     if (hosts.export) refreshes.push(mountDataExport(hosts.export, opts.api));
     if (hosts.system) refreshes.push(mountSystemInfo(hosts.system, opts.api));
+    if (hosts.configYaml) refreshes.push(mountConfigYaml(hosts.configYaml, opts.api));
 
     return async function refreshAll(): Promise<void> {
         await Promise.allSettled(refreshes.map((fn) => fn()));
@@ -51,6 +56,7 @@ export function mountSettingsView(hosts: SettingsHosts, opts: MountSettingsOptio
 }
 
 export { mountConfigWarnings } from './ConfigWarnings';
+export { mountConfigYaml } from './ConfigYaml';
 export { mountIdentity } from './Identity';
 export { mountRbacMatrix } from './RbacMatrix';
 export { mountWebhooks } from './Webhooks';

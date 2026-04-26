@@ -505,6 +505,28 @@ def create_router(agent) -> APIRouter:
         """
         return await agent.store.verify_audit_chain()
 
+    @router.get("/api/v1/config/yaml")
+    async def get_config_yaml(request: Request):
+        """Return the active config rendered as YAML, with secrets redacted.
+
+        O.5: gives operators a Terraform-vibe "this is what the proxy is
+        actually running with" view in Settings — including auto-discovered
+        endpoints, env-merged values, and runtime mutations (preset, cost
+        weight, …) that the on-disk config.yaml doesn't yet reflect. Secret
+        fields (api keys, tokens, passwords) are redacted via core.export
+        scrub_dict before serialisation, so a leaked screenshot doesn't
+        leak credentials.
+        """
+        _check_admin_auth(request)
+        import yaml as _yaml
+        from core.export import scrub_dict
+        try:
+            redacted = scrub_dict(agent.config or {})
+            text = _yaml.safe_dump(redacted, default_flow_style=False, sort_keys=False)
+        except Exception as e:  # noqa: BLE001 — surface, don't crash the route
+            raise HTTPException(status_code=500, detail=f"YAML serialisation failed: {e}") from e
+        return {"yaml": text}
+
     @router.get("/api/v1/config/warnings")
     async def get_config_warnings(request: Request):
         """Surface startup-validation warnings to the admin UI.
