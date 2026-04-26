@@ -105,3 +105,62 @@ def test_resolve_roles_default(mock_secret):
     )
     roles = mgr._resolve_roles({}, fake_provider, "nobody@test.com")
     assert roles == ["user"]
+
+
+@pytest.mark.asyncio
+@patch("core.identity.get_secret", return_value=None)
+async def test_issuer_prefix_bypass_rejected(mock_secret):
+    """
+    Security regression: an attacker-controlled issuer that merely *starts with*
+    a trusted issuer's value (e.g. "https://accounts.google.com.attacker.com")
+    must NOT match the trusted provider. Only exact-match issuer is accepted.
+    """
+    from core.identity import IdentityManager, OIDCProvider
+    import jwt as pyjwt
+
+    mgr = IdentityManager(IDENTITY_CONFIG)
+    mgr.providers["google"] = OIDCProvider(
+        name="google",
+        issuer="https://accounts.google.com",
+        jwks_uri="https://www.googleapis.com/oauth2/v3/certs",
+        client_id="test-client",
+        audience="test-client",
+    )
+
+    # Forge an unsigned JWT whose iss claim is a prefix-bypass attempt.
+    forged = pyjwt.encode(
+        {"iss": "https://accounts.google.com.attacker.com", "sub": "evil"},
+        "irrelevant-key",
+        algorithm="HS256",
+    )
+
+    result = await mgr.verify_token(forged)
+    # No provider should match → None (not a ValueError, since it falls through
+    # before signature verification).
+    assert result is None
+
+
+@pytest.mark.asyncio
+@patch("core.identity.get_secret", return_value=None)
+async def test_issuer_trailing_slash_variant_rejected(mock_secret):
+    """The old `startswith(rstrip('/'))` matcher would have accepted
+    'https://accounts.google.com/evil'. With exact-match it must be rejected."""
+    from core.identity import IdentityManager, OIDCProvider
+    import jwt as pyjwt
+
+    mgr = IdentityManager(IDENTITY_CONFIG)
+    mgr.providers["google"] = OIDCProvider(
+        name="google",
+        issuer="https://accounts.google.com",
+        jwks_uri="https://www.googleapis.com/oauth2/v3/certs",
+        client_id="test-client",
+        audience="test-client",
+    )
+
+    forged = pyjwt.encode(
+        {"iss": "https://accounts.google.com/evil", "sub": "evil"},
+        "irrelevant-key",
+        algorithm="HS256",
+    )
+    result = await mgr.verify_token(forged)
+    assert result is None
