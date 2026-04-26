@@ -11,6 +11,7 @@
 import { mountConfigWarnings, type ConfigWarningsApi } from './ConfigWarnings';
 import { mountConfigYaml, type ConfigYamlApi } from './ConfigYaml';
 import { mountDataExport, type ExportApi } from './DataExport';
+import { mountHealthPanel, type HealthApi } from './HealthPanel';
 import { mountIdentity, type IdentityApi } from './Identity';
 import { mountRateLimit, type RateLimitApi } from './RateLimit';
 import { mountRbacMatrix, type RbacApi } from './RbacMatrix';
@@ -25,7 +26,8 @@ export interface SettingsApi
         ExportApi,
         ConfigWarningsApi,
         ConfigYamlApi,
-        RateLimitApi {}
+        RateLimitApi,
+        HealthApi {}
 
 export interface MountSettingsOptions {
     api: SettingsApi;
@@ -44,6 +46,8 @@ export interface SettingsHosts {
     configYaml?: HTMLElement | null;
     /** P.1 — Rate-limit preset picker. Optional. */
     rateLimit?: HTMLElement | null;
+    /** P.3 — Per-component health panel. Optional. */
+    health?: HTMLElement | null;
 }
 
 export function mountSettingsView(hosts: SettingsHosts, opts: MountSettingsOptions): () => Promise<void> {
@@ -63,6 +67,10 @@ export function mountSettingsView(hosts: SettingsHosts, opts: MountSettingsOptio
         const handle = mountRateLimit(hosts.rateLimit, opts.api, opts.toast);
         refreshes.push(handle.refresh);
     }
+    if (hosts.health) {
+        const handle = mountHealthPanel(hosts.health, opts.api);
+        refreshes.push(handle.refresh);
+    }
 
     return async function refreshAll(): Promise<void> {
         await Promise.allSettled(refreshes.map((fn) => fn()));
@@ -71,6 +79,7 @@ export function mountSettingsView(hosts: SettingsHosts, opts: MountSettingsOptio
 
 export { mountConfigWarnings } from './ConfigWarnings';
 export { mountConfigYaml } from './ConfigYaml';
+export { mountHealthPanel } from './HealthPanel';
 export { mountIdentity } from './Identity';
 export { mountRateLimit } from './RateLimit';
 export { mountRbacMatrix } from './RbacMatrix';
