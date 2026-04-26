@@ -38,14 +38,22 @@ describe('createGuardCard', () => {
         expect(card.textContent).not.toContain('ACTIVE');
     });
 
-    it('toggleable spec renders a role=switch button with the right testid; firing it calls onToggle', () => {
+    it('toggleable spec renders a role=switch button with the right testid; firing it calls onToggle', async () => {
+        // N.3: GuardCard's toggle is debounced 200 ms, so the click fires the
+        // visual flip immediately but the onToggle callback runs trailing.
+        vi.useFakeTimers();
         const onToggle = vi.fn();
         const card = createGuardCard({ spec: TOGGLEABLE, enabled: false, onToggle });
         const sw = card.querySelector<HTMLButtonElement>('[data-testid="guard-toggle-injection_guard"]');
         expect(sw).not.toBeNull();
         expect(sw?.getAttribute('aria-checked')).toBe('false');
         sw!.click();
+        // Visual state flipped synchronously; callback hasn't fired yet.
+        expect(sw?.getAttribute('aria-checked')).toBe('true');
+        expect(onToggle).not.toHaveBeenCalled();
+        vi.advanceTimersByTime(200);
         expect(onToggle).toHaveBeenCalledWith(true);
+        vi.useRealTimers();
     });
 
     it('static spec renders a status badge with the static label, not a toggle', () => {
