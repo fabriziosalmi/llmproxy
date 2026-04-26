@@ -86,6 +86,18 @@ class RateLimiter:
         return allowed, bucket.retry_after
 
 
+# N.6 — Named presets for runtime rate-limit tuning. Operators set one with
+# POST /api/v1/rate-limit/preset; the middleware swaps default_capacity +
+# default_rate and flushes existing buckets so the new caps take effect on
+# the very next request. config.yaml still wins at boot — preset is applied
+# on top after the orchestrator hydrates `rate_limit:preset` from the store.
+RATE_LIMIT_PRESETS: Dict[str, Dict[str, int]] = {
+    "strict":  {"requests_per_minute": 30,  "burst": 5},
+    "normal":  {"requests_per_minute": 60,  "burst": 10},
+    "relaxed": {"requests_per_minute": 240, "burst": 60},
+}
+
+
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """ASGI middleware that enforces per-IP rate limiting.
 
@@ -99,6 +111,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             - /metrics
     """
 
+    # Singleton reference: Starlette instantiates this once per app, and the
+    # admin route uses the reference to mutate limits at runtime. Less ugly
+    # than carrying the instance around through agent.app.middleware_stack.
+    instance: "Optional[RateLimitMiddleware]" = None
+
     def __init__(self, app, config: Optional[Dict] = None):
         super().__init__(app)
         cfg = (config or {}).get("rate_limiting", {})
@@ -109,8 +126,46 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         rate = rpm / 60.0  # tokens per second
         self.limiter = RateLimiter(default_capacity=capacity, default_rate=rate)
         self.exempt_paths = set(cfg.get("exempt_paths", ["/health", "/metrics"]))
+        # Active preset name — None means "raw config values, no preset applied".
+        self.preset: Optional[str] = None
+        RateLimitMiddleware.instance = self
         if self.enabled:
             logger.info(f"Rate limiter active: {rpm} req/min, burst={burst}")
+
+    async def apply_preset(self, name: str) -> Dict[str, int]:
+        """Swap the active rpm/burst to the named preset and flush buckets.
+
+        Existing buckets are dropped so the new caps apply immediately. New
+        buckets are created on the next request with the new defaults.
+        Returns the values applied so callers can echo them.
+        """
+        if name not in RATE_LIMIT_PRESETS:
+            raise ValueError(f"Unknown preset '{name}'. Valid: {list(RATE_LIMIT_PRESETS)}")
+        values = RATE_LIMIT_PRESETS[name]
+        rpm = values["requests_per_minute"]
+        burst = values["burst"]
+        self.limiter.default_capacity = rpm + burst
+        self.limiter.default_rate = rpm / 60.0
+        async with self.limiter._lock:
+            self.limiter._buckets.clear()
+        self.preset = name
+        logger.info(f"Rate limit preset applied: {name} ({rpm}/min, burst={burst})")
+        return {"requests_per_minute": rpm, "burst": burst}
+
+    def current_config(self) -> Dict[str, object]:
+        """Expose the live tuning numbers to /api/v1/rate-limit/config."""
+        cap = self.limiter.default_capacity
+        rate = self.limiter.default_rate
+        rpm = round(rate * 60)
+        burst = max(0, cap - rpm)
+        return {
+            "enabled": self.enabled,
+            "preset": self.preset,
+            "requests_per_minute": rpm,
+            "burst": burst,
+            "default_capacity": cap,
+            "default_rate_per_second": rate,
+        }
 
     async def dispatch(self, request: Request, call_next):
         if not self.enabled:
