@@ -358,6 +358,42 @@ class TestAdminRoutes:
         finally:
             RateLimitMiddleware.instance = None
 
+    # ── O.5 — /api/v1/config/yaml ─────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_config_yaml_serialises_active_config(self):
+        app, agent = _make_admin_app()
+        # Add a non-trivial config shape so we can assert it round-trips.
+        agent.config["routing"] = {"cost_weight": 0.4, "strategy": "smart_weighted"}
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.get("/api/v1/config/yaml")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "yaml" in body
+        # Sections we set in the fixture must appear in the rendered YAML.
+        assert "routing:" in body["yaml"]
+        assert "cost_weight: 0.4" in body["yaml"]
+        assert "smart_weighted" in body["yaml"]
+
+    @pytest.mark.asyncio
+    async def test_config_yaml_redacts_secrets(self):
+        """O.5 — secrets must be scrubbed before serialisation. A leaked
+        screenshot of the Settings panel can't leak credentials."""
+        app, agent = _make_admin_app()
+        agent.config["secrets"] = {
+            "api_key": "sk-real-secret-12345",
+            "authorization": "Bearer leaked-token",
+            "password": "p@ssw0rd",
+        }
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.get("/api/v1/config/yaml")
+        body = resp.json()
+        rendered = body["yaml"]
+        assert "sk-real-secret-12345" not in rendered
+        assert "Bearer leaked-token" not in rendered
+        assert "p@ssw0rd" not in rendered
+        assert "<REDACTED>" in rendered
+
     @pytest.mark.asyncio
     async def test_set_rate_limit_preset_flushes_existing_buckets(self):
         """A bucket created at the OLD rate must be evicted so the next
