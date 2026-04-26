@@ -2,6 +2,24 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.25] — 2026-04-26
+
+### P.3 — UI consumer for `/health` components panel (M.3 backend)
+
+M.3's `/health` `components` block has been live since 1.21.9. The UI surface was queued — now Settings shows a tile per component instead of a single binary "ok/down" composite.
+
+`mountHealthPanel(host, api)` renders:
+- Header with title + overall status badge (pulse on `ok`).
+- One tile per component, intent-coded border (emerald/amber/rose).
+- Formatted detail per component: endpoints "healthy/total + circuits OPEN", plugins "loaded + per-ring", log_queue "depth/max (saturation%)", cache "size/hits".
+- COMPONENT_ORDER puts `session` and `store` first (critical subsystems triage first).
+- Forward-compat: unknown component keys render at the end.
+- Older proxies (< 1.21.9) without the components block get an explainer pointing at the version requirement.
+
+7 new tests; 319/319 unit tests green.
+
+---
+
 ## [1.21.24] — 2026-04-26
 
 ### P.2 — UI consumer for spend forecast (M.2 backend)
