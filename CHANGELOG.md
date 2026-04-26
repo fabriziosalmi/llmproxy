@@ -2,6 +2,29 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.29] — 2026-04-26
+
+### R.1 — Lazy-load 8 secondary tab modules → main bundle −41% gzip
+
+N.8 measured FCP and deferred this as "real win, multi-file refactor". Now shipped.
+
+Before: `main.js` statically imported all 11 component modules. Every boot parsed all of them. **main bundle: 39.51 kB gzip.**
+
+After: only `sidebar` + `content` + `navigation` + `threats` (default tab) stay eager. The other 8 (`guards` / `registry` / `settings` / `logs` / `plugins` / `models` / `analytics` / `security`) are pulled on first nav-into-tab via `import()`. Each lands as its own Vite chunk (1.7-5 kB gzip).
+
+**main.js: 39.51 → 23.35 kB gzip (−16.2 kB / −41%).**
+
+Mechanics:
+- `_tabLoaders[tab]` thunks with static `import()` paths — Vite emits one chunk per path.
+- `_ensureTabLoaded(tab)` caches loads; failed loads retry on next nav.
+- Store subscriber uses optional chaining on `_lazy.{registry,guards,security}` so a state-tick before first-load is a clean no-op.
+- Registry data is still fetched eagerly (4-line `_refreshRegistry` inlined) — Threats TrafficFlow + Cmd+K `>ep` resolver depend on `state.registry`; only the rendering surface is deferred.
+- Deep-link boot: `_ensureTabLoaded(store.state.currentTab)` fires once after init wrappers so `#/endpoints` loads the chunk immediately.
+
+340/340 unit tests + lint + typecheck clean.
+
+---
+
 ## [1.21.28] — 2026-04-26
 
 ### Q.3 — Hourly ring buffer + sparklines wired to real data
