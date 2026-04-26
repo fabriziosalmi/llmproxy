@@ -2,6 +2,19 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.13] — 2026-04-26
+
+### N.4 — Scrollbar width + light-theme variant
+
+Existing custom scrollbars covered WebKit + Firefox + dark theme. Two real issues:
+
+1. **3 px** was below the OS hit-target threshold on Windows/Linux — operators overshot when grabbing the thumb. Now **6 px** (still subtle, now grabbable).
+2. **No light-theme variant** — the dark white-overlay thumb (`rgba(255,255,255,…)`) was invisible against L.3's bright substrate. Added explicit `html.theme-light` overrides flipping to `rgba(0,0,0,…)` for both WebKit + Firefox.
+
+Behavior intent unchanged: invisible at rest, fade in on hover/scroll. Also stamped `::-webkit-scrollbar-corner: transparent` so the bottom-right intersection on dual-axis overflow stops showing as a default-gray square.
+
+---
+
 ## [1.21.12] — 2026-04-26
 
 ### N.3 — Toggle debouncing (opt-in via `debounceMs`)
