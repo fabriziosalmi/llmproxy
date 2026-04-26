@@ -178,7 +178,7 @@ class IdentityManager:
         # Find matching provider
         provider = None
         for p in self.providers.values():
-            if p.issuer == issuer or issuer.startswith(p.issuer.rstrip("/")):
+            if p.issuer == issuer:
                 provider = p
                 break
 
