@@ -2,6 +2,22 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.41] — 2026-04-25
+
+### Refactor — Extract endpoint seeding from `proxy/rotator.py` (split 2/3)
+
+Pulled `_seed_endpoints_from_config` into `proxy/seeding.py` as a free function `seed_endpoints_from_config(config, store)` that returns the count of newly-seeded endpoints. The orchestrator's method is now a 2-line shim.
+
+Also factored out the placeholder API-key set (`sk-proj-…`, `AIza…`, `your-api-key`, `CHANGE-ME`, etc.) into a module-level frozenset for clarity and so it's reusable if other callers ever need to detect "key not yet configured" state.
+
+Dropped the now-unused `LLMEndpoint` / `EndpointStatus` imports from `rotator.py`.
+
+`rotator.py`: 652 → 615 lines. No behavior change. 1141/1141 unit tests green.
+
+One slice left: `request_pipeline.py` for the 220-line `proxy_request` method.
+
+---
+
 ## [1.21.40] — 2026-04-25
 
 ### Refactor — Extract small helpers from `proxy/rotator.py` (split 1/3)
