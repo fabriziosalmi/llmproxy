@@ -131,9 +131,9 @@ A curated adversarial corpus runs as a regression test on every build. Current p
 
 | Category | Coverage | Notes |
 |----------|---------:|-------|
-| LLM01 — Prompt Injection | **58 %** | Direct attacks caught; obfuscation variants (leetspeak, suffix-injection, chain-of-thought) are documented gaps |
+| LLM01 — Prompt Injection | **100 %** | All 12 corpus variants caught: direct, base64/hex/zero-width-encoded, leetspeak, role-play, suffix-injection, chain-of-thought, indirect tool-use |
 | LLM02 — Sensitive Info (PII) | **100 %** | Email · SSN · Visa · Amex · IBAN · phones · API keys |
-| LLM07 — System Prompt Leakage | **33 %** | Direct extraction caught; indirect / translation / meta-query patterns slip |
+| LLM07 — System Prompt Leakage | **100 %** | Direct + indirect + continuation + translation + meta-instruction + persona-rebase |
 | Benign false-positive rate | **10 %** | Meta-discussion of attacks ("explain how prompt injection works") trips on purpose |
 
 LLM03/04/06/08/09/10 are **out-of-scope for the proxy itself** (build-time, training-time, caller-side, model-side) — documented as N/A in the report.

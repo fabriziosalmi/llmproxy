@@ -323,18 +323,43 @@ class SecurityShield:
     # repeating groups like (all\s+)? that cause catastrophic backtracking).
     _THREAT_PATTERNS: list[tuple["re.Pattern[str]", float]] = [
         (re.compile(r"ignore\s+(?:all\s+)?previous\s+instructions?"), 0.9),
+        # S.1 — variants of "ignore" that don't say "previous instructions"
+        # but accomplish the same jailbreak. "Ignore the user", "ignore your
+        # safety guidelines", "ignore any rules" land in the same intent.
+        (re.compile(r"ignore\s+(?:the\s+)?user"), 0.7),
+        (re.compile(r"ignore\s+(?:your\s+|all\s+|any\s+)?(?:safety|guideline|guard|rule|restriction|policy|filter)s?"), 0.85),
+        (re.compile(r"(?:initial|original|base|prior)\s+instructions?"), 0.7),
         (re.compile(r"system\s*prompt"), 0.8),
         (re.compile(r"you\s+are\s+now\s+a"), 0.7),
         (re.compile(r"bypass\s+(?:all\s+)?(?:safety|security|filter)"), 0.85),
         (re.compile(r"reveal\s+(?:your\s+)?(?:secret|hidden|base)\s+instructions?"), 0.9),
+        # S.2 — operator queries asking the model to enumerate its own rules.
+        # "What were the exact instructions you were given", "what rules were
+        # you told to follow" — the model isn't supposed to dump them.
+        (re.compile(r"what\s+(?:were|are|was)\s+(?:the\s+|your\s+)?(?:exact\s+|original\s+)?instructions?"), 0.75),
+        (re.compile(r"what\s+rules\s+(?:were\s+you\s+|are\s+you\s+|do\s+you)"), 0.7),
+        # S.3 — extraction tricks that ask for verbatim continuation /
+        # repetition of the system prompt content.
+        (re.compile(r"continue\s+this\s+(?:exact\s+)?(?:text|prompt|message|conversation)"), 0.7),
+        (re.compile(r"repeat\s+(?:the\s+)?(?:words?\s+|text\s+)?(?:above|verbatim|exactly)"), 0.8),
+        (re.compile(r"starting\s+with\s+['\"]you\s+are"), 0.85),
         (re.compile(r"```\s*system"), 0.85),
         (re.compile(r"<\|im_start\|>"), 0.95),
         (re.compile(r"assistant:\s"), 0.6),
     ]
 
     def _calculate_threat_score(self, prompt: str) -> tuple[float, List[str]]:
-        """Internal helper to calculate injection threat score."""
-        normalized = unicodedata.normalize("NFKC", prompt).lower()
+        """Internal helper to calculate injection threat score.
+
+        S.5 — Uses `semantic_analyzer.normalize_match_chars` for normalisation
+        so leetspeak ("1gn0r3 pr3v10us"), Cyrillic confusables ("іgnоrе"),
+        and zero-width-obscured payloads ("Ig​nore") all land on the
+        same plaintext the regex patterns expect. Previously these only
+        got normalised inside the optional semantic_analyzer plugin path,
+        leaving the static SecurityShield blind to obfuscation.
+        """
+        from core.semantic_analyzer import normalize_match_chars
+        normalized = normalize_match_chars(prompt)
         score = 0.0
         matched = []
         for compiled, weight in self._THREAT_PATTERNS:
