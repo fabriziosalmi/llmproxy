@@ -145,3 +145,54 @@ class TestSecurityShieldMaskPII:
     def test_empty_string(self):
         shield = self._make_shield()
         assert shield.mask_pii("") == ""
+
+
+class TestSessionMemoryConcurrency:
+    """P0-3: session_memory mutations must be lock-protected."""
+
+    def _make_shield(self):
+        return SecurityShield({"security": {"enabled": True}})
+
+    def test_concurrent_session_writes_no_corruption(self):
+        """Hammer check_session_trajectory from many threads on the same shield
+        with mixed session_ids. Without the lock, the OrderedDict's internal
+        linked list can corrupt on free-threaded builds, and on CPython under
+        eviction pressure the move_to_end + popitem interleave can drop or
+        duplicate entries. After the run we just check structural invariants
+        — every recorded session must still be a valid dict with the expected
+        shape."""
+        import threading
+        shield = self._make_shield()
+
+        N_THREADS = 16
+        N_OPS_PER_THREAD = 200
+        N_SESSIONS = 50  # forces high collision on session_ids
+
+        def worker(tid: int):
+            for i in range(N_OPS_PER_THREAD):
+                sid = f"sess-{(tid * 7 + i) % N_SESSIONS}"
+                shield.check_session_trajectory(sid, "hello world")
+
+        threads = [threading.Thread(target=worker, args=(t,)) for t in range(N_THREADS)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # Structural invariants
+        assert len(shield.session_memory) <= N_SESSIONS
+        for sid, data in shield.session_memory.items():
+            assert isinstance(data, dict)
+            assert "scores" in data and "last_seen" in data
+            assert isinstance(data["scores"], list)
+            for entry in data["scores"]:
+                assert isinstance(entry, tuple) and len(entry) == 2
+
+    def test_lock_attribute_exists(self):
+        """Smoke test that the lock attribute exists and is a real Lock."""
+        import threading
+        shield = self._make_shield()
+        # Lock acquisition should succeed and release
+        assert shield._session_memory_lock.acquire(blocking=False)
+        shield._session_memory_lock.release()
+        assert isinstance(shield._session_memory_lock, type(threading.Lock()))

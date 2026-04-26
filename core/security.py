@@ -2,6 +2,7 @@ import asyncio
 import re
 import time
 import logging
+import threading
 import unicodedata
 import uuid
 from collections import OrderedDict
@@ -63,6 +64,12 @@ class SecurityShield:
         # A plain dict's min() scan over 10k entries fires on every new session
         # when at capacity — same DoS pattern fixed in RateLimiter.
         self.session_memory: OrderedDict[str, Any] = OrderedDict()
+        # Guards every mutation of session_memory. CPython's GIL makes single
+        # OrderedDict ops atomic, but a check-existence → move_to_end → mutate
+        # sequence is not — and on free-threaded builds (3.13+ no-GIL) even
+        # individual ops on the doubly-linked list backing OrderedDict can
+        # corrupt under concurrent move_to_end + popitem.
+        self._session_memory_lock: threading.Lock = threading.Lock()
         # Instance-level (not class-level) to prevent cross-instance interference
         self._last_eviction: float = 0.0
 
@@ -272,41 +279,46 @@ class SecurityShield:
             return None
 
         now = time.time()
-
-        # 1. Time-based eviction: purge sessions idle > _SESSION_TTL.
-        #    Throttled to once per _EVICTION_INTERVAL to avoid an O(N) dict
-        #    scan on every single request (pathological at 10 000 sessions).
-        if now - self._last_eviction >= self._EVICTION_INTERVAL:
-            self._last_eviction = now
-            stale = [sid for sid, data in self.session_memory.items()
-                     if now - data["last_seen"] > self._SESSION_TTL]
-            for sid in stale:
-                del self.session_memory[sid]
-
-        # 2. Capacity guard (hard cap after eviction)
-        if session_id not in self.session_memory:
-            if len(self.session_memory) >= self._MAX_TRACKED_SESSIONS:
-                # O(1) LRU eviction: OrderedDict front = least-recently-used
-                self.session_memory.popitem(last=False)
-            self.session_memory[session_id] = {"scores": [], "last_seen": now}
-        else:
-            # Mark as most-recently used: move to back in O(1)
-            self.session_memory.move_to_end(session_id)
-
-        # 3. Record timestamped score for current prompt
+        # Threat score is pure CPU; compute outside the lock to keep the
+        # critical section minimal.
         score, _ = self._calculate_threat_score(current_prompt)
-        self.session_memory[session_id]["scores"].append((score, now))
-        self.session_memory[session_id]["last_seen"] = now
 
-        # 4. Drop scores older than _SESSION_SCORE_TTL (sliding window)
-        cutoff = now - self._SESSION_SCORE_TTL
-        self.session_memory[session_id]["scores"] = [
-            (s, ts) for s, ts in self.session_memory[session_id]["scores"]
-            if ts >= cutoff
-        ]
+        with self._session_memory_lock:
+            # 1. Time-based eviction: purge sessions idle > _SESSION_TTL.
+            #    Throttled to once per _EVICTION_INTERVAL to avoid an O(N) dict
+            #    scan on every single request (pathological at 10 000 sessions).
+            if now - self._last_eviction >= self._EVICTION_INTERVAL:
+                self._last_eviction = now
+                stale = [sid for sid, data in self.session_memory.items()
+                         if now - data["last_seen"] > self._SESSION_TTL]
+                for sid in stale:
+                    del self.session_memory[sid]
 
-        # 5. Crescent Attack detection: sum of last 3 scores in the window
-        recent_scores = [s for s, _ in self.session_memory[session_id]["scores"][-3:]]
+            # 2. Capacity guard (hard cap after eviction)
+            if session_id not in self.session_memory:
+                if len(self.session_memory) >= self._MAX_TRACKED_SESSIONS:
+                    # O(1) LRU eviction: OrderedDict front = least-recently-used
+                    self.session_memory.popitem(last=False)
+                self.session_memory[session_id] = {"scores": [], "last_seen": now}
+            else:
+                # Mark as most-recently used: move to back in O(1)
+                self.session_memory.move_to_end(session_id)
+
+            # 3. Record timestamped score for current prompt
+            self.session_memory[session_id]["scores"].append((score, now))
+            self.session_memory[session_id]["last_seen"] = now
+
+            # 4. Drop scores older than _SESSION_SCORE_TTL (sliding window)
+            cutoff = now - self._SESSION_SCORE_TTL
+            self.session_memory[session_id]["scores"] = [
+                (s, ts) for s, ts in self.session_memory[session_id]["scores"]
+                if ts >= cutoff
+            ]
+
+            # 5. Crescent Attack detection: sum of last 3 scores in the window
+            recent_scores = [s for s, _ in self.session_memory[session_id]["scores"][-3:]]
+
+        # Logging + return outside the lock — log handlers may do I/O.
         if len(recent_scores) >= 3:
             recent_sum = sum(recent_scores)
             if recent_sum > 1.5:
