@@ -30,7 +30,7 @@ class TestRateLimiterConcurrency:
 
         bucket = TokenBucket(capacity=50, rate=0.0)  # No refill
         results = await asyncio.gather(*[bucket.acquire() for _ in range(200)])
-        successes = sum(1 for r in results if r)
+        successes = sum(1 for allowed, _ in results if allowed)
 
         assert successes == 50, (
             f"Race condition in TokenBucket: {successes} acquires from capacity=50"

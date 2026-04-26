@@ -109,7 +109,8 @@ class TestRateLimiterBenchmarks:
 
         async def acquire_once():
             bucket = TokenBucket(capacity=1000, rate=100.0)
-            return await bucket.acquire()
+            allowed, _ = await bucket.acquire()
+            return allowed
 
         result = benchmark(lambda: _run(acquire_once()))
         assert result is True
@@ -120,7 +121,12 @@ class TestRateLimiterBenchmarks:
 
         async def burst():
             bucket = TokenBucket(capacity=1000, rate=100.0)
-            return sum([await bucket.acquire() for _ in range(100)])
+            count = 0
+            for _ in range(100):
+                allowed, _ = await bucket.acquire()
+                if allowed:
+                    count += 1
+            return count
 
         result = benchmark(lambda: _run(burst()))
         assert result == 100

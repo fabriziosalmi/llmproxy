@@ -2,6 +2,35 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.37] — 2026-04-25
+
+### P1-1 (correctness) — TokenBucket `retry_after` atomic with acquire
+
+`RateLimiter.check()` was doing this:
+```python
+allowed = await bucket.acquire()        # mutates _tokens UNDER lock
+return allowed, bucket.retry_after      # reads _tokens OUTSIDE lock
+```
+
+Between the two lines, a concurrent coroutine could call `acquire()` on the same bucket and change `_tokens`, so the `retry_after` returned to the caller didn't reflect the post-acquire state. Wrong `Retry-After` header → client jitter.
+
+Fixed by computing `retry_after` inside the same critical section as the take. `TokenBucket.acquire()` now returns `Tuple[bool, float]` (allowed, retry_after_seconds) and `RateLimiter.check()` simply forwards that tuple. The standalone `retry_after` property is preserved as an advisory lock-free peek for read-only inspection (admin endpoints, tests) with a docstring noting it should not be used in the request path.
+
+Also handled `rate=0` correctly: was a divide-by-zero risk, now returns `float("inf")` so callers can render it as a permanent block.
+
+3 new test cases:
+- `test_bucket_retry_after_via_acquire` — atomic value matches expected refill time
+- `test_bucket_retry_after_property_still_works` — advisory peek path
+- `test_bucket_retry_after_zero_rate_is_infinite` — divide-by-zero guard
+
+Updated 4 call sites in test_rate_limiter, test_invariants, test_concurrency_stress, test_benchmarks for the new tuple signature.
+
+1130/1130 unit tests green.
+
+First of 2 P1 fixes from the audit re-pass. (3 of the original 6 audit candidates were verified non-bugs and dropped honestly: closure-held speculative task, unmutated `role_mappings`, single-writer `MetricsHistory`.)
+
+---
+
 ## [1.21.36] — 2026-04-25
 
 ### P0-5 (security) — CORS default is loopback-only, not wildcard
