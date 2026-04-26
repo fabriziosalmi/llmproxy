@@ -349,6 +349,18 @@ class ProxyOrchestrator(BaseAgent):
         self.routing_cost_weight = float(
             await self.store.get_state("routing:cost_weight", self.routing_cost_weight)
         )
+
+        # N.6 — Apply persisted rate-limit preset (if any) to the live
+        # middleware. Done after middleware construction (which happens when
+        # FastAPI is built earlier in startup) so the singleton already exists.
+        saved_preset = await self.store.get_state("rate_limit:preset", None)
+        if saved_preset:
+            try:
+                from core.rate_limiter import RateLimitMiddleware
+                if RateLimitMiddleware.instance is not None:
+                    await RateLimitMiddleware.instance.apply_preset(saved_preset)
+            except (ValueError, RuntimeError) as e:
+                self.logger.warning(f"Persisted rate-limit preset '{saved_preset}' rejected: {e}")
         for f in self.features:
             self.features[f] = await self.store.get_state(f"feature_{f}", self.features[f])
             self.security.config[f] = {"enabled": self.features[f]}
