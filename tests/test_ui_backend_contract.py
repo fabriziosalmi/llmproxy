@@ -233,3 +233,61 @@ async def test_audit_shape(app_agent):
     data = r.json()
     assert "items" in data, "audit response must have 'items' array"
     assert isinstance(data["items"], list)
+
+
+# ── N.7 — /api/v1/registry/scan ─────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_scan_endpoint_shape(app_agent, monkeypatch):
+    """Pin the AddForm scan-button contract: response has {candidates: [...], total: N}
+    and each candidate has {id, provider, base_url, models}. Discovery is
+    monkeypatched so the test doesn't rely on a local Ollama running."""
+    app, _agent = app_agent
+
+    async def _fake_discover(scratch, *, timeout=1.5):
+        scratch["endpoints"]["ollama"] = {
+            "provider": "ollama",
+            "base_url": "http://127.0.0.1:11434",
+            "models": ["llama3.3", "qwen2.5:7b"],
+            "auth_type": "none",
+            "_source": "auto-discovery",
+        }
+        return ["ollama"]
+    import core.local_probe as lp
+    monkeypatch.setattr(lp, "discover_local_endpoints", _fake_discover)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.post("/api/v1/registry/scan")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "candidates" in body and "total" in body
+    assert body["total"] == 1
+    cand = body["candidates"][0]
+    for field in ("id", "provider", "base_url", "models"):
+        assert field in cand, f"AddForm reads candidate.{field}; missing"
+    assert cand["base_url"] == "http://127.0.0.1:11434"
+    assert "llama3.3" in cand["models"]
+
+
+@pytest.mark.asyncio
+async def test_scan_filters_already_configured(app_agent, monkeypatch):
+    """If the discovered URL is already wired up in live config, drop it from
+    candidates so the operator doesn't see a dup they'd have to dedupe."""
+    app, agent = app_agent
+    # ollama is already in the live config (see _mock_agent) at
+    # http://localhost:11434. The discovery probe finds the same URL.
+    async def _fake_discover(scratch, *, timeout=1.5):
+        scratch["endpoints"]["ollama"] = {
+            "provider": "ollama",
+            "base_url": "http://localhost:11434",
+            "models": ["llama3.3"],
+        }
+        return ["ollama"]
+    import core.local_probe as lp
+    monkeypatch.setattr(lp, "discover_local_endpoints", _fake_discover)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.post("/api/v1/registry/scan")
+    body = r.json()
+    assert body["total"] == 0, "Already-configured URL should have been filtered"
