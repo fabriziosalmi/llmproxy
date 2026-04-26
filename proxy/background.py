@@ -84,6 +84,37 @@ async def drain_pending_writes(agent):
             logger.warning(f"Failed to flush state write {key}: {e}")
 
 
+async def metrics_history_loop(agent, interval: int = 3600):
+    """Q.3 — Snapshot Prometheus counters into the hourly ring buffer.
+
+    The MetricsHistory ring buffer (24 hourly slots by default) feeds the
+    KPI sparklines on the Threats / Models / Analytics views. We sample
+    once per hour: deltas for cumulative counters (requests / blocked /
+    errors / auth_failures) and a gauge for the running daily cost.
+
+    Defensive everywhere: a malformed counter, an exception, or the agent
+    not having `total_cost_today` yet must not stall the loop. Logs the
+    error and waits for the next tick.
+    """
+    from core import metrics
+    from core.metrics_history import sum_prometheus_counter
+
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            history = getattr(agent, "metrics_history", None)
+            if history is None:
+                # Agent didn't construct one — bail out, don't crash the loop.
+                continue
+            history.record_delta("requests", sum_prometheus_counter(metrics.REQUEST_COUNT))
+            history.record_delta("blocked", sum_prometheus_counter(metrics.INJECTION_BLOCKED))
+            history.record_delta("errors", sum_prometheus_counter(metrics.REQUEST_ERRORS))
+            history.record_delta("auth_failures", sum_prometheus_counter(metrics.AUTH_FAILURES))
+            history.record_gauge("cost_usd", float(getattr(agent, "total_cost_today", 0.0)))
+        except Exception as e:  # noqa: BLE001 — keep ticking
+            logger.warning(f"metrics_history snapshot error: {e}")
+
+
 async def cache_eviction_loop(cache_backend, interval: int = 3600):
     """Evict expired cache entries periodically."""
     while True:

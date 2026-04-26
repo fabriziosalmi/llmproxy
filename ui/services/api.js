@@ -116,6 +116,7 @@ export const api = {
     async fetchRoutingConfig() { return _json(`${BASE_URL}/api/v1/routing/config`); },
     async setRoutingCostWeight(cost_weight) { return _post(`${BASE_URL}/api/v1/routing/cost-weight`, { cost_weight }); },
     async fetchOpenApi() { return _json(`${BASE_URL}/api/v1/openapi.json`); },
+    async fetchHourlyBuckets() { return _json(`${BASE_URL}/api/v1/metrics/hourly-buckets`); },
 
     async fetchLatencyMetrics() { return _json(`${BASE_URL}/api/v1/metrics/latency`); },
     async fetchRingTimeline() { return _json(`${BASE_URL}/api/v1/metrics/ring-timeline`); },
