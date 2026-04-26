@@ -2,6 +2,49 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.33] — 2026-04-25
+
+### P0-2 (security) — Constant-time API-key compare across all auth sites
+
+The codebase had **9 distinct sites** doing `token in valid_keys` or `token not in valid_keys` against a Python `list[str]`. Both `==` and `in` short-circuit on the first byte mismatch (and on the first match), which makes timing-distinguishable comparisons over the network. With remote latency this is hard but not impossible — the right answer is to never leak it in the first place.
+
+Added a single helper on `ProxyOrchestrator` and routed every site through it:
+
+```python
+def _verify_api_key(self, token: str) -> bool:
+    if not token:
+        return False
+    token_b = token.encode("utf-8", errors="replace")
+    matched = False
+    for k in self._get_api_keys():
+        if hmac.compare_digest(token_b, k.encode("utf-8", errors="replace")):
+            matched = True
+    return matched
+```
+
+Two design choices that matter:
+1. **Always iterate every key** — no early `return True`. Total runtime depends only on `|valid_keys|`, not on which key (if any) matched, so an attacker can't bisect the configured key set by latency.
+2. **`hmac.compare_digest`** for the per-key comparison — Python's built-in constant-time bytes equality.
+
+Sites updated:
+- `proxy/app_factory.py:125` (global fail-closed middleware)
+- `proxy/routes/admin.py:72` (`_check_admin_auth` closure)
+- `proxy/routes/telemetry.py:47`
+- `proxy/routes/registry.py:28`
+- `proxy/routes/plugins.py:23`
+- `proxy/routes/gdpr.py:34`
+- `proxy/routes/embeddings.py:66`
+- `proxy/routes/chat.py:66`
+- `proxy/routes/identity.py:48`
+
+3 regression tests in `tests/test_coverage_rotator.py` cover constant-time match, prefix/suffix non-match, and empty key set rejection.
+
+1118/1118 unit tests green.
+
+Second of 5 P0 critical fixes from the 360° audit.
+
+---
+
 ## [1.21.32] — 2026-04-25
 
 ### P0-1 (security) — OIDC issuer prefix-bypass fixed

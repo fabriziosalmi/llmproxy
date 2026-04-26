@@ -62,8 +62,7 @@ def create_router(agent) -> APIRouter:
                     level="SECURITY"
                 )
             else:
-                valid_keys = agent._get_api_keys()
-                if token not in valid_keys:
+                if not agent._verify_api_key(token):
                     MetricsTracker.track_auth_failure("invalid_key")
                     agent._spawn_task(agent.webhooks.dispatch(EventType.AUTH_FAILURE, {"reason": "invalid_api_key", "ip": request.client.host if request.client else "unknown"}))
                     raise HTTPException(status_code=401, detail="Unauthorized: Invalid API key or JWT")
