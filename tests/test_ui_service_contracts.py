@@ -23,15 +23,19 @@ UI_ROOT = Path(__file__).parent.parent / "ui"
 # ── Expected exports per service (what the rest of the UI relies on) ──────
 
 EXPECTED_EXPORTS = {
-    "services/dialog.js":    {"dialog"},
+    # Legacy JS services that still front the data layer (api/store/toast/timerange/auth).
     "services/toast.js":     {"toast"},
     "services/store.js":     {"store"},
     "services/api.js":       {"api"},
     "services/auth.js":      {"auth"},
-    "services/drawer.js":    {"drawer"},
-    "services/explain.js":   {"initExplain", "explain", "markExplainable"},
-    "services/drilldown.js": {"initDrilldown", "drilldown"},
     "services/timerange.js": {"initTimerange", "timerange"},
+    # J.2: explain + drilldown migrated to TS. Modal/dialog and Drawer
+    # primitives moved to src/ui/ in Phase E. The four legacy files
+    # (services/dialog.js, services/drawer.js, services/explain.js,
+    # services/drilldown.js) were retired — assertions removed so this
+    # tripwire stays accurate, not stale.
+    "src/services/explain.ts":   {"initExplain", "explain", "markExplainable"},
+    "src/services/drilldown.ts": {"initDrilldown", "drilldown"},
 }
 
 _EXPORT_RE = re.compile(
