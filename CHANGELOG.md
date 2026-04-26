@@ -2,6 +2,28 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.22] — 2026-04-26
+
+### O.5 — Active config YAML view in Settings (read-only, redacted)
+
+Terraform-vibe "this is what the proxy is actually running with" surface in Settings. Operators see auto-discovered endpoints, env-merged values, and runtime mutations (rate-limit preset, cost weight, …) that on-disk `config.yaml` hasn't picked up yet — without grepping logs.
+
+**Backend** — `GET /api/v1/config/yaml` (admin.py)
+- Renders `agent.config` via `yaml.safe_dump(default_flow_style=False, sort_keys=False)`.
+- Secrets scrubbed via `core/export.py:scrub_dict` **before** serialisation — same set the GDPR exporter uses (api_key, authorization, token, password, secret, …). Leaked screenshots can't leak credentials.
+- Auth-gated like the rest of `/api/v1/*`.
+
+**Frontend** — `src/views/settings/ConfigYaml.ts`
+- `mountConfigYaml(host, api)` renders skeleton → `Snippet` (copy button from O.3) → error state with retry.
+- Header copy: "read-only · secrets redacted" so operators know the rendered text isn't editable AND not raw keys.
+- Wired through `SettingsHosts.configYaml` (optional field, older shells unaffected) and `components/settings.js`.
+
+`api.fetchConfigYaml()` follows the existing `_json` wrapper pattern.
+
+2 backend tests (round-trip + secret redaction) + 4 frontend tests (snippet on success, error retry, empty-yaml surface, header copy). 295/295 UI tests + 88/88 backend across the touched suites green. Bundle main +0.05 kB gzip (39.21).
+
+---
+
 ## [1.21.21] — 2026-04-26
 
 ### O.4 — Native SVG Traffic Flow on the Threats tab
