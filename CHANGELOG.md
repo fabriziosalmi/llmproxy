@@ -2,6 +2,35 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.9] — 2026-04-26
+
+### M.3 — `/health` per-component status block
+
+Old `/health` returned `status:"ok"` unconditionally — operators only knew the proxy was tipping when the whole thing already had. Now it decomposes into a `components` block so the failing piece is visible from outside before any single ring breaks.
+
+**Components**
+- `endpoints` — `total`, `healthy`, `circuits_open`. Degraded when at least one circuit is OPEN, or when the pool exists but no endpoint is gated through.
+- `store` — exercised via a real `get_state` read so a broken DB surfaces as `down`, not silently as `ok`.
+- `cache` — `_enabled=False` is `degraded` (proxy still serves, slower); `stats()` error is `down`.
+- `plugins` — `loaded` count + per-ring sizes. Empty rings are config state, not faults.
+- `session` — aiohttp upstream session liveness. Critical: a missing session means no forwarding.
+- `log_queue` — `depth` / `max` / `saturation`; `>= 0.8` flips to `degraded` (DLQ overflow imminent).
+
+**Status semantics**
+- `ok` — all components ok
+- `degraded` — at least one component degraded/down (non-critical)
+- `down` — `store` or `session` is down (no proxy without those)
+
+**HTTP status stays 200 always.** Overall health is in the body. Existing pollers that just check 200 don't break — they get the bug fixed (was always-ok regardless of state) but can opt into reading `body.status`.
+
+**Backward-compat:** every previous top-level field (`version`, `uptime_seconds`, `pool_size`, `pool_healthy`, `session_active`, `budget_today_usd`) is still present in the response.
+
+5 tests — happy path (all `ok`) + 4 scenarios pinning session-loss / cache-disabled / circuit-open / log-queue-saturated. The existing `/health` test was updated to match correct overall-status semantics (it had been asserting on the always-ok bug).
+
+Wider regression: 155 backend tests across the touched suites all green.
+
+---
+
 ## [1.21.8] — 2026-04-25
 
 ### M.2 — Spend forecasting (burn rate + time-to-limit + projection)
