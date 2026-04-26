@@ -157,14 +157,16 @@ def create_router(agent) -> APIRouter:
             except (json.JSONDecodeError, KeyError):
                 pass
 
-        # Cost tracking
+        # Cost tracking. Embeddings is its own route — no downstream
+        # enqueue runs (unlike /v1/chat/completions), so without persistence
+        # here a crash before the next chat request would lose the charge.
         try:
             if hasattr(response, "body"):
                 usage = json.loads(response.body.decode()).get("usage", {})
                 tokens = usage.get("total_tokens", 0) or usage.get("prompt_tokens", 0)
                 cost_usd = estimate_cost(model, tokens, 0)
-                async with agent._budget_lock:
-                    agent.total_cost_today += cost_usd
+                from proxy.budget import charge_and_persist
+                await charge_and_persist(agent, agent._budget_lock, cost_usd)
         except Exception:
             pass
 
