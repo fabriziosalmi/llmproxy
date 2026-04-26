@@ -2,6 +2,34 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.48] — 2026-04-26
+
+### Docs — Clear all 3 Dependabot alerts + unblock docs CI
+
+GitHub flagged 3 medium-severity vulnerabilities in `docs/package-lock.json` (the VitePress docs site, not the runtime proxy):
+- **#24** — `postcss` < 8.5.10 — XSS via unescaped `</style>` (CVE-2026-41305)
+- **#23** — `vite` ≤ 6.4.1 — path traversal in optimized-deps `.map` handling (CVE-2026-39365)
+- **#9** — `esbuild` ≤ 0.24.2 — dev server accepts requests from any origin
+
+All three were transitive dependencies of VitePress with no real production exposure (the runtime proxy is Python; these libs only run during docs build / local dev). Still: a clean security tab is worth 5 minutes.
+
+Used npm `overrides` in `docs/package.json` to force patched versions without bumping VitePress itself (which would be a major-version churn). Resolved versions:
+- `postcss` 8.5.8 → **8.5.12** (≥ 8.5.10 patched)
+- `vite` 5.4.21 → **6.4.2** (≥ 6.4.2 patched, major bump but VitePress 1.6.4 absorbs it cleanly)
+- `esbuild` 0.21.5 → **0.25.12** (≥ 0.25.0 patched)
+
+The Dependabot PR #48 (postcss bump only) is superseded by this commit, which closes all three alerts atomically.
+
+### Bonus — fixed dead link blocking docs CI
+
+VitePress 1.6.4 (now resolved by the override path) is stricter about dead-link checking, which surfaced a **pre-existing broken link** (`docs/ui/contributing.md` → `../../CONTRIBUTING.md`) that had been silently failing the `docs.yml` workflow since commit `ff886d4` (April 25). VitePress can't link outside its source root, so the link was changed to an absolute GitHub URL (`https://github.com/fabriziosalmi/llmproxy/blob/main/CONTRIBUTING.md`).
+
+`npm run docs:build` now completes cleanly in ~2s. The Deploy Docs workflow has been failing for several days; it will go green on the next push.
+
+No code change to the runtime proxy. 1192/1192 unit tests still green.
+
+---
+
 ## [1.21.47] — 2026-04-26
 
 ### Docs — Public Docker image one-liner quickstart

@@ -1,6 +1,6 @@
 # UI Contributing Guide
 
-> Audience: anyone touching the admin console (`ui/`). Covers the build pipeline, the primitive system, the C.2 view-migration pattern, and the test contract. Backend contribution rules live in [`CONTRIBUTING.md`](../../CONTRIBUTING.md) at the repo root.
+> Audience: anyone touching the admin console (`ui/`). Covers the build pipeline, the primitive system, the C.2 view-migration pattern, and the test contract. Backend contribution rules live in [`CONTRIBUTING.md`](https://github.com/fabriziosalmi/llmproxy/blob/main/CONTRIBUTING.md) at the repo root.
 
 ## TL;DR
 
