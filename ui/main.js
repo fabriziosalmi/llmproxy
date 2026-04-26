@@ -74,8 +74,12 @@ store.subscribe((state) => {
 // Vite resolve to .ts at build; the source-tree fallback gets a 404 and
 // we silently skip telemetry, which is fine because it is no-op anyway.
 function initTelemetry() {
-    Promise.all([import('./src/services/logger'), import('./src/services/rum')])
-        .then(([loggerMod, rumMod]) => {
+    Promise.all([
+        import('./src/services/logger'),
+        import('./src/services/rum'),
+        import('./src/services/perf'),
+    ])
+        .then(([loggerMod, rumMod, perfMod]) => {
             const sinks = [loggerMod.consoleSink];
             // Backend sink: ships error/warn batches to /api/v1/logs/client.
             // The endpoint is auth-gated, so a missing token simply drops the
@@ -90,6 +94,10 @@ function initTelemetry() {
             _rumRef = rumMod.rum;
             window.__llmproxy_rum = rumMod.rum;
             try { rumMod.rum.pageView(store.state.currentTab || 'threats'); } catch { /* silent */ }
+            // N.8: capture FCP / LCP / DCL / load and route through rum.
+            // Default no-op sink means metrics only ship if the operator
+            // wires up an analytics backend (e.g. PostHog) via rum.setSink.
+            try { perfMod.reportPagePerf(); } catch { /* silent */ }
         })
         .catch(() => { /* no TS chunk — telemetry stays off */ });
 }
