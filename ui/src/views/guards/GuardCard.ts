@@ -75,6 +75,10 @@ export function createGuardCard(props: GuardCardProps): HTMLElement {
             label: spec.name,
             checked: enabled,
             onChange: (next) => props.onToggle?.(next),
+            // 200 ms trailing debounce: a frenzied 10-click run produces
+            // 1 POST /api/v1/features/toggle instead of 10. Visual flip
+            // stays instant — this only collapses the API call.
+            debounceMs: 200,
             testId: `guard-toggle-${spec.key}`,
         });
         // We only want the switch, not the label/description block.

@@ -62,6 +62,9 @@ describe('mountGuardsGrid', () => {
     });
 
     it('toggling a guard calls the dep, updates state, and emits a toast', async () => {
+        // N.3: guard toggle is debounced 200 ms, so we need to advance fake
+        // timers past the window before the API call fires.
+        vi.useFakeTimers();
         const toggleGuard = vi.fn().mockResolvedValue({ enabled: true });
         const toast = vi.fn();
         mountGuardsGrid(container, STATE, { toggleGuard, toast });
@@ -70,8 +73,11 @@ describe('mountGuardsGrid', () => {
         expect(sw.getAttribute('aria-checked')).toBe('false');
         sw.click();
 
-        // Wait for promise + re-render.
+        // Drain the debounce window, then any micro-tasks the resolved promise leaves.
+        await vi.advanceTimersByTimeAsync(200);
+        vi.useRealTimers();
         await new Promise((r) => setTimeout(r, 0));
+
         expect(toggleGuard).toHaveBeenCalledWith('language_guard', true);
         const fresh = container.querySelector<HTMLButtonElement>('[data-testid="guard-toggle-language_guard"]')!;
         expect(fresh.getAttribute('aria-checked')).toBe('true');
@@ -79,6 +85,7 @@ describe('mountGuardsGrid', () => {
     });
 
     it('a failing toggle reverts the UI and shows an error toast', async () => {
+        vi.useFakeTimers();
         const toggleGuard = vi.fn().mockRejectedValue(new Error('500 backend down'));
         const toast = vi.fn();
         mountGuardsGrid(container, STATE, { toggleGuard, toast });
@@ -86,6 +93,8 @@ describe('mountGuardsGrid', () => {
         const sw = container.querySelector<HTMLButtonElement>('[data-testid="guard-toggle-injection_guard"]')!;
         expect(sw.getAttribute('aria-checked')).toBe('true');
         sw.click();
+        await vi.advanceTimersByTimeAsync(200);
+        vi.useRealTimers();
         await new Promise((r) => setTimeout(r, 0));
 
         const fresh = container.querySelector<HTMLButtonElement>('[data-testid="guard-toggle-injection_guard"]')!;
