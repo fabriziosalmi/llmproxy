@@ -337,6 +337,11 @@
                     </div>
                 </div>
 
+                <!-- O.4 — Traffic Flow diagram (mounted by src/views/threats/sections/TrafficFlow.ts).
+                     Empty by default; the orchestrator hydrates with live counts on each
+                     refresh tick. -->
+                <div id="threats-traffic-flow" data-testid="threats-traffic-flow" class="mb-6"></div>
+
                 <!-- Live Security Event Feed (mounted by src/views/threats/EventFeed.ts; the
                      markup below is the legacy fallback shown when TS hasn't loaded). -->
                 <div id="threats-event-feed" data-testid="threats-event-feed">

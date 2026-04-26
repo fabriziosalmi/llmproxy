@@ -1,4 +1,4 @@
-/** Subset of /api/v1/guards/status used by the budget gauge + firewall stats. */
+/** Subset of /api/v1/guards/status used by the budget gauge + firewall stats + traffic flow. */
 export interface GuardsStatus {
     firewall?: {
         enabled?: boolean;
@@ -11,6 +11,10 @@ export interface GuardsStatus {
         total_cost_today?: number;
         daily_limit?: number;
     };
+    /** Per-feature toggle map (injection_guard, link_sanitizer, …). Used by O.4 flow. */
+    features?: Record<string, boolean>;
+    /** Per-endpoint circuit-breaker state. Used by O.4 flow to color provider nodes. */
+    circuit_breakers?: Record<string, { state?: string; failure_count?: number; failure_threshold?: number }>;
 }
 
 /** Per-ring latency record from /api/v1/metrics/latency. */
