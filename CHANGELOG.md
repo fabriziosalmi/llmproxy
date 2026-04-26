@@ -2,6 +2,53 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.45] — 2026-04-25
+
+### Cost routing — Tier A polish (formula tests + pricing visibility + savings estimate)
+
+Strategic priority #4. The cost-routing slider has been in production for a while — runtime-tunable, persisted across restarts, UI exposed — but operators had no signal that it was *doing anything useful*. Three honest gaps the scoping pass surfaced:
+
+**A.1 — Pin the scoring formula.** Only the admin endpoint was tested; the actual `_compute_score` in `plugins/default/smart_router.py` was unverified. A future refactor could silently flip the winner. New `tests/test_smart_router_scoring.py` (14 tests) asserts the *ranking behavior*:
+- `cost_weight=0.0` → cost ignored, fast cloud beats slow local
+- `cost_weight=0.3` (default) → cheaper wins on tie, free dominates on tie, but a 7× latency gap still beats a 5× price advantage
+- `cost_weight=1.0` → cheap-slow beats fast-expensive (the operator wants out of the cloud)
+- success-rate squared penalty: 0.7² = 0.49 → flaky endpoint loses by ~half (not 30%)
+- Edge cases: zero latency (clamps to 1ms floor), unknown model (default pricing path), empty model name (skips cost calc), strict positivity across the parameter grid
+- Full pool ranking on a realistic 5-endpoint mix at three cost-weight values
+
+**A.2 — One-shot warning on default-pricing fallback.** `core.pricing.get_pricing` previously returned `_DEFAULT_PRICING = {input: 1.0, output: 3.0}` silently for any unknown model. Operators running fine-tunes or new model names absorbed those guesses into routing scores and budget estimates without knowing. Now: first lookup of an unknown model emits a `WARNING` like:
+
+```
+Unknown model 'foo-bar-9b' — using default pricing $1.00/$3.00 per MTok.
+Routing scores and budget estimates for this model are guesses.
+Add it to MODEL_PRICING or config.yaml `pricing` to fix.
+```
+
+One-shot per model (a `_DEFAULT_PRICING_WARNED: Set[str]` guard) so high-traffic unknown models don't flood the log. Empty model strings don't warn (caller bug, not a pricing issue). Reset on process restart.
+
+**A.3 — Savings estimate on `/api/v1/analytics/cost-efficiency`.** Added a `savings` block:
+
+```json
+{
+  "savings": {
+    "baseline_usd": 612.40,
+    "actual_usd":   78.20,
+    "saved_usd":   534.20,
+    "saved_pct":    87.23,
+    "baseline_input_per_mtok": 10.00,
+    "baseline_output_per_mtok": 40.00
+  }
+}
+```
+
+`baseline_usd` is computed by repricing every spend row at the most-expensive paid model in `MODEL_PRICING` (free models excluded — they'd give a misleading $0 baseline). Saved clamps at 0 (no negative numbers; if actuals exceed baseline, that means the user actually picked premium and there's nothing to brag about).
+
+**Honest scope note** (in the helper docstring): this is "model-mix economics, not just slider effect." The slider only influences ties between endpoints serving the same model; user choice drives most of the savings. The number answers "is my multi-provider strategy paying off?" — not "did the slider save me $X." The latter would require per-request telemetry that doesn't exist.
+
+28 new tests (14 scoring + 14 pricing helpers). 1183/1183 unit tests green.
+
+---
+
 ## [1.21.44] — 2026-04-25
 
 ### Budget persistence — End-to-end tests + hydration helper extracted

@@ -453,7 +453,7 @@ def create_router(agent) -> APIRouter:
 
     @router.get("/api/v1/analytics/cost-efficiency")
     async def analytics_cost_efficiency(request: Request):
-        """Cost efficiency: avg cost/request and cost savings from routing."""
+        """Cost efficiency: avg cost/request + savings vs premium baseline."""
         _check_admin_auth(request)
         params = request.query_params
         by_model = await agent.store.query_spend(
@@ -484,12 +484,19 @@ def create_router(agent) -> APIRouter:
             })
         efficiency.sort(key=lambda x: x["avg_cost_per_request_usd"])
 
+        # Savings vs a premium-tier baseline. Honest scope: this measures
+        # model-mix economics, not the routing slider in isolation.
+        # See core.pricing.estimate_baseline_savings for the contract.
+        from core.pricing import estimate_baseline_savings
+        savings = estimate_baseline_savings(by_model)
+
         return {
             "period_total_usd": total,
             "models": efficiency,
             "cheapest_model": efficiency[0]["model"] if efficiency else None,
             "most_expensive_model": efficiency[-1]["model"] if efficiency else None,
             "routing": _routing_block(),
+            "savings": savings,
         }
 
     # ── Audit Log (R2.10) ──
