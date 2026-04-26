@@ -2,6 +2,33 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.38] — 2026-04-25
+
+### P1-2 (resilience) — Bounded stream buffer for the speculative analyzer
+
+`stream_text_chunks: list[str]` in `proxy/forwarder.py` accumulated every decoded chunk of a streaming response so the speculative analyzer (`SecurityShield.analyze_speculative`) could scan it. There was no cap. A 5 MB streaming response held all 5 MB in RAM until the stream ended; under high concurrent streaming load the per-request memory cost was unbounded — a real OOM vector even though it never tripped a single test.
+
+Two compounding costs fixed:
+1. **Memory**: replaced the bare list with `_BoundedStreamBuffer` — a tiny rolling-window buffer capped at 128 KB. Old chunks evict from the front; at least one chunk is always retained so the analyzer has recent context to scan.
+2. **CPU**: the analyzer does `"".join(stream_chunks)` every 10 ms poll. With an unbounded buffer that's O(N) per poll where N grows to the full response. Now bounded to ≤ 128 KB worth of join work.
+
+Token-estimation correctness is preserved through `total_chars` (a running counter of every char ever appended). The missing-usage fallback now scales the windowed token count by `total_chars / sample_chars` so a 5 MB response still gets a token count proportional to its length, not a 128 KB cap.
+
+Why this is P1 not P0: bounded blast radius. Memory is reclaimed when the stream ends; non-streaming paths are untouched. No security bypass, no data corruption.
+
+7 regression tests in `tests/test_forwarder_stream_buffer.py`:
+- 5 MB stream into a 100 KB buffer never overshoots by more than one chunk
+- single chunk larger than cap is retained (no all-context loss)
+- FIFO eviction (oldest evicted, recent kept — the analyzer cares about the suffix)
+- `total_chars` tracks every char regardless of evictions
+- token-scaling math contract documented as a test
+
+1137/1137 unit tests green.
+
+Second of 2 P1 fixes from the audit re-pass.
+
+---
+
 ## [1.21.37] — 2026-04-25
 
 ### P1-1 (correctness) — TokenBucket `retry_after` atomic with acquire

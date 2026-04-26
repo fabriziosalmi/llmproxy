@@ -22,6 +22,58 @@ from core.metrics import MetricsTracker
 logger = logging.getLogger("llmproxy.forwarder")
 
 
+# Rolling window cap for the speculative-analyzer text buffer. A 128 KB
+# window holds plenty of context for injection-pattern matching (patterns
+# are short; the window only needs to be longer than the longest pattern
+# plus typical chunk size). Without this cap, a 5 MB streaming response
+# would buffer all 5 MB in RAM until the stream finished — bounded per-
+# request OOM under streaming load. The total-char counter is preserved
+# so missing-usage token estimation scales correctly for long responses.
+_MAX_STREAM_BUFFER_CHARS = 131_072
+
+
+class _BoundedStreamBuffer:
+    """Rolling-window text buffer for the speculative analyzer.
+
+    Holds at most `max_chars` characters of recent stream text (the
+    analyzer scans the recent suffix; older chunks are dropped). A
+    separate `total_chars` counter records every character ever
+    appended, so missing-usage token estimation can scale up from the
+    sampled window: `tokens ≈ sample_tokens × total_chars / sample_chars`.
+
+    Backed by a list[str] so existing consumers that do `"".join(buf.chunks)`
+    keep working without an interface change.
+    """
+
+    __slots__ = ("chunks", "_buf_chars", "total_chars", "_max")
+
+    def __init__(self, max_chars: int = _MAX_STREAM_BUFFER_CHARS):
+        self.chunks: list[str] = []
+        self._buf_chars: int = 0
+        self.total_chars: int = 0
+        self._max: int = max_chars
+
+    def append(self, text: str) -> None:
+        if not text:
+            return
+        self.chunks.append(text)
+        n = len(text)
+        self._buf_chars += n
+        self.total_chars += n
+        # Evict oldest chunks until within cap. Always keep at least one
+        # chunk so the analyzer has the most-recent text to scan.
+        while self._buf_chars > self._max and len(self.chunks) > 1:
+            dropped = self.chunks.pop(0)
+            self._buf_chars -= len(dropped)
+
+    @property
+    def buf_chars(self) -> int:
+        return self._buf_chars
+
+    def text(self) -> str:
+        return "".join(self.chunks)
+
+
 # Actionable hints surfaced in 4xx/quota error details so operators reading
 # the audit log or SDK error don't have to guess where to fix the key.
 _PROVIDER_HINTS = {
@@ -273,7 +325,11 @@ class RequestForwarder:
         # background task that monitors the accumulating response text for PII
         # leakage or injection patterns.  Previously this method existed but
         # was never wired into the streaming path (dead code).
-        stream_text_chunks: list[str] = []
+        # Bounded rolling-window buffer (caps memory for long streams).
+        stream_buf = _BoundedStreamBuffer()
+        # Backwards-compatible alias for the analyzer's existing list-based
+        # interface. analyze_speculative reads via "".join(stream_chunks).
+        stream_text_chunks = stream_buf.chunks
         kill_event = asyncio.Event()
         speculative_task: asyncio.Task | None = None
         if self._security:
@@ -319,10 +375,11 @@ class RequestForwarder:
                                         stream_usage = u
                         except (json.JSONDecodeError, KeyError, UnicodeDecodeError):
                             pass
-                    # Feed decoded text to the speculative analyzer
+                    # Feed decoded text to the speculative analyzer via the
+                    # bounded rolling-window buffer.
                     if speculative_task is not None:
                         try:
-                            stream_text_chunks.append(chunk.decode("utf-8", errors="replace"))
+                            stream_buf.append(chunk.decode("utf-8", errors="replace"))
                         except Exception:
                             pass
                     yield chunk
@@ -349,12 +406,21 @@ class RequestForwarder:
                     prompt_text = " ".join(
                         str(m.get("content", "")) for m in ctx.body.get("messages", [])
                     )
-                    response_text = "".join(stream_text_chunks)
                     p_tok = count_tokens(prompt_text, model_name)
-                    c_tok = count_tokens(response_text, model_name)
+                    sample_text = stream_buf.text()
+                    sample_tok = count_tokens(sample_text, model_name)
+                    # Scale up if the bounded buffer dropped earlier chunks:
+                    # token rate per char is ~uniform within a single response,
+                    # so total ≈ sample × (total_chars / sample_chars).
+                    if sample_text and stream_buf.total_chars > len(sample_text):
+                        scale = stream_buf.total_chars / max(1, len(sample_text))
+                        c_tok = int(sample_tok * scale)
+                    else:
+                        c_tok = sample_tok
                     logger.info(
                         f"Stream usage missing — estimated {p_tok}+{c_tok} tokens "
-                        f"for model={model_name} endpoint={endpoint_id}"
+                        f"for model={model_name} endpoint={endpoint_id} "
+                        f"(buf={len(sample_text)}/total={stream_buf.total_chars})"
                     )
                 if p_tok or c_tok:
                     real_cost = estimate_cost(model_name, p_tok, c_tok)
