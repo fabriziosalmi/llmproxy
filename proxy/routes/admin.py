@@ -505,6 +505,24 @@ def create_router(agent) -> APIRouter:
         """
         return await agent.store.verify_audit_chain()
 
+    @router.get("/api/v1/openapi.json")
+    async def get_openapi_schema(request: Request):
+        """Auth-gated OpenAPI schema mirror.
+
+        Q.2: FastAPI's default `/openapi.json` is disabled at app construction
+        when auth is enabled (proxy/app_factory.py — full route map is recon
+        for an unauthenticated attacker). This mirror sits behind the same
+        admin auth as the rest of /api/v1/*, so a logged-in operator can still
+        feed the schema into Swagger UI or generate clients without restarting
+        the proxy in development mode.
+        """
+        _check_admin_auth(request)
+        try:
+            schema = request.app.openapi()
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=f"OpenAPI schema build failed: {e}") from e
+        return schema
+
     @router.get("/api/v1/config/yaml")
     async def get_config_yaml(request: Request):
         """Return the active config rendered as YAML, with secrets redacted.

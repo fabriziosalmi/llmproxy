@@ -8,6 +8,7 @@
  * skeletons while loading, ErrorState with retry on failure, and
  * EmptyState when the backend reports the feature is disabled.
  */
+import { mountApiReference, type ApiReferenceApi } from './ApiReference';
 import { mountConfigWarnings, type ConfigWarningsApi } from './ConfigWarnings';
 import { mountConfigYaml, type ConfigYamlApi } from './ConfigYaml';
 import { mountDataExport, type ExportApi } from './DataExport';
@@ -29,7 +30,8 @@ export interface SettingsApi
         ConfigYamlApi,
         RateLimitApi,
         HealthApi,
-        RoutingConfigApi {}
+        RoutingConfigApi,
+        ApiReferenceApi {}
 
 export interface MountSettingsOptions {
     api: SettingsApi;
@@ -52,6 +54,8 @@ export interface SettingsHosts {
     health?: HTMLElement | null;
     /** Q.1 — Routing cost-weight slider. Optional. */
     routing?: HTMLElement | null;
+    /** Q.2 — OpenAPI / API Reference viewer. Optional. */
+    apiReference?: HTMLElement | null;
 }
 
 export function mountSettingsView(hosts: SettingsHosts, opts: MountSettingsOptions): () => Promise<void> {
@@ -79,12 +83,17 @@ export function mountSettingsView(hosts: SettingsHosts, opts: MountSettingsOptio
         const handle = mountRoutingConfig(hosts.routing, opts.api, opts.toast);
         refreshes.push(handle.refresh);
     }
+    if (hosts.apiReference) {
+        const handle = mountApiReference(hosts.apiReference, opts.api);
+        refreshes.push(handle.refresh);
+    }
 
     return async function refreshAll(): Promise<void> {
         await Promise.allSettled(refreshes.map((fn) => fn()));
     };
 }
 
+export { mountApiReference } from './ApiReference';
 export { mountConfigWarnings } from './ConfigWarnings';
 export { mountConfigYaml } from './ConfigYaml';
 export { mountHealthPanel } from './HealthPanel';

@@ -376,6 +376,25 @@ class TestAdminRoutes:
         assert "smart_weighted" in body["yaml"]
 
     @pytest.mark.asyncio
+    async def test_openapi_endpoint_returns_schema(self):
+        """Q.2 — auth-gated mirror of /openapi.json. The default FastAPI
+        route is disabled when auth is on (proxy/app_factory.py:86), so
+        this endpoint is the way an authenticated operator gets at the
+        schema for Swagger / Postman / openapi-generator."""
+        app, agent = _make_admin_app()
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.get("/api/v1/openapi.json")
+        assert resp.status_code == 200
+        body = resp.json()
+        # Shape contract — Swagger / Postman / openapi-generator all read
+        # info + paths off the root.
+        assert "openapi" in body
+        assert "info" in body
+        assert "paths" in body
+        # The endpoint we just added must be in its own schema (sanity).
+        assert "/api/v1/openapi.json" in body["paths"]
+
+    @pytest.mark.asyncio
     async def test_config_yaml_redacts_secrets(self):
         """O.5 — secrets must be scrubbed before serialisation. A leaked
         screenshot of the Settings panel can't leak credentials."""
