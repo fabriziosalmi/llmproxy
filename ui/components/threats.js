@@ -47,6 +47,7 @@ export function initThreats() {
                     ttft: document.getElementById('ttft-metrics'),
                     ringTimeline: document.getElementById('ring-timeline'),
                     chartCanvas: document.getElementById('threat-chart'),
+                    trafficFlow: document.getElementById('threats-traffic-flow'),
                 },
                 {
                     api: {
