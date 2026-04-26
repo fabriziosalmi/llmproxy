@@ -2,6 +2,35 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.35] — 2026-04-25
+
+### P0-4 (security) — Atomic plugin hot-swap
+
+Before: `hot_swap()` called `load_plugins()`, which **first cleared** `self._plugin_instances`, `self._plugin_stats`, and every entry in `self.rings`, then loaded fresh state. Any incoming request that hit `execute_ring()` during that window saw an empty plugin chain — security plugins (PII, prompt-shield, mutation guards) were *bypassed* during reload. Worst-case: a malicious request timed against a hot-swap goes straight through.
+
+After: build-then-swap (true RCU semantics).
+
+1. `_build_plugin_state()` constructs four fresh dicts (`new_rings`, `new_meta`, `new_instances`, `new_stats`) without touching `self.*`. If the build fails, `self.*` is untouched and the live state stays live.
+2. `hot_swap()` snapshots the current four pointers, then performs four `self.X = new_X` assignments **with no `await` between them**. The asyncio event loop cannot interleave another task across plain attribute writes, so any concurrent `execute_ring` observes either the entire old state or the entire new state — never a half-cleared dict or partial chain.
+3. Health check runs against the new live state. On failure: snap back atomically (four pointer assignments) and unload the failed new instances.
+4. On success: stash old rings as the rollback target, then `on_unload` superseded instances.
+
+Refactor scope:
+- `_load_plugin` now accepts target dicts as kwargs (`rings`, `meta`, `instances`, `stats`) so it can write into a fresh state during hot-swap. Default-None preserves the previous self-mutating behavior for direct callers (e.g., `install_plugin`).
+- `load_plugins()` (startup path) became a thin wrapper around `_build_plugin_state()` + four assignments — same external behavior, internally clean.
+- Manifest-merge logic extracted to `_read_merged_manifest()`.
+
+3 regression tests in `tests/test_plugin_engine.py`:
+- `test_hot_swap_build_failure_preserves_live_state` — build raises → all four pointers `is`-identical, p1 still loaded
+- `test_hot_swap_no_partial_clear_window` — during build, `self.rings[PRE_FLIGHT]` still has the old plugin (wasn't pre-cleared)
+- `test_hot_swap_health_check_failure_rolls_back_atomically` — post-swap health check failure → rollback restores all four pointers identically
+
+1123/1123 unit tests green.
+
+Fourth of 5 P0 critical fixes from the 360° audit.
+
+---
+
 ## [1.21.34] — 2026-04-25
 
 ### P0-3 (correctness) — Lock around `session_memory` mutations
