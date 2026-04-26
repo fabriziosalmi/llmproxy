@@ -2,6 +2,24 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.40] — 2026-04-25
+
+### Refactor — Extract small helpers from `proxy/rotator.py` (split 1/3)
+
+First slice of the rotator-split priority. Pulled three pure-function helpers out of `ProxyOrchestrator` into focused modules:
+
+- **`proxy/config_loader.py`** — `load_config(path)`, `compute_config_hash(path)`. The orchestrator's `_load_config` / `_compute_config_hash_sync` are now 2-line shims.
+- **`proxy/auth_helpers.py`** — `resolve_api_keys(config)`, `verify_api_key(token, valid_keys)`. The constant-time verifier (P0-2) is now reusable and unit-testable without instantiating an orchestrator.
+- **`proxy/http_session.py`** — `build_http_session(config)`. The aiohttp.ClientSession constructor is isolated; the orchestrator keeps the session cache + lock.
+
+Also dropped 3 now-unused imports (`hmac`, `yaml`, `SecretManager`) from `rotator.py`.
+
+`rotator.py`: 702 → 652 lines. No behavior change. 1141/1141 unit tests green.
+
+Two more slices to come: `seeding.py` next, then `request_pipeline.py` for the 220-line `proxy_request` method.
+
+---
+
 ## [1.21.39] — 2026-04-25
 
 ### P1-3 (correctness) — Forwarder picks up hot-reloaded config
