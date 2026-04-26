@@ -508,6 +508,39 @@ tr {
     will-change: transform, opacity;
 }
 
+/* O.2 — Subtle "alive" affordance for status dots and cards.
+ * Used on success-intent badges (e.g. Endpoint Live, sidebar proxy active)
+ * and on the surrounding card to give a premium "breathing" cue without
+ * triggering a flashy alarm-style animation. The 2.4s period is slow
+ * enough to read as life, fast enough to register at glance. */
+@keyframes llm-pulse-soft {
+    0%, 100% { opacity: 0.9;  transform: scale(1); }
+    50%      { opacity: 0.45; transform: scale(0.85); }
+}
+.pulse-live {
+    animation: llm-pulse-soft 2.4s ease-in-out infinite;
+    transform-origin: center;
+}
+/* Shadow on cards whose endpoint is currently Live — a faint emerald halo
+ * that reads as "this surface is healthy" without competing with the
+ * glassmorphism. Inset shadow softens the inner edge; outer is the halo. */
+.glow-live {
+    box-shadow:
+        inset 0 0 24px rgba(16, 185, 129, 0.08),
+        0 0 16px rgba(16, 185, 129, 0.06);
+}
+/* Light theme — the same emerald tint, but a touch stronger so it stays
+ * visible against a bright substrate. */
+html.theme-light .glow-live {
+    box-shadow:
+        inset 0 0 24px rgba(16, 185, 129, 0.12),
+        0 0 16px rgba(16, 185, 129, 0.10);
+}
+/* Honor user motion preference — disable the breath if the OS asks. */
+@media (prefers-reduced-motion: reduce) {
+    .pulse-live { animation: none; }
+}
+
 /* 7. Explain-target affordance — elements with data-explain become inspectable.
    Subtle dotted underline signals the status badge is actionable without making
    every <span> look like a link. */

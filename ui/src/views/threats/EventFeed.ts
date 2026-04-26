@@ -232,16 +232,22 @@ export class ThreatEventFeed {
     }
 
     private renderStatus(): void {
-        const map: Record<EventFeedStatus, { label: string; intent: BadgeIntent; dot?: boolean }> = {
+        // O.2: pulse the dot on `streaming` (live, healthy) and `connecting`
+        // (still establishing) — the SSE feed is "actively in motion".
+        // reconnecting stays still (warning intent) so it reads as alarm,
+        // not heartbeat.
+        const map: Record<EventFeedStatus, { label: string; intent: BadgeIntent; dot?: boolean; pulse?: boolean }> = {
             idle: { label: 'idle', intent: 'neutral' },
-            connecting: { label: 'connecting', intent: 'info', dot: true },
-            streaming: { label: this.deps.windowLabel, intent: 'success', dot: true },
+            connecting: { label: 'connecting', intent: 'info', dot: true, pulse: true },
+            streaming: { label: this.deps.windowLabel, intent: 'success', dot: true, pulse: true },
             error: { label: 'disconnected', intent: 'danger' },
             reconnecting: { label: 'reconnecting', intent: 'warning', dot: true },
             unauthenticated: { label: 'awaiting auth', intent: 'neutral' },
         };
         const cfg = map[this.status];
-        this.statusEl.replaceChildren(createBadge({ label: cfg.label, intent: cfg.intent, dot: cfg.dot, size: 'sm' }));
+        this.statusEl.replaceChildren(
+            createBadge({ label: cfg.label, intent: cfg.intent, dot: cfg.dot, pulse: cfg.pulse, size: 'sm' }),
+        );
     }
 
     private visibleEvents(): { events: SecurityEvent[]; mutedCount: number } {
