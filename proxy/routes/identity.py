@@ -44,8 +44,7 @@ def create_router(agent) -> APIRouter:
                     "roles": identity.roles,
                     "permissions": list(agent.rbac.get_permissions_for_roles(identity.roles)),
                 }
-        valid_keys = agent._get_api_keys()
-        if token in valid_keys:
+        if agent._verify_api_key(token):
             return {
                 "authenticated": True,
                 "provider": "api_key",

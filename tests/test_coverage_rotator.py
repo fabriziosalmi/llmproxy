@@ -57,6 +57,33 @@ class TestRotatorApiKeys:
             assert "sk-proxy-test2" in keys
             assert len(keys) == 2
 
+    def test_verify_api_key_constant_time_match(self):
+        with patch.dict(os.environ, {
+            "LLM_PROXY_API_KEYS": "sk-proxy-test1,sk-proxy-test2",
+        }):
+            agent = _make_rotator()
+            assert agent._verify_api_key("sk-proxy-test1") is True
+            assert agent._verify_api_key("sk-proxy-test2") is True
+
+    def test_verify_api_key_rejects_invalid(self):
+        with patch.dict(os.environ, {
+            "LLM_PROXY_API_KEYS": "sk-proxy-test1,sk-proxy-test2",
+        }):
+            agent = _make_rotator()
+            assert agent._verify_api_key("") is False
+            assert agent._verify_api_key("sk-proxy-wrong") is False
+            # Prefix should NOT match — full equality required
+            assert agent._verify_api_key("sk-proxy-test") is False
+            # Suffix beyond a real key should NOT match
+            assert agent._verify_api_key("sk-proxy-test11") is False
+
+    def test_verify_api_key_no_keys_configured(self):
+        with patch.dict(os.environ, {"LLM_PROXY_API_KEYS": ""}):
+            agent = _make_rotator()
+            # Empty key set: every input — including empty — must reject.
+            assert agent._verify_api_key("anything") is False
+            assert agent._verify_api_key("") is False
+
 
 class TestRotatorBudget:
 
