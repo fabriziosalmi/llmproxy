@@ -2,6 +2,30 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.21] — 2026-04-26
+
+### O.4 — Native SVG Traffic Flow on the Threats tab
+
+The "killer feature" pitch from the design audit, executed **without React Flow / d3-sankey / any new dep**. Pure SVG, ~250 LoC, ships in the threats chunk (no main-bundle bloat).
+
+Four-column logical view of the security pipeline: **Clients → Guards → Router → Providers**.
+
+**`renderTrafficFlow(host, data, opts?)`** — 800×360 viewBox SVG with column headers + per-state node colors:
+- `live` — emerald, halo + `.pulse-live`
+- `idle` — slate, no animation
+- `blocked` — rose, halo + `.pulse-live` (Firewall when sigs are firing, circuits in `HALF_OPEN`)
+- `down` — rose-dimmed (circuit `OPEN`, firewall `OFF`)
+
+Edges are cubic-bezier curves; their stroke flips rose-tinted when the destination is blocked/down — at-a-glance "what's catching traffic and what's failing".
+
+`_buildFlowData(promText, guards)` derives the shape from inputs the orchestrator already polls (`extractMetric` for clients, `guards.features` for toggles, `guards.circuit_breakers` for providers). Onboarding state (zero endpoints) renders a placeholder so the diagram never collapses.
+
+**Honest scope**: this is the LOGICAL pipeline view. Per-edge token volume (true Sankey ribbon proportionality) is a follow-on once the backend exposes per-stage flow counters.
+
+7 new TrafficFlow tests + 291/291 unit tests green.
+
+---
+
 ## [1.21.20] — 2026-04-26
 
 ### O.3 — Copy/paste-to-prod snippets on model Inspect
