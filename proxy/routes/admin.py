@@ -191,6 +191,56 @@ def create_router(agent) -> APIRouter:
         _check_admin_auth(request)
         return _routing_block()
 
+    # ── Rate-limit presets (N.6) ──
+
+    @router.get("/api/v1/rate-limit/config")
+    async def get_rate_limit_config(request: Request):
+        """Live rate-limit config: enabled flag + active preset (if any) +
+        the rpm/burst the limiter is currently serving."""
+        _check_admin_auth(request)
+        from core.rate_limiter import RateLimitMiddleware, RATE_LIMIT_PRESETS
+        block: dict = {"presets": RATE_LIMIT_PRESETS}
+        if RateLimitMiddleware.instance is not None:
+            block.update(RateLimitMiddleware.instance.current_config())
+        else:
+            # Fallback when the middleware was never instantiated (tests, no-app).
+            cfg = agent.config.get("rate_limiting", {})
+            block.update({
+                "enabled": cfg.get("enabled", False),
+                "preset": None,
+                "requests_per_minute": cfg.get("requests_per_minute", 60),
+                "burst": cfg.get("burst", 10),
+            })
+        return block
+
+    @router.post("/api/v1/rate-limit/preset")
+    async def set_rate_limit_preset(request: Request):
+        """Apply a named rate-limit preset (strict / normal / relaxed) at
+        runtime. Existing per-IP buckets are flushed so the new caps take
+        effect immediately. Persists to the store, restart-safe."""
+        _check_admin_auth(request)
+        from core.rate_limiter import RateLimitMiddleware, RATE_LIMIT_PRESETS
+        data = await request.json()
+        name = (data.get("preset") or "").lower().strip()
+        if name not in RATE_LIMIT_PRESETS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown preset '{name}'. Valid: {list(RATE_LIMIT_PRESETS)}",
+            )
+        if RateLimitMiddleware.instance is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Rate-limit middleware not initialised — preset cannot be applied",
+            )
+        applied = await RateLimitMiddleware.instance.apply_preset(name)
+        await agent.store.set_state("rate_limit:preset", name)
+        await agent._add_log(
+            f"SYSTEM: Rate-limit preset → {name} "
+            f"({applied['requests_per_minute']}/min, burst={applied['burst']})",
+            level="SYSTEM",
+        )
+        return {"preset": name, **applied}
+
     @router.post("/api/v1/routing/cost-weight")
     async def set_routing_cost_weight(request: Request):
         """Update the cost-bias weight at runtime.
