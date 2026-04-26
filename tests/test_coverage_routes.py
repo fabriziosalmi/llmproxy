@@ -33,24 +33,35 @@ def _make_mock_agent():
 
     store = InMemoryRepository()
     agent.store = store
-    agent._session = None
+    # Session: real-enough mock so M.3 /health classifies session as "ok".
+    session = MagicMock()
+    session.closed = False
+    agent._session = session
     agent.total_cost_today = 1.23
     agent._start_time = time.time() - 120  # 2 min uptime
     agent._version = "1.8.0"
 
-    # Circuit manager mock
+    # Circuit manager mock — get_all_states returns a dict so /health can
+    # iterate it without exploding on MagicMock magic.
     breaker = MagicMock()
     breaker.can_execute = AsyncMock(return_value=True)
     breaker.report_success = AsyncMock()
     breaker.report_failure = AsyncMock()
     agent.circuit_manager = MagicMock()
-    agent.circuit_manager.get_breaker.return_value = breaker
+    agent.circuit_manager.get_breaker = AsyncMock(return_value=breaker)
+    agent.circuit_manager.get_all_states = MagicMock(return_value={})
 
-    # Plugin manager mock
+    # Plugin manager mock — rings is a real dict so /health's iteration works.
     agent.plugin_manager = MagicMock()
     agent.plugin_manager._plugin_instances = {}
     agent.plugin_manager._ring_traces = []
     agent.plugin_manager._ring_traces_index = {}
+    agent.plugin_manager.rings = {}
+
+    # Cache backend — enabled by default so /health classifies as "ok".
+    agent.cache_backend = MagicMock()
+    agent.cache_backend._enabled = True
+    agent.cache_backend.stats = AsyncMock(return_value={"size": 0, "hits": 0, "misses": 0})
 
     # Log queue
     agent.log_queue = asyncio.Queue(maxsize=100)
@@ -87,6 +98,76 @@ class TestTelemetryRoutes:
         assert data["pool_healthy"] == 0
         assert "uptime_seconds" in data
         assert "budget_today_usd" in data
+        # M.3 — components block surfaces per-subsystem state.
+        assert set(data["components"].keys()) == {
+            "endpoints", "store", "cache", "plugins", "session", "log_queue",
+        }
+        assert data["components"]["session"]["status"] == "ok"
+        assert data["components"]["store"]["status"] == "ok"
+        assert data["components"]["cache"]["status"] == "ok"
+
+    @pytest.mark.asyncio
+    async def test_health_session_down_marks_overall_down(self):
+        """Session is critical — losing it must propagate to overall status."""
+        from proxy.routes.telemetry import create_router
+        app, agent = _make_app_with_routes(create_router)
+        agent._session = None  # aiohttp not initialized / closed
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/health")
+        data = resp.json()
+        assert data["status"] == "down"
+        assert data["components"]["session"]["status"] == "down"
+        # HTTP status stays 200 — overall health is in the body so existing
+        # pollers don't break their alerting on a 503.
+        assert resp.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_health_cache_disabled_marks_degraded(self):
+        """Cache disabled is "degraded", not "down" — proxy still serves."""
+        from proxy.routes.telemetry import create_router
+        app, agent = _make_app_with_routes(create_router)
+        agent.cache_backend._enabled = False
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/health")
+        data = resp.json()
+        assert data["status"] == "degraded"
+        assert data["components"]["cache"]["status"] == "degraded"
+
+    @pytest.mark.asyncio
+    async def test_health_circuit_open_marks_endpoints_degraded(self):
+        """One open breaker should not panic the proxy, but should be visible."""
+        from proxy.routes.telemetry import create_router
+        app, agent = _make_app_with_routes(create_router)
+        agent.circuit_manager.get_all_states.return_value = {
+            "openai": {"state": "open", "failure_count": 5, "failure_threshold": 5},
+            "anthropic": {"state": "closed", "failure_count": 0, "failure_threshold": 5},
+        }
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/health")
+        data = resp.json()
+        assert data["status"] == "degraded"
+        assert data["components"]["endpoints"]["status"] == "degraded"
+        assert data["components"]["endpoints"]["circuits_open"] == 1
+
+    @pytest.mark.asyncio
+    async def test_health_log_queue_saturation_marks_degraded(self):
+        """Log queue near full → DLQ overflow imminent → degraded."""
+        from proxy.routes.telemetry import create_router
+        app, agent = _make_app_with_routes(create_router)
+        # Fill the queue to 85% (>= 0.8 threshold).
+        for _ in range(85):
+            agent.log_queue.put_nowait({"level": "INFO", "message": "x"})
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/health")
+        data = resp.json()
+        assert data["components"]["log_queue"]["status"] == "degraded"
+        assert data["components"]["log_queue"]["depth"] == 85
+        assert data["components"]["log_queue"]["max"] == 100
+        assert data["status"] == "degraded"
 
     @pytest.mark.asyncio
     async def test_metrics_endpoint(self):
