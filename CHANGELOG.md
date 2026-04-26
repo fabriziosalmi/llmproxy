@@ -2,6 +2,37 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.46] — 2026-04-25
+
+### Draconian-audit P1 bundle (4 fixes)
+
+End-of-session verification pass spawned 4 parallel audit agents covering backend, API, frontend, and docs. After spot-checking each claim (7 of ~30 turned out to be false positives — e.g. circuit_breaker did transition correctly, threat_ledger window-cutoff order was right) and uncovering one P1 the agents missed, the surviving real findings landed in a single focused commit:
+
+**Fix 1 — PRE_FLIGHT block path returned `None` instead of an HTTPException** (caught by my own spot-check, missed by the audit). When a plugin in PRE_FLIGHT issues `action=block` (e.g. `budget_guard`, `loop_breaker`), the plugin engine sets `stop_chain=True` + `ctx.error` + `_block_status` but does NOT set `ctx.response`. The handler at `proxy/request_pipeline.py:107-115` only had a code path for the cache-hit case (`_cache_hit=True`) — the block case fell through to `return ctx.response`, returning `None` to the route, which FastAPI surfaced as a generic 500. **Real impact**: budget-exceeded blocks intended as 402 Payment Required were emitted as 500 Internal Server Error. Fix splits the cache-hit path from the block path; the latter raises `HTTPException(_block_status, ctx.error)` so plugins control the surfaced status code.
+
+**Fix 2 — README test count was stale by 25%.** Badge + body claimed "942 passing"; actual count after 14 commits today is **1183** (now 1192 with this bundle's tests). Updated all three occurrences (`README.md:7,310,316`).
+
+**Fix 3 — `/api/v1/identity/exchange` leaked JWT validation reasons.** Pre-fix: `raise HTTPException(401, detail=str(e))` exposed "Token expired", "Invalid issuer", "Invalid audience", etc. to unauthenticated callers — modest info leak telling an attacker which validation step failed. Post-fix: response is generic `"Invalid token"`; the precise reason is logged server-side at WARNING level for ops debugging. The "unrecognized provider" path was also unified to the same generic message so the two failure modes can't be distinguished by an attacker. (`proxy/routes/identity.py:67`)
+
+**Fix 4 — GDPR erase: audit-before-delete (atomicity).** Pre-fix order was `delete → log_audit`. If `log_audit` failed after the delete, the GDPR-required Article 30 trail was silently missing. Post-fix: log the audit row with `phase=intent` + status=202 BEFORE the destructive delete. If pre-audit fails the delete is refused with 503 (fail-closed). If delete fails after pre-audit, the trail still records the request was received — operator investigates from the audit log. (`proxy/routes/gdpr.py:36-110`)
+
+9 regression tests in `tests/test_p1_bundle_v1_21_46.py`:
+- PRE_FLIGHT block surfaces 402 (not 500) with `_block_status=402`
+- PRE_FLIGHT block defaults to 403 when `_block_status` is unset
+- PRE_FLIGHT cache-hit path still works (the legitimate stop-chain case)
+- Identity exchange returns generic "Invalid token" + logs precise reason at WARNING
+- Identity exchange unrecognized-provider also returns generic message (timing-distinguishable failure modes unified)
+- GDPR erase: audit row written BEFORE delete (call-order asserted)
+- GDPR erase: pre-audit failure → 503, delete NEVER runs (fail-closed)
+- GDPR erase: post-audit delete failure → audit row persists, caller gets 500
+- GDPR erase: audit metadata carries `phase=intent` so the trail is unambiguous
+
+**Honest scope note**: 7 audit-claimed P1s were verified false positives and dropped from the bundle (circuit-breaker half-open transitions correctly; threat_ledger window-cutoff order is right; background.py:182 already has the `iscoroutine + await` guard; sql_store query_spend doesn't accept the offset parameter the agent invented; OIDC client_id+issuer are public identifiers by design, not secrets; plugin_engine block doesn't leak body — request_pipeline checks stop_chain after every ring; UI cloneNode+replaceChild deliberately drops handlers, not a leak). Reporting them so future sessions don't waste effort re-auditing them.
+
+1192/1192 unit tests green.
+
+---
+
 ## [1.21.45] — 2026-04-25
 
 ### Cost routing — Tier A polish (formula tests + pricing visibility + savings estimate)
