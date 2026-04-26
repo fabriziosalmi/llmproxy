@@ -12,12 +12,20 @@ import { mountConfigWarnings, type ConfigWarningsApi } from './ConfigWarnings';
 import { mountConfigYaml, type ConfigYamlApi } from './ConfigYaml';
 import { mountDataExport, type ExportApi } from './DataExport';
 import { mountIdentity, type IdentityApi } from './Identity';
+import { mountRateLimit, type RateLimitApi } from './RateLimit';
 import { mountRbacMatrix, type RbacApi } from './RbacMatrix';
 import { mountSystemInfo, type SystemInfoApi } from './SystemInfo';
 import { mountWebhooks, type WebhooksApi } from './Webhooks';
 
 export interface SettingsApi
-    extends SystemInfoApi, IdentityApi, RbacApi, WebhooksApi, ExportApi, ConfigWarningsApi, ConfigYamlApi {}
+    extends SystemInfoApi,
+        IdentityApi,
+        RbacApi,
+        WebhooksApi,
+        ExportApi,
+        ConfigWarningsApi,
+        ConfigYamlApi,
+        RateLimitApi {}
 
 export interface MountSettingsOptions {
     api: SettingsApi;
@@ -34,6 +42,8 @@ export interface SettingsHosts {
     system: HTMLElement | null;
     /** O.5 — Active config (YAML) read-only viewer. Optional so older shells still work. */
     configYaml?: HTMLElement | null;
+    /** P.1 — Rate-limit preset picker. Optional. */
+    rateLimit?: HTMLElement | null;
 }
 
 export function mountSettingsView(hosts: SettingsHosts, opts: MountSettingsOptions): () => Promise<void> {
@@ -49,6 +59,10 @@ export function mountSettingsView(hosts: SettingsHosts, opts: MountSettingsOptio
     if (hosts.export) refreshes.push(mountDataExport(hosts.export, opts.api));
     if (hosts.system) refreshes.push(mountSystemInfo(hosts.system, opts.api));
     if (hosts.configYaml) refreshes.push(mountConfigYaml(hosts.configYaml, opts.api));
+    if (hosts.rateLimit) {
+        const handle = mountRateLimit(hosts.rateLimit, opts.api, opts.toast);
+        refreshes.push(handle.refresh);
+    }
 
     return async function refreshAll(): Promise<void> {
         await Promise.allSettled(refreshes.map((fn) => fn()));
@@ -58,6 +72,7 @@ export function mountSettingsView(hosts: SettingsHosts, opts: MountSettingsOptio
 export { mountConfigWarnings } from './ConfigWarnings';
 export { mountConfigYaml } from './ConfigYaml';
 export { mountIdentity } from './Identity';
+export { mountRateLimit } from './RateLimit';
 export { mountRbacMatrix } from './RbacMatrix';
 export { mountWebhooks } from './Webhooks';
 export { mountDataExport } from './DataExport';
