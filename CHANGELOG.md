@@ -2,6 +2,24 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.26] — 2026-04-26
+
+### Q.1 — UI consumer for routing cost_weight slider (K.1 backend)
+
+K.1 backend has been live since 1.21.1. UI surface queued — now an operator slides cost_weight 0.0-1.0 from Settings instead of `curl`.
+
+`mountRoutingConfig(host, api, toast?)`:
+- Big-mono current value + helper line "0.00 = ignore cost · 1.00 = full bias".
+- Native `<input type="range">` (free a11y + keyboard nav).
+- **Submit-on-`change` (release), not `input`**: dragging doesn't spam POSTs. Live big-number preview during drag.
+- 3 quick-set buttons (`Performance` 0.0 · `Smart` 0.3 · `Cost-first` 0.8). Active = `variant=primary`.
+- POST failure reverts slider to persisted value + error toast. Inflight guard.
+- `priority_mode=true` → slider disabled + amber "Priority Steering ON" notice (cost weight isn't used in priority mode; pretending it's editable would mislead).
+
+9 new tests; 328/328 unit tests green.
+
+---
+
 ## [1.21.25] — 2026-04-26
 
 ### P.3 — UI consumer for `/health` components panel (M.3 backend)
