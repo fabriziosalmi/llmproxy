@@ -2,6 +2,40 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.44] — 2026-04-25
+
+### Budget persistence — End-to-end tests + hydration helper extracted
+
+Strategic priority #3. Tier 1 (1.21.43) closed the leaky paths so streaming and embeddings actually enqueue persistence; this commit proves the **full pipeline** survives restart end-to-end.
+
+Pipeline tested:
+
+```
+charge_and_persist
+  → rotator._pending_writes queue
+    → drain_pending_writes (the 0.25s flush loop)
+      → store.set_state
+        → survives restart (new rotator hydrates from store)
+```
+
+To make the restart side testable, extracted `hydrate_daily_total(store) → (total, today_iso)` into `proxy/budget.py`. This was previously 8 lines inlined in `ProxyOrchestrator.setup()` — now a 2-line shim there. Owns the daily-rollover policy: matches today's date → restore saved total; otherwise → reset to 0 and persist today's date.
+
+8 E2E tests in `tests/test_budget_persistence_e2e.py`:
+- streaming-style charge reaches store via charge → drain → set_state
+- multiple charges accumulate to the running total
+- **negative control**: charge without drain leaves store unchanged (proves test setup distinguishes "enqueued" from "persisted")
+- restart restores persisted total
+- **failure-mode demo**: restart after un-drained charge loses the spend (the gap that motivated Tier 1; small in production due to 0.25s flush)
+- yesterday's state resets to 0 on boot + persists today's date for the next process
+- empty store → first boot initializes today's state
+- 100 concurrent charges → exact running total survives restart
+
+The stub agent in the test mirrors only the orchestrator's budget surface (lock, queue, store, hydrate-on-init) so the tests exercise the real plumbing without spinning up the full `ProxyOrchestrator` and its 20+ subsystems. Test runtime: 0.11s for the full file.
+
+1155/1155 unit tests green.
+
+---
+
 ## [1.21.43] — 2026-04-25
 
 ### Budget persistence — Tier 1 (streaming + embeddings now persist)
