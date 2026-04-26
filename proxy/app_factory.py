@@ -121,8 +121,7 @@ def create_app(agent) -> FastAPI:
             # from query parameter as fallback for streaming endpoints.
             if not token:
                 token = request.query_params.get("token", "")
-            valid_keys = agent._get_api_keys()
-            if not token or token not in valid_keys:
+            if not agent._verify_api_key(token):
                 from fastapi.responses import JSONResponse
                 logger.warning(
                     f"Global auth: rejected {request.method} {path} "

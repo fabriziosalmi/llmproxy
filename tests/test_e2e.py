@@ -134,6 +134,17 @@ class LightweightAgent:
     def _get_api_keys(self):
         return []
 
+    def _verify_api_key(self, token: str) -> bool:
+        import hmac as _hmac
+        if not token:
+            return False
+        tb = token.encode("utf-8", errors="replace")
+        matched = False
+        for k in self._get_api_keys():
+            if _hmac.compare_digest(tb, k.encode("utf-8", errors="replace")):
+                matched = True
+        return matched
+
     async def _add_log(self, message, level="INFO", metadata=None):
         """Lightweight log — mirrors RotatorAgent._add_log."""
         import time

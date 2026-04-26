@@ -62,8 +62,7 @@ def create_router(agent) -> APIRouter:
                 raise HTTPException(status_code=401, detail="Unauthorized: Empty token")
 
             if not agent.identity.enabled:
-                valid_keys = agent._get_api_keys()
-                if token not in valid_keys:
+                if not agent._verify_api_key(token):
                     MetricsTracker.track_auth_failure("invalid_key")
                     raise HTTPException(status_code=401, detail="Unauthorized: Invalid API key")
 
