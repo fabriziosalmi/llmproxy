@@ -17,6 +17,7 @@ import { renderFirewallStats } from './sections/FirewallStats';
 import { renderRingLatencyBars, renderTtft } from './sections/RingLatency';
 import { renderRingTimeline } from './sections/RingTimeline';
 import { mountThreatChart, type ThreatChartHandle } from './sections/ThreatChart';
+import { renderTrafficFlow, type FlowData, type FlowNode } from './sections/TrafficFlow';
 import type { GuardsStatus, LatencyMetrics, TimelinePayload } from './sections/types';
 
 interface ThreatsApi {
@@ -85,6 +86,7 @@ export interface SectionsHosts {
     ttft: HTMLElement | null;
     ringTimeline: HTMLElement | null;
     chartCanvas: HTMLCanvasElement | null;
+    trafficFlow?: HTMLElement | null;
 }
 
 export interface SectionsOptions {
@@ -141,6 +143,12 @@ export function mountThreatsSections(hosts: SectionsHosts, opts: SectionsOptions
         if (hosts.ringTimeline && timeline) {
             renderRingTimeline(hosts.ringTimeline, timeline.traces ?? []);
         }
+        // O.4 — TrafficFlow uses /metrics + guards-status + the live registry
+        // already in the store. Build a logical view of "Clients → Guards →
+        // Router → Providers" with current state per node.
+        if (hosts.trafficFlow) {
+            renderTrafficFlow(hosts.trafficFlow, _buildFlowData(promText, guards));
+        }
     };
 
     void refresh();
@@ -154,6 +162,83 @@ export function mountThreatsSections(hosts: SectionsHosts, opts: SectionsOptions
     return () => {
         stop();
         chart?.destroy();
+    };
+}
+
+// ── O.4 — Build the FlowData shape from the polled inputs the section
+// already has. The view is logical, not a true Sankey: each node carries
+// state (live / idle / blocked / down) so the SVG can color + pulse;
+// we don't yet have per-edge token counts (queued for backend hourly
+// buckets). The point now is "operator sees the pipeline and what's
+// active".
+function _buildFlowData(promText: string, guards: GuardsStatus | null): FlowData {
+    const reqs = extractMetric(promText, 'llm_proxy_requests_total');
+    const blocked = extractMetric(promText, 'llm_proxy_injection_blocked_total');
+
+    // Guards — surface the four canonical ones we always show in the Guards
+    // tab. Each can be enabled / disabled / blocking.
+    const features = guards?.features ?? {};
+    const blockBySig = guards?.firewall?.block_by_signature ?? {};
+    const guardNodes: FlowNode[] = [
+        {
+            id: 'firewall',
+            label: 'Firewall',
+            sub: guards?.firewall?.enabled !== false ? 'WAF · L1' : 'OFF',
+            state:
+                guards?.firewall?.enabled === false
+                    ? 'down'
+                    : Object.keys(blockBySig).length > 0
+                      ? 'blocked'
+                      : 'live',
+        },
+        {
+            id: 'injection_guard',
+            label: 'Injection',
+            sub: features.injection_guard !== false ? 'L2' : 'OFF',
+            state: features.injection_guard !== false ? 'live' : 'idle',
+        },
+        {
+            id: 'pii_masker',
+            label: 'PII Mask',
+            sub: 'L2',
+            state: 'live',
+        },
+        {
+            id: 'link_sanitizer',
+            label: 'Link Scrub',
+            sub: features.link_sanitizer !== false ? 'L4' : 'OFF',
+            state: features.link_sanitizer !== false ? 'live' : 'idle',
+        },
+    ];
+
+    // Providers — derive from circuit_breakers. Each entry maps to one
+    // provider node with live (closed circuit), blocked (open), or down state.
+    const cbs = guards?.circuit_breakers ?? {};
+    const providerNodes: FlowNode[] = Object.keys(cbs).map((id) => {
+        const state = (cbs[id]?.state ?? 'closed').toLowerCase();
+        return {
+            id,
+            label: id.length > 14 ? id.slice(0, 12) + '…' : id,
+            sub: state === 'closed' ? 'LIVE' : state.toUpperCase(),
+            state: state === 'open' ? 'down' : state === 'half_open' ? 'blocked' : 'live',
+        };
+    });
+    if (providerNodes.length === 0) {
+        // Onboarding state — no endpoints registered yet.
+        providerNodes.push({ id: 'none', label: 'No endpoints', sub: 'add one', state: 'idle' });
+    }
+
+    return {
+        clientsLabel: reqs > 0 ? reqs.toLocaleString() : '—',
+        clientsSub: reqs > 0 ? `req · ${blocked > 0 ? `${blocked} blk` : 'no blk'}` : 'no traffic yet',
+        guards: guardNodes,
+        router: {
+            id: 'router',
+            label: 'Router',
+            sub: 'smart',
+            state: 'live',
+        },
+        providers: providerNodes,
     };
 }
 
