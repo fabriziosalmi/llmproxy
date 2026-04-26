@@ -5,15 +5,11 @@ import { store } from './services/store.js';
 import { api } from './services/api.js';
 import { renderSidebar, initSidebar } from './components/sidebar.js';
 import { renderContent, initNavigation } from './components/content.js';
-import { renderRegistry, fetchRegistry, initRegistry } from './components/registry.js';
+// R.1 — Threats stays eager (default tab, KPIs visible at first paint). The
+// other 8 secondary tab modules are lazy-loaded on first nav-into-tab via
+// `_tabLoaders` below; static imports for them have been removed so Vite
+// emits each as its own chunk.
 import { initThreats } from './components/threats.js';
-import { initGuards, renderGuards } from './components/guards.js';
-import { initSettings } from './components/settings.js';
-import { initLogs } from './components/logs.js';
-import { initPlugins } from './components/plugins.js';
-import { initModels } from './components/models.js';
-import { initAnalytics } from './components/analytics.js';
-import { initSecurity, renderSecurity } from './components/security.js';
 import { auth } from './services/auth.js';
 import { toast } from './services/toast.js';
 import { initExplain } from './src/services/explain';
@@ -49,15 +45,93 @@ window.addEventListener('DOMContentLoaded', () => {
 // Global state listener — only re-render what changed (audit #24)
 let _prevState = { ...store.state };
 let _rumRef = null; // Filled lazily by initTelemetry() — no-op until then.
+
+// R.1 — Lazy module references. Populated as the user navigates into a
+// secondary tab; the store subscriber checks them with optional chaining
+// so a state-tick before first-load is a clean no-op (no exception, no
+// silent failure).
+const _lazy = { registry: null, guards: null, security: null };
+const _loadedTabs = new Set();
+// Each loader is a thunk so Vite can statically analyse the import path
+// and emit one chunk per component (template-string imports defeat the
+// static analysis pass in Rollup/Vite).
+const _tabLoaders = {
+    endpoints: async () => {
+        const m = await import('./components/registry.js');
+        _lazy.registry = m;
+        m.initRegistry();
+        if (store.state.registry?.length) m.renderRegistry();
+    },
+    guards: async () => {
+        const m = await import('./components/guards.js');
+        _lazy.guards = m;
+        m.initGuards();
+        m.renderGuards();
+    },
+    settings: async () => {
+        const m = await import('./components/settings.js');
+        m.initSettings();
+    },
+    logs: async () => {
+        const m = await import('./components/logs.js');
+        m.initLogs();
+    },
+    plugins: async () => {
+        const m = await import('./components/plugins.js');
+        m.initPlugins();
+    },
+    models: async () => {
+        const m = await import('./components/models.js');
+        m.initModels();
+    },
+    analytics: async () => {
+        const m = await import('./components/analytics.js');
+        m.initAnalytics();
+    },
+    security: async () => {
+        const m = await import('./components/security.js');
+        _lazy.security = m;
+        m.initSecurity();
+        m.renderSecurity();
+    },
+};
+function _ensureTabLoaded(tab) {
+    if (_loadedTabs.has(tab)) return;
+    const loader = _tabLoaders[tab];
+    if (!loader) return; // threats / unknown tab — no lazy chunk
+    _loadedTabs.add(tab);
+    loader().catch((e) => {
+        console.warn(`[lazy ${tab}] load failed:`, e);
+        _loadedTabs.delete(tab); // allow retry on next nav
+    });
+}
+
 store.subscribe((state) => {
     // Always update navigation/sidebar (cheap)
     renderSidebar();
     renderContent();
 
-    // Only re-render view-specific components when relevant state changes
-    if (state.registry !== _prevState.registry) renderRegistry();
-    if (state.features !== _prevState.features || state.proxyEnabled !== _prevState.proxyEnabled || state.priorityMode !== _prevState.priorityMode || state.firewall !== _prevState.firewall) renderGuards();
-    if (state.currentTab === 'security' && state.currentTab !== _prevState.currentTab) renderSecurity();
+    // R.1 — load the destination tab's chunk on first visit. Fires async;
+    // the visible tab content is HTML in index.html, so the user sees the
+    // tab structure immediately and the JS hydrates as soon as it lands.
+    if (state.currentTab !== _prevState.currentTab) {
+        _ensureTabLoaded(state.currentTab);
+    }
+
+    // Only re-render view-specific components when relevant state changes —
+    // safe-no-op until that tab's chunk has loaded.
+    if (state.registry !== _prevState.registry) _lazy.registry?.renderRegistry?.();
+    if (
+        state.features !== _prevState.features ||
+        state.proxyEnabled !== _prevState.proxyEnabled ||
+        state.priorityMode !== _prevState.priorityMode ||
+        state.firewall !== _prevState.firewall
+    ) {
+        _lazy.guards?.renderGuards?.();
+    }
+    if (state.currentTab === 'security' && state.currentTab !== _prevState.currentTab) {
+        _lazy.security?.renderSecurity?.();
+    }
 
     // Tab navigation telemetry — fires after the tab actually flipped, with
     // `from` threaded through by the rum facade. No-op until initTelemetry
@@ -235,19 +309,13 @@ async function init() {
         if (section) section.classList.add('flex');
     }
 
-    // Initialize UI components first — must work even without backend
+    // R.1 — only the eager-required modules run synchronously at boot.
+    // The other 8 secondary tabs are loaded by `_ensureTabLoaded` on first
+    // nav-into-tab (or via Cmd+K palette → store.update({ currentTab })).
     const initWrappers = [
         { name: 'sidebar', fn: initSidebar },
         { name: 'navigation', fn: initNavigation },
         { name: 'threats', fn: initThreats },
-        { name: 'guards', fn: initGuards },
-        { name: 'registry', fn: initRegistry },
-        { name: 'settings', fn: initSettings },
-        { name: 'logs', fn: initLogs },
-        { name: 'plugins', fn: initPlugins },
-        { name: 'models', fn: initModels },
-        { name: 'analytics', fn: initAnalytics },
-        { name: 'security', fn: initSecurity },
     ];
 
     initWrappers.forEach(w => {
@@ -257,6 +325,10 @@ async function init() {
             console.warn(`UI Component [${w.name}] failed to initialize:`, e);
         }
     });
+
+    // Boot the destination tab's chunk if the user landed deep-linked
+    // somewhere other than threats (URL hash like #/endpoints).
+    _ensureTabLoaded(store.state.currentTab);
 
     // Delegated handler for [data-explain] — attaches once on document.
     // Does NOT require per-component wiring; views just stamp the attribute
@@ -288,8 +360,19 @@ async function init() {
         console.warn("Backend unavailable — running in offline mode.", err);
     }
 
-    // Background refresh — pauses when page hidden (audit #13)
-    store.poll(fetchRegistry, 30000, 'endpoints');
+    // R.1 — Eager registry fetch loop. Inlined here (rather than dragging in
+    // the whole components/registry.js, 355 LoC) so the registry data lights
+    // up state.registry for callers that don't depend on the rendering
+    // surface — TrafficFlow on Threats, the Cmd+K palette's `>ep` resolver,
+    // anything else that reads `state.registry`. The render path is wired
+    // when the user first navigates to Endpoints.
+    async function _refreshRegistry() {
+        try {
+            const data = await api.fetchRegistry();
+            store.update({ registry: data });
+        } catch { /* offline — keep last good state */ }
+    }
+    store.poll(_refreshRegistry, 30000, 'endpoints');
 
     console.info("LLMPROXY Modular UI Environment: READY");
 }
