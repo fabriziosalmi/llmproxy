@@ -112,6 +112,7 @@ class ForwardingContext:
     the orchestrator builds this context once and hands it over.
     """
     config: dict = field(default_factory=dict)
+    config_provider: Callable[[], dict] | None = None
     circuit_manager: Any = None
     budget_lock: asyncio.Lock | None = None
     get_session: Callable[[], Awaitable[Any]] | None = None
@@ -120,7 +121,15 @@ class ForwardingContext:
 
 
 class RequestForwarder:
-    """Forwards requests to upstream LLM providers with fallback chain support."""
+    """Forwards requests to upstream LLM providers with fallback chain support.
+
+    Config sourcing: callers may pass either a static `config` dict (legacy,
+    no hot-reload) or a `config_provider` callable that returns the live agent
+    config on every read. The provider is the source of truth when both are
+    given — it's how the orchestrator wires hot-reload through. Without this,
+    rebinding `agent.config = new_dict` in the watcher silently leaves the
+    forwarder stuck on the boot-time config.
+    """
 
     def __init__(
         self,
@@ -132,25 +141,46 @@ class RequestForwarder:
         security: Any = None,
         *,
         ctx: ForwardingContext | None = None,
+        config_provider: Callable[[], dict] | None = None,
     ):
         if ctx is not None:
-            self.config = ctx.config
+            self._static_config = ctx.config
+            self._config_provider = ctx.config_provider
             self.circuit_manager = ctx.circuit_manager
             self._budget_lock = ctx.budget_lock
             self._get_session = ctx.get_session
             self._add_log = ctx.add_log
             self._security = ctx.security
         else:
-            self.config = config or {}
+            self._static_config = config or {}
+            self._config_provider = config_provider
             self.circuit_manager = circuit_manager
             self._budget_lock = budget_lock
             self._get_session = get_session
             self._add_log = add_log
             self._security = security
 
+    @property
+    def config(self) -> dict:
+        """Always returns the live config. Reads via provider when wired,
+        else falls back to the static dict passed at construction."""
+        return self._live_config()
+
+    def _live_config(self) -> dict:
+        if self._config_provider is not None:
+            try:
+                cfg = self._config_provider()
+                if cfg is not None:
+                    return cfg
+            except Exception:
+                # Defensive: provider failure shouldn't 500 the request path.
+                # Fall back to the last-known static config.
+                pass
+        return self._static_config
+
     def resolve_endpoint_for_provider(self, provider: str) -> Any:
         """Resolve the configured endpoint URL for a provider."""
-        endpoints_cfg = self.config.get("endpoints", {})
+        endpoints_cfg = self._live_config().get("endpoints", {})
         for ep_name, ep_config in endpoints_cfg.items():
             if ep_config.get("provider") == provider or ep_name == provider:
                 base_url = ep_config.get("base_url", "")
@@ -208,8 +238,8 @@ class RequestForwarder:
             "is_fallback": False,
         })
 
-        # Add fallback chain entries
-        chain = self.config.get("fallback_chains", {}).get(original_model, [])
+        # Add fallback chain entries (read live so config hot-reloads apply)
+        chain = self._live_config().get("fallback_chains", {}).get(original_model, [])
         for fb in chain:
             fb_target = self.resolve_endpoint_for_provider(fb["provider"])
             if fb_target:
