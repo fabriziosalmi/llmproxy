@@ -1,24 +1,30 @@
-"""LLMProxy — Budget charging + persistence helper.
+"""LLMProxy — Budget charging + persistence helpers.
 
-Single source of truth for "increment today's spend AND persist it". Used
-by every cost-charging path:
+Two responsibilities:
 
-  - request_pipeline.process_proxy_request (non-streaming charges)
-  - forwarder._handle_streaming finally block (streaming charges)
-  - routes/embeddings.create_router (embeddings charges)
-  - routes/chat.create_router (post-call persistence sweep)
+  1. `charge_and_persist(rotator, lock, amount)` — increment today's spend
+     atomically and enqueue persistence. Called by every cost-charging
+     site (forwarder streaming finally, embeddings cost block, …).
 
-Without the persistence step, a charge lives only in `rotator.total_cost_today`
-(in-memory) until either (a) a chat request happens to enqueue it via
-`agent.enqueue_write`, or (b) a graceful shutdown drains the queue. A
-crash between charge and persist loses the spend.
+  2. `hydrate_daily_total(store)` — read today's budget state on startup,
+     reset to 0 if the saved date is stale, return (total, today). Owns
+     the daily-rollover policy.
+
+Without (1), a charge lives only in `rotator.total_cost_today` until a
+chat request happens to enqueue it; a crash between charge and persist
+loses the spend.
+
+Without (2), the orchestrator's setup() inlined the same logic — split
+out so tests can exercise the hydration policy without spinning up a
+full orchestrator.
 """
 
 from __future__ import annotations
 
 import asyncio
+import datetime as _dt
 import logging
-from typing import Any
+from typing import Any, Tuple
 
 logger = logging.getLogger("llmproxy.budget")
 
@@ -48,3 +54,25 @@ async def charge_and_persist(
             )
         except Exception as e:  # noqa: BLE001 — never let persistence kill the request
             logger.debug(f"Budget enqueue skipped: {e}")
+
+
+async def hydrate_daily_total(store: Any) -> Tuple[float, str]:
+    """Restore today's budget on startup, applying the daily-rollover
+    policy.
+
+    Reads `budget:daily_date` from `store`:
+      - if it matches today's ISO date → return saved `budget:daily_total`
+      - otherwise → reset to 0.0, persist today's date + 0.0 total
+
+    Returns `(total, today_iso)`. The orchestrator stores both:
+    `total` → `self.total_cost_today`, `today_iso` → `self._budget_date`.
+    """
+    today = _dt.date.today().isoformat()
+    saved_date = await store.get_state("budget:daily_date", None)
+    if saved_date == today:
+        total = await store.get_state("budget:daily_total", 0.0)
+        return float(total), today
+    # Date changed (or first boot) — reset.
+    await store.set_state("budget:daily_date", today)
+    await store.set_state("budget:daily_total", 0.0)
+    return 0.0, today
