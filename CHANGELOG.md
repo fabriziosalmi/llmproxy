@@ -2,6 +2,26 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.47] — 2026-04-26
+
+### Docs — Public Docker image one-liner quickstart
+
+The GHCR image `ghcr.io/fabriziosalmi/llmproxy` has been pushing on every release since v1.0.0 but was set to **private visibility** by default — anonymous `docker pull` returned 401, so the README's `git clone + ./install.sh` was the only published path. After flipping the package to public on GHCR, the README quickstart now leads with a 30-second `docker run` one-liner that requires no clone, no install:
+
+```bash
+docker run --rm -p 8090:8090 \
+  -e LLM_PROXY_API_KEYS=sk-proxy-test \
+  ghcr.io/fabriziosalmi/llmproxy:latest
+```
+
+The git-clone path is preserved as the secondary "build from source / contribute" route. Time-to-first-success drops from ~5 minutes (clone + prerequisites + install.sh) to ~30 seconds (single `docker run`).
+
+Tags published on every release: `:latest`, `:1.21.47`, `:1.21`, plus per-commit SHA.
+
+No code change. Pure UX/onboarding improvement.
+
+---
+
 ## [1.21.46] — 2026-04-25
 
 ### Draconian-audit P1 bundle (4 fixes)
