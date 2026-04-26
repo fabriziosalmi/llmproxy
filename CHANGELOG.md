@@ -2,6 +2,21 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.30] — 2026-04-26
+
+### R.2 — Drawer mobile second pass
+
+J.4 made the drawer panel claim 100vw on phones, but the content INSIDE was still tight. Audit + four fixes:
+
+1. **Drilldown tab bar overflow** — 5 tabs × ~80px squeezed to multi-row at <640px. Fix: `flex-nowrap overflow-x-auto` + `shrink-0` on each tab. Also dropped the `sticky top-[48px]` magic-number anchor for `top-0` (header isn't a hard 48px anymore).
+2. **kv rows squeezed values to ~150px** on phones — `grid-cols-[110px_1fr]` reserved a fixed 110px label column. Fix: `grid-cols-1 sm:grid-cols-[110px_1fr]` — stacks on phones. Applied to both `drilldown._kv` and `explain._kvRow`.
+3. **Drawer padding too generous** on phones — `px-5` ate ~12% of width. Fix: `px-3 py-2 sm:px-5 sm:py-3` header + `px-3 sm:px-5` body. Recovers ~16px horizontal + ~12px vertical on mobile.
+4. **Wide content broke the panel scroll** — long URLs / code blocks / tables forced horizontal swipe of the whole drawer. Fix: `overflow-x-hidden` on the panel + tab bar bleed-edge re-aligned (`-mx-3 px-3 sm:-mx-5 sm:px-5`). Wide content scrolls inside its own wrapper as designed.
+
+Pure CSS, no behavior change. Bundle +0.04 kB gzip. 340/340 unit tests green.
+
+---
+
 ## [1.21.29] — 2026-04-26
 
 ### R.1 — Lazy-load 8 secondary tab modules → main bundle −41% gzip
