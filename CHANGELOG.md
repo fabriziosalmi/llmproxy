@@ -2,6 +2,31 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.42] — 2026-04-25
+
+### Refactor — Extract request pipeline from `proxy/rotator.py` (split 3/3, complete)
+
+Final slice of the rotator-split priority. The 220-line `proxy_request` method — the 5-ring pipeline that every proxied request flows through — moved to `proxy/request_pipeline.py` as `process_proxy_request(orchestrator, request, body, session_id)`. The orchestrator's `proxy_request` is now a 3-line shim.
+
+Coupling stays the same: the function takes the orchestrator as its first arg and reads every subsystem off it (security, plugin_manager, forwarder, cache_backend, response_signer, webhooks, zt_manager, …). The win is structural — pipeline dispatch logic is no longer interleaved with orchestrator wiring.
+
+Dropped 11 now-orphaned imports from `rotator.py` (`json`, `uuid`, `JSONResponse`, `StreamingResponse`, `TraceManager`, `PluginHook`, `PluginContext`, `fake_stream`, `resolve_model`, `update_endpoint_stats`, plus their respective `from` lines), and pruned imports in the new module to exactly what's needed.
+
+**`rotator.py` final: 702 → 396 lines** (44% reduction across 3 commits).
+
+| Module | Lines | Role |
+|---|---|---|
+| `proxy/rotator.py` | 396 | Orchestrator: lifecycle, wiring, attribute holder |
+| `proxy/request_pipeline.py` | 271 | The 5-ring dispatch pipeline |
+| `proxy/seeding.py` | 80 | Endpoint seeding from config |
+| `proxy/config_loader.py` | 57 | YAML + env config loading |
+| `proxy/auth_helpers.py` | 53 | API-key resolution + constant-time verify |
+| `proxy/http_session.py` | 44 | aiohttp ClientSession factory |
+
+No behavior change. 1141/1141 unit tests green. Strategic priority #1 from saved memory done.
+
+---
+
 ## [1.21.41] — 2026-04-25
 
 ### Refactor — Extract endpoint seeding from `proxy/rotator.py` (split 2/3)
