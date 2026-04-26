@@ -17,7 +17,6 @@ in the formula is fine; flipping the winner is a bug.
 
 from types import SimpleNamespace
 
-import pytest
 
 from plugins.default.smart_router import _compute_score
 
