@@ -50,9 +50,10 @@ interface GuardsStatus {
 }
 
 function _kvRow(label: string, value: unknown): string {
+    // R.2: stack label-over-value on phones (mirror of drilldown._kv).
     const safeVal = value == null || value === '' ? '—' : String(value);
     return `
-        <div class="grid grid-cols-[110px_1fr] gap-2 py-1.5 border-b border-white/[0.04] last:border-0">
+        <div class="grid grid-cols-1 sm:grid-cols-[110px_1fr] gap-y-0.5 sm:gap-2 py-1.5 border-b border-white/[0.04] last:border-0">
             <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wide">${label}</span>
             <span class="text-[11px] text-white font-mono break-all">${safeVal}</span>
         </div>`;

@@ -78,15 +78,23 @@ export function createDrawer(opts: CreateDrawerOptions = {}): DrawerHandle {
     // On phones, claim the full viewport — a 5vw gutter is cosmetic and
     // costs us readable line length inside drilldown panels.
     panel.style.width = `min(${width}px, 100vw)`;
+    // R.2: overflow-x-hidden on the panel — wide content (code blocks,
+    // tables, long URLs) scrolls inside their own wrapper instead of
+    // forcing the whole panel to scroll horizontally.
     panel.className = cx(
-        'fixed top-0 right-0 h-full bg-[#0a0a0c] border-l border-white/[0.08] shadow-2xl overflow-y-auto',
+        'fixed top-0 right-0 h-full bg-[#0a0a0c] border-l border-white/[0.08] shadow-2xl',
+        'overflow-y-auto overflow-x-hidden',
         'translate-x-full transition-transform duration-200 ease-out'
     );
     if (opts.testId) panel.setAttribute('data-testid', opts.testId);
 
     const header = document.createElement('header');
+    // R.2: tighter mobile padding (px-3 py-2 → ~36px tall) so the drilldown
+    // tab bar sticks at the right offset and we save ~8px of vertical real
+    // estate on small viewports. sm:+ keeps the original looser padding.
     header.className =
-        'sticky top-0 z-10 bg-[#0a0a0c]/95 backdrop-blur-xl border-b border-white/[0.06] px-5 py-3 flex items-center justify-between';
+        'sticky top-0 z-10 bg-[#0a0a0c]/95 backdrop-blur-xl border-b border-white/[0.06] ' +
+        'px-3 py-2 sm:px-5 sm:py-3 flex items-center justify-between gap-2';
 
     const heading = document.createElement('h2');
     heading.id = titleId;
@@ -101,7 +109,9 @@ export function createDrawer(opts: CreateDrawerOptions = {}): DrawerHandle {
     closeBtn.innerHTML = '&times;';
 
     const bodyEl = document.createElement('div');
-    bodyEl.className = 'px-5 py-4 text-[12px] text-slate-300';
+    // R.2: tighter horizontal padding on mobile (px-3 vs px-5) — drilldown
+    // tables and code blocks have more readable width inside.
+    bodyEl.className = 'px-3 sm:px-5 py-4 text-[12px] text-slate-300';
 
     header.appendChild(heading);
     header.appendChild(closeBtn);

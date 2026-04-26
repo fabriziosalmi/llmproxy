@@ -118,9 +118,12 @@ function _fmtTs(ts: number | string | undefined | null): string {
 }
 
 function _kv(label: string, value: unknown): string {
+    // R.2: stack label-over-value on phones (label column is 110px which
+    // squeezes the value to ~150px on a 320-360px viewport). At sm:+ the
+    // original 110/1fr grid takes over.
     const v = value == null || value === '' ? '—' : String(value);
     return `
-        <div class="grid grid-cols-[110px_1fr] gap-2 py-1.5 border-b border-white/[0.04] last:border-0">
+        <div class="grid grid-cols-1 sm:grid-cols-[110px_1fr] gap-y-0.5 sm:gap-2 py-1.5 border-b border-white/[0.04] last:border-0">
             <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wide">${label}</span>
             <span class="text-[11px] text-white font-mono break-all">${v}</span>
         </div>`;
@@ -129,15 +132,25 @@ function _kv(label: string, value: unknown): string {
 // ── Tab scaffold ───────────────────────────────────────────────────────────
 
 function _tabBar(tabs: readonly string[], active: string, onPick: (next: string) => void): HTMLElement {
+    // R.2: 5 tabs × ~80px = 400px — overflows a 320px viewport and was
+    // wrapping into 2 rows. Make the bar scroll horizontally on tight
+    // viewports (`overflow-x-auto` + `flex-nowrap`), and drop the
+    // sticky-with-magic-number-top behavior in favor of `top-0` —
+    // the drawer header isn't a hard 48px anymore now that mobile
+    // padding is tighter, and a free-scroll tab bar reads cleaner
+    // than a partially-occluded sticky one.
     const wrap = document.createElement('div');
     wrap.className =
-        'flex items-center gap-1 border-b border-white/[0.06] -mx-5 px-5 mb-4 sticky top-[48px] bg-[#0a0a0c]/95 backdrop-blur';
+        'flex items-center gap-1 flex-nowrap overflow-x-auto border-b border-white/[0.06] ' +
+        // R.2: align the bleed-edge with the Drawer body padding (px-3 on
+        // mobile, px-5 from sm:+). Mismatched negatives wedge the tab bar.
+        '-mx-3 px-3 sm:-mx-5 sm:px-5 mb-4 sticky top-0 bg-[#0a0a0c]/95 backdrop-blur';
     for (const t of tabs) {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.textContent = t;
         const isActive = t === active;
-        btn.className = `px-3 py-2 text-[10px] font-bold uppercase tracking-wide transition-colors border-b-2 ${isActive ? 'text-white border-cyan-500' : 'text-slate-500 hover:text-white border-transparent'}`;
+        btn.className = `px-3 py-2 text-[10px] font-bold uppercase tracking-wide transition-colors border-b-2 shrink-0 ${isActive ? 'text-white border-cyan-500' : 'text-slate-500 hover:text-white border-transparent'}`;
         btn.addEventListener('click', () => onPick(t));
         wrap.appendChild(btn);
     }
