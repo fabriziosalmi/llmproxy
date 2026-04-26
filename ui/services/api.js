@@ -110,6 +110,8 @@ export const api = {
     async fetchIdentityConfig() { return _json(`${BASE_URL}/api/v1/identity/config`); },
     async fetchConfigWarnings() { return _json(`${BASE_URL}/api/v1/config/warnings`); },
     async fetchConfigYaml() { return _json(`${BASE_URL}/api/v1/config/yaml`); },
+    async fetchRateLimitConfig() { return _json(`${BASE_URL}/api/v1/rate-limit/config`); },
+    async setRateLimitPreset(preset) { return _post(`${BASE_URL}/api/v1/rate-limit/preset`, { preset }); },
 
     async fetchLatencyMetrics() { return _json(`${BASE_URL}/api/v1/metrics/latency`); },
     async fetchRingTimeline() { return _json(`${BASE_URL}/api/v1/metrics/ring-timeline`); },
