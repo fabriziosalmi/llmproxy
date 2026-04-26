@@ -9,6 +9,13 @@ export interface BadgeOptions {
     size?: BadgeSize;
     /** Optional leading dot — useful for status indicators. */
     dot?: boolean;
+    /**
+     * Animate the dot with a slow breathing pulse (2.4s) — surfaces "live"
+     * for success-intent indicators (Endpoint Live, sidebar proxy active).
+     * Honors `prefers-reduced-motion` via the .pulse-live CSS rule.
+     * Has no effect when `dot` is false.
+     */
+    pulse?: boolean;
     /** Optional leading icon as raw SVG. */
     icon?: string;
     /** Override the rendered title attribute (defaults to label for ellipsized cases). */
@@ -50,7 +57,7 @@ export function createBadge(opts: BadgeOptions): HTMLElement {
 
     if (opts.dot) {
         const dot = document.createElement('span');
-        dot.className = cx('inline-block w-1.5 h-1.5 rounded-full', palette.dot);
+        dot.className = cx('inline-block w-1.5 h-1.5 rounded-full', palette.dot, opts.pulse && 'pulse-live');
         dot.setAttribute('aria-hidden', 'true');
         badge.appendChild(dot);
     }

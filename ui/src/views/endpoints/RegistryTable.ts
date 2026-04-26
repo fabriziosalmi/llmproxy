@@ -39,7 +39,18 @@ const ICON_UP =
 
 function renderStatusCell(row: Endpoint): HTMLElement {
     const intent = STATUS_INTENT[row.status ?? ''] ?? 'warning';
-    return createBadge({ label: row.status ?? '—', intent, size: 'sm', testId: `ep-status-${row.id}` });
+    // O.2: Live status gets a leading dot with a slow breath animation —
+    // visible aliveness without competing with the row content. DEGRADED
+    // and IGNORED stay still (a pulsing amber would read as alarm).
+    const isLive = (row.status ?? '').toUpperCase() === 'LIVE';
+    return createBadge({
+        label: row.status ?? '—',
+        intent,
+        size: 'sm',
+        dot: isLive,
+        pulse: isLive,
+        testId: `ep-status-${row.id}`,
+    });
 }
 
 function renderCircuitCell(row: Endpoint): DocumentFragment {
