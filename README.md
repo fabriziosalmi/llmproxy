@@ -24,23 +24,45 @@ Security gateway for Large Language Models. Routes requests across 15 providers 
 
 ## Quick Start
 
+### 30 seconds with Docker (no clone, no install)
+
+```bash
+docker run --rm -p 8090:8090 \
+  -e LLM_PROXY_API_KEYS=sk-proxy-test \
+  ghcr.io/fabriziosalmi/llmproxy:latest
+```
+
+That's it. Open `http://localhost:8090/ui` and the first-run wizard walks you through adding a provider (OpenAI, Anthropic, Ollama, etc.). The proxy boots in **onboarding mode** with zero endpoints — inference returns 503 until you add one.
+
+Drop-in OpenAI replacement, once an endpoint is configured:
+
+```bash
+curl http://localhost:8090/v1/chat/completions \
+  -H "Authorization: Bearer sk-proxy-test" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}'
+```
+
+**For persistent state** (budget tracking, audit log, registered endpoints) across container restarts, mount a volume and pin the version:
+
+```bash
+docker run -d --name llmproxy -p 8090:8090 \
+  -e LLM_PROXY_API_KEYS=sk-proxy-test \
+  -e OPENAI_API_KEY=$OPENAI_API_KEY \
+  -v llmproxy-data:/app/data \
+  ghcr.io/fabriziosalmi/llmproxy:1.21.46
+```
+
+Each release publishes `:latest`, the full semver (`:X.Y.Z`), the minor (`:X.Y`), plus a per-commit short SHA tag for reproducible deploys.
+
+### Or, build from source
+
 ```bash
 git clone https://github.com/fabriziosalmi/llmproxy && cd llmproxy
 ./install.sh                        # Interactive — checks Python/Docker, creates .env, starts the proxy
 ```
 
-The installer detects your platform, verifies prerequisites, generates a proxy auth key, and boots the service via Docker Compose v2 (preferred) or a local Python 3.12+ virtualenv. You can also run `./install.sh --docker`, `./install.sh --local`, or `./install.sh --check` for non-interactive use.
-
-**Start in onboarding mode with zero endpoints.** The proxy boots even without provider keys; open `http://localhost:8090/ui` and use the first-run wizard to add your first endpoint. Inference calls return 503 until an endpoint is configured.
-
-```bash
-# Once running
-curl http://localhost:8090/health
-curl http://localhost:8090/v1/chat/completions \
-  -H "Authorization: Bearer $YOUR_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}'
-```
+The installer detects your platform, verifies prerequisites, generates a proxy auth key, and boots the service via Docker Compose v2 (preferred) or a local Python 3.12+ virtualenv. Use `./install.sh --docker`, `./install.sh --local`, or `./install.sh --check` for non-interactive flows. Choose this path if you want to modify plugins, contribute, or run without an internet connection to GHCR.
 
 ### Prerequisites
 
