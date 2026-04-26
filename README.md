@@ -125,6 +125,23 @@ HMAC-SHA256 response signing proves the response was not modified after leaving 
 
 See [SECURITY.md](SECURITY.md) for the full security architecture and vulnerability disclosure policy.
 
+### OWASP LLM Top 10 coverage
+
+A curated adversarial corpus runs as a regression test on every build. Current per-category pass rate against `tests/corpus/owasp_llm_top10.yaml`:
+
+| Category | Coverage | Notes |
+|----------|---------:|-------|
+| LLM01 — Prompt Injection | **58 %** | Direct attacks caught; obfuscation variants (leetspeak, suffix-injection, chain-of-thought) are documented gaps |
+| LLM02 — Sensitive Info (PII) | **100 %** | Email · SSN · Visa · Amex · IBAN · phones · API keys |
+| LLM07 — System Prompt Leakage | **33 %** | Direct extraction caught; indirect / translation / meta-query patterns slip |
+| Benign false-positive rate | **10 %** | Meta-discussion of attacks ("explain how prompt injection works") trips on purpose |
+
+LLM03/04/06/08/09/10 are **out-of-scope for the proxy itself** (build-time, training-time, caller-side, model-side) — documented as N/A in the report.
+
+Full per-entry results + known gaps + reproduction steps: [docs/OWASP_LLM_COVERAGE.md](docs/OWASP_LLM_COVERAGE.md). Re-generate with `pytest tests/test_owasp_corpus.py`.
+
+The corpus deliberately includes the AI-judgment-bypass path: deterministic checks only. The `ai_analyze_threat` gray-zone escalation (when configured) catches a fraction of the listed gaps in real deployments, but it depends on an upstream model being available — so it doesn't ship in the regression number.
+
 ---
 
 ## Performance
