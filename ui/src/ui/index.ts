@@ -33,6 +33,9 @@ export type { MetricTileOptions, MetricIntent, MetricSize } from './MetricTile';
 export { createSparkline } from './Sparkline';
 export type { SparklineOptions, SparklineColor } from './Sparkline';
 
+export { createSnippet } from './Snippet';
+export type { SnippetOptions, SnippetHandle } from './Snippet';
+
 export { createModal, confirm, prompt } from './Modal';
 export type { CreateModalOptions, ModalButton, ConfirmOptions, PromptOptions, ButtonRole } from './Modal';
 
