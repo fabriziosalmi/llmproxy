@@ -2,6 +2,25 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.16] — 2026-04-26
+
+### N.7 — On-demand local autodiscovery + AddForm scan button
+
+Boot-time local probe runs once at startup. When an operator spins up Ollama (11434) / LM Studio (1234) / vLLM (8000) / LiteLLM (4000) **after** the proxy is already running, they had to copy the URL into the form by hand. Now there's a button.
+
+**Backend** (`POST /api/v1/registry/scan`)
+- Triggers the same `core/local_probe.py` discovery as boot, but against a scratch dict — does NOT mutate live registry.
+- Returns `{candidates: [{id, provider, base_url, models}], total}`.
+- Filters out URLs already in live config so the UI doesn't surface dups.
+
+**Frontend** (`AddForm`)
+- New "Scan local" button next to Cancel / Add. Click → pre-fills the form fields with the first candidate (id / url / provider / models). If multiple, the toast surfaces what else is available.
+- Empty result → "No local LLM endpoints found" info toast.
+
+2 new contract tests pin `{candidates, total}` response shape + the already-configured-URL filter (regression guard).
+
+---
+
 ## [1.21.15] — 2026-04-26
 
 ### N.6 — Runtime-tunable rate-limit presets (Strict / Normal / Relaxed)
