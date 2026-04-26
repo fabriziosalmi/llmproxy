@@ -2,6 +2,22 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.10] — 2026-04-26
+
+### N.1 — Actionable provider links on missing keys + upstream 429
+
+Two surfaces where a bad/missing key turns into "go fix this here":
+
+**`core/startup_checks.py`** — when an endpoint declares `api_key_env` that is unset, the warning surfaced via `/api/v1/config/warnings` now appends the provider's key dashboard + billing URLs. Operators see e.g. `"Get one at: https://platform.openai.com/api-keys (billing: ...)"` right where they're already looking.
+
+**`proxy/forwarder.py`** — when an upstream returns 429 (rate-limited or quota-exhausted), the `HTTPException` detail now appends a provider-specific hint: `"Upstream openai returned 429 — Check key at https://platform.openai.com/api-keys; billing/credits at https://platform.openai.com/account/billing"`. 4xx auth (401/402/403) still passes through to the SDK unchanged.
+
+Coverage: 8 known providers (`openai`, `anthropic`, `google`, `azure`, `groq`, `mistral`, `openrouter`, `cohere`). Unknown → empty hint, no behavior change.
+
+5 new tests cover the pure helper + the startup-check assertion.
+
+---
+
 ## [1.21.9] — 2026-04-26
 
 ### M.3 — `/health` per-component status block
