@@ -2,6 +2,31 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.36] — 2026-04-25
+
+### P0-5 (security) — CORS default is loopback-only, not wildcard
+
+`proxy/app_factory.py` defaulted `cors_origins` to `["*"]` when not configured. For a security gateway this is the wrong polarity — any origin on the Web could initiate authenticated cross-origin requests against the proxy from a victim's browser. The previous code logged a warning, but warnings don't change behavior.
+
+Default flipped to `[http://localhost:<port>, http://127.0.0.1:<port>]` (the bundled UI lives at `/ui` on the same origin, so loopback is the only legitimate cross-origin need by default). Wildcard is now opt-in.
+
+Implementation: extracted `_resolve_cors_origins(config)` so the policy is testable in isolation:
+- `cors_origins` unset → loopback list keyed off `server.port` (default 8090)
+- `cors_origins` set → returned as-is, including `["*"]` (warning still fires)
+
+5 regression tests in `tests/test_coverage_core.py::TestAppFactory`:
+- default unset → loopback-only
+- default tracks `server.port` (e.g. 9000 → loopback:9000)
+- explicit list respected (`["https://app.example.com"]`)
+- explicit wildcard respected (opt-in is intentional)
+- empty server block → still loopback-only
+
+1128/1128 unit tests green.
+
+**Fifth and final P0 fix from the 360° audit. All five shipped.**
+
+---
+
 ## [1.21.35] — 2026-04-25
 
 ### P0-4 (security) — Atomic plugin hot-swap
