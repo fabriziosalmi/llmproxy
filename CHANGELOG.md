@@ -2,6 +2,23 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.23] — 2026-04-26
+
+### P.1 — UI consumer for rate-limit preset picker (N.6 backend)
+
+N.6's backend (admin endpoints + middleware mutation + bucket flush) has been live since 1.21.15. The UI surface was queued — operators had to `curl` to switch presets. Now there's a card in Settings.
+
+`mountRateLimit(host, api, toast?)`:
+- Live numbers strip: req/min · burst · active preset (or "custom").
+- 3 buttons (Strict / Normal / Relaxed). Active = `variant=primary`, others ghost.
+- Click on active = no-op. Click on other = POST + refresh + toast.
+- Tone-coded description of the active preset.
+- Header pulse-dot badge for the middleware enabled/disabled state.
+
+7 new tests; 302/302 unit tests green. Bundle +0.06 kB gzip.
+
+---
+
 ## [1.21.22] — 2026-04-26
 
 ### O.5 — Active config YAML view in Settings (read-only, redacted)
