@@ -294,6 +294,93 @@ class TestAdminRoutes:
             resp = await c.post("/api/v1/routing/cost-weight", json={"cost_weight": "fast"})
         assert resp.status_code == 400
 
+    # ── N.6 Rate-limit presets ───────────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_rate_limit_config_returns_presets_when_no_instance(self):
+        """With the middleware not constructed (test app), fall back to
+        config + still expose the presets so the UI can render them."""
+        from core.rate_limiter import RateLimitMiddleware
+        RateLimitMiddleware.instance = None  # ensure clean state
+        app, agent = _make_admin_app()
+        agent.config["rate_limiting"] = {"enabled": True, "requests_per_minute": 90, "burst": 12}
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.get("/api/v1/rate-limit/config")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["enabled"] is True
+        assert body["requests_per_minute"] == 90
+        assert body["burst"] == 12
+        assert body["preset"] is None
+        # Presets always included so the UI can render the radio group.
+        assert set(body["presets"]) == {"strict", "normal", "relaxed"}
+        assert body["presets"]["strict"]["requests_per_minute"] == 30
+
+    @pytest.mark.asyncio
+    async def test_set_rate_limit_preset_503_when_middleware_missing(self):
+        from core.rate_limiter import RateLimitMiddleware
+        RateLimitMiddleware.instance = None
+        app, agent = _make_admin_app()
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.post("/api/v1/rate-limit/preset", json={"preset": "strict"})
+        assert resp.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_set_rate_limit_preset_invalid_name(self):
+        app, agent = _make_admin_app()
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.post("/api/v1/rate-limit/preset", json={"preset": "paranoid"})
+        assert resp.status_code == 400
+        assert "Unknown preset" in resp.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_set_rate_limit_preset_applies_and_persists(self):
+        """Happy path: middleware exists, preset is valid, limiter mutates,
+        store records the preset name."""
+        from core.rate_limiter import RateLimitMiddleware
+        # Spin up a real middleware so .instance is set + apply_preset works.
+        from starlette.applications import Starlette
+        mw = RateLimitMiddleware(app=Starlette(), config={"rate_limiting": {"enabled": True}})
+        try:
+            app, agent = _make_admin_app()
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+                resp = await c.post("/api/v1/rate-limit/preset", json={"preset": "strict"})
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["preset"] == "strict"
+            assert body["requests_per_minute"] == 30
+            assert body["burst"] == 5
+            # Limiter mutated.
+            assert mw.limiter.default_capacity == 35
+            assert mw.limiter.default_rate == pytest.approx(30 / 60)
+            # Persisted.
+            agent.store.set_state.assert_awaited_with("rate_limit:preset", "strict")
+        finally:
+            RateLimitMiddleware.instance = None
+
+    @pytest.mark.asyncio
+    async def test_set_rate_limit_preset_flushes_existing_buckets(self):
+        """A bucket created at the OLD rate must be evicted so the next
+        request from that key gets the new defaults — otherwise an attacker
+        spraying during the cutover keeps their old (relaxed) cap."""
+        from core.rate_limiter import RateLimitMiddleware
+        from starlette.applications import Starlette
+        mw = RateLimitMiddleware(app=Starlette(), config={
+            "rate_limiting": {"enabled": True, "requests_per_minute": 240, "burst": 60}
+        })
+        try:
+            # Seed a bucket at the relaxed defaults.
+            await mw.limiter.check("1.2.3.4")
+            assert "1.2.3.4" in mw.limiter._buckets
+
+            app, agent = _make_admin_app()
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+                await c.post("/api/v1/rate-limit/preset", json={"preset": "strict"})
+
+            assert "1.2.3.4" not in mw.limiter._buckets
+        finally:
+            RateLimitMiddleware.instance = None
+
     # ── M.2 Spend forecasting ───────────────────────────────────────
 
     @pytest.mark.asyncio
