@@ -41,6 +41,7 @@ export async function initSettings() {
                     webhooks: document.getElementById('settings-webhooks-host'),
                     export: document.getElementById('settings-export-host'),
                     system: document.getElementById('settings-system-host'),
+                    configYaml: document.getElementById('settings-config-yaml-host'),
                 },
                 {
                     api: {
@@ -53,6 +54,7 @@ export async function initSettings() {
                         testWebhook: api.testWebhook,
                         fetchExportStatus: api.fetchExportStatus,
                         fetchConfigWarnings: api.fetchConfigWarnings,
+                        fetchConfigYaml: api.fetchConfigYaml,
                     },
                     toast,
                 },
