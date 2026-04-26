@@ -505,6 +505,38 @@ def create_router(agent) -> APIRouter:
         """
         return await agent.store.verify_audit_chain()
 
+    @router.get("/api/v1/metrics/hourly-buckets")
+    async def get_hourly_buckets(request: Request):
+        """Q.3 — Hourly ring buffer of KPI counters/gauges, fed by the
+        background metrics_history_loop in proxy/background.py.
+
+        Returns:
+            {
+              "hours": 24,
+              "interval_s": 3600,
+              "series": {
+                "requests": [12, 8, 5, ...],   // 24 entries, oldest first
+                "blocked":  [0, 1, 0, ...],
+                "errors":   [...],
+                "auth_failures": [...],
+                "cost_usd": [...]              // gauge, not delta
+              }
+            }
+
+        Empty `series` (no buckets yet) is a valid response — proxies
+        that just started haven't accumulated history; the UI handles
+        "render skeleton until at least 2 points".
+        """
+        _check_admin_auth(request)
+        history = getattr(agent, "metrics_history", None)
+        interval_s = int(agent.config.get("metrics", {}).get("history_interval_s", 3600))
+        slots = getattr(history, "slots", 24) if history is not None else 24
+        return {
+            "hours": slots,
+            "interval_s": interval_s,
+            "series": history.snapshot() if history is not None else {},
+        }
+
     @router.get("/api/v1/openapi.json")
     async def get_openapi_schema(request: Request):
         """Auth-gated OpenAPI schema mirror.

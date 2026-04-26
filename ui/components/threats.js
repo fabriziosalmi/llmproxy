@@ -31,7 +31,11 @@ export function initThreats() {
             const kpiHost = document.getElementById('threats-kpi-grid');
             if (kpiHost) {
                 mountThreatsKpis(kpiHost, {
-                    api: { fetchMetrics: api.fetchMetrics, fetchHealth: api.fetchHealth },
+                    api: {
+                        fetchMetrics: api.fetchMetrics,
+                        fetchHealth: api.fetchHealth,
+                        fetchHourlyBuckets: api.fetchHourlyBuckets,
+                    },
                     poll: (fn, intervalMs) => store.poll(fn, intervalMs, 'threats'),
                 });
             }
