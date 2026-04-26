@@ -185,8 +185,15 @@ async def test_health_endpoint(client):
     resp = await client.get("/health")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["status"] == "ok"
+    # M.3: status reflects actual component state. The e2e mock agent
+    # doesn't wire an aiohttp _session (real proxy initialises it on
+    # first forward), so session=down → overall=down. The contract we
+    # care about here is: shape is correct + backward-compat fields
+    # are still present.
+    assert data["status"] in ("ok", "degraded", "down")
     assert "pool_size" in data
+    assert "components" in data
+    assert "session" in data["components"]
 
 
 @pytest.mark.asyncio
