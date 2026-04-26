@@ -2,6 +2,26 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.34] — 2026-04-25
+
+### P0-3 (correctness) — Lock around `session_memory` mutations
+
+`SecurityShield.check_session_trajectory` mutates an `OrderedDict` (`session_memory`) on every prompt: it calls `move_to_end()`, conditional `popitem(last=False)` for LRU eviction, and `append()` to a per-session score list. CPython's GIL makes each individual op atomic, but the *sequence* (check → move-to-end → mutate score list) is not — and on free-threaded builds (3.13+ with `--disable-gil`), even single ops on the OrderedDict's doubly-linked list can corrupt under concurrent `move_to_end` + `popitem`.
+
+Added `self._session_memory_lock: threading.Lock` and wrapped the read-modify-write block. Two design notes:
+1. **Threading lock, not asyncio.Lock**: the function is sync; introducing async would cascade through every caller. `threading.Lock` is the drop-in primitive for protecting sync state across event-loop tasks and (future-proof) free-threaded workers.
+2. **Score computation outside the lock**: `_calculate_threat_score` is pure CPU and easily 100µs+ on long prompts. Holding the lock across it would serialize all concurrent prompt inspections globally. The threat score is computed first; only the OrderedDict mutation runs under the lock.
+
+Stress test in `tests/test_coverage_security.py::TestSessionMemoryConcurrency`:
+- 16 threads × 200 ops × 50 sessions hammering one shield
+- Verifies no entries dropped, no malformed data, lock attribute present
+
+1120/1120 unit tests green.
+
+Third of 5 P0 critical fixes from the 360° audit.
+
+---
+
 ## [1.21.33] — 2026-04-25
 
 ### P0-2 (security) — Constant-time API-key compare across all auth sites
