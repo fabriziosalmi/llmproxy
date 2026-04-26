@@ -151,7 +151,13 @@ export function createPluginCard(plugin: Plugin, stats: PluginStats | undefined,
         right.appendChild(v);
     }
     const dot = document.createElement('div');
-    dot.className = cx('w-2 h-2 rounded-full', enabled ? 'bg-emerald-400' : 'bg-slate-600');
+    // O.2: enabled dot pulses; disabled stays still. The pulse is the
+    // cheapest "this is alive" cue — same animation token as the Live
+    // status badges in the registry table.
+    dot.className = cx(
+        'w-2 h-2 rounded-full',
+        enabled ? 'bg-emerald-400 pulse-live' : 'bg-slate-600',
+    );
     dot.setAttribute('aria-label', enabled ? 'Enabled' : 'Disabled');
     right.appendChild(dot);
 
@@ -236,7 +242,10 @@ export function createPluginCard(plugin: Plugin, stats: PluginStats | undefined,
 
     return createCard({
         body,
-        className: cx('p-4', !enabled && 'opacity-50'),
+        // O.2: glow halo on enabled plugins — subtle emerald shadow that
+        // reads as "this surface is healthy" without competing with the
+        // glassmorphism. Disabled plugins stay flat + dimmed.
+        className: cx('p-4', enabled ? 'glow-live' : 'opacity-50'),
         testId: `plugin-card-${plugin.name}`,
     });
 }
