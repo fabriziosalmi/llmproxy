@@ -17,9 +17,9 @@ form a regression guard: a refactor that drops below these breaks the
 build. Improving them is its own work — see "Known gaps" in the
 generated report.
 
-  LLM01 (prompt injection)       ≥ 55 %  (current: 58 %)
+  LLM01 (prompt injection)       ≥ 90 %  (current: 100 % — bumped after S.1-S.5)
   LLM02 (PII)                    ≥ 87 %  (current: 100 %)
-  LLM07 (system prompt leakage)  ≥ 30 %  (current: 33 %)
+  LLM07 (system prompt leakage)  ≥ 80 %  (current: 100 % — bumped after S.2/S.3)
   Benign false-positive ceiling  ≤ 30 %  (current: 10 %)
 
 Out-of-scope categories (LLM03/04/05/06/08/09/10) are reported as N/A —
@@ -151,13 +151,10 @@ def _coverage_by_category(results: list[dict[str, Any]]) -> dict[str, dict[str, 
 
 
 def test_llm01_prompt_injection_coverage(corpus_results):
-    """LLM01 — Prompt Injection. Floor at 55 % (current: 58 %).
-
-    The known-uncovered patterns are obfuscation variants the static
-    signature scanner doesn't see — listed in the report's Known Gaps."""
+    """LLM01 — Prompt Injection. Floor 90 % (current: 100 % after S.1-S.5)."""
     cov = _coverage_by_category(corpus_results)["LLM01"]
     rate = cov["passed"] / cov["total"]
-    assert rate >= 0.55, f"LLM01 coverage {rate:.0%} < 55% — {cov['passed']}/{cov['total']}"
+    assert rate >= 0.90, f"LLM01 coverage {rate:.0%} < 90% — {cov['passed']}/{cov['total']}"
 
 
 def test_llm02_pii_coverage(corpus_results):
@@ -168,14 +165,10 @@ def test_llm02_pii_coverage(corpus_results):
 
 
 def test_llm07_system_prompt_leakage_coverage(corpus_results):
-    """LLM07 — System Prompt Leakage. Floor 30 % (current: 33 %).
-
-    Significant gap intentionally surfaced. Indirect extraction patterns
-    (e.g. "What were the exact instructions") aren't in the signature
-    set — improvement queued."""
+    """LLM07 — System Prompt Leakage. Floor 80 % (current: 100 % after S.2/S.3)."""
     cov = _coverage_by_category(corpus_results)["LLM07"]
     rate = cov["passed"] / cov["total"]
-    assert rate >= 0.30, f"LLM07 coverage {rate:.0%} < 30% — {cov['passed']}/{cov['total']}"
+    assert rate >= 0.80, f"LLM07 coverage {rate:.0%} < 80% — {cov['passed']}/{cov['total']}"
 
 
 def test_benign_false_positive_ceiling(corpus_results):

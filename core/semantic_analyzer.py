@@ -177,6 +177,31 @@ _CONFUSABLE_MAP = str.maketrans({
 })
 
 
+def normalize_match_chars(text: str) -> str:
+    """S.5 — Single-source normalization for security-pattern matching.
+
+    NFKC → lowercase → strip Cf (zero-width / RTL marks) → confusables → leetspeak.
+    Does NOT collapse spaces or strip punctuation; regex patterns expect
+    intact whitespace. SecurityShield._calculate_threat_score consumes
+    this so leetspeak ("1gn0r3 pr3v10us") and Cyrillic-confusable
+    ("іgnоrе") variants land on the same plaintext as the regex set.
+
+    The leetspeak + confusable maps were previously gated behind the
+    semantic_analyzer plugin path. Wiring them through this helper means
+    static SecurityShield (used by the OWASP corpus + dev-mode runs
+    without plugins loaded) gets the same coverage.
+    """
+    text = unicodedata.normalize("NFKC", text).lower()
+    # Cf = Format chars — zero-width space (U+200B), zero-width joiner,
+    # zero-width non-joiner, RTL marks, etc. Removed wholesale: an attacker
+    # uses these to obscure attack words; legitimate prose has no use for
+    # them in security-matching context.
+    text = "".join(c for c in text if unicodedata.category(c) != "Cf")
+    text = text.translate(_CONFUSABLE_MAP)
+    text = text.translate(_LEET_MAP)
+    return text
+
+
 def _normalize(text: str) -> str:
     """Normalize text for trigram comparison.
 
