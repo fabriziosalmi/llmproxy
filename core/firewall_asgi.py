@@ -115,13 +115,19 @@ class ByteLevelFirewallMiddleware:
 
     @staticmethod
     def _normalize_unicode(data: bytes) -> bytes:
-        """NFKC normalize + strip accents/diacritics + collapse homoglyphs."""
+        """NFKC normalize + strip Cf format chars + strip accents/diacritics + collapse homoglyphs.
+
+        S.4 — Cf (Format) category is stripped here so zero-width spaces
+        (U+200B), zero-width joiner/non-joiner, and RTL marks don't survive
+        normalization to obscure attack words. Without this, "Ig​nore"
+        (with U+200B between Ig and nore) bypassed the signature scanner.
+        """
         try:
             text = data.decode("utf-8", errors="replace")
             text = unicodedata.normalize("NFKC", text)
             text = "".join(
                 c for c in unicodedata.normalize("NFD", text)
-                if unicodedata.category(c) != "Mn"
+                if unicodedata.category(c) not in ("Mn", "Cf")
             )
             # R2-06: Map Cyrillic/Greek confusables to Latin equivalents
             text = text.translate(ByteLevelFirewallMiddleware._CONFUSABLE_MAP)
