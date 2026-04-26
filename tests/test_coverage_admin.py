@@ -375,6 +375,46 @@ class TestAdminRoutes:
         assert "cost_weight: 0.4" in body["yaml"]
         assert "smart_weighted" in body["yaml"]
 
+    # ── Q.3 — /api/v1/metrics/hourly-buckets ─────────────────────
+
+    @pytest.mark.asyncio
+    async def test_hourly_buckets_returns_default_shape_when_no_history(self):
+        """Proxy boot — agent has no metrics_history yet. Endpoint must
+        still respond with a stable shape so the UI consumer doesn't
+        need a special-case for 'before first hour'."""
+        app, agent = _make_admin_app()
+        agent.metrics_history = None
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.get("/api/v1/metrics/hourly-buckets")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["hours"] == 24
+        assert body["interval_s"] == 3600
+        assert body["series"] == {}
+
+    @pytest.mark.asyncio
+    async def test_hourly_buckets_serialises_history_snapshot(self):
+        """With a real MetricsHistory wired, every series surfaces."""
+        from core.metrics_history import MetricsHistory
+        app, agent = _make_admin_app()
+        h = MetricsHistory(slots=12)
+        # Seed three series with deterministic values.
+        h.record_delta("requests", 1000)
+        h.record_delta("requests", 1042)
+        h.record_gauge("cost_usd", 5.67)
+        agent.metrics_history = h
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.get("/api/v1/metrics/hourly-buckets")
+        body = resp.json()
+        assert body["hours"] == 12
+        assert "requests" in body["series"]
+        assert "cost_usd" in body["series"]
+        # Each series the length of the buffer (pre-fill is part of the contract).
+        assert len(body["series"]["requests"]) == 12
+        assert body["series"]["requests"][-1] == 42.0  # last delta
+        assert body["series"]["cost_usd"][-1] == pytest.approx(5.67)
+
     @pytest.mark.asyncio
     async def test_openapi_endpoint_returns_schema(self):
         """Q.2 — auth-gated mirror of /openapi.json. The default FastAPI

@@ -337,7 +337,13 @@ class ProxyOrchestrator(BaseAgent):
             config_watch_loop, write_flush_loop,
             cache_eviction_loop, dedup_cleanup_loop,
             retention_purge_loop, local_discovery_loop,
+            metrics_history_loop,
         )
+        from core.metrics_history import MetricsHistory
+
+        # Q.3 — hourly KPI sparkline ring buffer. Constructed before the
+        # snapshot loop is spawned so the very first tick has a target.
+        self.metrics_history = MetricsHistory(slots=24)
 
         await self.store.init()
         await self.cache_backend.init()
@@ -383,6 +389,10 @@ class ProxyOrchestrator(BaseAgent):
             self._spawn_task(cache_eviction_loop(self.cache_backend, eviction_interval))
         self._spawn_task(config_watch_loop(self, 30))
         self._spawn_task(write_flush_loop(self, 0.25))
+        # Q.3 — hourly snapshot loop; interval configurable for ops who want
+        # finer-grain KPI sparklines (10-min slots = 4h trailing) or coarser.
+        history_interval = int(self.config.get("metrics", {}).get("history_interval_s", 3600))
+        self._spawn_task(metrics_history_loop(self, history_interval))
 
         # Auto-discover local OpenAI-compatible providers (Ollama, LM Studio,
         # vLLM, LiteLLM) before seeding. Zero-config path for the developer
