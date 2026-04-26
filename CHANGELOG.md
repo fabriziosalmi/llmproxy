@@ -2,6 +2,26 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.24] — 2026-04-26
+
+### P.2 — UI consumer for spend forecast (M.2 backend)
+
+M.2's `/api/v1/analytics/forecast` has been live since 1.21.8. The UI surface was queued — now an operator sees "time to limit" at-a-glance above the existing Budget Gauge.
+
+`renderSpendForecast(host, forecast?, error?)` draws **3 MetricTiles**: Time to Limit · Burn Rate · Projected (24h). Intent-coded by alarm bucket:
+- `< 1h` → danger (rose) — alarm
+- `< 4h` → warning (amber)
+- `≥ 4h` → success (emerald) — calm
+- `null` → neutral / success (no burn yet)
+- `0` → danger ("OVER LIMIT")
+- no `daily_limit` → info ("no limit set")
+
+Time formats into the readable unit (`30m` / `2h 15m` / `2d`). USD: 2 dp ≥ $1, 4 dp below. Loading renders 3 skeletons (no layout shift); error renders **one** tile (not 3 duplicate "fetch failed" copies).
+
+10 new tests; 312/312 unit tests green.
+
+---
+
 ## [1.21.23] — 2026-04-26
 
 ### P.1 — UI consumer for rate-limit preset picker (N.6 backend)
