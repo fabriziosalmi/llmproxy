@@ -306,7 +306,8 @@ class TestRateLimiterConservation:
 
         successes = 0
         for _ in range(capacity + 20):
-            if await bucket.acquire():
+            allowed, _ = await bucket.acquire()
+            if allowed:
                 successes += 1
 
         assert successes == capacity, (
@@ -326,8 +327,8 @@ class TestRateLimiterConservation:
 
         # Next 100 must ALL fail
         for i in range(100):
-            result = await bucket.acquire()
-            assert result is False, f"Empty bucket accepted acquire at attempt {i}"
+            allowed, _ = await bucket.acquire()
+            assert allowed is False, f"Empty bucket accepted acquire at attempt {i}"
 
 
 # ── I11: Budget Guard Accounting ──────────────────────────────
