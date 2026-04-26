@@ -2,6 +2,30 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.39] — 2026-04-25
+
+### P1-3 (correctness) — Forwarder picks up hot-reloaded config
+
+The deferred P1 from the audit. Re-investigating cleared two things:
+
+**The bug was real but mis-stated by the audit.** The audit framed it as a non-atomic-swap race in `config_watch_loop`. Actual reading of the watcher (`proxy/background.py:24-45`) shows lines 26–42 are entirely *synchronous* — no `await` between mutations. In single-threaded asyncio, the swap is effectively atomic. The only `await` in the block is `load_plugins()` at line 45, and P0-4 already made that RCU-safe. So the race surface the audit described is largely closed.
+
+**The actual bug**: `RequestForwarder.__init__` did `self.config = config`. The watcher does `agent.config = agent._load_config()` — that *rebinds* the attribute to a **new** dict; the forwarder's reference still points at the **old** one. Result: hot-reload of `endpoints` and `fallback_chains` silently doesn't take effect on the request path. Operators edit `config.yaml`, see "Config hot-reloaded" in the log, but the new endpoint list is invisible to forwarding decisions until restart.
+
+Fix: `RequestForwarder` now accepts an optional `config_provider: Callable[[], dict]`. The orchestrator wires `config_provider=lambda: self.config`, so every endpoint / fallback-chain lookup reads the live agent config. `self.config` is now a property delegating to the provider; the static-dict path stays for back-compat. Provider failures fall back to the last-known dict (defensive — a watcher hiccup must not 500 the request path).
+
+4 regression tests in `tests/test_forwarder_config_reload.py`:
+- rebound `agent.config` → forwarder sees new endpoints
+- rebound `agent.config` → forwarder sees new fallback chains
+- legacy static-config callers keep working (back-compat)
+- when both are passed, `config_provider` wins (live source of truth)
+
+**Honest scope note**: `ZeroTrustManager` and a few other subsystems hold sub-tree config references with the same staleness pattern, but they're either narrower in request-path impact or are recreated by the watcher (`SecurityShield`, `WebhookDispatcher`). Those are filed as P2 followup, not bundled here.
+
+1141/1141 unit tests green.
+
+---
+
 ## [1.21.38] — 2026-04-25
 
 ### P1-2 (resilience) — Bounded stream buffer for the speculative analyzer
