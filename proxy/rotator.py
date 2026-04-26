@@ -14,10 +14,8 @@ Extracted modules:
 """
 
 import os
-import hmac
 import json
 import uuid
-import yaml
 import asyncio
 import logging
 import uvicorn
@@ -36,7 +34,6 @@ from core.zero_trust import ZeroTrustManager
 from core.rbac import RBACManager
 from core.circuit_breaker import CircuitManager
 from core.security import SecurityShield
-from core.secrets import SecretManager
 from core.plugin_engine import PluginManager, PluginHook, PluginContext, PluginState
 from core.identity import IdentityManager
 from core.webhooks import WebhookDispatcher, EventType
@@ -190,33 +187,13 @@ class ProxyOrchestrator(BaseAgent):
     # ── Config & Secrets ──
 
     def _load_config(self):
-        if os.path.exists(self.config_path):
-            with open(self.config_path, 'r') as f:
-                cfg = yaml.safe_load(f) or {}
-        else:
-            cfg = {"server": {"auth": {"enabled": False}}}
-
-        # Env-based endpoint overlay — runs on every config reload (boot + hot
-        # reload watcher). Keeps LLM_PROXY_ENDPOINT_<NAME>_* declarations in
-        # sync with the live config without requiring YAML edits.
-        from core.env_endpoints import inject_env_endpoints
-        inject_env_endpoints(cfg)
-
-        # Env override for the WAF toggle. Applied after YAML so env wins.
-        firewall_env = os.environ.get("LLM_PROXY_FIREWALL_ENABLED")
-        if firewall_env is not None:
-            enabled = firewall_env.strip().lower() not in ("0", "false", "off", "no", "")
-            cfg.setdefault("security", {}).setdefault("firewall", {})["enabled"] = enabled
-
-        return cfg
+        from .config_loader import load_config
+        return load_config(self.config_path)
 
     def _compute_config_hash_sync(self) -> str:
         """Blocking hash — must run via to_thread() from async context."""
-        import hashlib
-        if os.path.exists(self.config_path):
-            with open(self.config_path, 'rb') as f:
-                return hashlib.md5(f.read(), usedforsecurity=False).hexdigest()
-        return ""
+        from .config_loader import compute_config_hash
+        return compute_config_hash(self.config_path)
 
     def enqueue_write(self, key: str, value: Any):
         """Non-blocking enqueue of a state write. Logs error if queue is full."""
@@ -273,26 +250,13 @@ class ProxyOrchestrator(BaseAgent):
         await drain_pending_writes(self)
 
     def _get_api_keys(self) -> list[str]:
-        env_var = self.config.get("server", {}).get("auth", {}).get("api_keys_env", "LLM_PROXY_API_KEYS")
-        raw = SecretManager.get_secret(env_var, "") or ""
-        return [k.strip() for k in raw.split(",") if k.strip()]
+        from .auth_helpers import resolve_api_keys
+        return resolve_api_keys(self.config)
 
     def _verify_api_key(self, token: str) -> bool:
-        """Constant-time API-key check.
-
-        `token in valid_keys` short-circuits on the first byte mismatch and on
-        the first match — both leak timing. This OR-aggregates `compare_digest`
-        across every configured key and never breaks early, so total runtime
-        depends only on |valid_keys|, not on which key (if any) matched.
-        """
-        if not token:
-            return False
-        token_b = token.encode("utf-8", errors="replace")
-        matched = False
-        for k in self._get_api_keys():
-            if hmac.compare_digest(token_b, k.encode("utf-8", errors="replace")):
-                matched = True
-        return matched
+        """Constant-time API-key check (see proxy/auth_helpers.verify_api_key)."""
+        from .auth_helpers import verify_api_key
+        return verify_api_key(token, self._get_api_keys())
 
     # ── HTTP Session ──
 
@@ -305,24 +269,10 @@ class ProxyOrchestrator(BaseAgent):
             # Re-check after acquiring lock (another coroutine may have created it)
             if self._session is not None and not self._session.closed:
                 return self._session
-            http_cfg = self.config.get("server", {})
-            timeout_s = int(http_cfg.get("timeout", "30s").rstrip("s"))
+            from .http_session import build_http_session
+            self._session = build_http_session(self.config)
+            connector = self._session.connector
             pool_cfg = self.config.get("connection_pool", {})
-            connector = aiohttp.TCPConnector(
-                limit=pool_cfg.get("max_connections", 100),
-                limit_per_host=pool_cfg.get("max_per_host", 30),
-                ttl_dns_cache=pool_cfg.get("dns_cache_ttl", 300),
-                enable_cleanup_closed=True,
-                keepalive_timeout=pool_cfg.get("keepalive_timeout", 30),
-            )
-            self._session = aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(
-                    total=timeout_s,
-                    sock_connect=pool_cfg.get("connect_timeout", 10),
-                    sock_read=timeout_s,
-                ),
-                connector=connector,
-            )
             self.logger.info(
                 f"HTTP pool: max={connector.limit} per_host={connector.limit_per_host} "
                 f"keepalive={pool_cfg.get('keepalive_timeout', 30)}s"
