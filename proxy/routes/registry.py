@@ -28,6 +28,52 @@ def create_router(agent) -> APIRouter:
         if not token or token not in valid_keys:
             raise HTTPException(status_code=401, detail="Registry: Unauthorized")
 
+    @router.post("/api/v1/registry/scan")
+    async def scan_local_endpoints(request: Request):
+        """N.7 — On-demand local autodiscovery.
+
+        Probes the same local hosts/ports the boot-time scanner does
+        (Ollama 11434, LM Studio 1234, vLLM 8000, LiteLLM 4000 on
+        127.0.0.1 + host.docker.internal + LLM_PROXY_DISCOVERY_PEERS)
+        and returns candidate entries WITHOUT mutating the live registry.
+        Operators pick one from the UI, then post it via /api/v1/registry
+        like any manual entry.
+
+        Read-only by design: the original boot-time scan can only run
+        once at startup, so when an operator spins up Ollama after the
+        proxy is already running, this endpoint is the way to find it.
+        """
+        _check_admin_auth(request)
+        from core.local_probe import discover_local_endpoints
+
+        scratch: dict[str, Any] = {
+            "endpoints": {},
+            "discovery": agent.config.get("discovery", {}),
+        }
+        try:
+            found = await discover_local_endpoints(scratch)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=f"Discovery failed: {e}") from e
+
+        # Drop candidates whose base_url is already wired up in live config
+        # so the UI doesn't suggest dups the operator would have to dedupe.
+        live_urls = {
+            (cfg.get("base_url") or "").rstrip("/").lower()
+            for cfg in agent.config.get("endpoints", {}).values()
+        }
+        candidates = []
+        for ep_id in found:
+            entry = scratch["endpoints"][ep_id]
+            if entry.get("base_url", "").rstrip("/").lower() in live_urls:
+                continue
+            candidates.append({
+                "id": ep_id,
+                "provider": entry.get("provider", "openai-compatible"),
+                "base_url": entry.get("base_url", ""),
+                "models": entry.get("models", []),
+            })
+        return {"candidates": candidates, "total": len(candidates)}
+
     @router.post("/api/v1/registry/{endpoint_id}/toggle")
     async def toggle_endpoint(endpoint_id: str, request: Request):
         _check_admin_auth(request)

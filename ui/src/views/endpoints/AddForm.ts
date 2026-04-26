@@ -111,6 +111,16 @@ export function createAddEndpointForm(deps: AddFormDeps): AddFormHandle {
     heading.textContent = 'Add LLM Endpoint';
 
     const cancelBtn = createButton({ label: 'Cancel', variant: 'ghost', size: 'sm', testId: 'ep-cancel-btn' });
+    // N.7 — Scan local: probe well-known LLM ports (Ollama 11434, LM Studio
+    // 1234, vLLM 8000, LiteLLM 4000) on 127.0.0.1 + host.docker.internal
+    // and pre-fill the form with the first hit. Operator still confirms +
+    // submits — scan only saves typing.
+    const scanBtn = createButton({
+        label: 'Scan local',
+        variant: 'ghost',
+        size: 'sm',
+        testId: 'ep-scan-btn',
+    });
     const submitBtn = createButton({
         label: 'Add Endpoint',
         variant: 'primary',
@@ -120,6 +130,7 @@ export function createAddEndpointForm(deps: AddFormDeps): AddFormHandle {
 
     const actions = document.createElement('div');
     actions.className = 'flex items-center justify-end gap-2';
+    actions.appendChild(scanBtn);
     actions.appendChild(cancelBtn);
     actions.appendChild(submitBtn);
 
@@ -153,6 +164,49 @@ export function createAddEndpointForm(deps: AddFormDeps): AddFormHandle {
     }
 
     cancelBtn.addEventListener('click', () => close());
+
+    scanBtn.addEventListener('click', async () => {
+        const btn = scanBtn as HTMLButtonElement;
+        btn.disabled = true;
+        const labelSpan = btn.querySelector('span:last-child');
+        const original = labelSpan?.textContent ?? 'Scan local';
+        if (labelSpan) labelSpan.textContent = 'Scanning…';
+        try {
+            const token = typeof localStorage !== 'undefined' ? localStorage.getItem('proxy_key') ?? '' : '';
+            const res = await fetch(`${window.location.origin}/api/v1/registry/scan`, {
+                method: 'POST',
+                headers: token ? { Authorization: `Bearer ${token}` } : {},
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const body = (await res.json()) as { candidates?: Array<{ id: string; provider: string; base_url: string; models?: string[] }>; total?: number };
+            const candidates = body.candidates ?? [];
+            if (candidates.length === 0) {
+                deps.toast?.('No local LLM endpoints found on 127.0.0.1 / host.docker.internal', 'info');
+                return;
+            }
+            // Pre-fill with the first candidate. If multiple, surface the count
+            // so the operator knows there's more they could pick from.
+            const first = candidates[0]!;
+            idField.setValue(first.id);
+            urlField.setValue(first.base_url);
+            modelsField.setValue((first.models ?? []).join(', '));
+            // Provider select — match the candidate's provider if it's one of
+            // our options, otherwise leave the default.
+            const providerOptions = Array.from(providerSelect.options).map((o) => o.value);
+            if (providerOptions.includes(first.provider)) {
+                providerSelect.value = first.provider;
+            }
+            const note = candidates.length === 1
+                ? `Found ${first.id} @ ${first.base_url} — review + Add`
+                : `Found ${candidates.length} endpoints — using ${first.id} (others: ${candidates.slice(1).map((c) => c.id).join(', ')})`;
+            deps.toast?.(note, 'success');
+        } catch (err) {
+            deps.toast?.(`Scan failed: ${(err as Error)?.message ?? err}`, 'error');
+        } finally {
+            btn.disabled = false;
+            if (labelSpan) labelSpan.textContent = original;
+        }
+    });
 
     submitBtn.addEventListener('click', async () => {
         const id = idField.getValue().trim();
