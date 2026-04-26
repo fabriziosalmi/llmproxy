@@ -2,6 +2,36 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.43] — 2026-04-25
+
+### Budget persistence — Tier 1 (streaming + embeddings now persist)
+
+Strategic priority #2 from saved memory. Scoping pass found that only the chat (`/v1/chat/completions`) route enqueued a `budget:daily_total` write after charging — **streaming charges and embeddings charges mutated `agent.total_cost_today` in-memory but never persisted**. A crash between the in-memory increment and the next chat request would lose that spend.
+
+The audit spend ledger (`store.log_spend(...)`) was always intact, so reconciliation was theoretically possible — but the live `total_cost_today` snapshot drifted from disk until something triggered an enqueue. Most visible symptom: restart after a streaming-heavy session showed budget-state drift compared to the actual spend.
+
+**Fix shape**: extracted `proxy/budget.py: charge_and_persist(rotator, lock, amount)` — single source of truth for "increment today's spend AND enqueue persistence under the same lock". Routed both leaky paths through it:
+
+- **`proxy/forwarder.py`** — streaming finally block (the increment that runs after `StreamingResponse` returns to the route, after chat.py's pre-stream enqueue has already snapshotted)
+- **`proxy/routes/embeddings.py`** — embeddings cost-tracking block
+
+The helper:
+- **No-ops on amount=0** (failed upstream returning no usage shouldn't pollute the queue with zero-charges that the 0.25s flush loop has to process)
+- **Swallows enqueue exceptions** (a full queue must not 500 the request — the in-memory increment has already happened, and the audit ledger is the authoritative record regardless)
+
+6 regression tests in `tests/test_budget_persistence.py`:
+- helper increments + enqueues atomically under one lock
+- helper is a no-op for amount=0
+- helper swallows enqueue exceptions (full queue, broken store)
+- 200 concurrent charges under one lock land on the exact running total + queue is monotonic
+- 2 smoke tests verifying both call sites still reference the helper (catches future re-inlining that forgets persistence)
+
+Tier 2 (periodic budget snapshot loop for crash-during-idle) and Tier 3 (reconcile from spend_log on startup) are filed but not bundled — Tier 1 closes the leaky paths cleanly.
+
+1147/1147 unit tests green.
+
+---
+
 ## [1.21.42] — 2026-04-25
 
 ### Refactor — Extract request pipeline from `proxy/rotator.py` (split 3/3, complete)
