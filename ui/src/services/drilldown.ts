@@ -19,6 +19,7 @@ import { api } from '../../services/api.js';
 import { store } from '../../services/store.js';
 import { toast } from '../../services/toast.js';
 import { timerange } from '../../services/timerange.js';
+import { createSnippet } from '../ui';
 
 const BASE_URL = window.location.origin;
 
@@ -596,19 +597,87 @@ function _modelRelated(candidates: EndpointLike[]): HTMLElement {
 }
 
 function _modelActions(modelId: string): HTMLElement {
-    const el = document.createElement('div');
-    el.innerHTML = `
-        <p class="text-[11px] text-slate-400 leading-relaxed mb-3">
-            To change which endpoints serve this model, edit the endpoint's <code>models:</code>
-            list. Cloud: <code>config.yaml</code>. Local: <code>LLM_PROXY_ENDPOINT_&lt;NAME&gt;_MODELS</code>
-            in <code>.env</code>. Auto-discovered entries re-populate on each probe cycle.
-        </p>
-        <p class="text-[11px] text-slate-500 font-mono">
-            Smoke-test: <br>
-            <code class="text-cyan-400">curl $URL/v1/chat/completions -d '{"model":"${modelId}", ...}'</code>
-        </p>
-    `;
-    return el;
+    // O.3 — copy/paste-to-prod snippets. Three languages cover ~95% of
+    // operator integration paths: cURL for smoke tests, Python for
+    // backend pipelines, TypeScript for browser/Node SDK use. We pin to
+    // the OpenAI SDK on the typed-language side because that's the
+    // protocol the proxy speaks; users wiring up Anthropic/Google clients
+    // simply swap base_url + the SDK they already have.
+    const base = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8090';
+    const wrap = document.createElement('div');
+    wrap.className = 'space-y-3';
+
+    const intro = document.createElement('p');
+    intro.className = 'text-[11px] text-slate-400 leading-relaxed';
+    intro.innerHTML =
+        'Copy any snippet and run it against the proxy. The bearer key is read from your ' +
+        '<code>$LLMPROXY_KEY</code> environment variable so nothing secret lands in the clipboard.';
+    wrap.appendChild(intro);
+
+    const curl = createSnippet({
+        language: 'cURL',
+        testId: 'model-snippet-curl',
+        code: [
+            `curl ${base}/v1/chat/completions \\`,
+            '  -H "Content-Type: application/json" \\',
+            '  -H "Authorization: Bearer $LLMPROXY_KEY" \\',
+            `  -d '{`,
+            `    "model": "${modelId}",`,
+            `    "messages": [{"role": "user", "content": "Hello"}]`,
+            `  }'`,
+        ].join('\n'),
+    });
+    wrap.appendChild(curl.root);
+
+    const py = createSnippet({
+        language: 'Python',
+        testId: 'model-snippet-python',
+        code: [
+            'import os',
+            'from openai import OpenAI',
+            '',
+            'client = OpenAI(',
+            `    base_url="${base}/v1",`,
+            '    api_key=os.environ["LLMPROXY_KEY"],',
+            ')',
+            '',
+            'resp = client.chat.completions.create(',
+            `    model="${modelId}",`,
+            '    messages=[{"role": "user", "content": "Hello"}],',
+            ')',
+            'print(resp.choices[0].message.content)',
+        ].join('\n'),
+    });
+    wrap.appendChild(py.root);
+
+    const ts = createSnippet({
+        language: 'TypeScript',
+        testId: 'model-snippet-typescript',
+        code: [
+            "import OpenAI from 'openai';",
+            '',
+            'const client = new OpenAI({',
+            `    baseURL: '${base}/v1',`,
+            '    apiKey: process.env.LLMPROXY_KEY,',
+            '});',
+            '',
+            'const resp = await client.chat.completions.create({',
+            `    model: '${modelId}',`,
+            "    messages: [{ role: 'user', content: 'Hello' }],",
+            '});',
+            'console.log(resp.choices[0].message.content);',
+        ].join('\n'),
+    });
+    wrap.appendChild(ts.root);
+
+    const note = document.createElement('p');
+    note.className = 'text-[10px] text-slate-500';
+    note.innerHTML =
+        'To change which endpoints serve this model, edit the endpoint\'s <code>models:</code> ' +
+        'list. Cloud: <code>config.yaml</code>. Local: <code>LLM_PROXY_ENDPOINT_&lt;NAME&gt;_MODELS</code> in <code>.env</code>.';
+    wrap.appendChild(note);
+
+    return wrap;
 }
 
 // ── Plugin kind ────────────────────────────────────────────────────────────
