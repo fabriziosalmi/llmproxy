@@ -2,6 +2,30 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.31] — 2026-04-26
+
+### R.3 — TrafficFlow ribbon thickness proportional to node intensity
+
+O.4 shipped equal-thickness ribbons because no per-edge traffic counter is exposed today (multi-day backend task). R.3 closes the visual loop with data already available: **intensity-weighted ribbons**.
+
+`FlowNode.weight` (0-1, optional) drives stroke-width through `_weightToWidth` → range `[1.25px, 6px]`.
+
+`_buildFlowData` computes weights from current `GuardsStatus` + circuit-breaker state — no new backend:
+- `state.live` → 1.00 (full thickness)
+- `state.blocked` → 0.85
+- `state.down` → 0.45 (visibly thinner)
+- `state.idle` → 0.30 (thinnest)
+
+Per-node refinements:
+- **Firewall (blocked)**: `weight = max(0.85, block_ratio + 0.4)` where `block_ratio = total_blocked / total_scanned`. Active WAFs get fatter ribbons than quiet enabled ones.
+- **Provider**: weight is reduced by `failure_count / threshold` (capped at 0.4). A flaky-but-recovering endpoint reads visibly different from a healthy one even before its circuit goes half-open.
+
+**Honest re-statement**: INTENSITY-weighted, not TRAFFIC-SHARE-weighted. True Sankey proportionality needs per-edge counters that don't exist yet — when they do, the `FlowNode.weight` contract is the seam.
+
+4 new tests; 344/344 unit tests green.
+
+---
+
 ## [1.21.30] — 2026-04-26
 
 ### R.2 — Drawer mobile second pass
