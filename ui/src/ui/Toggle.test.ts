@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createToggle } from './Toggle';
 
 describe('createToggle', () => {
@@ -69,5 +69,61 @@ describe('createToggle', () => {
     it('renders the optional description line', () => {
         const t = createToggle({ label: 'Firewall', description: 'WAF on Ring 0' });
         expect(t.root.textContent).toContain('WAF on Ring 0');
+    });
+
+    // N.3 — Trailing-debounce on onChange. Default 0 keeps the existing
+    // sync behavior (covered above); >0 collapses rapid flips into one fire.
+    describe('debounceMs', () => {
+        beforeEach(() => vi.useFakeTimers());
+        afterEach(() => vi.useRealTimers());
+
+        it('10 rapid clicks fire onChange once with the final state', () => {
+            const onChange = vi.fn();
+            const t = createToggle({ label: 'X', onChange, debounceMs: 200 });
+            const sw = t.root.querySelector<HTMLButtonElement>('[role="switch"]')!;
+
+            for (let i = 0; i < 10; i++) sw.click();
+            // No fire yet — within the debounce window.
+            expect(onChange).not.toHaveBeenCalled();
+
+            vi.advanceTimersByTime(200);
+            expect(onChange).toHaveBeenCalledTimes(1);
+            // 10 flips from initial false → final state is false (even count).
+            expect(onChange).toHaveBeenCalledWith(false);
+        });
+
+        it('a flip + pause + flip fires twice (separate windows)', () => {
+            const onChange = vi.fn();
+            const t = createToggle({ label: 'X', onChange, debounceMs: 200 });
+            const sw = t.root.querySelector<HTMLButtonElement>('[role="switch"]')!;
+
+            sw.click();
+            vi.advanceTimersByTime(250);
+            expect(onChange).toHaveBeenCalledTimes(1);
+
+            sw.click();
+            vi.advanceTimersByTime(250);
+            expect(onChange).toHaveBeenCalledTimes(2);
+        });
+
+        it('debounceMs=0 fires synchronously (default behavior preserved)', () => {
+            const onChange = vi.fn();
+            const t = createToggle({ label: 'X', onChange, debounceMs: 0 });
+            const sw = t.root.querySelector<HTMLButtonElement>('[role="switch"]')!;
+            sw.click();
+            expect(onChange).toHaveBeenCalledTimes(1);
+        });
+
+        it('setChecked(.., fire=true) also honors the debounce', () => {
+            const onChange = vi.fn();
+            const t = createToggle({ label: 'X', onChange, debounceMs: 200 });
+            t.setChecked(true, true);
+            t.setChecked(false, true);
+            t.setChecked(true, true);
+            expect(onChange).not.toHaveBeenCalled();
+            vi.advanceTimersByTime(200);
+            expect(onChange).toHaveBeenCalledTimes(1);
+            expect(onChange).toHaveBeenCalledWith(true);
+        });
     });
 });
