@@ -29,7 +29,14 @@ class TokenBucket:
         self._last_refill = time.monotonic()
         self._lock = asyncio.Lock()
 
-    async def acquire(self) -> bool:
+    async def acquire(self) -> Tuple[bool, float]:
+        """Atomic check-and-take. Returns (allowed, retry_after_seconds).
+
+        retry_after is computed under the same lock as the token mutation, so
+        the value reflects the post-acquire state — no read-modify-write race
+        with a concurrent acquire(). 0.0 when allowed; otherwise seconds
+        until the next whole token refills.
+        """
         async with self._lock:
             now = time.monotonic()
             elapsed = now - self._last_refill
@@ -37,14 +44,22 @@ class TokenBucket:
             self._last_refill = now
             if self._tokens >= 1.0:
                 self._tokens -= 1.0
-                return True
-            return False
+                return True, 0.0
+            # Denied — compute retry_after under the same lock.
+            retry_after = (1.0 - self._tokens) / self.rate if self.rate > 0 else float("inf")
+            return False, retry_after
 
     @property
     def retry_after(self) -> float:
-        """Seconds until next token is available."""
+        """Advisory snapshot of seconds until the next token. Lock-free —
+        intended only for read-only inspection (admin endpoints, tests).
+        For correct retry hints in the request path, use the second value
+        returned by `acquire()` which is computed atomically with the take.
+        """
         if self._tokens >= 1.0:
             return 0.0
+        if self.rate <= 0:
+            return float("inf")
         return (1.0 - self._tokens) / self.rate
 
 
@@ -82,8 +97,7 @@ class RateLimiter:
                 self._buckets.move_to_end(key)
             bucket = self._buckets[key]
 
-        allowed = await bucket.acquire()
-        return allowed, bucket.retry_after
+        return await bucket.acquire()
 
 
 # N.6 — Named presets for runtime rate-limit tuning. Operators set one with
