@@ -16,6 +16,11 @@ import { renderEndpointBreakdown } from './sections/EndpointBreakdown';
 import { renderFirewallStats } from './sections/FirewallStats';
 import { renderRingLatencyBars, renderTtft } from './sections/RingLatency';
 import { renderRingTimeline } from './sections/RingTimeline';
+import {
+    renderSpendForecast,
+    type SpendForecastApi,
+    type SpendForecastBlock,
+} from './sections/SpendForecast';
 import { mountThreatChart, type ThreatChartHandle } from './sections/ThreatChart';
 import { renderTrafficFlow, type FlowData, type FlowNode } from './sections/TrafficFlow';
 import type { GuardsStatus, LatencyMetrics, TimelinePayload } from './sections/types';
@@ -71,7 +76,7 @@ export function mountThreatsEventFeed(container: HTMLElement): ThreatEventFeed {
     return feed;
 }
 
-export interface SectionsApi {
+export interface SectionsApi extends SpendForecastApi {
     fetchMetrics: () => Promise<string>;
     fetchGuardsStatus: () => Promise<GuardsStatus | null>;
     fetchLatencyMetrics: () => Promise<LatencyMetrics | null>;
@@ -87,6 +92,8 @@ export interface SectionsHosts {
     ringTimeline: HTMLElement | null;
     chartCanvas: HTMLCanvasElement | null;
     trafficFlow?: HTMLElement | null;
+    /** P.2 — Spend forecast tile grid (time to limit / burn rate / projected). */
+    spendForecast?: HTMLElement | null;
 }
 
 export interface SectionsOptions {
@@ -109,12 +116,17 @@ export function mountThreatsSections(hosts: SectionsHosts, opts: SectionsOptions
         chart = mountThreatChart(hosts.chartCanvas);
     }
 
+    // Initial loading state for the spend forecast — renders skeleton tiles
+    // immediately so we don't get a layout shift when the first poll lands.
+    if (hosts.spendForecast) renderSpendForecast(hosts.spendForecast, null);
+
     const refresh = async (): Promise<void> => {
-        const [promText, guards, latency, timeline] = await Promise.all([
+        const [promText, guards, latency, timeline, forecast] = await Promise.all([
             opts.api.fetchMetrics().catch(() => ''),
             opts.api.fetchGuardsStatus().catch(() => null),
             opts.api.fetchLatencyMetrics().catch(() => null),
             opts.api.fetchRingTimeline().catch(() => null),
+            opts.api.fetchSpendForecast().catch((err) => ({ __error: (err as Error)?.message ?? 'unreachable' } as unknown as SpendForecastBlock)),
         ]);
 
         // Budget + firewall are powered by /metrics + guards-status combined.
@@ -148,6 +160,17 @@ export function mountThreatsSections(hosts: SectionsHosts, opts: SectionsOptions
         // Router → Providers" with current state per node.
         if (hosts.trafficFlow) {
             renderTrafficFlow(hosts.trafficFlow, _buildFlowData(promText, guards));
+        }
+        // P.2 — Spend forecast tiles. Errors from /forecast are surfaced on
+        // the leading tile only, the rest stays renderable (operator still
+        // sees burn rate from /metrics if forecast is down).
+        if (hosts.spendForecast) {
+            const sentinel = forecast as unknown as { __error?: string };
+            if (sentinel.__error) {
+                renderSpendForecast(hosts.spendForecast, null, sentinel.__error);
+            } else {
+                renderSpendForecast(hosts.spendForecast, forecast);
+            }
         }
     };
 
