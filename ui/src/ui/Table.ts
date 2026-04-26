@@ -30,9 +30,24 @@ export interface TableColumn<T> {
      */
     hideBelow?: 'sm' | 'md';
     /** Returns a string or DOM node for the cell. Falls back to String(row[key]). */
-    render?: (row: T) => string | HTMLElement;
+    render?: (row: T) => string | HTMLElement | DocumentFragment;
     /** Pulls a comparable value out of the row when sorting on this column. */
     sortValue?: (row: T) => string | number;
+    /**
+     * Extra Tailwind classes applied to the cell `<td>`. Lets a column
+     * carry its layout (flex, gap, justify-end) without requiring an
+     * extra wrap `<div>` inside the render function — saves a DOM node
+     * per row × N rows, and pushes the data-explain / data-drilldown
+     * attribute closer to the cell semantics.
+     */
+    cellClassName?: string;
+    /**
+     * Per-row HTML attributes applied to the cell `<td>`. Used for
+     * row-specific data-* attributes (e.g. `data-explain="circuit:<id>"`)
+     * that the wrap div used to carry. Returned record keys are passed
+     * to setAttribute as-is.
+     */
+    cellAttrs?: (row: T) => Record<string, string>;
 }
 
 export interface TableOptions<T> {
@@ -200,8 +215,14 @@ export function createTable<T>(opts: TableOptions<T>): TableHandle<T> {
                 td.className = cx(
                     'px-3 py-2 text-slate-300 align-middle',
                     ALIGN_CLASS[col.align ?? 'left'],
-                    col.hideBelow && HIDE_BELOW_CLASS[col.hideBelow]
+                    col.hideBelow && HIDE_BELOW_CLASS[col.hideBelow],
+                    col.cellClassName
                 );
+                if (col.cellAttrs) {
+                    for (const [k, v] of Object.entries(col.cellAttrs(row))) {
+                        td.setAttribute(k, v);
+                    }
+                }
                 if (col.render) {
                     const out = col.render(row);
                     if (typeof out === 'string') td.innerHTML = out;
