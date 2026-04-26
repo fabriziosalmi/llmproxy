@@ -2,6 +2,23 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.49] — 2026-04-26
+
+### Lint hygiene — clear 5 ruff F401 unused-import errors
+
+The CI lint job had been failing on `b55992f` (and on prior commits this session) due to 5 unused `import` statements I introduced when scaffolding test files earlier in the session:
+
+- `proxy/rotator.py` — leftover `time` and `fastapi.HTTPException` imports after the rotator-split extractions (request_pipeline.py + others)
+- `tests/test_forwarder_config_reload.py:14` — `import pytest` (file uses no fixtures or markers)
+- `tests/test_forwarder_stream_buffer.py:11` — same
+- `tests/test_smart_router_scoring.py:20` — same
+
+`make test` (1192/1192) didn't catch these — the lint step is in the GitHub Actions `CI` workflow, run separately from the test suite. Local pytest doesn't enforce ruff. Auto-fixed via `ruff check . --fix`.
+
+No code change to the runtime proxy or test behavior. Pure lint cleanup.
+
+---
+
 ## [1.21.48] — 2026-04-26
 
 ### Docs — Clear all 3 Dependabot alerts + unblock docs CI

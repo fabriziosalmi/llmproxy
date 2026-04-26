@@ -18,10 +18,8 @@ import asyncio
 import logging
 import uvicorn
 import aiohttp
-import time
 from typing import Optional, Dict, Any
 
-from fastapi import HTTPException
 
 from core.base_agent import BaseAgent
 from core.metrics import MetricsTracker
