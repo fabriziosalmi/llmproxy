@@ -122,10 +122,16 @@ button:active, .cursor-pointer:active {
     text-shadow: 0 0 30px rgba(0, 122, 255, 0.15);
 }
 
-/* ─── 1.5: Custom Scrollbars — visible only on hover/scroll ─── */
+/* ─── 1.5: Custom Scrollbars — visible only on hover/scroll ───
+ * N.4: bumped width 3px → 6px (3px was below the OS hit-target threshold
+ * on Windows/Linux, operators ended up overshooting) and added a
+ * light-theme variant so the scrollbar stays legible when html.theme-light
+ * inverts the substrate. Behavior intent is unchanged: scrollbars stay
+ * invisible at rest and fade in on hover/scroll, preserving the
+ * immersive surface. */
 ::-webkit-scrollbar {
-    width: 3px;
-    height: 3px;
+    width: 6px;
+    height: 6px;
 }
 ::-webkit-scrollbar-track {
     background: transparent;
@@ -137,10 +143,13 @@ button:active, .cursor-pointer:active {
 }
 *:hover::-webkit-scrollbar-thumb,
 *:active::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.1);
 }
 *:hover::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.2);
+}
+::-webkit-scrollbar-corner {
+    background: transparent;
 }
 /* Firefox */
 * {
@@ -148,7 +157,20 @@ button:active, .cursor-pointer:active {
     scrollbar-color: transparent transparent;
 }
 *:hover {
-    scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+    scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+/* Light theme — invert the thumb so it stays visible against the bright
+ * substrate. !important wins against the universal selectors above. */
+html.theme-light *:hover::-webkit-scrollbar-thumb,
+html.theme-light *:active::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.18) !important;
+}
+html.theme-light *:hover::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.3) !important;
+}
+html.theme-light *:hover {
+    scrollbar-color: rgba(0, 0, 0, 0.18) transparent !important;
 }
 
 .scrollbar-hide::-webkit-scrollbar {
