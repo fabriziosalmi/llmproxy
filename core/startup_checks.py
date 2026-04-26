@@ -23,6 +23,39 @@ class StartupError(Exception):
 _LAST_WARNINGS: list[str] = []
 
 
+# Actionable provider links for missing/invalid keys. Operators reading
+# the warnings get a one-click path to the right place — billing for
+# revoked/quota-exhausted keys, key dashboard for misconfigured ones.
+_PROVIDER_LINKS = {
+    "openai": "https://platform.openai.com/api-keys (billing: https://platform.openai.com/account/billing)",
+    "anthropic": "https://console.anthropic.com/settings/keys (billing: https://console.anthropic.com/settings/billing)",
+    "google": "https://aistudio.google.com/app/apikey",
+    "azure": "https://portal.azure.com (Azure OpenAI resource → Keys and Endpoint)",
+    "groq": "https://console.groq.com/keys",
+    "mistral": "https://console.mistral.ai/api-keys/",
+    "openrouter": "https://openrouter.ai/keys",
+    "cohere": "https://dashboard.cohere.com/api-keys",
+}
+
+
+def _provider_link_hint(env_name: str, ep_provider: str) -> str:
+    """Return a 'Get one at: <url>' suffix for a known provider, '' otherwise.
+
+    Match by provider field first (config-declared), then by env-var prefix
+    (covers OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.).
+    """
+    key = (ep_provider or "").lower()
+    if key not in _PROVIDER_LINKS:
+        env_lower = env_name.lower()
+        for known in _PROVIDER_LINKS:
+            if known in env_lower:
+                key = known
+                break
+    if key in _PROVIDER_LINKS:
+        return f"\n  Get one at: {_PROVIDER_LINKS[key]}"
+    return ""
+
+
 def get_startup_warnings() -> list[str]:
     """Return a copy of the most recent run_startup_checks() warnings."""
     return list(_LAST_WARNINGS)
@@ -80,6 +113,7 @@ def validate_config(config: dict) -> list[str]:
                 warnings.append(
                     f"Endpoint '{name}' needs {api_key_env} — skipped.\n"
                     f"  Set in .env: {api_key_env}=your-api-key"
+                    + _provider_link_hint(api_key_env, ep_cfg.get("provider", ""))
                 )
 
     if endpoints and not active_providers:
