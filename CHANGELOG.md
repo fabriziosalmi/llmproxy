@@ -2,6 +2,22 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.32] — 2026-04-25
+
+### P0-1 (security) — OIDC issuer prefix-bypass fixed
+
+`core/identity.py:181` matched providers by `issuer.startswith(p.issuer.rstrip("/"))`. An attacker who controlled a host like `accounts.google.com.attacker.com` could mint a JWT whose `iss` claim merely *started with* the trusted issuer string and reach the JWKS resolution path with their own provider. The downstream PyJWT `verify_iss=True` check would still catch it on signature, but no token from an unverified prefix should ever reach JWKS lookup — that's a remote fetch initiated from an attacker-controlled string.
+
+Replaced with strict equality: `if p.issuer == issuer:`. Two regression tests added in `tests/test_identity.py`:
+- `test_issuer_prefix_bypass_rejected` — `accounts.google.com.attacker.com` rejected
+- `test_issuer_trailing_slash_variant_rejected` — `accounts.google.com/evil` rejected
+
+1115/1115 unit tests green.
+
+First of 5 P0 critical fixes from the 360° audit.
+
+---
+
 ## [1.21.31] — 2026-04-26
 
 ### R.3 — TrafficFlow ribbon thickness proportional to node intensity
