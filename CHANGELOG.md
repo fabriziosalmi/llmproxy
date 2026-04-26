@@ -2,6 +2,25 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.20] — 2026-04-26
+
+### O.3 — Copy/paste-to-prod snippets on model Inspect
+
+The model drilldown's "Actions" tab used to surface a single inline pseudocode line. Now three copy-paste-to-prod snippets, each with a working clipboard button.
+
+**`src/ui/Snippet.ts`** — new primitive. `createSnippet({ language, code, caption? })` returns a card with a language tag, a copy button that flashes "copied" / "failed" for 1.5 s, and the code in a `<pre><code>`. Clipboard logic prefers `navigator.clipboard.writeText` and falls back to the textarea + `execCommand` path so http:// dev environments still work. Returns a `copy()` handle for programmatic use.
+
+**Wired in `_modelActions`** with three snippets:
+- **cURL** with `Authorization: Bearer $LLMPROXY_KEY` — nothing secret lands in the clipboard.
+- **Python** via the OpenAI SDK pointed at `/v1`.
+- **TypeScript** via the OpenAI SDK (browser/Node).
+
+Each carries a stable `testId` (`model-snippet-{curl,python,typescript}`). `base_url` reads from `window.location.origin` so the snippet always matches the dashboard the operator is looking at.
+
+6 new Snippet tests + 284/284 unit tests green. Bundle +0.54 kB gzip (38.61 → 39.15).
+
+---
+
 ## [1.21.19] — 2026-04-26
 
 ### O.2 — Pulse on live dots + emerald glow on enabled plugin cards
