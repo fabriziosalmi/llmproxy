@@ -2,6 +2,25 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.27] — 2026-04-26
+
+### Q.2 — Auth-gated OpenAPI mirror + Settings API Reference card
+
+Default FastAPI `/openapi.json` is disabled at app construction when auth is on (`proxy/app_factory.py:86` — route map is recon for unauthenticated attackers). Operators in production lost the ability to feed the schema into Swagger / Postman / openapi-generator. Q.2 adds an auth-gated mirror + a Settings card.
+
+**Backend** — `GET /api/v1/openapi.json` (auth-gated). Calls `request.app.openapi()` so the response is what FastAPI would serve on the default route, just behind admin auth.
+
+**Frontend** — `mountApiReference(host, api)`:
+- Header chips: "OpenAPI 3.1.0" + "N paths".
+- Body: intro linking to editor.swagger.io / Postman / openapi-generator, JSON spec in a Snippet (O.3 — copy button, monospace, overflow-x-auto), "Open in Swagger Editor" button.
+- 404 specifically calls out the version requirement (≥ 1.21.27).
+
+**Honest deferred**: live Swagger UI embed inside the card. Needs either CDN dep (rejected — 0 deps policy) or `swagger-ui-dist` static asset (~1 MB). Snippet + open-in-Editor covers 90% of the value at 0 KB.
+
+5 new UI tests + 1 backend test; 334/334 UI + 44/44 backend.
+
+---
+
 ## [1.21.26] — 2026-04-26
 
 ### Q.1 — UI consumer for routing cost_weight slider (K.1 backend)
