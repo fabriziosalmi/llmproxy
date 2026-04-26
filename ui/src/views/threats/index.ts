@@ -214,57 +214,96 @@ function _buildFlowData(promText: string, guards: GuardsStatus | null): FlowData
     const reqs = extractMetric(promText, 'llm_proxy_requests_total');
     const blocked = extractMetric(promText, 'llm_proxy_injection_blocked_total');
 
+    // R.3 — Map a node state to a default ribbon weight (0-1). Operators
+    // visually triage by state, so the weight encodes "intensity" rather
+    // than traffic share (which would need per-edge counters we don't
+    // yet expose). Live = thick, idle = thin.
+    const stateWeight = { live: 1.0, blocked: 0.85, down: 0.45, idle: 0.3 } as const;
+
     // Guards — surface the four canonical ones we always show in the Guards
     // tab. Each can be enabled / disabled / blocking.
     const features = guards?.features ?? {};
     const blockBySig = guards?.firewall?.block_by_signature ?? {};
+    // R.3 — block ratio = blocks / total_scanned. Drives a fatter ribbon
+    // when the firewall is actively catching traffic. Falls back to 1.0
+    // when nothing's been blocked yet.
+    const fwScanned = guards?.firewall?.total_scanned ?? 0;
+    const fwBlocked = guards?.firewall?.total_blocked ?? 0;
+    const fwBlockRatio = fwScanned > 0 ? Math.min(1, fwBlocked / fwScanned) : 0;
+    const firewallState: FlowNode['state'] =
+        guards?.firewall?.enabled === false
+            ? 'down'
+            : Object.keys(blockBySig).length > 0
+              ? 'blocked'
+              : 'live';
     const guardNodes: FlowNode[] = [
         {
             id: 'firewall',
             label: 'Firewall',
             sub: guards?.firewall?.enabled !== false ? 'WAF · L1' : 'OFF',
-            state:
-                guards?.firewall?.enabled === false
-                    ? 'down'
-                    : Object.keys(blockBySig).length > 0
-                      ? 'blocked'
-                      : 'live',
+            state: firewallState,
+            // Active blocks → thicker ribbon. Floor at the state default
+            // so a quiet but enabled WAF still reads as "alive".
+            weight:
+                firewallState === 'blocked'
+                    ? Math.max(stateWeight.blocked, fwBlockRatio + 0.4)
+                    : stateWeight[firewallState],
         },
         {
             id: 'injection_guard',
             label: 'Injection',
             sub: features.injection_guard !== false ? 'L2' : 'OFF',
             state: features.injection_guard !== false ? 'live' : 'idle',
+            weight: features.injection_guard !== false ? stateWeight.live : stateWeight.idle,
         },
         {
             id: 'pii_masker',
             label: 'PII Mask',
             sub: 'L2',
             state: 'live',
+            weight: stateWeight.live,
         },
         {
             id: 'link_sanitizer',
             label: 'Link Scrub',
             sub: features.link_sanitizer !== false ? 'L4' : 'OFF',
             state: features.link_sanitizer !== false ? 'live' : 'idle',
+            weight: features.link_sanitizer !== false ? stateWeight.live : stateWeight.idle,
         },
     ];
 
     // Providers — derive from circuit_breakers. Each entry maps to one
     // provider node with live (closed circuit), blocked (open), or down state.
+    // R.3 — weight: live providers get full thickness, half-open thinner
+    // (warning), open thinnest (down). failure_count adds slight penalty
+    // even on a closed circuit so a flaky-but-recovering endpoint reads
+    // visibly different from a healthy one.
     const cbs = guards?.circuit_breakers ?? {};
     const providerNodes: FlowNode[] = Object.keys(cbs).map((id) => {
-        const state = (cbs[id]?.state ?? 'closed').toLowerCase();
+        const cbInfo = cbs[id] ?? {};
+        const state = (cbInfo.state ?? 'closed').toLowerCase();
+        const failures = cbInfo.failure_count ?? 0;
+        const threshold = cbInfo.failure_threshold ?? 5;
+        const failPenalty = threshold > 0 ? Math.min(0.4, failures / threshold * 0.4) : 0;
+        const nodeState: FlowNode['state'] =
+            state === 'open' ? 'down' : state === 'half_open' ? 'blocked' : 'live';
         return {
             id,
             label: id.length > 14 ? id.slice(0, 12) + '…' : id,
             sub: state === 'closed' ? 'LIVE' : state.toUpperCase(),
-            state: state === 'open' ? 'down' : state === 'half_open' ? 'blocked' : 'live',
+            state: nodeState,
+            weight: Math.max(0.1, stateWeight[nodeState] - failPenalty),
         };
     });
     if (providerNodes.length === 0) {
         // Onboarding state — no endpoints registered yet.
-        providerNodes.push({ id: 'none', label: 'No endpoints', sub: 'add one', state: 'idle' });
+        providerNodes.push({
+            id: 'none',
+            label: 'No endpoints',
+            sub: 'add one',
+            state: 'idle',
+            weight: stateWeight.idle,
+        });
     }
 
     return {

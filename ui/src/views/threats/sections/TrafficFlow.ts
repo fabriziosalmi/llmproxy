@@ -20,10 +20,19 @@ import { cx } from '../../../ui';
 export interface FlowNode {
     id: string;
     label: string;
-    /** Smaller secondary line under the label (e.g. counts, "OFF · env"). */
+    /** Smaller secondary line under the label (e.g. counts, "OFF · count"). */
     sub?: string;
     /** Visual state — drives color + pulse. */
     state: 'live' | 'idle' | 'blocked' | 'down';
+    /**
+     * R.3 — Edge ribbon weight 0.0-1.0. Drives the stroke-width of the
+     * cubic-bezier connecting THIS node to the column on either side.
+     * Intent-weighted, NOT traffic-share-proportional (no per-edge counter
+     * exposed today). Live providers + active guards are heavier;
+     * idle/down nodes are thinner. Default 1.0 keeps the existing visual
+     * for callers that haven't computed a weight yet.
+     */
+    weight?: number;
 }
 
 export interface FlowData {
@@ -119,13 +128,31 @@ function _node(x: number, y: number, w: number, h: number, node: FlowNode): SVGG
     return g;
 }
 
-function _edge(x1: number, y1: number, x2: number, y2: number, intent: 'flow' | 'block'): SVGPathElement {
+// R.3 — Map a 0-1 weight to a Sankey-style ribbon thickness. The min is
+// thick enough to register as a line (a 0.5px stroke vanishes at typical
+// viewport DPI), the max stays subtle so a heavy edge doesn't drown the
+// node it connects.
+const _EDGE_WIDTH_MIN = 1.25;
+const _EDGE_WIDTH_MAX = 6.0;
+function _weightToWidth(weight: number | undefined): number {
+    const w = Math.min(1, Math.max(0, weight ?? 1));
+    return _EDGE_WIDTH_MIN + (_EDGE_WIDTH_MAX - _EDGE_WIDTH_MIN) * w;
+}
+
+function _edge(
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    intent: 'flow' | 'block',
+    weight?: number,
+): SVGPathElement {
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     const dx = (x2 - x1) * 0.45;
     path.setAttribute('d', `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`);
     path.setAttribute('fill', 'none');
     path.setAttribute('stroke', intent === 'block' ? 'rgba(244,63,94,0.4)' : 'rgba(34,211,238,0.35)');
-    path.setAttribute('stroke-width', '1.5');
+    path.setAttribute('stroke-width', String(_weightToWidth(weight)));
     path.setAttribute('stroke-linecap', 'round');
     return path;
 }
@@ -171,28 +198,34 @@ function _renderSvg(data: FlowData): SVGSVGElement {
     const routerY = top + colH / 2;
     const providersY = _layoutColumn(data.providers.length, colH).map((y) => top + y);
 
-    // Edge layer first so nodes paint over the curves.
+    // R.3 — Edge layer first so nodes paint over the curves.
+    // Edge thickness reflects the destination node's weight (0-1) so a
+    // heavy provider has a thicker incoming ribbon, an idle guard has a
+    // thinner one. Defaults to 1.0 if the data builder didn't compute it.
     const edges = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     const clientsRightX = COL_X[0]! + 10 + nodeW;
     // Clients → each guard
     for (let i = 0; i < guardsY.length; i++) {
         const guardLeftX = COL_X[1]! + (COL_WIDTHS[1]! - nodeW) / 2;
-        const intent = data.guards[i]?.state === 'blocked' ? 'block' : 'flow';
-        edges.appendChild(_edge(clientsRightX, clientsY, guardLeftX, guardsY[i]!, intent));
+        const guard = data.guards[i];
+        const intent = guard?.state === 'blocked' ? 'block' : 'flow';
+        edges.appendChild(_edge(clientsRightX, clientsY, guardLeftX, guardsY[i]!, intent, guard?.weight));
     }
     // Each guard → router (single)
     const routerLeftX = COL_X[2]! + (COL_WIDTHS[2]! - nodeW) / 2;
     const routerRightX = routerLeftX + nodeW;
     for (let i = 0; i < guardsY.length; i++) {
         const guardRightX = COL_X[1]! + (COL_WIDTHS[1]! - nodeW) / 2 + nodeW;
-        const intent = data.guards[i]?.state === 'blocked' ? 'block' : 'flow';
-        edges.appendChild(_edge(guardRightX, guardsY[i]!, routerLeftX, routerY, intent));
+        const guard = data.guards[i];
+        const intent = guard?.state === 'blocked' ? 'block' : 'flow';
+        edges.appendChild(_edge(guardRightX, guardsY[i]!, routerLeftX, routerY, intent, guard?.weight));
     }
     // Router → each provider
     for (let i = 0; i < providersY.length; i++) {
         const provLeftX = COL_X[3]! + (COL_WIDTHS[3]! - nodeW) / 2;
-        const intent = data.providers[i]?.state === 'down' ? 'block' : 'flow';
-        edges.appendChild(_edge(routerRightX, routerY, provLeftX, providersY[i]!, intent));
+        const prov = data.providers[i];
+        const intent = prov?.state === 'down' ? 'block' : 'flow';
+        edges.appendChild(_edge(routerRightX, routerY, provLeftX, providersY[i]!, intent, prov?.weight));
     }
     svg.appendChild(edges);
 
@@ -247,3 +280,6 @@ export function renderTrafficFlow(host: HTMLElement, data: FlowData, opts: FlowO
 
     host.replaceChildren(card);
 }
+
+// R.3 — Pure helpers exported for the test suite.
+export const __testInternals = { _weightToWidth };

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { renderTrafficFlow, type FlowData } from './TrafficFlow';
+import { renderTrafficFlow, __testInternals, type FlowData } from './TrafficFlow';
+
+const { _weightToWidth } = __testInternals;
 
 const _data = (overrides: Partial<FlowData> = {}): FlowData => ({
     clientsLabel: '1.2k',
@@ -76,5 +78,49 @@ describe('renderTrafficFlow', () => {
         const host = document.createElement('div');
         renderTrafficFlow(host, _data(), { caption: 'last 60s · 1.2k req · 4 blk' });
         expect(host.textContent).toContain('last 60s · 1.2k req · 4 blk');
+    });
+});
+
+// R.3 — Sankey-style weighted ribbons.
+describe('TrafficFlow ribbon weights', () => {
+    it('_weightToWidth maps 0→1.25px, 1→6px, with smooth interpolation', () => {
+        expect(_weightToWidth(0)).toBeCloseTo(1.25);
+        expect(_weightToWidth(1)).toBeCloseTo(6.0);
+        expect(_weightToWidth(0.5)).toBeCloseTo(3.625);
+    });
+
+    it('_weightToWidth clamps out-of-range inputs', () => {
+        expect(_weightToWidth(-5)).toBeCloseTo(1.25);
+        expect(_weightToWidth(99)).toBeCloseTo(6.0);
+    });
+
+    it('_weightToWidth defaults to max width on undefined (back-compat)', () => {
+        expect(_weightToWidth(undefined)).toBeCloseTo(6.0);
+    });
+
+    it('renders ribbons with stroke-widths derived from node weights', () => {
+        const host = document.createElement('div');
+        renderTrafficFlow(host, {
+            clientsLabel: '1k',
+            guards: [
+                { id: 'fw', label: 'FW', state: 'live', weight: 1.0 },
+                { id: 'lk', label: 'LK', state: 'idle', weight: 0.3 },
+            ],
+            router: { id: 'router', label: 'Router', state: 'live', weight: 1.0 },
+            providers: [
+                { id: 'openai', label: 'openai', state: 'live', weight: 1.0 },
+                { id: 'flaky', label: 'flaky', state: 'down', weight: 0.45 },
+            ],
+        });
+
+        // Edge layer is the first <g> child after the column-header texts;
+        // each path's stroke-width should reflect _weightToWidth(weight).
+        const paths = host.querySelectorAll<SVGPathElement>('path[stroke-linecap="round"]');
+        expect(paths.length).toBeGreaterThan(0);
+        // Collect unique stroke-widths — should span at least 2 distinct values
+        // because the data contains both weight=1.0 and weight=0.3 nodes.
+        const widths = new Set<string>();
+        paths.forEach((p) => widths.add(p.getAttribute('stroke-width') ?? ''));
+        expect(widths.size).toBeGreaterThanOrEqual(2);
     });
 });
