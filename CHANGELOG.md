@@ -2,6 +2,28 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.28] — 2026-04-26
+
+### Q.3 — Hourly ring buffer + sparklines wired to real data
+
+The Sparkline primitive (O.1) has been idle since 1.21.18 — render-ready but with no time series. Q.3 closes the loop end-to-end.
+
+**Backend** — `core/metrics_history.py` (new)
+- `MetricsHistory(slots=24)` ring buffer. `record_delta()` for monotonic counters (clamps negative to 0 on resets, emits 0 on first tick to dodge phantom-spike). `record_gauge()` for point-in-time values. Pre-fills with zeros so shape is stable from tick 1.
+- `sum_prometheus_counter()` walks `Counter.collect()` across all label permutations into a scalar. Defensive `0.0` return on exceptions.
+
+**`proxy/background.py`** — `metrics_history_loop` snapshots `REQUEST_COUNT` / `INJECTION_BLOCKED` / `REQUEST_ERRORS` / `AUTH_FAILURES` (deltas) + `total_cost_today` (gauge). Default 3600s; `metrics.history_interval_s` configurable.
+
+**`GET /api/v1/metrics/hourly-buckets`** returns `{hours, interval_s, series}` (auth-gated). Empty `series` is a valid pre-first-tick response.
+
+**Frontend** — `Kpi.ts`: `KpiSpec.sparkSeries` + `sparkColor` wired on requests / blocked / errors. `piiMasked` + `passRate` sparkline-less on purpose (shared series / derived metric). Loading + error paths suppress sparklines (no spark over skeleton).
+
+**Honest scope**: ring buffer loses history on restart. For durable long-window analytics scrape Prometheus against `/metrics` — that's the right tool.
+
+10 + 2 + 6 = 18 new tests; 340/340 UI unit tests green; backend +12.
+
+---
+
 ## [1.21.27] — 2026-04-26
 
 ### Q.2 — Auth-gated OpenAPI mirror + Settings API Reference card
