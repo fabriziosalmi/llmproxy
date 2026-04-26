@@ -113,6 +113,8 @@ export const api = {
     async fetchRateLimitConfig() { return _json(`${BASE_URL}/api/v1/rate-limit/config`); },
     async setRateLimitPreset(preset) { return _post(`${BASE_URL}/api/v1/rate-limit/preset`, { preset }); },
     async fetchSpendForecast() { return _json(`${BASE_URL}/api/v1/analytics/forecast`); },
+    async fetchRoutingConfig() { return _json(`${BASE_URL}/api/v1/routing/config`); },
+    async setRoutingCostWeight(cost_weight) { return _post(`${BASE_URL}/api/v1/routing/cost-weight`, { cost_weight }); },
 
     async fetchLatencyMetrics() { return _json(`${BASE_URL}/api/v1/metrics/latency`); },
     async fetchRingTimeline() { return _json(`${BASE_URL}/api/v1/metrics/ring-timeline`); },
