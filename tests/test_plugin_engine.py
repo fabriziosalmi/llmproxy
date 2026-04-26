@@ -198,3 +198,127 @@ async def test_load_without_pin_warns_but_succeeds(tmp_path, caplog):
         await pm._load_plugin(p_info)
     warns = [r.message for r in caplog.records if "SHA-256 pin" in r.message]
     assert len(warns) == 1
+
+
+# ── P0-4: Atomic hot-swap ──────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_hot_swap_build_failure_preserves_live_state(tmp_path):
+    """If _build_plugin_state raises, self.* must be untouched. The previous
+    state stays live — no fail-open window where rings are empty or partial."""
+    from core.plugin_engine import PluginManager, PluginHook
+    import yaml as _yaml
+
+    plugins_dir = str(tmp_path)
+    _write_plugin_file(plugins_dir, "p1", _VALID_PLUGIN_SRC)
+    with open(tmp_path / "manifest.yaml", "w") as f:
+        _yaml.safe_dump({"plugins": [
+            {"name": "p1", "hook": "pre_flight", "type": "python",
+             "entrypoint": "p1:execute"},
+        ]}, f)
+
+    pm = PluginManager(plugins_dir=plugins_dir)
+    await pm.load_plugins()
+    # Sanity: p1 is loaded
+    assert any(p["name"] == "p1" for p in pm.rings[PluginHook.PRE_FLIGHT])
+    snap_rings = pm.rings
+    snap_meta = pm._plugin_meta
+    snap_instances = pm._plugin_instances
+    snap_stats = pm._plugin_stats
+
+    # Force the build path to blow up.
+    async def boom():
+        raise RuntimeError("synthetic build failure")
+    pm._build_plugin_state = boom  # type: ignore[assignment]
+
+    with pytest.raises(RuntimeError, match="synthetic build failure"):
+        await pm.hot_swap()
+
+    # Pointers must be IDENTICAL (not just equal) — no swap occurred.
+    assert pm.rings is snap_rings
+    assert pm._plugin_meta is snap_meta
+    assert pm._plugin_instances is snap_instances
+    assert pm._plugin_stats is snap_stats
+    # And p1 is still live
+    assert any(p["name"] == "p1" for p in pm.rings[PluginHook.PRE_FLIGHT])
+
+
+@pytest.mark.asyncio
+async def test_hot_swap_no_partial_clear_window(tmp_path):
+    """Before the fix, load_plugins() cleared self.rings BEFORE rebuilding,
+    creating a window where concurrent execute_ring observed empty rings.
+    Now hot_swap builds new state off-side and swaps in one block — at no
+    point should rings be empty if they were non-empty before AND a valid
+    new state was built."""
+    from core.plugin_engine import PluginManager, PluginHook
+    import yaml as _yaml
+
+    plugins_dir = str(tmp_path)
+    _write_plugin_file(plugins_dir, "p1", _VALID_PLUGIN_SRC)
+    with open(tmp_path / "manifest.yaml", "w") as f:
+        _yaml.safe_dump({"plugins": [
+            {"name": "p1", "hook": "pre_flight", "type": "python",
+             "entrypoint": "p1:execute"},
+        ]}, f)
+    pm = PluginManager(plugins_dir=plugins_dir)
+    await pm.load_plugins()
+    assert len(pm.rings[PluginHook.PRE_FLIGHT]) == 1
+
+    # Patch _build_plugin_state to record what self.rings looks like at the
+    # moment we *would* be in the middle of a clear-then-rebuild. With the
+    # atomic fix, self.rings is the OLD state until the swap happens.
+    original_build = pm._build_plugin_state
+    observed_during_build = []
+
+    async def spying_build():
+        observed_during_build.append(list(pm.rings[PluginHook.PRE_FLIGHT]))
+        return await original_build()
+
+    pm._build_plugin_state = spying_build  # type: ignore[assignment]
+    await pm.hot_swap()
+
+    # During build, self.rings still pointed to the OLD non-empty list.
+    assert observed_during_build, "spy was not invoked"
+    assert len(observed_during_build[0]) == 1, (
+        f"during-build snapshot was empty — old state was prematurely cleared: "
+        f"{observed_during_build}"
+    )
+    # And after swap, the new state is also non-empty.
+    assert len(pm.rings[PluginHook.PRE_FLIGHT]) == 1
+
+
+@pytest.mark.asyncio
+async def test_hot_swap_health_check_failure_rolls_back_atomically(tmp_path):
+    """If post-swap health check fails, all four pointers swap back."""
+    from core.plugin_engine import PluginManager, PluginHook
+    import yaml as _yaml
+
+    plugins_dir = str(tmp_path)
+    _write_plugin_file(plugins_dir, "p1", _VALID_PLUGIN_SRC)
+    with open(tmp_path / "manifest.yaml", "w") as f:
+        _yaml.safe_dump({"plugins": [
+            {"name": "p1", "hook": "pre_flight", "type": "python",
+             "entrypoint": "p1:execute"},
+        ]}, f)
+    pm = PluginManager(plugins_dir=plugins_dir)
+    await pm.load_plugins()
+    snap_rings = pm.rings
+    snap_meta = pm._plugin_meta
+    snap_instances = pm._plugin_instances
+    snap_stats = pm._plugin_stats
+
+    # Force execute_ring to mark the test_ctx with an error after the swap.
+    async def failing_execute(hook, context):
+        context.error = "simulated post-swap failure"
+    pm.execute_ring = failing_execute  # type: ignore[assignment]
+
+    with pytest.raises(RuntimeError, match="Health check failed"):
+        await pm.hot_swap()
+
+    # Rolled back: pointers identical to pre-swap snapshot.
+    assert pm.rings is snap_rings
+    assert pm._plugin_meta is snap_meta
+    assert pm._plugin_instances is snap_instances
+    assert pm._plugin_stats is snap_stats
+    assert any(p["name"] == "p1" for p in pm.rings[PluginHook.PRE_FLIGHT])
