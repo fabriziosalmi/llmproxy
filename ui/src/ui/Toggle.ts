@@ -16,6 +16,15 @@ export interface ToggleOptions {
     description?: string;
     /** Fired on every state flip. The new state is passed as the first arg. */
     onChange?: (checked: boolean) => void;
+    /**
+     * Trailing-debounce window in ms before `onChange` actually fires. Default
+     * 0 (fire on every flip — keeps existing behavior). Set to >0 (typically
+     * 200) on toggles whose `onChange` triggers a network call so a frenzied
+     * 10-click run produces 1 API call instead of 10. The visual flip stays
+     * instant — only the side-effect callback is debounced. The latest state
+     * wins on each rapid succession.
+     */
+    debounceMs?: number;
     className?: string;
     testId?: string;
 }
@@ -76,11 +85,24 @@ export function createToggle(opts: ToggleOptions): ToggleHandle {
         else switchEl.removeAttribute('disabled');
     };
 
+    let _debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const fireOnChange = (state: boolean): void => {
+        if (!opts.debounceMs || opts.debounceMs <= 0) {
+            opts.onChange?.(state);
+            return;
+        }
+        if (_debounceTimer !== null) clearTimeout(_debounceTimer);
+        _debounceTimer = setTimeout(() => {
+            _debounceTimer = null;
+            opts.onChange?.(state);
+        }, opts.debounceMs);
+    };
+
     const flip = (fire: boolean): void => {
         if (disabled) return;
         checked = !checked;
         paint();
-        if (fire) opts.onChange?.(checked);
+        if (fire) fireOnChange(checked);
     };
 
     switchEl.addEventListener('click', () => flip(true));
@@ -100,7 +122,7 @@ export function createToggle(opts: ToggleOptions): ToggleHandle {
             if (next === checked) return;
             checked = next;
             paint();
-            if (fire) opts.onChange?.(checked);
+            if (fire) fireOnChange(checked);
         },
         setDisabled(next: boolean): void {
             disabled = next;
