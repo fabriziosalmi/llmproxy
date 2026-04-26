@@ -7,14 +7,19 @@
     <title>LLMProxy — Security Gateway</title>
     <!-- All assets served locally — zero external CDN dependencies. Tailwind
          is compiled at build time via PostCSS; running without `npm run build`
-         leaves utility classes unstyled (the proxy still functions). -->
-    <script src="vendor/chart.min.js"></script>
+         leaves utility classes unstyled (the proxy still functions).
+         N.8: vendor scripts are `defer`-ed so they don't block HTML parsing.
+         Chart.js is only used by the Analytics tab; xterm.js by Logs.
+         Neither is on the first-paint critical path. defer preserves the
+         declared order, so xterm-addon-* still see xterm.js as a global
+         on initialisation. -->
+    <script src="vendor/chart.min.js" defer></script>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="vendor/fonts.css">
     <link rel="stylesheet" href="vendor/xterm.css" />
-    <script src="vendor/xterm.js"></script>
-    <script src="vendor/xterm-addon-webgl.js"></script>
-    <script src="vendor/xterm-addon-fit.js"></script>
+    <script src="vendor/xterm.js" defer></script>
+    <script src="vendor/xterm-addon-webgl.js" defer></script>
+    <script src="vendor/xterm-addon-fit.js" defer></script>
     <style>
         .font-mono { font-family: 'JetBrains Mono', 'Fira Code', monospace !important; }
     </style>
