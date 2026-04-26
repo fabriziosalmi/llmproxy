@@ -4,7 +4,7 @@ Security gateway for Large Language Models. Routes requests across 15 providers 
 
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-942%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-1183%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-67%25-yellowgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 [![CI](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml/badge.svg)](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml)
@@ -307,13 +307,13 @@ Keyboard shortcuts: `Cmd+K` (command palette), `F` (cinema mode). URL hash routi
 ## Testing
 
 ```bash
-make test       # 942 tests, ~19s
+make test       # 1183 tests, ~22s
 make bench      # 22 performance benchmarks
 make lint       # ruff
 make typecheck  # mypy
 ```
 
-942 tests across 48 modules: unit, HTTP integration, pipeline E2E, property-based fuzz (Hypothesis), 31 mathematical invariant proofs, concurrency stress tests, and performance benchmarks.
+1183 tests across 50+ modules: unit, HTTP integration, pipeline E2E, property-based fuzz (Hypothesis), 31 mathematical invariant proofs, concurrency stress tests, and performance benchmarks.
 
 The invariant suite proves correctness properties (Jaccard axioms, normalize idempotence, token conservation, budget accounting, adapter determinism) and blocks merge on violation.
 

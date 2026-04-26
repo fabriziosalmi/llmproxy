@@ -1,6 +1,10 @@
 """Identity routes: SSO/OIDC config, current user, token exchange."""
+import logging
+
 from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.security import APIKeyHeader
+
+logger = logging.getLogger("llmproxy.routes.identity")
 
 API_KEY_HEADER = APIKeyHeader(name="Authorization", auto_error=False)
 
@@ -64,9 +68,14 @@ def create_router(agent) -> APIRouter:
         try:
             identity = await agent.identity.verify_token(external_token)
         except ValueError as e:
-            raise HTTPException(status_code=401, detail=str(e))
+            # Log the precise validation reason server-side for ops, but
+            # return a generic message to the caller — leaking "Token
+            # expired" vs "Invalid issuer" lets attackers probe which
+            # validation step failed.
+            logger.warning(f"Token exchange validation failed: {e}")
+            raise HTTPException(status_code=401, detail="Invalid token")
         if not identity:
-            raise HTTPException(status_code=401, detail="Unrecognized JWT provider")
+            raise HTTPException(status_code=401, detail="Invalid token")
         ttl = agent.config.get("identity", {}).get("session_ttl", 3600)
         proxy_token = agent.identity.generate_proxy_jwt(identity, ttl=ttl)
         await agent.rbac.set_user_roles(identity.subject, identity.email, identity.roles)

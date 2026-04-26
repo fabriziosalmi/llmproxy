@@ -105,14 +105,27 @@ async def process_proxy_request(
         await orchestrator.plugin_manager.execute_ring(PluginHook.PRE_FLIGHT, ctx)
         MetricsTracker.track_ring_latency("pre_flight", time.perf_counter() - r2_start)
         if ctx.stop_chain:
-            if ctx.metadata.get("_cache_hit") and ctx.body.get("stream"):
-                cached_data = ctx.metadata.get("_cached_response_data")
-                if cached_data:
-                    ctx.response = StreamingResponse(
-                        fake_stream(cached_data), media_type="text/event-stream",
-                        headers={"X-LLMProxy-Cache": "HIT"},
-                    )
-            return ctx.response
+            # Two legitimate stop-chain paths in PRE_FLIGHT:
+            #   1. cache_hit  — semantic_cache plugin set ctx.response
+            #   2. action=block — budget_guard / loop_breaker / similar set
+            #      ctx.error + _block_status but NO ctx.response
+            # Without this distinction the block path falls through with
+            # ctx.response=None and FastAPI returns a 500 Internal Error
+            # instead of the proper 4xx the plugin asked for.
+            if ctx.metadata.get("_cache_hit"):
+                if ctx.body.get("stream"):
+                    cached_data = ctx.metadata.get("_cached_response_data")
+                    if cached_data:
+                        ctx.response = StreamingResponse(
+                            fake_stream(cached_data), media_type="text/event-stream",
+                            headers={"X-LLMProxy-Cache": "HIT"},
+                        )
+                return ctx.response
+            # Block path — surface the plugin's status + error.
+            raise HTTPException(
+                status_code=ctx.metadata.get("_block_status", 403),
+                detail=ctx.error or "Request blocked by pre-flight plugin",
+            )
 
         # Model alias/group resolution (before routing)
         original_model = ctx.body.get("model", "")
