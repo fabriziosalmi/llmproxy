@@ -2,6 +2,31 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.15] — 2026-04-26
+
+### N.6 — Runtime-tunable rate-limit presets (Strict / Normal / Relaxed)
+
+Rate-limit tuning was config-only — operators had to edit `config.yaml` and wait for the 30s watcher OR restart. Three named presets + admin endpoints to apply them at runtime, persisted across restarts.
+
+**Presets** (`core/rate_limiter.py`):
+- `strict` — 30 req/min, +5 burst
+- `normal` — 60 req/min, +10 burst
+- `relaxed` — 240 req/min, +60 burst
+
+**Endpoints**:
+- `GET /api/v1/rate-limit/config` — enabled + active preset + live `rpm`/`burst` + preset map for UI
+- `POST /api/v1/rate-limit/preset` — `{preset: name}` validates + applies + persists `rate_limit:preset`
+
+**Middleware singleton**: Starlette instantiates the middleware once; we keep `RateLimitMiddleware.instance` so the admin route mutates limits at runtime. `apply_preset` flushes existing per-IP buckets — otherwise an attacker spraying during the cutover keeps their old (relaxed) bucket.
+
+`rotator.py` setup re-applies the persisted preset on boot, mirroring the `routing_cost_weight` pattern from K.1.
+
+5 new tests cover the happy path, 400 on unknown name, 503 when middleware missing, presets-always-exposed-in-/config, and the bucket-flush regression guard.
+
+UI surface (preset picker in Settings) ships in a follow-on — backend contract is locked first.
+
+---
+
 ## [1.21.14] — 2026-04-26
 
 ### N.5 — Flatten RegistryTable DOM (~4 fewer divs per row)
