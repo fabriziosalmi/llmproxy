@@ -15,6 +15,7 @@ import { mountHealthPanel, type HealthApi } from './HealthPanel';
 import { mountIdentity, type IdentityApi } from './Identity';
 import { mountRateLimit, type RateLimitApi } from './RateLimit';
 import { mountRbacMatrix, type RbacApi } from './RbacMatrix';
+import { mountRoutingConfig, type RoutingConfigApi } from './RoutingConfig';
 import { mountSystemInfo, type SystemInfoApi } from './SystemInfo';
 import { mountWebhooks, type WebhooksApi } from './Webhooks';
 
@@ -27,7 +28,8 @@ export interface SettingsApi
         ConfigWarningsApi,
         ConfigYamlApi,
         RateLimitApi,
-        HealthApi {}
+        HealthApi,
+        RoutingConfigApi {}
 
 export interface MountSettingsOptions {
     api: SettingsApi;
@@ -48,6 +50,8 @@ export interface SettingsHosts {
     rateLimit?: HTMLElement | null;
     /** P.3 — Per-component health panel. Optional. */
     health?: HTMLElement | null;
+    /** Q.1 — Routing cost-weight slider. Optional. */
+    routing?: HTMLElement | null;
 }
 
 export function mountSettingsView(hosts: SettingsHosts, opts: MountSettingsOptions): () => Promise<void> {
@@ -71,6 +75,10 @@ export function mountSettingsView(hosts: SettingsHosts, opts: MountSettingsOptio
         const handle = mountHealthPanel(hosts.health, opts.api);
         refreshes.push(handle.refresh);
     }
+    if (hosts.routing) {
+        const handle = mountRoutingConfig(hosts.routing, opts.api, opts.toast);
+        refreshes.push(handle.refresh);
+    }
 
     return async function refreshAll(): Promise<void> {
         await Promise.allSettled(refreshes.map((fn) => fn()));
@@ -83,6 +91,7 @@ export { mountHealthPanel } from './HealthPanel';
 export { mountIdentity } from './Identity';
 export { mountRateLimit } from './RateLimit';
 export { mountRbacMatrix } from './RbacMatrix';
+export { mountRoutingConfig } from './RoutingConfig';
 export { mountWebhooks } from './Webhooks';
 export { mountDataExport } from './DataExport';
 export { mountSystemInfo } from './SystemInfo';
