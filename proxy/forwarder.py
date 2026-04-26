@@ -22,6 +22,36 @@ from core.metrics import MetricsTracker
 logger = logging.getLogger("llmproxy.forwarder")
 
 
+# Actionable hints surfaced in 4xx/quota error details so operators reading
+# the audit log or SDK error don't have to guess where to fix the key.
+_PROVIDER_HINTS = {
+    "openai": (
+        "Check key at https://platform.openai.com/api-keys; "
+        "billing/credits at https://platform.openai.com/account/billing"
+    ),
+    "anthropic": (
+        "Check key at https://console.anthropic.com/settings/keys; "
+        "billing at https://console.anthropic.com/settings/billing"
+    ),
+    "google": "Check key at https://aistudio.google.com/app/apikey",
+    "azure": "Check the Azure OpenAI resource → Keys and Endpoint in https://portal.azure.com",
+    "groq": "Check key at https://console.groq.com/keys",
+    "mistral": "Check key at https://console.mistral.ai/api-keys/",
+    "openrouter": "Check key/credits at https://openrouter.ai/keys",
+    "cohere": "Check key at https://dashboard.cohere.com/api-keys",
+}
+
+
+def _actionable_hint(provider: str | None, status_code: int) -> str:
+    """Return a hint suffix for known auth/quota failures, '' otherwise."""
+    if status_code not in (401, 402, 403, 429):
+        return ""
+    p = (provider or "").lower()
+    if p in _PROVIDER_HINTS:
+        return f" — {_PROVIDER_HINTS[p]}"
+    return ""
+
+
 @dataclass
 class ForwardingContext:
     """Decouples the forwarder from the orchestrator's internals.
@@ -87,9 +117,17 @@ class RequestForwarder:
         response = await adapter.request(target_url, translated_body, translated_headers, session)
         if response.status_code in (429, 500, 502, 503, 504):
             await cb.report_failure()
+            # Provider hint surfaces an actionable next-step (key dashboard /
+            # billing) on 429 — rate-limited or quota-exhausted is the most
+            # common operator-fixable upstream error. 4xx auth (401/403)
+            # passes through to the SDK caller unchanged so existing client
+            # error-handling paths still work.
+            provider = getattr(ctx.metadata.get("target_endpoint"), "provider", None) \
+                or getattr(ctx.metadata.get("target_endpoint"), "provider_type", None)
+            hint = _actionable_hint(provider, response.status_code)
             raise HTTPException(
                 status_code=response.status_code,
-                detail=f"Upstream {endpoint_id} returned {response.status_code}",
+                detail=f"Upstream {endpoint_id} returned {response.status_code}{hint}",
             )
         await cb.report_success()
         return response

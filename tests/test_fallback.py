@@ -354,6 +354,35 @@ class TestResolveEndpoint:
 
 class TestFallbackStatusCodes:
 
+    # N.1 — provider hint helper attached to upstream-failure detail.
+
+    def test_actionable_hint_429_openai_includes_billing_link(self):
+        from proxy.forwarder import _actionable_hint
+        h = _actionable_hint("openai", 429)
+        assert "platform.openai.com" in h
+        assert "billing" in h.lower()
+
+    def test_actionable_hint_429_anthropic_includes_link(self):
+        from proxy.forwarder import _actionable_hint
+        h = _actionable_hint("anthropic", 429)
+        assert "anthropic.com" in h.lower()
+
+    def test_actionable_hint_unknown_provider_returns_empty(self):
+        from proxy.forwarder import _actionable_hint
+        assert _actionable_hint("custom-llm-corp", 429) == ""
+        # None / empty also fine.
+        assert _actionable_hint(None, 429) == ""
+        assert _actionable_hint("", 429) == ""
+
+    def test_actionable_hint_2xx_or_5xx_returns_empty(self):
+        """The hint is targeted at 401/402/403/429 — auth/quota issues. A
+        500 from upstream is the provider's problem, not the operator's
+        billing config."""
+        from proxy.forwarder import _actionable_hint
+        assert _actionable_hint("openai", 200) == ""
+        assert _actionable_hint("openai", 500) == ""
+        assert _actionable_hint("openai", 502) == ""
+
     @pytest.mark.asyncio
     @pytest.mark.parametrize("status", [429, 500, 502, 503, 504])
     async def test_error_status_triggers_fallback(self, status):
