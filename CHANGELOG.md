@@ -2,6 +2,26 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.18] — 2026-04-26
+
+### O.1 — SVG sparkline primitive + MetricTile integration
+
+Inline 24-point trend strip below the big number on KPI tiles. Pure SVG, **no runtime dep added** — the sparkline ships at ~50 LoC in the same bundle (build size unchanged at 38.61 kB gzip).
+
+**`src/ui/Sparkline.ts`**
+- `createSparkline({ data, color?, area?, height?, aspect? })` → `SVGSVGElement`
+- 5 named palette colors (cyan / emerald / amber / rose / slate)
+- Optional area fill with a vertical linear-gradient fading to transparent
+- Flat-series guard: when `min === max` the line pins to the mid-line instead of slamming top via div-by-zero
+
+**`MetricTile`** gets a new `sparkline?: { data, color? }` option. Color defaults from the tile intent.
+
+**Honest scope**: the primitive is tested + documented in stories, but the real KPI surfaces (Models, Threats, Analytics) take snapshot data — wiring per-tile time series is a follow-on (backend hourly-bucket endpoint or rolling client-side accumulator).
+
+9 new Sparkline tests + 3 new Storybook entries. 275/275 unit tests green.
+
+---
+
 ## [1.21.17] — 2026-04-26
 
 ### N.8 — FCP/LCP measurement + defer render-blocking vendor scripts
