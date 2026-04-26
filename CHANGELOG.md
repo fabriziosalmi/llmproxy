@@ -2,6 +2,22 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.14] — 2026-04-26
+
+### N.5 — Flatten RegistryTable DOM (~4 fewer divs per row)
+
+Each registry row wrapped each multi-element cell (Endpoint / Circuit / Priority / Actions) in its own `<div>` that existed only to carry layout classes (flex, gap, justify-end) and a row-specific `data-explain` attribute. Four wrap divs × N rows = ~4N nodes the browser painted and reflowed for nothing.
+
+Two surfaces moved into the Table primitive:
+- `TableColumn.cellClassName` — extra Tailwind classes appended to `<td>`.
+- `TableColumn.cellAttrs(row)` — per-row HTML attributes (for `data-explain="circuit:<id>"`).
+
+RegistryTable: four columns refactored to return `DocumentFragment` instead of `<div>`. Same visual output, smaller tree, `data-explain` still picked up by the delegated handler via `closest('[data-explain]')`.
+
+Honest note: this won't double FPS during scroll — the table doesn't re-render on scroll (full repaint only on data refresh), so the gain is in code clarity + a smaller layout tree, not raw scroll perf.
+
+---
+
 ## [1.21.13] — 2026-04-26
 
 ### N.4 — Scrollbar width + light-theme variant
