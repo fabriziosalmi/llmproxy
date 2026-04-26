@@ -43,6 +43,7 @@ export async function initSettings() {
                     system: document.getElementById('settings-system-host'),
                     configYaml: document.getElementById('settings-config-yaml-host'),
                     rateLimit: document.getElementById('settings-rate-limit-host'),
+                    health: document.getElementById('settings-health-host'),
                 },
                 {
                     api: {
@@ -58,6 +59,7 @@ export async function initSettings() {
                         fetchConfigYaml: api.fetchConfigYaml,
                         fetchRateLimitConfig: api.fetchRateLimitConfig,
                         setRateLimitPreset: api.setRateLimitPreset,
+                        fetchHealth: api.fetchHealth,
                     },
                     toast,
                 },
