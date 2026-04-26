@@ -2,6 +2,27 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.17] — 2026-04-26
+
+### N.8 — FCP/LCP measurement + defer render-blocking vendor scripts
+
+Measure first, then unblock the obvious.
+
+**Measurement** — `src/services/perf.ts`
+- Captures FCP via `performance.getEntriesByType('paint')`.
+- Captures DCL + load via the navigation timing entry.
+- Observes LCP via `PerformanceObserver`, snapshots the largest seen on first user interaction (click/keydown/scroll/pagehide) or after a 30 s timeout.
+- Routes all four metrics through `rum.action('perf_metric', { name, value_ms })`. Default no-op sink — metrics only ship if an operator wires up a real analytics backend.
+
+**Optimization** — `index.html`
+- Added `defer` to the four vendor scripts in `<head>` (`chart.min.js`, `xterm.js`, `xterm-addon-webgl.js`, `xterm-addon-fit.js`). Chart is only used by Analytics; xterm by Logs. Neither is on the first-paint critical path. `defer` preserves declared order so xterm-addon-* still see xterm.js as a global, and HTML parsing stops being held up by ~120 KB Chart.js + ~250 KB xterm parse.
+
+**Honest deferred**: lazy import of `components/{chat,analytics,security,plugins,…}.js` in `main.js` — they're statically imported on every boot regardless of landing tab. Real win, multi-file refactor. Now that we have measurement, the gain can be verified.
+
+4 new perf service tests + 266/266 unit tests + lint + typecheck + build all green.
+
+---
+
 ## [1.21.16] — 2026-04-26
 
 ### N.7 — On-demand local autodiscovery + AddForm scan button
