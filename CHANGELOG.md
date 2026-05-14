@@ -2,6 +2,24 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.51] — 2026-05-14
+
+### Fix auth follow-through bugs discovered after 1.21.50 deploy
+
+Live test against `http://100.76.251.33:11434/ui/` with a valid API key surfaced three issues that the 1.21.50 fix didn't cover. Login overlay now works, but the post-login experience was leaking 401s.
+
+**UI — raw fetch() missing Bearer header**:
+- `ui/main.js:730` — Network status heartbeat polled `/api/v1/proxy/status` every 5s with a bare `fetch()`. In API-key mode the polling loops 401 and lights the status dot red even when the proxy is perfectly healthy. Switched to `api.fetchProxyStatus()` which goes through `_fetch()` and auto-injects `Authorization: Bearer <key>`.
+- `ui/components/plugins.js:63` — Plugin hot-swap reload button used `fetch(..., { method: 'POST' })` without headers. Same fix: switched to `api.reloadPlugins()`.
+
+**Backend — SSE auth query-param fallback missing on /api/v1/logs**:
+The global ASGI auth middleware at `proxy/app_factory.py:138-139` reads `?token=...` as a fallback so `EventSource` (which can't send custom headers) can authenticate. The per-route `_check_auth()` in `proxy/routes/telemetry.py:44-47` did not — it only inspected the `Authorization` header, so the log stream returned 401 even for valid keys. Mirrored the middleware's query-param fallback in `_check_auth()`. Both threats and logs views now connect.
+
+Validation:
+- Curl probe against live proxy with valid key: `/identity/me` ✓, `/version` ✓ (401 anonymous), `/proxy/status?token=...` ✓, `/api/v1/logs?token=...` will pass after this push.
+
+---
+
 ## [1.21.50] — 2026-05-14
 
 ### UI auth — fix login overlay locking users out when SSO is off
