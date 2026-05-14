@@ -2,6 +2,28 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.53] — 2026-05-14
+
+### Chat playground — kill 4 S-tier bugs blocking daily use
+
+Live audit of `/ui/chat.html` (the orphan playground page bundled by Vite but not linked from the dashboard) surfaced four ship-blocking defects in the markdown renderer. All fixed in a single pass:
+
+1. **Code blocks lost newlines.** `renderMarkdown` ran `\n → <br>` AFTER wrapping fenced blocks in `<pre><code>`, so the global replacement chewed up the internal newlines of every code block and the LLM's `cargo new hello_world\ncd hello_world` rendered as `cargo new hello_worldcd hello_world` on one line — every multi-line snippet was broken. Refactor: tokenize fenced blocks to `__LLMP_CB_<i>__` placeholders BEFORE escape/inline/header passes, then restore them in step 8 with internal whitespace preserved via `white-space: pre` on `.hljs` nodes ([chat.js:43-108](ui/chat.js#L43-L108)).
+2. **Markdown headers picked up monospace styling** from surrounding `code, pre { font-family: monospace !important }` rules in `style.css:37-43`, so every `### Header` looked like a code line. Now `.prose-invert h1/h2/h3` in chat.html explicitly forces Inter, with proper sizing scale (1.05rem / 0.95rem / 0.875rem) and letter-spacing ([chat.html:36-44](ui/chat.html#L36-L44)).
+3. **No copy button on code blocks** in a coding-first playground. Each `<pre>` now renders an inline `<button class="copy-btn">Copy</button>` in the top-right (opacity 0 by default, fades in on hover). One delegated `click` handler on `#messages` covers every block ([chat.js:end](ui/chat.js)); flash to "Copied" with success-green for 1.2s on confirm.
+4. **No syntax highlighting.** All code blocks rendered as flat emerald-400 text regardless of language. Pulled `highlight.js@11.9.0` via jsDelivr CDN with the `github-dark` theme; the `<pre><code class="hljs language-X">` markup that `renderMarkdown` now emits is exactly what hljs expects. `highlightCodeBlocks(bodyEl)` is called once per assistant message after the stream completes — never during the progressive `innerHTML` updates, so we don't burn CPU re-tokenizing partial code on every SSE delta.
+
+Side fixes folded in:
+- Code blocks now carry a `<span class="code-lang">` badge in the top-left when the LLM emitted a language tag (rust/bash/json/…). Visual hint that highlighting picked the right grammar.
+- Inline code (`` `x` `` ) regex tightened to `/`([^`\n]+)`/g` so it can't accidentally swallow a line break.
+- Safari prefix `-webkit-user-select` added to the code-lang label (caught by VS Code lint).
+
+Out of scope for this patch (next chat phase): system prompt input, temperature/max_tokens controls, regenerate/edit/delete on messages, session history persistence, live TPS during streaming, sidebar link from the dashboard. See [memory `ui-refactor-plan-2026-05-14`](https://github.com/fabriziosalmi/llmproxy/blob/main/CHANGELOG.md) for the broader roadmap.
+
+Validation: lint ✓ typecheck ✓ vitest 344/344 ✓ build ✓ bundle confirmed (`LLMP_CB_`, `copy-btn`, `highlightElement` present in `dist/assets/chat-*.js`).
+
+---
+
 ## [1.21.52] — 2026-05-14
 
 ### Docs + CI hygiene — README accuracy + actually publish `:latest`
