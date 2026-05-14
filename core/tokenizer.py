@@ -49,7 +49,7 @@ _ENCODING_MAP = {
 _DEFAULT_ENCODING = "cl100k_base"
 
 # Encoding cache (tiktoken.get_encoding is idempotent but we avoid repeated lookups)
-_encoding_cache = {}
+_encoding_cache: dict[str, Any] = {}
 
 
 def _get_encoding(model: str):
