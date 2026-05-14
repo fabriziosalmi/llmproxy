@@ -154,7 +154,9 @@ test.describe('settings view', () => {
         await expect(authedPage.locator('[data-testid="config-warnings-empty"]')).toBeVisible();
     });
 
-    test('Config Warnings widget surfaces a row per warning when startup checks flagged drift', async ({ authedPage }) => {
+    test('Config Warnings widget surfaces a row per warning when startup checks flagged drift', async ({
+        authedPage,
+    }) => {
         await authedPage.unroute('**/api/v1/config/warnings').catch(() => {});
         await authedPage.route('**/api/v1/config/warnings', async (route) => {
             await route.fulfill({

@@ -21,9 +21,13 @@ describe('SpendForecast helpers', () => {
 
     it('classifies time_to_limit by alarm bucket', () => {
         const base: SpendForecastBlock = {
-            current_spend_usd: 12, daily_limit_usd: 50, elapsed_hours: 6,
-            burn_rate_usd_per_hour: 2, projected_daily_total_usd: 48,
-            headroom_usd: 38, time_to_limit_hours: 19,
+            current_spend_usd: 12,
+            daily_limit_usd: 50,
+            elapsed_hours: 6,
+            burn_rate_usd_per_hour: 2,
+            projected_daily_total_usd: 48,
+            headroom_usd: 38,
+            time_to_limit_hours: 19,
         };
         expect(_classifyTimeToLimit(base).intent).toBe('success');
         expect(_classifyTimeToLimit({ ...base, time_to_limit_hours: 3 }).intent).toBe('warning');
@@ -34,9 +38,13 @@ describe('SpendForecast helpers', () => {
 
     it('classifies "no limit set" as info — not danger', () => {
         const fc: SpendForecastBlock = {
-            current_spend_usd: 5, daily_limit_usd: null, elapsed_hours: 4,
-            burn_rate_usd_per_hour: 1.25, projected_daily_total_usd: 30,
-            headroom_usd: null, time_to_limit_hours: null,
+            current_spend_usd: 5,
+            daily_limit_usd: null,
+            elapsed_hours: 4,
+            burn_rate_usd_per_hour: 1.25,
+            projected_daily_total_usd: 30,
+            headroom_usd: null,
+            time_to_limit_hours: null,
         };
         expect(_classifyTimeToLimit(fc).intent).toBe('info');
         expect(_classifyTimeToLimit(fc).label).toBe('no limit set');
@@ -44,9 +52,13 @@ describe('SpendForecast helpers', () => {
 
     it('classifies zero burn with limit as success — calm, not "out of data"', () => {
         const fc: SpendForecastBlock = {
-            current_spend_usd: 0, daily_limit_usd: 50, elapsed_hours: 4,
-            burn_rate_usd_per_hour: 0, projected_daily_total_usd: 0,
-            headroom_usd: 50, time_to_limit_hours: null,
+            current_spend_usd: 0,
+            daily_limit_usd: 50,
+            elapsed_hours: 4,
+            burn_rate_usd_per_hour: 0,
+            projected_daily_total_usd: 0,
+            headroom_usd: 50,
+            time_to_limit_hours: null,
         };
         expect(_classifyTimeToLimit(fc).intent).toBe('success');
         expect(_classifyTimeToLimit(fc).label).toBe('no burn yet');
@@ -83,7 +95,9 @@ describe('renderSpendForecast', () => {
         const host = document.createElement('div');
         renderSpendForecast(host, null);
         // 3 tiles even in loading — no layout shift on first poll.
-        expect(host.querySelectorAll('[data-skeleton]').length + host.querySelectorAll('article').length).toBeGreaterThan(0);
+        expect(
+            host.querySelectorAll('[data-skeleton]').length + host.querySelectorAll('article').length
+        ).toBeGreaterThan(0);
         // No live values yet.
         expect(host.textContent).not.toContain('$2.00');
     });

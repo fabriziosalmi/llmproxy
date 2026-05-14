@@ -16,13 +16,7 @@ async function refreshAll() {
         if (_tsRefresh) await _tsRefresh();
         return;
     }
-    await Promise.allSettled([
-        loadSystemInfo(),
-        loadIdentity(),
-        loadRbac(),
-        loadWebhooks(),
-        loadExport(),
-    ]);
+    await Promise.allSettled([loadSystemInfo(), loadIdentity(), loadRbac(), loadWebhooks(), loadExport()]);
 }
 
 export async function initSettings() {
@@ -67,7 +61,7 @@ export async function initSettings() {
                         fetchOpenApi: api.fetchOpenApi,
                     },
                     toast,
-                },
+                }
             );
             _tsRefresh = refreshTs;
             _tsMounted = true;
@@ -103,10 +97,7 @@ export async function initSettings() {
 
 async function loadSystemInfo() {
     try {
-        const [version, info] = await Promise.all([
-            api.fetchVersion(),
-            api.fetchServiceInfo(),
-        ]);
+        const [version, info] = await Promise.all([api.fetchVersion(), api.fetchServiceInfo()]);
         setText('sys-version', version.version || '--');
         setText('sys-url', info.url || '--');
     } catch {
@@ -119,7 +110,7 @@ async function loadSystemInfo() {
 
 async function loadIdentity() {
     try {
-        const config = await fetch(`${window.location.origin}/api/v1/identity/config`).then(r => r.json());
+        const config = await fetch(`${window.location.origin}/api/v1/identity/config`).then((r) => r.json());
         setText('auth-mode', config.enabled ? 'SSO / OIDC' : 'API Key');
         setText('sso-status', config.enabled ? 'Enabled' : 'Disabled');
     } catch {
@@ -144,7 +135,7 @@ async function loadIdentity() {
                     </div>
                     <div>
                         <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Roles</label>
-                        <p class="text-xs font-mono">${(me.roles || []).map(r => `<span class="text-rose-400">${r}</span>`).join(', ') || '--'}</p>
+                        <p class="text-xs font-mono">${(me.roles || []).map((r) => `<span class="text-rose-400">${r}</span>`).join(', ') || '--'}</p>
                     </div>
                     <div>
                         <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block">Permissions</label>
@@ -157,7 +148,8 @@ async function loadIdentity() {
         }
     } catch {
         const container = document.getElementById('identity-me');
-        if (container) container.innerHTML = `<p class="text-[10px] text-slate-600 font-mono">Identity service unavailable</p>`;
+        if (container)
+            container.innerHTML = `<p class="text-[10px] text-slate-600 font-mono">Identity service unavailable</p>`;
     }
 }
 
@@ -168,7 +160,7 @@ async function loadRbac() {
     try {
         const roles = await api.fetchRbacRoles();
         const roleNames = Object.keys(roles);
-        const allPerms = [...new Set(roleNames.flatMap(r => roles[r]))].sort();
+        const allPerms = [...new Set(roleNames.flatMap((r) => roles[r]))].sort();
 
         container.innerHTML = `
             <div class="overflow-x-auto">
@@ -176,20 +168,28 @@ async function loadRbac() {
                     <thead>
                         <tr class="border-b border-white/[0.06]">
                             <th class="text-left text-[10px] font-bold text-slate-500 uppercase px-2 py-1.5 sticky left-0 bg-[#050506]">Permission</th>
-                            ${roleNames.map(r => `<th class="text-center text-[10px] font-bold text-slate-500 uppercase px-2 py-1.5">${r}</th>`).join('')}
+                            ${roleNames.map((r) => `<th class="text-center text-[10px] font-bold text-slate-500 uppercase px-2 py-1.5">${r}</th>`).join('')}
                         </tr>
                     </thead>
                     <tbody>
-                        ${allPerms.map(perm => `
+                        ${allPerms
+                            .map(
+                                (perm) => `
                             <tr class="border-b border-white/[0.03] hover:bg-white/[0.02]">
                                 <td class="text-[10px] font-mono text-slate-400 px-2 py-1 sticky left-0 bg-[#050506]">${perm}</td>
-                                ${roleNames.map(r => `
+                                ${roleNames
+                                    .map(
+                                        (r) => `
                                     <td class="text-center px-2 py-1">
                                         ${roles[r].includes(perm) ? '<span class="text-emerald-400 text-[10px]">&#10003;</span>' : '<span class="text-slate-700 text-[10px]">-</span>'}
                                     </td>
-                                `).join('')}
+                                `
+                                    )
+                                    .join('')}
                             </tr>
-                        `).join('')}
+                        `
+                            )
+                            .join('')}
                     </tbody>
                 </table>
             </div>
@@ -215,8 +215,12 @@ async function loadWebhooks() {
 
         container.innerHTML = `
             <div class="space-y-2">
-                ${eps.length === 0 ? '<p class="text-[10px] text-slate-600 font-mono">No endpoints configured</p>' :
-                eps.map(ep => `
+                ${
+                    eps.length === 0
+                        ? '<p class="text-[10px] text-slate-600 font-mono">No endpoints configured</p>'
+                        : eps
+                              .map(
+                                  (ep) => `
                     <div class="flex items-center justify-between p-2 bg-white/[0.02] rounded-lg">
                         <div class="flex items-center gap-2">
                             <span class="text-[10px] font-mono text-${targetColors[ep.target] || 'slate'}-400 bg-${targetColors[ep.target] || 'slate'}-500/10 px-1.5 py-0.5 rounded uppercase">${ep.target}</span>
@@ -224,12 +228,15 @@ async function loadWebhooks() {
                         </div>
                         <span class="text-[10px] font-mono text-slate-500">${ep.events.join(', ')}</span>
                     </div>
-                `).join('')}
+                `
+                              )
+                              .join('')
+                }
             </div>
             <div class="mt-3 pt-2 border-t border-white/[0.04]">
                 <p class="text-[10px] text-slate-600 uppercase font-bold mb-1">Available Events</p>
                 <div class="flex flex-wrap gap-1">
-                    ${(data.event_types || []).map(e => `<span class="text-[9px] font-mono text-slate-500 bg-white/[0.03] px-1.5 py-0.5 rounded">${e}</span>`).join('')}
+                    ${(data.event_types || []).map((e) => `<span class="text-[9px] font-mono text-slate-500 bg-white/[0.03] px-1.5 py-0.5 rounded">${e}</span>`).join('')}
                 </div>
             </div>
         `;
@@ -261,17 +268,25 @@ async function loadExport() {
                     <p class="text-[10px] text-white font-mono">PII Scrub: ${data.scrub_pii ? 'ON' : 'OFF'} | Compress: ${data.compress ? 'ON' : 'OFF'}</p>
                 </div>
             </div>
-            ${files.length > 0 ? `
+            ${
+                files.length > 0
+                    ? `
                 <div class="space-y-1 pt-2 border-t border-white/[0.04]">
                     <p class="text-[10px] text-slate-600 uppercase font-bold mb-1">Recent Files</p>
-                    ${files.map(f => `
+                    ${files
+                        .map(
+                            (f) => `
                         <div class="flex items-center justify-between">
                             <span class="text-[9px] font-mono text-slate-400">${f.name}</span>
                             <span class="text-[10px] font-mono text-slate-600">${(f.size_bytes / 1024).toFixed(1)} KB</span>
                         </div>
-                    `).join('')}
+                    `
+                        )
+                        .join('')}
                 </div>
-            ` : '<p class="text-[9px] text-slate-600 font-mono mt-2">No export files yet</p>'}
+            `
+                    : '<p class="text-[9px] text-slate-600 font-mono mt-2">No export files yet</p>'
+            }
         `;
     } catch {
         container.innerHTML = `<p class="text-[10px] text-slate-600 font-mono">Export service unavailable</p>`;

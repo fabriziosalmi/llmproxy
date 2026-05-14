@@ -110,15 +110,13 @@ function makeGrid(
     specs: KpiSpec[],
     data: ThreatsKpiData | null,
     error: string | undefined,
-    seriesByName: Record<string, number[]>,
+    seriesByName: Record<string, number[]>
 ): HTMLElement {
     const grid = document.createElement('div');
     grid.className = 'grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6';
     for (const spec of specs) {
         const series = spec.sparkSeries ? seriesByName[spec.sparkSeries] : undefined;
-        const sparkline = series && series.length >= 2
-            ? { data: series, color: spec.sparkColor }
-            : undefined;
+        const sparkline = series && series.length >= 2 ? { data: series, color: spec.sparkColor } : undefined;
         const tile = createMetricTile({
             label: spec.label,
             value: data ? spec.format(data).value : '',
@@ -148,7 +146,7 @@ export function renderThreatKpis(
     container: HTMLElement,
     data: ThreatsKpiData | null,
     error?: string,
-    series: Record<string, number[]> = {},
+    series: Record<string, number[]> = {}
 ): void {
     container.replaceChildren(makeGrid(PRIMARY, data, error, series), makeGrid(SECONDARY, data, error, series));
 }

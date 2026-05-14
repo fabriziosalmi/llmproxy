@@ -45,9 +45,12 @@ describe('renderTrafficFlow', () => {
 
     it('blocked guards stamp a pulse-live halo', () => {
         const host = document.createElement('div');
-        renderTrafficFlow(host, _data({
-            guards: [{ id: 'firewall', label: 'Firewall', state: 'blocked' }],
-        }));
+        renderTrafficFlow(
+            host,
+            _data({
+                guards: [{ id: 'firewall', label: 'Firewall', state: 'blocked' }],
+            })
+        );
         const guard = host.querySelector('[data-node-id="firewall"]')!;
         // The halo rect is the second rect with no fill + .pulse-live class.
         const halos = guard.querySelectorAll('.pulse-live');
@@ -56,9 +59,12 @@ describe('renderTrafficFlow', () => {
 
     it('idle guards do NOT pulse', () => {
         const host = document.createElement('div');
-        renderTrafficFlow(host, _data({
-            guards: [{ id: 'link_sanitizer', label: 'Link', state: 'idle' }],
-        }));
+        renderTrafficFlow(
+            host,
+            _data({
+                guards: [{ id: 'link_sanitizer', label: 'Link', state: 'idle' }],
+            })
+        );
         const guard = host.querySelector('[data-node-id="link_sanitizer"]')!;
         expect(guard.querySelectorAll('.pulse-live')).toHaveLength(0);
     });

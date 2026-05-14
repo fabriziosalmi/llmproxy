@@ -42,13 +42,26 @@ const AUTHORIZE_URLS = {
 // every access. Wrap so a SecurityError doesn't crash the boot path.
 const _storage = {
     get(key) {
-        try { return localStorage.getItem(key); } catch { return null; }
+        try {
+            return localStorage.getItem(key);
+        } catch {
+            return null;
+        }
     },
     set(key, value) {
-        try { localStorage.setItem(key, value); return true; } catch { return false; }
+        try {
+            localStorage.setItem(key, value);
+            return true;
+        } catch {
+            return false;
+        }
     },
     del(key) {
-        try { localStorage.removeItem(key); } catch { /* noop */ }
+        try {
+            localStorage.removeItem(key);
+        } catch {
+            /* noop */
+        }
     },
 };
 
@@ -62,9 +75,7 @@ export const auth = {
     async init() {
         try {
             const res = await fetch(`${BASE_URL}/api/v1/identity/config`);
-            _identityConfig = res.ok
-                ? _normalizeConfig(await res.json())
-                : _normalizeConfig({});
+            _identityConfig = res.ok ? _normalizeConfig(await res.json()) : _normalizeConfig({});
         } catch {
             _identityConfig = _normalizeConfig({});
         }
@@ -126,7 +137,11 @@ export const auth = {
         if (_currentUser) return _currentUser;
         const raw = _storage.get(USER_KEY);
         if (raw) {
-            try { _currentUser = JSON.parse(raw); } catch { _currentUser = null; }
+            try {
+                _currentUser = JSON.parse(raw);
+            } catch {
+                _currentUser = null;
+            }
         }
         return _currentUser;
     },
@@ -190,7 +205,7 @@ async function _validateToken(token) {
     let res;
     try {
         res = await fetch(`${BASE_URL}/api/v1/identity/me`, {
-            headers: { 'Authorization': `Bearer ${token}` },
+            headers: { Authorization: `Bearer ${token}` },
         });
     } catch {
         return 'network';
@@ -251,7 +266,7 @@ async function _exchangeToken(externalToken) {
 // ─── OAuth Popup Flow ───
 
 function _startOAuthPopup(provider) {
-    const cfg = _identityConfig?.providers?.find(p => p.name === provider.name);
+    const cfg = _identityConfig?.providers?.find((p) => p.name === provider.name);
     if (!cfg) return;
 
     const authorizeUrl = AUTHORIZE_URLS[provider.name];

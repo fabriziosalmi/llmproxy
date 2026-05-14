@@ -28,11 +28,7 @@ export async function renderSecurity() {
     // Defensive: if main.js ever drops initSecurity from the initWrappers
     // list, we still attach listeners before the first data load.
     initSecurity();
-    await Promise.allSettled([
-        _loadGuardsStatus(),
-        _loadRetention(),
-        _loadCorpusStats(),
-    ]);
+    await Promise.allSettled([_loadGuardsStatus(), _loadRetention(), _loadCorpusStats()]);
 }
 
 // ── Data Loaders ──
@@ -52,9 +48,7 @@ async function _loadGuardsStatus() {
         if (sigEl) {
             const signing = data?.response_signing?.enabled;
             sigEl.textContent = signing ? 'ACTIVE' : 'OFF';
-            sigEl.className = signing
-                ? 'text-2xl font-black text-emerald-400'
-                : 'text-2xl font-black text-slate-500';
+            sigEl.className = signing ? 'text-2xl font-black text-emerald-400' : 'text-2xl font-black text-slate-500';
         }
     } catch {
         // Guards endpoint may not expose all fields yet
@@ -64,7 +58,7 @@ async function _loadGuardsStatus() {
 async function _loadRetention() {
     try {
         const token = localStorage.getItem('proxy_key') || '';
-        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
         const res = await fetch(`${window.location.origin}/api/v1/gdpr/retention`, { headers });
         const data = res.ok ? await res.json() : null;
         const el = document.getElementById('sec-retention-info');
@@ -80,31 +74,45 @@ async function _loadRetention() {
 async function _loadCorpusStats() {
     try {
         // Corpus stats not yet exposed via API — use static info
-        const stats = { total_patterns: 60, categories: {
-            override: 9, extraction: 8, hijack: 8, bypass: 6,
-            multilingual: 7, delimiter: 5, social: 7, exfiltration: 4
-        }};
+        const stats = {
+            total_patterns: 60,
+            categories: {
+                override: 9,
+                extraction: 8,
+                hijack: 8,
+                bypass: 6,
+                multilingual: 7,
+                delimiter: 5,
+                social: 7,
+                exfiltration: 4,
+            },
+        };
 
         const countEl = document.getElementById('sec-corpus-patterns');
         if (countEl) countEl.textContent = stats.total_patterns;
 
         const container = document.getElementById('sec-corpus-categories');
         if (container) {
-            container.innerHTML = Object.entries(stats.categories).map(([cat, count]) =>
-                `<div class="bg-white/5 rounded-lg p-2 text-center">
+            container.innerHTML = Object.entries(stats.categories)
+                .map(
+                    ([cat, count]) =>
+                        `<div class="bg-white/5 rounded-lg p-2 text-center">
                     <p class="text-sm font-bold text-white">${count}</p>
                     <p class="text-[9px] text-slate-500 uppercase">${cat}</p>
                 </div>`
-            ).join('');
+                )
+                .join('');
         }
-    } catch { /* non-critical */ }
+    } catch {
+        /* non-critical */
+    }
 }
 
 // ── Helpers ──
 
 async function _authJson(path) {
     const token = localStorage.getItem('proxy_key') || '';
-    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
     const res = await fetch(`${window.location.origin}${path}`, { headers });
     if (!res.ok) throw new Error(`${res.status}`);
     return res.json();
@@ -127,12 +135,18 @@ function _initListeners() {
                     resultEl.textContent = `Chain valid — ${data.verified} entries verified, 0 tampering detected`;
                     resultEl.className = 'font-mono text-[10px] text-emerald-400';
                     const statusEl = document.getElementById('sec-chain-status');
-                    if (statusEl) { statusEl.textContent = 'VALID'; statusEl.className = 'text-2xl font-black text-emerald-400'; }
+                    if (statusEl) {
+                        statusEl.textContent = 'VALID';
+                        statusEl.className = 'text-2xl font-black text-emerald-400';
+                    }
                 } else {
                     resultEl.textContent = `CHAIN BROKEN at entry #${data.broken_at} — ${data.error || 'tamper detected'}`;
                     resultEl.className = 'font-mono text-[10px] text-rose-400';
                     const statusEl = document.getElementById('sec-chain-status');
-                    if (statusEl) { statusEl.textContent = 'BROKEN'; statusEl.className = 'text-2xl font-black text-rose-400'; }
+                    if (statusEl) {
+                        statusEl.textContent = 'BROKEN';
+                        statusEl.className = 'text-2xl font-black text-rose-400';
+                    }
                 }
             } catch (e) {
                 resultEl.textContent = `Error: ${e.message}`;
@@ -150,7 +164,10 @@ function _initListeners() {
             if (!subjectInput || !resultEl) return;
 
             const subject = subjectInput.value.trim();
-            if (!subject) { toast('Enter a subject ID', 'warning'); return; }
+            if (!subject) {
+                toast('Enter a subject ID', 'warning');
+                return;
+            }
 
             resultEl.classList.remove('hidden');
             resultEl.textContent = 'Exporting...';
@@ -184,7 +201,10 @@ function _initListeners() {
             const resultEl = document.getElementById('sec-gdpr-result');
             if (!subjectInput || !resultEl) return;
             const subject = subjectInput.value.trim();
-            if (!subject) { toast('Enter a subject ID first', 'warning'); return; }
+            if (!subject) {
+                toast('Enter a subject ID first', 'warning');
+                return;
+            }
             const { confirm } = await import('../src/ui');
             const ok = await confirm({
                 title: 'GDPR — right to erasure (Article 17)',
@@ -200,7 +220,7 @@ function _initListeners() {
                 const token = localStorage.getItem('proxy_key') || '';
                 const res = await fetch(`${window.location.origin}/api/v1/gdpr/erase/${encodeURIComponent(subject)}`, {
                     method: 'POST',
-                    headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+                    headers: token ? { Authorization: `Bearer ${token}` } : {},
                 });
                 const data = await res.json();
                 if (res.ok) {
@@ -231,7 +251,7 @@ function _initListeners() {
                 const token = localStorage.getItem('proxy_key') || '';
                 const res = await fetch(`${window.location.origin}/api/v1/gdpr/purge`, {
                     method: 'POST',
-                    headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+                    headers: token ? { Authorization: `Bearer ${token}` } : {},
                 });
                 const data = await res.json();
                 if (res.ok) {
@@ -276,8 +296,8 @@ function _initListeners() {
                 const sinceMs = timerange.sinceEpochMs();
                 const untilMs = timerange.untilEpochMs();
                 let items = data.items || [];
-                if (sinceMs != null) items = items.filter(r => (r.ts || 0) * 1000 >= sinceMs);
-                if (untilMs != null) items = items.filter(r => (r.ts || 0) * 1000 <= untilMs);
+                if (sinceMs != null) items = items.filter((r) => (r.ts || 0) * 1000 >= sinceMs);
+                if (untilMs != null) items = items.filter((r) => (r.ts || 0) * 1000 <= untilMs);
                 if (!items.length) {
                     resultsEl.innerHTML = `<p class="text-[10px] text-slate-600 font-mono">No entries found${sinceMs != null ? ` in ${timerange.label()}` : ''}.</p>`;
                     return;
@@ -296,11 +316,14 @@ function _initListeners() {
                             </tr>
                         </thead>
                         <tbody>
-                            ${items.map(r => {
-                                const ts = r.ts ? new Date(r.ts * 1000).toLocaleString() : '--';
-                                const blocked = r.blocked ? '<span class="text-rose-400">YES</span>' : '<span class="text-emerald-400">no</span>';
-                                const cost = r.cost_usd ? `$${r.cost_usd.toFixed(4)}` : '--';
-                                return `<tr class="border-b border-white/[0.03] hover:bg-white/[0.02] cursor-pointer"
+                            ${items
+                                .map((r) => {
+                                    const ts = r.ts ? new Date(r.ts * 1000).toLocaleString() : '--';
+                                    const blocked = r.blocked
+                                        ? '<span class="text-rose-400">YES</span>'
+                                        : '<span class="text-emerald-400">no</span>';
+                                    const cost = r.cost_usd ? `$${r.cost_usd.toFixed(4)}` : '--';
+                                    return `<tr class="border-b border-white/[0.03] hover:bg-white/[0.02] cursor-pointer"
                                            data-drilldown="request:${r.req_id}"
                                            tabindex="0"
                                            role="button"
@@ -312,7 +335,8 @@ function _initListeners() {
                                     <td class="px-2 py-1 text-[9px] font-mono text-amber-400">${cost}</td>
                                     <td class="px-2 py-1 text-[9px] font-mono">${blocked}</td>
                                 </tr>`;
-                            }).join('')}
+                                })
+                                .join('')}
                         </tbody>
                     </table>`;
             } catch (e) {

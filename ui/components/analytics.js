@@ -51,10 +51,12 @@ function _analyticsFallback(id, title) {
 async function _fetchEfficiency() {
     try {
         const token = localStorage.getItem('proxy_key') || '';
-        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
         const res = await fetch(`${window.location.origin}/api/v1/analytics/cost-efficiency`, { headers });
         return res.ok ? await res.json() : null;
-    } catch { return null; }
+    } catch {
+        return null;
+    }
 }
 
 function renderEfficiency(data) {
@@ -92,7 +94,9 @@ function renderEfficiency(data) {
                     </tr>
                 </thead>
                 <tbody>
-                    ${models.map(m => `
+                    ${models
+                        .map(
+                            (m) => `
                         <tr class="border-b border-white/[0.04] hover:bg-white/[0.02]">
                             <td class="px-3 py-2 text-[10px] font-mono font-bold text-white">${m.model}</td>
                             <td class="px-3 py-2 text-right text-[10px] font-mono text-sky-400">${(m.requests || 0).toLocaleString()}</td>
@@ -100,7 +104,9 @@ function renderEfficiency(data) {
                             <td class="px-3 py-2 text-right text-[10px] font-mono text-emerald-400">$${(m.avg_cost_per_request_usd || 0).toFixed(6)}</td>
                             <td class="px-3 py-2 text-right text-[10px] font-mono text-slate-400">${Math.round(m.avg_tokens_per_request || 0)}</td>
                         </tr>
-                    `).join('')}
+                    `
+                        )
+                        .join('')}
                 </tbody>
             </table>
         </div>
@@ -132,18 +138,21 @@ function renderBreakdown(containerId, title, rows, groupCol) {
                     </tr>
                 </thead>
                 <tbody>
-                    ${rows.map(r => {
-                        const name = r[groupCol] || 'unknown';
-                        const cost = (r.total_cost_usd || 0);
-                        const costColor = cost > 1 ? 'text-rose-400' : cost > 0.1 ? 'text-amber-400' : 'text-emerald-400';
-                        return `
+                    ${rows
+                        .map((r) => {
+                            const name = r[groupCol] || 'unknown';
+                            const cost = r.total_cost_usd || 0;
+                            const costColor =
+                                cost > 1 ? 'text-rose-400' : cost > 0.1 ? 'text-amber-400' : 'text-emerald-400';
+                            return `
                         <tr class="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors">
                             <td class="px-3 py-2"><span class="text-[10px] font-bold text-white font-mono">${name}</span></td>
                             <td class="px-3 py-2 text-right"><span class="text-[10px] font-mono text-sky-400">${(r.requests || 0).toLocaleString()}</span></td>
                             <td class="px-3 py-2 text-right"><span class="text-[10px] font-mono ${costColor}">$${cost.toFixed(4)}</span></td>
                             <td class="px-3 py-2 text-right"><span class="text-[10px] font-mono text-slate-400">${(r.avg_latency_ms || 0).toFixed(0)}ms</span></td>
                         </tr>`;
-                    }).join('')}
+                        })
+                        .join('')}
                 </tbody>
             </table>
         </div>

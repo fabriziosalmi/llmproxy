@@ -119,33 +119,75 @@ html.theme-light .bg-\[\#0a0a0c\]\/95 {
 }
 
 /* Glassmorphic translucent overlays — flip white-on-dark to dark-on-light */
-html.theme-light .bg-white\/\[0\.02\] { background-color: rgb(0 0 0 / 0.025) !important; }
-html.theme-light .bg-white\/\[0\.03\] { background-color: rgb(0 0 0 / 0.04) !important; }
-html.theme-light .bg-white\/\[0\.04\] { background-color: rgb(0 0 0 / 0.05) !important; }
-html.theme-light .bg-white\/\[0\.05\] { background-color: rgb(0 0 0 / 0.06) !important; }
-html.theme-light .bg-white\/5     { background-color: rgb(0 0 0 / 0.05) !important; }
-html.theme-light .hover\:bg-white\/\[0\.04\]:hover { background-color: rgb(0 0 0 / 0.05) !important; }
-html.theme-light .hover\:bg-white\/\[0\.03\]:hover { background-color: rgb(0 0 0 / 0.04) !important; }
-html.theme-light .hover\:bg-white\/5:hover { background-color: rgb(0 0 0 / 0.06) !important; }
-html.theme-light .hover\:bg-white\/10:hover { background-color: rgb(0 0 0 / 0.08) !important; }
+html.theme-light .bg-white\/\[0\.02\] {
+    background-color: rgb(0 0 0 / 0.025) !important;
+}
+html.theme-light .bg-white\/\[0\.03\] {
+    background-color: rgb(0 0 0 / 0.04) !important;
+}
+html.theme-light .bg-white\/\[0\.04\] {
+    background-color: rgb(0 0 0 / 0.05) !important;
+}
+html.theme-light .bg-white\/\[0\.05\] {
+    background-color: rgb(0 0 0 / 0.06) !important;
+}
+html.theme-light .bg-white\/5 {
+    background-color: rgb(0 0 0 / 0.05) !important;
+}
+html.theme-light .hover\:bg-white\/\[0\.04\]:hover {
+    background-color: rgb(0 0 0 / 0.05) !important;
+}
+html.theme-light .hover\:bg-white\/\[0\.03\]:hover {
+    background-color: rgb(0 0 0 / 0.04) !important;
+}
+html.theme-light .hover\:bg-white\/5:hover {
+    background-color: rgb(0 0 0 / 0.06) !important;
+}
+html.theme-light .hover\:bg-white\/10:hover {
+    background-color: rgb(0 0 0 / 0.08) !important;
+}
 
 /* Borders */
-html.theme-light .border-white\/\[0\.04\] { border-color: rgb(0 0 0 / 0.06) !important; }
-html.theme-light .border-white\/\[0\.06\] { border-color: rgb(0 0 0 / 0.08) !important; }
-html.theme-light .border-white\/\[0\.08\] { border-color: rgb(0 0 0 / 0.1) !important; }
-html.theme-light .border-white\/10 { border-color: rgb(0 0 0 / 0.1) !important; }
+html.theme-light .border-white\/\[0\.04\] {
+    border-color: rgb(0 0 0 / 0.06) !important;
+}
+html.theme-light .border-white\/\[0\.06\] {
+    border-color: rgb(0 0 0 / 0.08) !important;
+}
+html.theme-light .border-white\/\[0\.08\] {
+    border-color: rgb(0 0 0 / 0.1) !important;
+}
+html.theme-light .border-white\/10 {
+    border-color: rgb(0 0 0 / 0.1) !important;
+}
 
 /* Text — invert the dominant white→dark, slate-200/300/400/500 → cooler grays
  * suited for a light substrate. Keep slate-600/700 on the lighter side
  * for muted captions. */
-html.theme-light .text-white { color: #1a1a1c !important; }
-html.theme-light .text-slate-200 { color: #1f2937 !important; }
-html.theme-light .text-slate-300 { color: #374151 !important; }
-html.theme-light .text-slate-400 { color: #4b5563 !important; }
-html.theme-light .text-slate-500 { color: #6b7280 !important; }
-html.theme-light .text-slate-600 { color: #9ca3af !important; }
-html.theme-light .text-slate-700 { color: #d1d5db !important; }
-html.theme-light .hover\:text-white:hover { color: #1a1a1c !important; }
+html.theme-light .text-white {
+    color: #1a1a1c !important;
+}
+html.theme-light .text-slate-200 {
+    color: #1f2937 !important;
+}
+html.theme-light .text-slate-300 {
+    color: #374151 !important;
+}
+html.theme-light .text-slate-400 {
+    color: #4b5563 !important;
+}
+html.theme-light .text-slate-500 {
+    color: #6b7280 !important;
+}
+html.theme-light .text-slate-600 {
+    color: #9ca3af !important;
+}
+html.theme-light .text-slate-700 {
+    color: #d1d5db !important;
+}
+html.theme-light .hover\:text-white:hover {
+    color: #1a1a1c !important;
+}
 
 /* Backdrop on the modal / drawer scrim — keep some dimming on a light bg */
 html.theme-light .bg-\[\#050506\]\/70 {
