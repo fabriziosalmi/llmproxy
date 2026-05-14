@@ -5,9 +5,9 @@
 
 const COLORS = {
     success: { bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', text: 'text-emerald-400' },
-    error:   { bg: 'bg-rose-500/10',    border: 'border-rose-500/20',    text: 'text-rose-400' },
-    warning: { bg: 'bg-amber-500/10',    border: 'border-amber-500/20',   text: 'text-amber-400' },
-    info:    { bg: 'bg-sky-500/10',      border: 'border-sky-500/20',     text: 'text-sky-400' },
+    error: { bg: 'bg-rose-500/10', border: 'border-rose-500/20', text: 'text-rose-400' },
+    warning: { bg: 'bg-amber-500/10', border: 'border-amber-500/20', text: 'text-amber-400' },
+    info: { bg: 'bg-sky-500/10', border: 'border-sky-500/20', text: 'text-sky-400' },
 };
 
 /**

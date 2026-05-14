@@ -90,7 +90,11 @@ function _renderComponentTile(name: string, comp: Record<string, unknown>): HTML
     const tile = document.createElement('article');
     tile.className = cx(
         'bg-white/[0.03] backdrop-blur-xl rounded-xl border p-3',
-        intent === 'success' ? 'border-emerald-500/20' : intent === 'warning' ? 'border-amber-500/25' : 'border-rose-500/25',
+        intent === 'success'
+            ? 'border-emerald-500/20'
+            : intent === 'warning'
+              ? 'border-amber-500/25'
+              : 'border-rose-500/25'
     );
     tile.setAttribute('data-testid', `health-component-${name}`);
 
@@ -108,7 +112,7 @@ function _renderComponentTile(name: string, comp: Record<string, unknown>): HTML
             size: 'sm',
             dot: status === 'ok',
             pulse: status === 'ok',
-        }),
+        })
     );
     tile.appendChild(head);
 
@@ -173,7 +177,7 @@ export function mountHealthPanel(host: HTMLElement, api: HealthApi): HealthPanel
                         title: 'No /health response',
                         description: 'Backend returned an empty body.',
                         testId: 'health-empty',
-                    }),
+                    })
                 );
                 overallSlot.replaceChildren();
                 return;
@@ -189,7 +193,7 @@ export function mountHealthPanel(host: HTMLElement, api: HealthApi): HealthPanel
                     dot: overall === 'ok',
                     pulse: overall === 'ok',
                     testId: 'health-overall-badge',
-                }),
+                })
             );
 
             // Tile per component, in canonical order. Unknown components
@@ -212,7 +216,7 @@ export function mountHealthPanel(host: HTMLElement, api: HealthApi): HealthPanel
                         title: 'No components reported',
                         description: 'Upgrade the proxy to ≥ 1.21.9 to see per-subsystem health.',
                         testId: 'health-no-components',
-                    }),
+                    })
                 );
             } else {
                 grid.replaceChildren(...tiles);
@@ -225,7 +229,7 @@ export function mountHealthPanel(host: HTMLElement, api: HealthApi): HealthPanel
                     detail: (err as Error)?.message,
                     onRetry: () => void refresh(),
                     testId: 'health-error',
-                }),
+                })
             );
             overallSlot.replaceChildren();
         }

@@ -13,11 +13,11 @@ export function renderContent() {
         history.replaceState(null, '', `#/${currentTab}`);
     }
 
-    document.querySelectorAll('.content-view').forEach(view => view.classList.add('hidden'));
+    document.querySelectorAll('.content-view').forEach((view) => view.classList.add('hidden'));
     const currentView = document.getElementById(`view-${currentTab}`);
     if (currentView) currentView.classList.remove('hidden');
 
-    document.querySelectorAll('.nav-item').forEach(item => {
+    document.querySelectorAll('.nav-item').forEach((item) => {
         item.classList.remove('active');
         item.classList.add('text-slate-500');
     });
@@ -35,7 +35,7 @@ export function renderContent() {
 }
 
 export function initNavigation() {
-    document.querySelectorAll('.nav-item').forEach(item => {
+    document.querySelectorAll('.nav-item').forEach((item) => {
         const tabId = item.id.replace('nav-', '');
         item.addEventListener('click', () => {
             store.update({ currentTab: tabId });

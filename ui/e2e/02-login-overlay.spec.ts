@@ -24,7 +24,7 @@ test.describe('login overlay', () => {
                     proxy_auth_enabled: true,
                     providers: [],
                 }),
-            }),
+            })
         );
         // /identity/me must reject anonymous + bogus keys for the "rejects
         // bad key" test to be meaningful against the same stub backend.
@@ -33,7 +33,7 @@ test.describe('login overlay', () => {
                 status: 200,
                 contentType: 'application/json',
                 body: JSON.stringify({ authenticated: false }),
-            }),
+            })
         );
     });
 

@@ -45,9 +45,9 @@ export function initLogs() {
     try {
         const webglAddon = new WebglAddon.WebglAddon();
         term.loadAddon(webglAddon);
-        console.info("xterm.js: WebGL Accelerated Rendering Enabled");
+        console.info('xterm.js: WebGL Accelerated Rendering Enabled');
     } catch (e) {
-        console.warn("xterm.js: WebGL failed, falling back to Canvas", e);
+        console.warn('xterm.js: WebGL failed, falling back to Canvas', e);
     }
 
     term.open(container);
@@ -100,10 +100,10 @@ export function initLogs() {
         const text = document.getElementById('log-stream-label');
         if (!dot || !text) return;
         const map = {
-            waiting:   { color: 'bg-slate-500',    tone: 'text-slate-500' },
-            connecting:{ color: 'bg-amber-400 animate-pulse', tone: 'text-amber-400' },
-            live:      { color: 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]', tone: 'text-emerald-400' },
-            reconnect: { color: 'bg-rose-500 animate-pulse',  tone: 'text-rose-400' },
+            waiting: { color: 'bg-slate-500', tone: 'text-slate-500' },
+            connecting: { color: 'bg-amber-400 animate-pulse', tone: 'text-amber-400' },
+            live: { color: 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]', tone: 'text-emerald-400' },
+            reconnect: { color: 'bg-rose-500 animate-pulse', tone: 'text-rose-400' },
         };
         const cfg = map[state] || map.waiting;
         dot.className = `w-1.5 h-1.5 rounded-full ${cfg.color}`;
@@ -151,22 +151,26 @@ function appendLogToTerm(log) {
     // Check filters
     const filterInput = document.getElementById('log-filter');
     if (filterInput && filterInput.value.trim() !== '') {
-        const pipes = filterInput.value.split('|').map(s => s.trim().toLowerCase()).filter(s => s);
-        const text = (log.message || "").toLowerCase();
-        const matches = pipes.every(p => text.includes(p.replace(/grep['" ]+/g, '').replace(/['"]/g, '')));
+        const pipes = filterInput.value
+            .split('|')
+            .map((s) => s.trim().toLowerCase())
+            .filter((s) => s);
+        const text = (log.message || '').toLowerCase();
+        const matches = pipes.every((p) => text.includes(p.replace(/grep['" ]+/g, '').replace(/['"]/g, '')));
         if (!matches) return;
     }
 
     const timestamp = `\x1b[90m[${log.timestamp}]\x1b[0m`;
-    const levelColor = {
-        'INFO': '\x1b[34m',    // Blue
-        'WARNING': '\x1b[33m', // Yellow
-        'ERROR': '\x1b[31m',   // Red
-        'CRITICAL': '\x1b[91;1m', // High Intensity Red
-        'SYSTEM': '\x1b[35m',  // Magenta
-        'PROXY': '\x1b[32m',   // Green
-        'SECURITY': '\x1b[33;1m' // Bold Yellow
-    }[log.level] || '\x1b[37m';
+    const levelColor =
+        {
+            INFO: '\x1b[34m', // Blue
+            WARNING: '\x1b[33m', // Yellow
+            ERROR: '\x1b[31m', // Red
+            CRITICAL: '\x1b[91;1m', // High Intensity Red
+            SYSTEM: '\x1b[35m', // Magenta
+            PROXY: '\x1b[32m', // Green
+            SECURITY: '\x1b[33;1m', // Bold Yellow
+        }[log.level] || '\x1b[37m';
 
     const level = `${levelColor}${log.level}\x1b[0m`;
     let message = log.message;
@@ -184,14 +188,17 @@ function appendLogToTerm(log) {
                 // Render prefix on its own line, then pretty JSON with colors
                 const isAtBottom = term.buffer.active.viewportY >= term.buffer.active.baseY;
                 if (prefix.trim()) term.writeln(`${timestamp} ${level} ${prefix.trim()}`);
-                pretty.split('\n').forEach(line => {
-                    const colored = line.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g, function (m) {
-                        if (/^"/.test(m)) {
-                            return (/:$/.test(m) ? '\x1b[36m' : '\x1b[32m') + m + '\x1b[0m';
-                        } else if (/true|false/.test(m)) return '\x1b[33m' + m + '\x1b[0m';
-                        else if (/null/.test(m)) return '\x1b[90m' + m + '\x1b[0m';
-                        return '\x1b[31m' + m + '\x1b[0m';
-                    });
+                pretty.split('\n').forEach((line) => {
+                    const colored = line.replace(
+                        /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g,
+                        function (m) {
+                            if (/^"/.test(m)) {
+                                return (/:$/.test(m) ? '\x1b[36m' : '\x1b[32m') + m + '\x1b[0m';
+                            } else if (/true|false/.test(m)) return '\x1b[33m' + m + '\x1b[0m';
+                            else if (/null/.test(m)) return '\x1b[90m' + m + '\x1b[0m';
+                            return '\x1b[31m' + m + '\x1b[0m';
+                        }
+                    );
                     // Braces/brackets in white
                     term.writeln(`  \x1b[90m│\x1b[0m ${colored}`);
                 });
@@ -203,22 +210,25 @@ function appendLogToTerm(log) {
             }
         }
         // Fallback: inline regex highlighting
-        message = message.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g, function (match) {
-            let cls = '\x1b[32m';
-            if (/^"/.test(match)) {
-                if (/:$/.test(match)) cls = '\x1b[36m';
-            } else if (/true|false/.test(match)) cls = '\x1b[33m';
-            else if (/null/.test(match)) cls = '\x1b[90m';
-            else cls = '\x1b[31m';
-            return cls + match + '\x1b[0m';
-        });
+        message = message.replace(
+            /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g,
+            function (match) {
+                let cls = '\x1b[32m';
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) cls = '\x1b[36m';
+                } else if (/true|false/.test(match)) cls = '\x1b[33m';
+                else if (/null/.test(match)) cls = '\x1b[90m';
+                else cls = '\x1b[31m';
+                return cls + match + '\x1b[0m';
+            }
+        );
     }
 
     // 5.1: Live Diff — GitHub-style colored lines for prompt-blocked diff output
     if (message.includes('@@') || /^[-+]{3}\s/.test(message.trim())) {
         const lines = message.split('\n');
         const isAtBottom = term.buffer.active.viewportY >= term.buffer.active.baseY;
-        lines.forEach(line => {
+        lines.forEach((line) => {
             const trimmed = line.trimStart();
             if (trimmed.startsWith('@@')) {
                 term.writeln(`${timestamp} \x1b[36;1m${line}\x1b[0m`);
@@ -242,7 +252,7 @@ function appendLogToTerm(log) {
     const isAtBottom = term.buffer.active.viewportY >= term.buffer.active.baseY;
 
     term.writeln(`${timestamp} ${level} ${message}`);
-    
+
     handleAutoScroll(isAtBottom);
 }
 

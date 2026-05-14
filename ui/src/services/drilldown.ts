@@ -406,8 +406,7 @@ function _requestOverview(r: AuditRow): HTMLElement {
 function _requestTimeline(related: AuditRow[]): HTMLElement {
     const el = document.createElement('div');
     if (!related.length) {
-        el.innerHTML =
-            '<p class="text-[11px] text-slate-600 font-mono">No other requests in this session window.</p>';
+        el.innerHTML = '<p class="text-[11px] text-slate-600 font-mono">No other requests in this session window.</p>';
         return el;
     }
     el.innerHTML =
@@ -686,7 +685,7 @@ function _modelActions(modelId: string): HTMLElement {
     const note = document.createElement('p');
     note.className = 'text-[10px] text-slate-500';
     note.innerHTML =
-        'To change which endpoints serve this model, edit the endpoint\'s <code>models:</code> ' +
+        "To change which endpoints serve this model, edit the endpoint's <code>models:</code> " +
         'list. Cloud: <code>config.yaml</code>. Local: <code>LLM_PROXY_ENDPOINT_&lt;NAME&gt;_MODELS</code> in <code>.env</code>.';
     wrap.appendChild(note);
 
@@ -791,9 +790,7 @@ function _pluginConfig(p: PluginLike): HTMLElement {
 
 function _pluginRelated(p: PluginLike, list: PluginLike[]): HTMLElement {
     const el = document.createElement('div');
-    const siblings = list
-        .filter((x) => x.name !== p.name && (x.hook === p.hook || x.ring === p.ring))
-        .slice(0, 10);
+    const siblings = list.filter((x) => x.name !== p.name && (x.hook === p.hook || x.ring === p.ring)).slice(0, 10);
     if (!siblings.length) {
         el.innerHTML = `<p class="text-[11px] text-slate-600 font-mono">No other plugin in the ${p.hook ?? p.ring} ring.</p>`;
         return el;

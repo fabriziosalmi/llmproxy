@@ -154,10 +154,7 @@ export function createPluginCard(plugin: Plugin, stats: PluginStats | undefined,
     // O.2: enabled dot pulses; disabled stays still. The pulse is the
     // cheapest "this is alive" cue — same animation token as the Live
     // status badges in the registry table.
-    dot.className = cx(
-        'w-2 h-2 rounded-full',
-        enabled ? 'bg-emerald-400 pulse-live' : 'bg-slate-600',
-    );
+    dot.className = cx('w-2 h-2 rounded-full', enabled ? 'bg-emerald-400 pulse-live' : 'bg-slate-600');
     dot.setAttribute('aria-label', enabled ? 'Enabled' : 'Disabled');
     right.appendChild(dot);
 

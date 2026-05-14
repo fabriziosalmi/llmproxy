@@ -16,7 +16,7 @@
     --apple-red: #ff3b30;
     --apple-gray: #8e8e93;
     --bg-deep: #050608;
-    --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+    --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
     --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
 }
 
@@ -35,18 +35,25 @@ body {
 
 /* 1.6: Monospace for all technical content */
 .font-mono,
-code, pre,
+code,
+pre,
 [data-mono],
 .tracking-wider,
-input[type="number"] {
+input[type='number'] {
     font-family: var(--font-mono) !important;
 }
 
 /* 60fps Micro-interactions */
-button, .cursor-pointer, input[type="text"], input[type="password"], input[type="number"], a {
+button,
+.cursor-pointer,
+input[type='text'],
+input[type='password'],
+input[type='number'],
+a {
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
-button:active, .cursor-pointer:active {
+button:active,
+.cursor-pointer:active {
     transform: scale(0.95);
 }
 
@@ -58,7 +65,8 @@ button:active, .cursor-pointer:active {
 }
 /* Fallback for browsers without backdrop-filter (audit #8) */
 @supports not (backdrop-filter: blur(1px)) {
-    .glass, .glass-sidebar {
+    .glass,
+    .glass-sidebar {
         background: rgba(15, 15, 18, 0.95);
     }
 }
@@ -183,8 +191,14 @@ html.theme-light *:hover {
 
 /* ─── Animations ─── */
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .animate-in {
@@ -196,30 +210,48 @@ tr:hover .w-1\.5 {
     box-shadow: 0 0 10px currentColor;
     transform: scale(1.2);
 }
-.w-1\.5 { transition: all 0.3s ease; }
+.w-1\.5 {
+    transition: all 0.3s ease;
+}
 
 /* 2.10: Drag-and-drop reorder */
-tr[draggable="true"] { cursor: default; }
-tr[draggable="true"] .drag-handle { opacity: 0; transition: opacity 0.15s; }
-tr[draggable="true"]:hover .drag-handle { opacity: 1; }
-tr.drag-over { border-top: 2px solid rgba(14, 165, 233, 0.5) !important; }
+tr[draggable='true'] {
+    cursor: default;
+}
+tr[draggable='true'] .drag-handle {
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+tr[draggable='true']:hover .drag-handle {
+    opacity: 1;
+}
+tr.drag-over {
+    border-top: 2px solid rgba(14, 165, 233, 0.5) !important;
+}
 
 /* Hide native number spinners */
-input[type=number]::-webkit-inner-spin-button,
-input[type=number]::-webkit-outer-spin-button {
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
     appearance: none;
     -webkit-appearance: none;
     margin: 0;
 }
-input[type=number] {
+input[type='number'] {
     appearance: textfield;
     -moz-appearance: textfield;
 }
 
 /* Data-Viz Equalizer */
 @keyframes eq {
-    0% { transform: scaleY(0.2); opacity: 0.6; }
-    100% { transform: scaleY(1.0); opacity: 1; filter: brightness(1.2); }
+    0% {
+        transform: scaleY(0.2);
+        opacity: 0.6;
+    }
+    100% {
+        transform: scaleY(1);
+        opacity: 1;
+        filter: brightness(1.2);
+    }
 }
 #token-eq > div {
     transform-origin: bottom;
@@ -233,8 +265,12 @@ input[type=number] {
 }
 
 @keyframes marquee {
-    0% { transform: translateX(20%); }
-    100% { transform: translateX(-100%); }
+    0% {
+        transform: translateX(20%);
+    }
+    100% {
+        transform: translateX(-100%);
+    }
 }
 .animate-marquee {
     animation: marquee 30s linear infinite;
@@ -245,10 +281,23 @@ input[type=number] {
 
 /* Guardrail Redaction */
 @keyframes redact {
-    0% { width: 0%; opacity: 1; }
-    80% { width: 100%; opacity: 1; }
-    98% { width: 100%; opacity: 1; border-color: #f43f5e; }
-    100% { width: 100%; opacity: 0; }
+    0% {
+        width: 0%;
+        opacity: 1;
+    }
+    80% {
+        width: 100%;
+        opacity: 1;
+    }
+    98% {
+        width: 100%;
+        opacity: 1;
+        border-color: #f43f5e;
+    }
+    100% {
+        width: 100%;
+        opacity: 0;
+    }
 }
 
 /* Cinema Mode */
@@ -345,20 +394,37 @@ body.cinema-mode main {
 
 /* ─── Reduced Motion ─── */
 @media (prefers-reduced-motion: reduce) {
-    .nebula-grain { display: none; }
-    .animate-in { animation: none; }
-    .animate-marquee { animation: none; }
-    .animate-pulse { animation: none; }
-    *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+    .nebula-grain {
+        display: none;
+    }
+    .animate-in {
+        animation: none;
+    }
+    .animate-marquee {
+        animation: none;
+    }
+    .animate-pulse {
+        animation: none;
+    }
+    *,
+    *::before,
+    *::after {
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+    }
 }
 
 /* ─── Touch Target Minimum (audit #31 — WCAG 2.5.8) ─── */
 @media (pointer: coarse) {
-    button, [role="switch"], .nav-item, .cursor-pointer {
+    button,
+    [role='switch'],
+    .nav-item,
+    .cursor-pointer {
         min-height: 36px;
         min-width: 36px;
     }
-    button[data-action], .guard-toggle {
+    button[data-action],
+    .guard-toggle {
         min-height: 32px;
         padding: 6px 10px;
     }
@@ -401,8 +467,12 @@ body.cinema-mode main {
 
 /* ─── 4.2: Skeleton Shimmer Loaders ─── */
 @keyframes shimmer {
-    0% { background-position: -400px 0; }
-    100% { background-position: 400px 0; }
+    0% {
+        background-position: -400px 0;
+    }
+    100% {
+        background-position: 400px 0;
+    }
 }
 .skeleton-shimmer {
     position: absolute;
@@ -417,19 +487,36 @@ body.cinema-mode main {
 }
 .skeleton-bar {
     border-radius: 10px;
-    background: linear-gradient(90deg, rgba(255,255,255,0.02) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.02) 75%);
+    background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.02) 25%,
+        rgba(255, 255, 255, 0.06) 50%,
+        rgba(255, 255, 255, 0.02) 75%
+    );
     background-size: 800px 100%;
     animation: shimmer 1.4s infinite linear;
 }
 
 /* ─── Toast Notifications ─── */
 @keyframes toastIn {
-    from { opacity: 0; transform: translateX(40px); }
-    to { opacity: 1; transform: translateX(0); }
+    from {
+        opacity: 0;
+        transform: translateX(40px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
 }
 @keyframes toastOut {
-    from { opacity: 1; transform: translateX(0); }
-    to { opacity: 0; transform: translateX(40px); }
+    from {
+        opacity: 1;
+        transform: translateX(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateX(40px);
+    }
 }
 .toast {
     pointer-events: auto;
@@ -462,13 +549,24 @@ body.cinema-mode main {
     animation: viewFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 @keyframes viewFadeIn {
-    0% { opacity: 0; transform: translateY(12px) scale(0.995); }
-    100% { opacity: 1; transform: translateY(0) scale(1); }
+    0% {
+        opacity: 0;
+        transform: translateY(12px) scale(0.995);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 /* 2. Skeleton Loading States (prevents CLS and visual jumps) */
 .skeleton {
-    background: linear-gradient(90deg, rgba(255,255,255,0.02) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.02) 75%);
+    background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.02) 25%,
+        rgba(255, 255, 255, 0.06) 50%,
+        rgba(255, 255, 255, 0.02) 75%
+    );
     background-size: 200% 100%;
     animation: skeletonLoading 1.5s infinite linear;
     border-radius: 4px;
@@ -479,8 +577,12 @@ body.cinema-mode main {
     min-width: 3ch;
 }
 @keyframes skeletonLoading {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
 }
 
 /* 3. Focus Visibility (Accessibility standard for Pro UI) */
@@ -491,10 +593,19 @@ body.cinema-mode main {
 }
 
 /* 4. Micro-interactions (Tactile buttons) */
-button, .nav-item, .system-toggle, .cursor-pointer {
-    transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease !important;
+button,
+.nav-item,
+.system-toggle,
+.cursor-pointer {
+    transition:
+        transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1),
+        background-color 0.2s ease,
+        box-shadow 0.2s ease,
+        opacity 0.2s ease !important;
 }
-button:active:not(:disabled), .nav-item:active, .system-toggle:active {
+button:active:not(:disabled),
+.nav-item:active,
+.system-toggle:active {
     transform: scale(0.96) !important;
 }
 
@@ -514,8 +625,15 @@ tr {
  * triggering a flashy alarm-style animation. The 2.4s period is slow
  * enough to read as life, fast enough to register at glance. */
 @keyframes llm-pulse-soft {
-    0%, 100% { opacity: 0.9;  transform: scale(1); }
-    50%      { opacity: 0.45; transform: scale(0.85); }
+    0%,
+    100% {
+        opacity: 0.9;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.45;
+        transform: scale(0.85);
+    }
 }
 .pulse-live {
     animation: llm-pulse-soft 2.4s ease-in-out infinite;
@@ -534,11 +652,13 @@ tr {
 html.theme-light .glow-live {
     box-shadow:
         inset 0 0 24px rgba(16, 185, 129, 0.12),
-        0 0 16px rgba(16, 185, 129, 0.10);
+        0 0 16px rgba(16, 185, 129, 0.1);
 }
 /* Honor user motion preference — disable the breath if the OS asks. */
 @media (prefers-reduced-motion: reduce) {
-    .pulse-live { animation: none; }
+    .pulse-live {
+        animation: none;
+    }
 }
 
 /* 7. Explain-target affordance — elements with data-explain become inspectable.
@@ -554,7 +674,7 @@ html.theme-light .glow-live {
     text-underline-offset: 3px;
 }
 .explain-target::after {
-    content: "ℹ";
+    content: 'ℹ';
     margin-left: 0.25rem;
     font-size: 0.7em;
     color: rgba(148, 163, 184, 0.5);

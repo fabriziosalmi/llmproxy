@@ -28,7 +28,7 @@ export const store = {
     },
 
     notify() {
-        this.listeners.forEach(fn => fn(this.state));
+        this.listeners.forEach((fn) => fn(this.state));
     },
 
     update(patch) {
@@ -54,11 +54,20 @@ export const store = {
         const tick = () => {
             if (document.hidden) return;
             if (requiredTab && this.state.currentTab !== requiredTab) return;
-            try { fn(); } catch {}
+            try {
+                fn();
+            } catch {}
         };
 
-        const start = () => { if (!timer) timer = setInterval(tick, intervalMs); };
-        const stop = () => { if (timer) { clearInterval(timer); timer = null; } };
+        const start = () => {
+            if (!timer) timer = setInterval(tick, intervalMs);
+        };
+        const stop = () => {
+            if (timer) {
+                clearInterval(timer);
+                timer = null;
+            }
+        };
 
         // Pause when page hidden
         document.addEventListener('visibilitychange', () => {

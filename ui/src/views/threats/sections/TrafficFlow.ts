@@ -53,10 +53,10 @@ interface FlowOptions {
 }
 
 const STATE_COLORS: Record<FlowNode['state'], { fill: string; stroke: string; text: string; pulse: boolean }> = {
-    live:    { fill: 'rgba(16,185,129,0.12)', stroke: 'rgba(16,185,129,0.55)', text: '#34d399', pulse: true  },
-    idle:    { fill: 'rgba(255,255,255,0.04)', stroke: 'rgba(255,255,255,0.12)', text: '#94a3b8', pulse: false },
-    blocked: { fill: 'rgba(244,63,94,0.14)',  stroke: 'rgba(244,63,94,0.55)',  text: '#fb7185', pulse: true  },
-    down:    { fill: 'rgba(244,63,94,0.08)',  stroke: 'rgba(244,63,94,0.35)',  text: '#fda4af', pulse: false },
+    live: { fill: 'rgba(16,185,129,0.12)', stroke: 'rgba(16,185,129,0.55)', text: '#34d399', pulse: true },
+    idle: { fill: 'rgba(255,255,255,0.04)', stroke: 'rgba(255,255,255,0.12)', text: '#94a3b8', pulse: false },
+    blocked: { fill: 'rgba(244,63,94,0.14)', stroke: 'rgba(244,63,94,0.55)', text: '#fb7185', pulse: true },
+    down: { fill: 'rgba(244,63,94,0.08)', stroke: 'rgba(244,63,94,0.35)', text: '#fda4af', pulse: false },
 };
 
 // SVG canvas — 800×360 logical units, scales via preserveAspectRatio="none"
@@ -145,7 +145,7 @@ function _edge(
     x2: number,
     y2: number,
     intent: 'flow' | 'block',
-    weight?: number,
+    weight?: number
 ): SVGPathElement {
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     const dx = (x2 - x1) * 0.45;
@@ -236,7 +236,7 @@ function _renderSvg(data: FlowData): SVGSVGElement {
             label: data.clientsLabel,
             sub: data.clientsSub,
             state: 'live',
-        }),
+        })
     );
     for (let i = 0; i < data.guards.length; i++) {
         const g = data.guards[i]!;
@@ -253,9 +253,7 @@ function _renderSvg(data: FlowData): SVGSVGElement {
 
 export function renderTrafficFlow(host: HTMLElement, data: FlowData, opts: FlowOptions = {}): void {
     const card = document.createElement('div');
-    card.className = cx(
-        'bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 overflow-hidden',
-    );
+    card.className = cx('bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 overflow-hidden');
     card.setAttribute('data-testid', 'traffic-flow-card');
 
     const header = document.createElement('div');

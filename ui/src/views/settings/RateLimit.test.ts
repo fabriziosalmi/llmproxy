@@ -101,10 +101,14 @@ describe('mountRateLimit', () => {
     it('a failing setRateLimitPreset surfaces an error toast and leaves the picker live', async () => {
         const setPreset = vi.fn().mockRejectedValue(new Error('500 backend down'));
         const toast = vi.fn();
-        const handle = mountRateLimit(host, {
-            fetchRateLimitConfig: vi.fn().mockResolvedValue(_normal),
-            setRateLimitPreset: setPreset,
-        }, toast);
+        const handle = mountRateLimit(
+            host,
+            {
+                fetchRateLimitConfig: vi.fn().mockResolvedValue(_normal),
+                setRateLimitPreset: setPreset,
+            },
+            toast
+        );
         await handle.refresh();
 
         const strictBtn = host.querySelector<HTMLButtonElement>('[data-testid="rate-limit-preset-strict"]')!;

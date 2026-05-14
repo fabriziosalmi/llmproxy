@@ -25,7 +25,7 @@ async function _fetch(url, options = {}) {
     if (token) {
         headers['Authorization'] = `Bearer ${token}`;
     }
-    
+
     try {
         const response = await fetch(url, { ...options, headers });
         if (!response.ok) {
@@ -33,7 +33,7 @@ async function _fetch(url, options = {}) {
             const err = new Error(`API ${response.status}: ${body.slice(0, 200)}`);
             err.status = response.status;
             err.body = body;
-            
+
             // Global Error Interceptor for UI Feedback
             if (response.status === 401) {
                 safeToast('Session expired or unauthorized. Please re-authenticate.', 'warning');
@@ -45,7 +45,7 @@ async function _fetch(url, options = {}) {
                 // Generic 400 errors
                 safeToast(`Error: ${body.slice(0, 100) || response.statusText}`, 'error');
             }
-            
+
             throw err;
         }
         return response;
@@ -77,54 +77,136 @@ function _post(url, data) {
 }
 
 export const api = {
-    async fetchNetworkInfo() { return _json(`${BASE_URL}/api/v1/network/info`); },
-    async fetchVersion() { return _json(`${BASE_URL}/api/v1/version`); },
-    async fetchRegistry() { return _json(`${BASE_URL}/api/v1/registry`); },
+    async fetchNetworkInfo() {
+        return _json(`${BASE_URL}/api/v1/network/info`);
+    },
+    async fetchVersion() {
+        return _json(`${BASE_URL}/api/v1/version`);
+    },
+    async fetchRegistry() {
+        return _json(`${BASE_URL}/api/v1/registry`);
+    },
 
-    async addEndpoint(data) { return _post(`${BASE_URL}/api/v1/registry`, data); },
-    async toggleEndpoint(id) { return _fetch(`${BASE_URL}/api/v1/registry/${id}/toggle`, { method: 'POST' }); },
-    async deleteEndpoint(id) { return _fetch(`${BASE_URL}/api/v1/registry/${id}`, { method: 'DELETE' }); },
-    async updatePriority(id, priority) { return _post(`${BASE_URL}/api/v1/registry/${id}/priority`, { priority }); },
+    async addEndpoint(data) {
+        return _post(`${BASE_URL}/api/v1/registry`, data);
+    },
+    async toggleEndpoint(id) {
+        return _fetch(`${BASE_URL}/api/v1/registry/${id}/toggle`, { method: 'POST' });
+    },
+    async deleteEndpoint(id) {
+        return _fetch(`${BASE_URL}/api/v1/registry/${id}`, { method: 'DELETE' });
+    },
+    async updatePriority(id, priority) {
+        return _post(`${BASE_URL}/api/v1/registry/${id}/priority`, { priority });
+    },
 
-    async fetchProxyStatus() { return _json(`${BASE_URL}/api/v1/proxy/status`); },
-    async toggleProxy(enabled) { return _post(`${BASE_URL}/api/v1/proxy/toggle`, { enabled }); },
-    async togglePriorityMode(enabled) { return _post(`${BASE_URL}/api/v1/proxy/priority/toggle`, { enabled }); },
+    async fetchProxyStatus() {
+        return _json(`${BASE_URL}/api/v1/proxy/status`);
+    },
+    async toggleProxy(enabled) {
+        return _post(`${BASE_URL}/api/v1/proxy/toggle`, { enabled });
+    },
+    async togglePriorityMode(enabled) {
+        return _post(`${BASE_URL}/api/v1/proxy/priority/toggle`, { enabled });
+    },
 
-    async fetchServiceInfo() { return _json(`${BASE_URL}/api/v1/service-info`); },
-    async fetchFeatures() { return _json(`${BASE_URL}/api/v1/features`); },
-    async toggleFeature(name, enabled) { return _post(`${BASE_URL}/api/v1/features/toggle`, { name, enabled }); },
+    async fetchServiceInfo() {
+        return _json(`${BASE_URL}/api/v1/service-info`);
+    },
+    async fetchFeatures() {
+        return _json(`${BASE_URL}/api/v1/features`);
+    },
+    async toggleFeature(name, enabled) {
+        return _post(`${BASE_URL}/api/v1/features/toggle`, { name, enabled });
+    },
 
-    async fetchPlugins() { return _json(`${BASE_URL}/api/v1/plugins`); },
-    async togglePlugin(name, enabled) { return _post(`${BASE_URL}/api/v1/plugins/toggle`, { name, enabled }); },
-    async panic() { return _json(`${BASE_URL}/api/v1/panic`, { method: 'POST' }); },
-    async fetchPluginStats() { return _json(`${BASE_URL}/api/v1/plugins/stats`); },
+    async fetchPlugins() {
+        return _json(`${BASE_URL}/api/v1/plugins`);
+    },
+    async togglePlugin(name, enabled) {
+        return _post(`${BASE_URL}/api/v1/plugins/toggle`, { name, enabled });
+    },
+    async panic() {
+        return _json(`${BASE_URL}/api/v1/panic`, { method: 'POST' });
+    },
+    async fetchPluginStats() {
+        return _json(`${BASE_URL}/api/v1/plugins/stats`);
+    },
 
-    async fetchMetrics() { return _text(`${BASE_URL}/metrics`); },
-    async fetchHealth() { return _json(`${BASE_URL}/health`); },
-    async fetchGuardsStatus() { return _json(`${BASE_URL}/api/v1/guards/status`); },
-    async fetchCacheStats() { return _json(`${BASE_URL}/api/v1/cache/stats`); },
-    async fetchWebhooks() { return _json(`${BASE_URL}/api/v1/webhooks`); },
-    async fetchExportStatus() { return _json(`${BASE_URL}/api/v1/export/status`); },
-    async fetchRbacRoles() { return _json(`${BASE_URL}/api/v1/rbac/roles`); },
-    async fetchIdentityMe() { return _json(`${BASE_URL}/api/v1/identity/me`); },
-    async fetchIdentityConfig() { return _json(`${BASE_URL}/api/v1/identity/config`); },
-    async fetchConfigWarnings() { return _json(`${BASE_URL}/api/v1/config/warnings`); },
-    async fetchConfigYaml() { return _json(`${BASE_URL}/api/v1/config/yaml`); },
-    async fetchRateLimitConfig() { return _json(`${BASE_URL}/api/v1/rate-limit/config`); },
-    async setRateLimitPreset(preset) { return _post(`${BASE_URL}/api/v1/rate-limit/preset`, { preset }); },
-    async fetchSpendForecast() { return _json(`${BASE_URL}/api/v1/analytics/forecast`); },
-    async fetchRoutingConfig() { return _json(`${BASE_URL}/api/v1/routing/config`); },
-    async setRoutingCostWeight(cost_weight) { return _post(`${BASE_URL}/api/v1/routing/cost-weight`, { cost_weight }); },
-    async fetchOpenApi() { return _json(`${BASE_URL}/api/v1/openapi.json`); },
-    async fetchHourlyBuckets() { return _json(`${BASE_URL}/api/v1/metrics/hourly-buckets`); },
+    async fetchMetrics() {
+        return _text(`${BASE_URL}/metrics`);
+    },
+    async fetchHealth() {
+        return _json(`${BASE_URL}/health`);
+    },
+    async fetchGuardsStatus() {
+        return _json(`${BASE_URL}/api/v1/guards/status`);
+    },
+    async fetchCacheStats() {
+        return _json(`${BASE_URL}/api/v1/cache/stats`);
+    },
+    async fetchWebhooks() {
+        return _json(`${BASE_URL}/api/v1/webhooks`);
+    },
+    async fetchExportStatus() {
+        return _json(`${BASE_URL}/api/v1/export/status`);
+    },
+    async fetchRbacRoles() {
+        return _json(`${BASE_URL}/api/v1/rbac/roles`);
+    },
+    async fetchIdentityMe() {
+        return _json(`${BASE_URL}/api/v1/identity/me`);
+    },
+    async fetchIdentityConfig() {
+        return _json(`${BASE_URL}/api/v1/identity/config`);
+    },
+    async fetchConfigWarnings() {
+        return _json(`${BASE_URL}/api/v1/config/warnings`);
+    },
+    async fetchConfigYaml() {
+        return _json(`${BASE_URL}/api/v1/config/yaml`);
+    },
+    async fetchRateLimitConfig() {
+        return _json(`${BASE_URL}/api/v1/rate-limit/config`);
+    },
+    async setRateLimitPreset(preset) {
+        return _post(`${BASE_URL}/api/v1/rate-limit/preset`, { preset });
+    },
+    async fetchSpendForecast() {
+        return _json(`${BASE_URL}/api/v1/analytics/forecast`);
+    },
+    async fetchRoutingConfig() {
+        return _json(`${BASE_URL}/api/v1/routing/config`);
+    },
+    async setRoutingCostWeight(cost_weight) {
+        return _post(`${BASE_URL}/api/v1/routing/cost-weight`, { cost_weight });
+    },
+    async fetchOpenApi() {
+        return _json(`${BASE_URL}/api/v1/openapi.json`);
+    },
+    async fetchHourlyBuckets() {
+        return _json(`${BASE_URL}/api/v1/metrics/hourly-buckets`);
+    },
 
-    async fetchLatencyMetrics() { return _json(`${BASE_URL}/api/v1/metrics/latency`); },
-    async fetchRingTimeline() { return _json(`${BASE_URL}/api/v1/metrics/ring-timeline`); },
+    async fetchLatencyMetrics() {
+        return _json(`${BASE_URL}/api/v1/metrics/latency`);
+    },
+    async fetchRingTimeline() {
+        return _json(`${BASE_URL}/api/v1/metrics/ring-timeline`);
+    },
 
-    async installPlugin(data) { return _post(`${BASE_URL}/api/v1/plugins/install`, data); },
-    async uninstallPlugin(name) { return _json(`${BASE_URL}/api/v1/plugins/${name}`, { method: 'DELETE' }); },
-    async rollbackPlugins() { return _json(`${BASE_URL}/api/v1/plugins/rollback`, { method: 'POST' }); },
-    async reloadPlugins() { return _json(`${BASE_URL}/api/v1/plugins/hot-swap`, { method: 'POST' }); },
+    async installPlugin(data) {
+        return _post(`${BASE_URL}/api/v1/plugins/install`, data);
+    },
+    async uninstallPlugin(name) {
+        return _json(`${BASE_URL}/api/v1/plugins/${name}`, { method: 'DELETE' });
+    },
+    async rollbackPlugins() {
+        return _json(`${BASE_URL}/api/v1/plugins/rollback`, { method: 'POST' });
+    },
+    async reloadPlugins() {
+        return _json(`${BASE_URL}/api/v1/plugins/hot-swap`, { method: 'POST' });
+    },
 
     async sendChatMessage(text, model = 'auto') {
         return _json(`${BASE_URL}/v1/chat/completions`, {
@@ -134,19 +216,37 @@ export const api = {
         });
     },
 
-    async fetchModels() { return _json(`${BASE_URL}/v1/models`); },
-    async fetchSpend(groupBy = 'model') { return _json(`${BASE_URL}/api/v1/analytics/spend?group_by=${groupBy}`); },
-    async fetchTopModels(limit = 10) { return _json(`${BASE_URL}/api/v1/analytics/spend/topmodels?limit=${limit}`); },
+    async fetchModels() {
+        return _json(`${BASE_URL}/v1/models`);
+    },
+    async fetchSpend(groupBy = 'model') {
+        return _json(`${BASE_URL}/api/v1/analytics/spend?group_by=${groupBy}`);
+    },
+    async fetchTopModels(limit = 10) {
+        return _json(`${BASE_URL}/api/v1/analytics/spend/topmodels?limit=${limit}`);
+    },
     async fetchAudit(params = {}) {
         const qs = new URLSearchParams(params).toString();
         return _json(`${BASE_URL}/api/v1/audit?${qs}`);
     },
 
     // Operations: reset/clear
-    async resetFirewall() { return _post(`${BASE_URL}/api/v1/firewall/reset`, {}); },
-    async clearCaches() { return _post(`${BASE_URL}/api/v1/cache/clear`, {}); },
-    async resetSecurity() { return _post(`${BASE_URL}/api/v1/security/reset`, {}); },
-    async resetCircuitBreaker(id) { return _post(`${BASE_URL}/api/v1/circuit-breaker/${id}/reset`, {}); },
-    async reloadConfig() { return _post(`${BASE_URL}/api/v1/admin/reload`, {}); },
-    async testWebhook() { return _post(`${BASE_URL}/api/v1/webhooks/test`, {}); },
+    async resetFirewall() {
+        return _post(`${BASE_URL}/api/v1/firewall/reset`, {});
+    },
+    async clearCaches() {
+        return _post(`${BASE_URL}/api/v1/cache/clear`, {});
+    },
+    async resetSecurity() {
+        return _post(`${BASE_URL}/api/v1/security/reset`, {});
+    },
+    async resetCircuitBreaker(id) {
+        return _post(`${BASE_URL}/api/v1/circuit-breaker/${id}/reset`, {});
+    },
+    async reloadConfig() {
+        return _post(`${BASE_URL}/api/v1/admin/reload`, {});
+    },
+    async testWebhook() {
+        return _post(`${BASE_URL}/api/v1/webhooks/test`, {});
+    },
 };

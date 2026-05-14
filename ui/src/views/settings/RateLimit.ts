@@ -45,7 +45,7 @@ export interface RateLimitHandle {
 export function mountRateLimit(
     host: HTMLElement,
     api: RateLimitApi,
-    toast?: (m: string, k?: 'success' | 'error' | 'warning' | 'info') => void,
+    toast?: (m: string, k?: 'success' | 'error' | 'warning' | 'info') => void
 ): RateLimitHandle {
     const card = document.createElement('div');
     card.className = 'bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6';
@@ -81,7 +81,7 @@ export function mountRateLimit(
                 dot: cfg.enabled,
                 pulse: cfg.enabled,
                 testId: 'rate-limit-enabled',
-            }),
+            })
         );
 
         const wrap = document.createElement('div');
@@ -106,9 +106,7 @@ export function mountRateLimit(
         };
         live.appendChild(cell('Req / min', String(cfg.requests_per_minute), 'rate-limit-rpm'));
         live.appendChild(cell('Burst +', String(cfg.burst), 'rate-limit-burst'));
-        live.appendChild(
-            cell('Preset', cfg.preset ?? 'custom', 'rate-limit-preset-current'),
-        );
+        live.appendChild(cell('Preset', cfg.preset ?? 'custom', 'rate-limit-preset-current'));
         wrap.appendChild(live);
 
         // Preset picker — three buttons. Active one is filled, others ghost.
@@ -157,7 +155,7 @@ export function mountRateLimit(
         if (activeName) {
             const tone = PRESET_TONE[activeName];
             desc.classList.add(
-                tone === 'success' ? 'text-emerald-400/70' : tone === 'info' ? 'text-cyan-400/70' : 'text-amber-400/70',
+                tone === 'success' ? 'text-emerald-400/70' : tone === 'info' ? 'text-cyan-400/70' : 'text-amber-400/70'
             );
         }
         wrap.appendChild(desc);
@@ -178,7 +176,7 @@ export function mountRateLimit(
                     detail: (err as Error)?.message,
                     onRetry: () => void refresh(),
                     testId: 'rate-limit-error',
-                }),
+                })
             );
             statusSlot.replaceChildren();
         }

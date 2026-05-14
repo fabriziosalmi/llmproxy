@@ -3,7 +3,6 @@
  * Safe markdown rendering (no innerHTML on user content), TPS metrics, provider labels.
  */
 
-
 const BASE = window.location.origin;
 const messagesEl = document.getElementById('messages');
 const inputEl = document.getElementById('input');
@@ -63,7 +62,10 @@ function renderMarkdown(text) {
     html = escapeHtml(html);
 
     // 3) Inline code — single-line only so it can't swallow line breaks.
-    html = html.replace(/`([^`\n]+)`/g, '<code class="bg-white/10 px-1.5 py-0.5 rounded text-[12px] text-sky-400 font-mono">$1</code>');
+    html = html.replace(
+        /`([^`\n]+)`/g,
+        '<code class="bg-white/10 px-1.5 py-0.5 rounded text-[12px] text-sky-400 font-mono">$1</code>'
+    );
 
     // 4) Bold / italic.
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong class="text-white font-bold">$1</strong>');
@@ -95,9 +97,7 @@ function renderMarkdown(text) {
         const stripped = block.code.replace(/^\n+|\n+$/g, '');
         const escaped = escapeHtml(stripped);
         const langAttr = block.lang ? ` language-${block.lang}` : '';
-        const langLabel = block.lang
-            ? `<span class="code-lang">${block.lang}</span>`
-            : '';
+        const langLabel = block.lang ? `<span class="code-lang">${block.lang}</span>` : '';
         return `<pre>${langLabel}<button type="button" class="copy-btn" aria-label="Copy code">Copy</button><code class="hljs${langAttr}">${escaped}</code></pre>`;
     });
 
@@ -111,8 +111,12 @@ function renderMarkdown(text) {
 function highlightCodeBlocks(root) {
     const hl = window.hljs;
     if (!hl || !root) return;
-    root.querySelectorAll('pre > code:not([data-hl])').forEach(el => {
-        try { hl.highlightElement(el); } catch { /* unknown language → leave plain */ }
+    root.querySelectorAll('pre > code:not([data-hl])').forEach((el) => {
+        try {
+            hl.highlightElement(el);
+        } catch {
+            /* unknown language → leave plain */
+        }
         el.setAttribute('data-hl', '1');
     });
 }
@@ -124,11 +128,11 @@ async function loadModels() {
         const res = await fetch(`${BASE}/v1/models`, { headers: authHeaders() });
         if (!res.ok) return { ok: false, status: res.status };
         const data = await res.json();
-        const models = (data.data || []).filter(m => !m.id.includes('embed'));
+        const models = (data.data || []).filter((m) => !m.id.includes('embed'));
         // Clear any pre-existing entries so re-bootstrapping after a key
         // change doesn't duplicate the list.
         modelSelect.innerHTML = '';
-        models.forEach(m => {
+        models.forEach((m) => {
             const opt = document.createElement('option');
             opt.value = m.id;
             opt.textContent = `${m.id} (${m.owned_by})`;
@@ -156,15 +160,21 @@ async function bootstrap() {
             inputType: 'password',
             placeholder: 'sk-proxy-…',
             confirmLabel: 'Connect',
-            validate: (v) => v.trim() ? null : 'Key is required',
+            validate: (v) => (v.trim() ? null : 'Key is required'),
         });
-        if (!key) { setStatus('offline'); return false; }
+        if (!key) {
+            setStatus('offline');
+            return false;
+        }
         localStorage.setItem('proxy_key', key.trim());
         // Re-run: load models with the new key, update status. Fixes the
         // dead-end state where saving a valid key still left the UI marked
         // Offline until a full page reload.
         const retry = await loadModels();
-        if (retry.ok) { setStatus('live'); return true; }
+        if (retry.ok) {
+            setStatus('live');
+            return true;
+        }
         setStatus('offline');
         return false;
     }
@@ -200,13 +210,15 @@ function addMessage(role, content, meta = {}) {
     wrapper.className = `max-w-3xl mx-auto flex ${role === 'user' ? 'justify-end' : 'justify-start'} mb-4`;
 
     const bubble = document.createElement('div');
-    bubble.className = role === 'user'
-        ? 'max-w-[80%] bg-rose-500/10 border border-rose-500/20 rounded-2xl rounded-br-md px-4 py-3'
-        : 'max-w-[85%] bg-white/[0.03] border border-white/[0.06] rounded-2xl rounded-bl-md px-4 py-3';
+    bubble.className =
+        role === 'user'
+            ? 'max-w-[80%] bg-rose-500/10 border border-rose-500/20 rounded-2xl rounded-br-md px-4 py-3'
+            : 'max-w-[85%] bg-white/[0.03] border border-white/[0.06] rounded-2xl rounded-bl-md px-4 py-3';
 
     // Label: provider (model) for assistant, "You" for user
     const label = document.createElement('div');
-    label.className = 'text-[9px] font-bold uppercase tracking-widest mb-1.5 ' +
+    label.className =
+        'text-[9px] font-bold uppercase tracking-widest mb-1.5 ' +
         (role === 'user' ? 'text-rose-400' : 'text-slate-500');
     if (role === 'user') {
         label.textContent = 'You';
@@ -218,9 +230,10 @@ function addMessage(role, content, meta = {}) {
 
     // Body: plain text for user, markdown for assistant
     const body = document.createElement('div');
-    body.className = role === 'user'
-        ? 'text-sm leading-relaxed text-slate-200 whitespace-pre-wrap'
-        : 'text-sm leading-relaxed text-slate-200 prose-invert';
+    body.className =
+        role === 'user'
+            ? 'text-sm leading-relaxed text-slate-200 whitespace-pre-wrap'
+            : 'text-sm leading-relaxed text-slate-200 prose-invert';
     if (role === 'user') {
         body.textContent = content; // Safe: no HTML interpretation
     } else {
@@ -233,7 +246,8 @@ function addMessage(role, content, meta = {}) {
     // Stats bar (assistant only, populated after stream completes)
     if (role !== 'user') {
         const stats = document.createElement('div');
-        stats.className = 'stats-bar mt-2 pt-2 border-t border-white/[0.04] flex items-center gap-3 text-[9px] font-mono text-slate-600 hidden';
+        stats.className =
+            'stats-bar mt-2 pt-2 border-t border-white/[0.04] flex items-center gap-3 text-[9px] font-mono text-slate-600 hidden';
         bubble.appendChild(stats);
     }
 
@@ -387,9 +401,10 @@ async function sendMessage() {
         const totalTime = ((performance.now() - startTime) / 1000).toFixed(1);
         const completionTokens = usage?.completion_tokens || tokenCount;
         const promptTokens = usage?.prompt_tokens || '?';
-        const tps = completionTokens > 0 && parseFloat(totalTime) > 0
-            ? (completionTokens / parseFloat(totalTime)).toFixed(1)
-            : null;
+        const tps =
+            completionTokens > 0 && parseFloat(totalTime) > 0
+                ? (completionTokens / parseFloat(totalTime)).toFixed(1)
+                : null;
 
         // Update label with actual provider (model)
         const label = bodyEl.parentElement.querySelector('div:first-child');
@@ -408,9 +423,7 @@ async function sendMessage() {
 
         // Update footer info
         latencyInfo.textContent = `${totalTime}s`;
-        tokenInfo.textContent = `${promptTokens}p + ${completionTokens}c tokens` +
-            (tps ? ` | ${tps} tok/s` : '');
-
+        tokenInfo.textContent = `${promptTokens}p + ${completionTokens}c tokens` + (tps ? ` | ${tps} tok/s` : '');
     } catch (e) {
         removeTypingIndicator();
         addMessage('assistant', `Network error: ${e.message}`, { model: 'error' });
@@ -456,7 +469,9 @@ messagesEl.addEventListener('click', async (e) => {
         }, 1200);
     } catch {
         btn.textContent = 'Failed';
-        setTimeout(() => { btn.textContent = 'Copy'; }, 1200);
+        setTimeout(() => {
+            btn.textContent = 'Copy';
+        }, 1200);
     }
 });
 
