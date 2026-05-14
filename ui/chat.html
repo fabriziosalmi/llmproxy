@@ -7,6 +7,13 @@
     <title>LLMProxy — Chat</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="vendor/fonts.css">
+    <!-- highlight.js GitHub-dark theme: scoped to .hljs nodes so it doesn't
+         bleed into surrounding chrome. Loaded ahead of chat.js so the first
+         render after stream completion can colorize without a FOUC. -->
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css">
+    <script defer
+            src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
     <style>
         * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
         body { background: #050506; font-family: 'Inter', system-ui, sans-serif; color: #f5f5f7; margin: 0; height: 100vh; display: flex; flex-direction: column; }
@@ -16,12 +23,83 @@
         #messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 4px; }
         @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
         .typing-dot { animation: blink 1.2s ease-in-out infinite; }
-        pre code { white-space: pre-wrap; word-break: break-word; }
-        /* Markdown prose styling for assistant messages */
-        .prose-invert h1, .prose-invert h2, .prose-invert h3 { margin-top: 0.75rem; }
+
+        /* Code blocks — preserve whitespace, override hljs default bg with our token-aligned surface. */
+        .prose-invert pre { position: relative; margin: 0.5rem 0; }
+        .prose-invert pre code,
+        .prose-invert pre code.hljs {
+            display: block;
+            white-space: pre;
+            overflow-x: auto;
+            word-break: normal;
+            padding: 0.75rem 0.85rem;
+            background: rgba(255,255,255,0.04);
+            border-radius: 0.5rem;
+            font-size: 12px;
+            line-height: 1.55;
+        }
+
+        /* Markdown prose: force Inter on headers + paragraph spacing.
+           Without this they inherit the body font but ALSO any ambient
+           font-family from siblings (code/pre rules) once :where()/cascade
+           rules kick in. Belt-and-braces. */
+        .prose-invert h1, .prose-invert h2, .prose-invert h3 {
+            font-family: 'Inter', system-ui, sans-serif;
+            margin-top: 0.85rem;
+            margin-bottom: 0.35rem;
+            letter-spacing: -0.01em;
+        }
+        .prose-invert h1 { font-size: 1.05rem; }
+        .prose-invert h2 { font-size: 0.95rem; }
+        .prose-invert h3 { font-size: 0.875rem; }
         .prose-invert li { margin: 0.15rem 0; }
-        .prose-invert pre { margin: 0.5rem 0; }
         .prose-invert br + br { display: none; } /* collapse double breaks */
+
+        /* Language label — sits in the top-left so users see at a glance
+           which grammar hljs picked (or nothing, if the LLM emitted a bare
+           fence). Same size + monospace as the copy button on the right. */
+        .code-lang {
+            position: absolute;
+            top: 0.35rem;
+            left: 0.5rem;
+            font-size: 9px;
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: rgb(148 163 184 / 0.55);
+            pointer-events: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        /* Copy button — sits in the top-right of every <pre>. */
+        .copy-btn {
+            position: absolute;
+            top: 0.35rem;
+            right: 0.35rem;
+            padding: 0.15rem 0.5rem;
+            font-size: 9px;
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: rgb(244 63 94 / 0.85);
+            background: rgb(244 63 94 / 0.08);
+            border: 1px solid rgb(244 63 94 / 0.22);
+            border-radius: 0.35rem;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.15s ease, background 0.15s ease;
+        }
+        .prose-invert pre:hover .copy-btn { opacity: 1; }
+        .copy-btn:hover { background: rgb(244 63 94 / 0.16); }
+        .copy-btn.copied {
+            opacity: 1;
+            color: rgb(52 211 153);
+            background: rgb(52 211 153 / 0.1);
+            border-color: rgb(52 211 153 / 0.25);
+        }
     </style>
 </head>
 <body>
