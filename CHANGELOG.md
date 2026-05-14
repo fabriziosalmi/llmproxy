@@ -2,6 +2,20 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.52] — 2026-05-14
+
+### Docs + CI hygiene — README accuracy + actually publish `:latest`
+
+The README's "Quick Start" example pointed at `ghcr.io/fabriziosalmi/llmproxy:latest`, but `docker.yml`'s `metadata-action` tag list never emitted `:latest` — only `:{{version}}`, `:{{major}}.{{minor}}`, `:<sha>`, and `:<branch>`. So the documented one-liner (`docker run … :latest`) was failing with a manifest-not-found 404. Added `type=raw,value=latest,enable={{is_default_branch}}` so `:latest` actually tracks main from now on.
+
+Other drift swept out in the same pass:
+- README test badge said `1183 passing` — the actual count is `1198`. Refreshed.
+- README's "pin a version" example pinned `1.21.46`, five releases behind. Bumped to `1.21.52` (the version being shipped here) so copy-paste users land on the freshest pinned tag.
+
+No runtime/code change in this release — pure doc + CI publishing fix.
+
+---
+
 ## [1.21.51] — 2026-05-14
 
 ### Fix auth follow-through bugs discovered after 1.21.50 deploy
