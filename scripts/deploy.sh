@@ -158,7 +158,10 @@ ok "SSH ok (control socket: ${SSH_CTRL})"
 
 log "Reading remote state..."
 # A single shell over the control socket — cheap and atomic-enough.
-read -r REMOTE_PREFLIGHT < <(ssh_exec bash -s <<'REMOTE_PRE'
+# Using $(...) instead of <(...) because bash doesn't parse heredocs nested
+# inside process-substitution cleanly ("bad substitution: no closing ')' ").
+# All silent-except-the-final-printf, so the captured stdout is one line.
+REMOTE_PREFLIGHT=$(ssh_exec bash -s <<'REMOTE_PRE'
 set -euo pipefail
 
 # Each piece is whitespace-free; we'll join them by '|' on one line so the
