@@ -56,11 +56,29 @@ test.describe('guards view', () => {
     });
 
     test('toggling a guard updates aria-checked optimistically and surfaces a toast', async ({ authedPage }) => {
+        // Stub the toggle endpoint so the optimistic aria-checked=true isn't
+        // reverted by the inevitable backend failure. Without this, Playwright
+        // races the optimistic window (~0–50ms) vs the rollback (~10–500ms)
+        // and the assertion is non-deterministic — exactly the flake CI hit.
+        await authedPage.route('**/api/v1/features/toggle', async (route) => {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({ name: 'language_guard', enabled: true }),
+            });
+        });
+
         const sw = authedPage.locator('[data-testid="guard-toggle-language_guard"]');
         await expect(sw).toBeVisible({ timeout: 10_000 });
         await expect(sw).toHaveAttribute('aria-checked', 'false');
 
-        await sw.click();
+        // Activate via keyboard — the sticky header intercepts pointer
+        // events at the toggle's viewport coordinates, so a real click
+        // races a retry loop. Space on a focused role="switch" follows
+        // the same code path and isn't intercepted. Same idiom the
+        // master-toggle test below already uses.
+        await sw.focus();
+        await authedPage.keyboard.press('Space');
         // After the stub resolves, the switch should reflect the new state.
         await expect(sw).toHaveAttribute('aria-checked', 'true');
     });
