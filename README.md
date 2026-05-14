@@ -4,7 +4,7 @@ Security gateway for Large Language Models. Routes requests across 15 providers 
 
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-1183%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-1198%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-67%25-yellowgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 [![CI](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml/badge.svg)](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml)
@@ -50,7 +50,7 @@ docker run -d --name llmproxy -p 8090:8090 \
   -e LLM_PROXY_API_KEYS=sk-proxy-test \
   -e OPENAI_API_KEY=$OPENAI_API_KEY \
   -v llmproxy-data:/app/data \
-  ghcr.io/fabriziosalmi/llmproxy:1.21.46
+  ghcr.io/fabriziosalmi/llmproxy:1.21.52
 ```
 
 Each release publishes `:latest`, the full semver (`:X.Y.Z`), the minor (`:X.Y`), plus a per-commit short SHA tag for reproducible deploys.
