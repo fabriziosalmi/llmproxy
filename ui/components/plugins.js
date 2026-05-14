@@ -60,8 +60,7 @@ export async function initPlugins() {
             btn.textContent = 'Reloading...';
             btn.disabled = true;
             try {
-                const res = await fetch(`${window.location.origin}/api/v1/plugins/hot-swap`, { method: 'POST' });
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                await api.reloadPlugins();
                 await renderPluginList();
                 toast('Plugins hot-swapped', 'success');
             } catch (e) {
