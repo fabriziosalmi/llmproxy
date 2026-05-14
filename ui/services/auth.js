@@ -13,7 +13,19 @@ const BASE_URL = window.location.origin;
 const TOKEN_KEY = 'proxy_key';
 const USER_KEY = 'proxy_user';
 
-/** @type {{ enabled: boolean, providers: Array<{name:string, client_id:string, issuer:string}> } | null} */
+/**
+ * Identity config response shape from /api/v1/identity/config.
+ *   enabled            — SSO/OIDC mode is on
+ *   proxy_auth_enabled — server.auth.enabled (API-key auth required)
+ *   providers          — SSO providers (empty when SSO is off)
+ *
+ * Both flags can be independently true/false:
+ *   - both false → fully open (no overlay)
+ *   - proxy_auth_enabled only → API-key overlay
+ *   - enabled only / both → SSO overlay (+ API-key fallback)
+ *
+ * @type {{ enabled: boolean, proxy_auth_enabled: boolean, providers: Array<{name:string, client_id:string, issuer:string}> } | null}
+ */
 let _identityConfig = null;
 
 /** @type {{ email:string, name:string, roles:string[], provider:string } | null} */
@@ -26,57 +38,93 @@ const AUTHORIZE_URLS = {
     apple: 'https://appleid.apple.com/auth/authorize',
 };
 
+// localStorage in Safari Private Mode and some sandboxed contexts throws on
+// every access. Wrap so a SecurityError doesn't crash the boot path.
+const _storage = {
+    get(key) {
+        try { return localStorage.getItem(key); } catch { return null; }
+    },
+    set(key, value) {
+        try { localStorage.setItem(key, value); return true; } catch { return false; }
+    },
+    del(key) {
+        try { localStorage.removeItem(key); } catch { /* noop */ }
+    },
+};
+
 // ─── Public API ───
 
 export const auth = {
     /**
      * Initialize auth: fetch config, check existing session, show login if needed.
-     * Returns true if user is authenticated (or identity is disabled).
+     * Returns true if user is authenticated or no auth is required.
      */
     async init() {
         try {
             const res = await fetch(`${BASE_URL}/api/v1/identity/config`);
-            if (!res.ok) {
-                // Backend doesn't support identity config — skip auth
-                _identityConfig = { enabled: false, providers: [] };
-                return true;
-            }
-            _identityConfig = await res.json();
+            _identityConfig = res.ok
+                ? _normalizeConfig(await res.json())
+                : _normalizeConfig({});
         } catch {
-            _identityConfig = { enabled: false, providers: [] };
-            return true;
+            _identityConfig = _normalizeConfig({});
         }
 
-        if (!_identityConfig.enabled) {
+        // Fully-open mode: no SSO and no API-key auth required. The proxy
+        // itself accepts unauthenticated requests, so gating the UI behind
+        // an overlay would strand the user with no way through.
+        if (!_identityConfig.enabled && !_identityConfig.proxy_auth_enabled) {
             _hideLoginOverlay();
             _updateUserUI();
             return true;
         }
 
-        // Check existing session
-        const token = localStorage.getItem(TOKEN_KEY);
+        // Validate any existing token before trusting it. Both SSO and
+        // API-key sessions probe /api/v1/identity/me, which is public-by-
+        // design but does its own per-mode verification and returns
+        // {authenticated: bool}. A revoked key sends the user back to the
+        // overlay instead of looping 401s on every subsequent fetch.
+        const token = _storage.get(TOKEN_KEY);
         if (token) {
-            const valid = await _validateSession(token);
-            if (valid) {
+            const result = await _validateToken(token);
+            // Token stability: if logout() (or any other writer) replaced
+            // the value while validation was in flight, the answer we got
+            // describes a stale token. Bail without touching UI state so
+            // the caller's intent wins.
+            if (_storage.get(TOKEN_KEY) !== token) {
+                _updateUserUI();
+                return false;
+            }
+            if (result === 'valid') {
                 _hideLoginOverlay();
                 _updateUserUI();
                 return true;
             }
-            // Token expired/invalid — clear it
-            localStorage.removeItem(TOKEN_KEY);
-            localStorage.removeItem(USER_KEY);
+            if (result === 'network') {
+                // Transient network failure — keep the token (it may still
+                // be valid) and surface the overlay so the user has a
+                // visible path if the issue persists. Don't wipe state.
+                _showLoginOverlay();
+                if (_identityConfig.enabled) _renderProviderButtons();
+                _showLoginError('Cannot reach proxy — check your connection.');
+                _updateUserUI();
+                return false;
+            }
+            // 'invalid' — drop stale credentials and fall through to overlay.
+            _storage.del(TOKEN_KEY);
+            _storage.del(USER_KEY);
+            _currentUser = null;
         }
 
-        // No valid session — show login
         _showLoginOverlay();
-        _renderProviderButtons();
+        if (_identityConfig.enabled) _renderProviderButtons();
+        _updateUserUI();
         return false;
     },
 
     /** Get current user info (or null). */
     getUser() {
         if (_currentUser) return _currentUser;
-        const raw = localStorage.getItem(USER_KEY);
+        const raw = _storage.get(USER_KEY);
         if (raw) {
             try { _currentUser = JSON.parse(raw); } catch { _currentUser = null; }
         }
@@ -85,7 +133,7 @@ export const auth = {
 
     /** Get current auth token (or empty string). */
     getToken() {
-        return localStorage.getItem(TOKEN_KEY) || '';
+        return _storage.get(TOKEN_KEY) || '';
     },
 
     /** Is identity/SSO enabled? */
@@ -93,40 +141,83 @@ export const auth = {
         return _identityConfig?.enabled ?? false;
     },
 
+    /**
+     * Notify auth that an API-key login just succeeded (called by main.js
+     * after it has validated the key and written it to localStorage).
+     * Refreshes the user UI so logout becomes visible without a reload.
+     */
+    markApiKeyLoggedIn() {
+        _hideLoginOverlay();
+        _updateUserUI();
+    },
+
     /** Log out: clear token + reload UI. */
     logout() {
-        localStorage.removeItem(TOKEN_KEY);
-        localStorage.removeItem(USER_KEY);
+        _storage.del(TOKEN_KEY);
+        _storage.del(USER_KEY);
         _currentUser = null;
         _updateUserUI();
-        if (_identityConfig?.enabled) {
+        // Only re-prompt when some form of auth is required. In fully-open
+        // mode (both flags false) there is nothing to log into.
+        if (_identityConfig?.enabled || _identityConfig?.proxy_auth_enabled) {
             _showLoginOverlay();
-            _renderProviderButtons();
+            if (_identityConfig?.enabled) _renderProviderButtons();
         }
     },
 };
 
 // ─── Session Validation ───
 
-async function _validateSession(token) {
+function _normalizeConfig(raw) {
+    return {
+        enabled: !!raw?.enabled,
+        proxy_auth_enabled: !!raw?.proxy_auth_enabled,
+        providers: Array.isArray(raw?.providers) ? raw.providers : [],
+    };
+}
+
+/**
+ * Probe /api/v1/identity/me. The endpoint is public-by-design and returns
+ * {authenticated: bool}, gating on its own per-mode verification (SSO JWT
+ * or API-key membership). Result:
+ *   'valid'   — token works
+ *   'invalid' — backend responded but rejected the token
+ *   'network' — could not reach backend (don't wipe state)
+ *
+ * The SSO success branch also caches the identity payload.
+ */
+async function _validateToken(token) {
+    let res;
     try {
-        const res = await fetch(`${BASE_URL}/api/v1/identity/me`, {
+        res = await fetch(`${BASE_URL}/api/v1/identity/me`, {
             headers: { 'Authorization': `Bearer ${token}` },
         });
-        if (!res.ok) return false;
-        const data = await res.json();
-        if (data.authenticated) {
-            _currentUser = {
-                email: data.email,
-                name: data.name,
-                roles: data.roles || [],
-                provider: data.provider,
-            };
-            localStorage.setItem(USER_KEY, JSON.stringify(_currentUser));
-            return true;
-        }
-    } catch { /* network error */ }
-    return false;
+    } catch {
+        return 'network';
+    }
+    if (!res.ok) {
+        // 5xx / unexpected — treat as transient. 401 from /identity/me is
+        // not expected (the route is public), but if it ever happens, the
+        // safe fallback is also 'network' rather than wiping a good token.
+        return 'network';
+    }
+    let data;
+    try {
+        data = await res.json();
+    } catch {
+        return 'network';
+    }
+    if (!data?.authenticated) return 'invalid';
+    if (data.provider && data.provider !== 'api_key') {
+        _currentUser = {
+            email: data.email,
+            name: data.name,
+            roles: data.roles || [],
+            provider: data.provider,
+        };
+        _storage.set(USER_KEY, JSON.stringify(_currentUser));
+    }
+    return 'valid';
 }
 
 // ─── Token Exchange ───
@@ -144,9 +235,9 @@ async function _exchangeToken(externalToken) {
         }
         const data = await res.json();
         // Store proxy JWT
-        localStorage.setItem(TOKEN_KEY, data.token);
+        _storage.set(TOKEN_KEY, data.token);
         _currentUser = data.identity;
-        localStorage.setItem(USER_KEY, JSON.stringify(_currentUser));
+        _storage.set(USER_KEY, JSON.stringify(_currentUser));
         _hideLoginOverlay();
         _updateUserUI();
         return true;
@@ -244,6 +335,7 @@ function _renderProviderButtons() {
     if (!container || !_identityConfig?.providers) return;
     container.innerHTML = '';
 
+    // SVG icons are static, controlled, no interpolation — safe to inline as HTML.
     const icons = {
         google: `<svg class="w-5 h-5" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>`,
         microsoft: `<svg class="w-5 h-5" viewBox="0 0 24 24"><rect x="1" y="1" width="10" height="10" fill="#F25022"/><rect x="13" y="1" width="10" height="10" fill="#7FBA00"/><rect x="1" y="13" width="10" height="10" fill="#00A4EF"/><rect x="13" y="13" width="10" height="10" fill="#FFB900"/></svg>`,
@@ -265,7 +357,18 @@ function _renderProviderButtons() {
     for (const provider of _identityConfig.providers) {
         const btn = document.createElement('button');
         btn.className = `w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${bgColors[provider.name] || 'bg-white/10 hover:bg-white/20 text-white'}`;
-        btn.innerHTML = `${icons[provider.name] || ''}<span>${labels[provider.name] || `Sign in with ${provider.name}`}</span>`;
+        // provider.name is operator-controlled (config-driven) but flows
+        // through the SSO config endpoint — treat as untrusted and never
+        // interpolate into innerHTML. Compose with safe DOM APIs instead.
+        const iconHTML = icons[provider.name] || '';
+        if (iconHTML) {
+            const wrapper = document.createElement('span');
+            wrapper.innerHTML = iconHTML;
+            while (wrapper.firstChild) btn.appendChild(wrapper.firstChild);
+        }
+        const span = document.createElement('span');
+        span.textContent = labels[provider.name] || `Sign in with ${provider.name}`;
+        btn.appendChild(span);
         btn.addEventListener('click', () => _startOAuthPopup(provider));
         container.appendChild(btn);
     }
@@ -277,8 +380,12 @@ function _updateUserUI() {
     const avatarEl = document.getElementById('user-avatar');
     const logoutBtn = document.getElementById('logout-btn');
     const loginHint = document.getElementById('login-hint');
+    const hasToken = !!_storage.get(TOKEN_KEY);
+    const ssoUser = !!(user && _identityConfig?.enabled);
+    // Fully-open mode: hide all user chrome (no concept of "logged in").
+    const requiresAuth = !!(_identityConfig?.enabled || _identityConfig?.proxy_auth_enabled);
 
-    if (user && _identityConfig?.enabled) {
+    if (ssoUser) {
         if (nameEl) {
             nameEl.textContent = user.name || user.email || 'User';
             nameEl.classList.remove('hidden');
@@ -290,10 +397,20 @@ function _updateUserUI() {
         }
         if (logoutBtn) logoutBtn.classList.remove('hidden');
         if (loginHint) loginHint.classList.add('hidden');
+    } else if (hasToken && requiresAuth) {
+        // API-key auth has no identity payload — keep name/avatar hidden
+        // but expose logout so the user can swap keys.
+        if (nameEl) nameEl.classList.add('hidden');
+        if (avatarEl) avatarEl.classList.add('hidden');
+        if (logoutBtn) logoutBtn.classList.remove('hidden');
+        if (loginHint) loginHint.classList.add('hidden');
     } else {
         if (nameEl) nameEl.classList.add('hidden');
         if (avatarEl) avatarEl.classList.add('hidden');
         if (logoutBtn) logoutBtn.classList.add('hidden');
-        if (loginHint) loginHint.classList.remove('hidden');
+        if (loginHint) {
+            // No login hint in fully-open mode either.
+            loginHint.classList.toggle('hidden', !requiresAuth);
+        }
     }
 }
