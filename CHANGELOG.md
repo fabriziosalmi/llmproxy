@@ -2,6 +2,36 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.50] — 2026-05-14
+
+### UI auth — fix login overlay locking users out when SSO is off
+
+The UI was unreachable for two operationally-common configurations:
+
+1. **API-key-only mode** (`server.auth.enabled: true`, no SSO) — `auth.init()` checked `_identityConfig.enabled` from `/api/v1/identity/config`, saw `false`, hid the overlay, and returned `true` as if the user were authenticated. Nothing offered the API-key field — the only way in was pasting the key into the DevTools console.
+2. **Fully-open dev mode** (`server.auth.enabled: false`, no SSO) — the previous code accidentally let users through, masking the bug above; a draconian audit of the bandaid revealed the gap.
+
+A first-pass fix probed `/api/v1/version` to validate API keys, but the global auth middleware leaves `/version` open when `server.auth.enabled: false` (config.yaml default) — so any garbage string would pass validation, exactly reproducing the original bug. Audit confirmed; switched to `/api/v1/identity/me` which returns `{authenticated: bool}` and does its own per-mode verification regardless of middleware state.
+
+**Backend** — `/api/v1/identity/config` now also returns `proxy_auth_enabled: bool` (= `server.auth.enabled`). The UI needs this to distinguish "no auth required" from "API-key required, SSO off" — those used to look identical in the response.
+
+**UI auth.js rewrite** — `init()` now:
+- Short-circuits when **both** `enabled` and `proxy_auth_enabled` are false (fully-open mode — no overlay).
+- Validates any stored token via `/identity/me` with a three-state result (`valid` / `invalid` / `network`). Transient network failures keep the token; only an explicit `{authenticated: false}` from the backend wipes it.
+- Token-stability guard after the `await` defuses a `logout()`-during-`init()` race that would have resurrected the overlay on a deliberately logged-out session.
+- `_normalizeConfig` coerces missing fields so partial test stubs (`{enabled: true}`) keep working.
+- `localStorage` is wrapped to swallow Safari Private Mode `SecurityError`.
+
+**UI main.js** — `apiKeyBtn` validates via `/identity/me` and inspects `data.authenticated` (not just the HTTP status). On success it calls the new `auth.markApiKeyLoggedIn()` so the logout button appears without a reload.
+
+**XSS hardening** — `_renderProviderButtons` used to interpolate `provider.name` into `innerHTML`. `provider.name` is operator-controlled (config-driven) but treating any server payload as HTML is gratuitously unsafe; rewritten to compose buttons with `textContent` + safe DOM appends.
+
+**E2E** — `02-login-overlay.spec.ts` now stubs `/identity/config` with `proxy_auth_enabled: true` to pin the API-key-required scenario regardless of the default backend config, and stubs `/identity/me` to return `authenticated: false` so the "rejects bad key" test is meaningful.
+
+Validation: 1198/1198 pytest, 344/344 vitest, lint + typecheck + build clean.
+
+---
+
 ## [1.21.49] — 2026-04-26
 
 ### Lint hygiene — clear 5 ruff F401 unused-import errors

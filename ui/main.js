@@ -236,24 +236,28 @@ async function init() {
             apiKeyBtn.textContent = 'Checking…';
             clearErr();
             try {
-                // /api/v1/version is cheap, auth-gated, and always mounted —
-                // a 200 proves the key is accepted by the running proxy.
-                const res = await fetch(`${window.location.origin}/api/v1/version`, {
+                // /api/v1/identity/me is public-by-design and returns
+                // {authenticated: bool}. Inspect data.authenticated — a 200
+                // alone is NOT proof of acceptance, because the route is
+                // anonymously reachable. Probing a public 200-on-anonymous
+                // endpoint (e.g. /version) would accept any garbage when
+                // server.auth is disabled.
+                const res = await fetch(`${window.location.origin}/api/v1/identity/me`, {
                     headers: { 'Authorization': `Bearer ${key}` },
                 });
-                if (res.status === 401 || res.status === 403) {
+                if (!res.ok) {
+                    showErr(`Backend returned HTTP ${res.status}. Try again.`);
+                    return;
+                }
+                const data = await res.json().catch(() => ({}));
+                if (!data.authenticated) {
                     showErr('Invalid API key. Check $LLM_PROXY_API_KEYS in your .env.');
                     apiKeyInput.focus();
                     apiKeyInput.select();
                     return;
                 }
-                if (!res.ok) {
-                    showErr(`Backend returned HTTP ${res.status}. Try again.`);
-                    return;
-                }
                 localStorage.setItem('proxy_key', key);
-                const overlay = document.getElementById('login-overlay');
-                if (overlay) overlay.classList.add('hidden');
+                auth.markApiKeyLoggedIn();
                 toast('Signed in', 'success');
             } catch {
                 showErr('Network error — is the proxy reachable?');
