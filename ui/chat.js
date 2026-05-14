@@ -40,41 +40,81 @@ function escapeHtml(str) {
     return d.innerHTML;
 }
 
+// Tokenize fenced code blocks BEFORE escaping or any other regex pass so their
+// internal newlines and angle brackets survive intact. The placeholder uses
+// underscores + hex digits so it round-trips through escapeHtml unchanged and
+// is statistically vanishingly unlikely to collide with user content.
+const CODE_PLACEHOLDER_RE = /__LLMP_CB_([0-9a-f]+)__/g;
+
 function renderMarkdown(text) {
     if (!text) return '';
 
-    // Escape HTML entities first (prevents XSS)
-    let html = escapeHtml(text);
+    // 1) Pull out fenced code blocks. ``` may or may not have a language tag.
+    //    Internal content is captured verbatim so newlines/indent stay byte-
+    //    exact. Each block gets a placeholder we restore in step 8.
+    const codeBlocks = [];
+    let html = text.replace(/```([A-Za-z0-9_+-]*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+        const i = codeBlocks.length.toString(16);
+        codeBlocks.push({ lang: (lang || '').toLowerCase(), code });
+        return `__LLMP_CB_${i}__`;
+    });
 
-    // Code blocks (``` ... ```) — must be before inline code
-    html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) =>
-        `<pre class="bg-white/5 rounded-lg p-3 my-2 overflow-x-auto text-[12px]"><code class="text-emerald-400">${code.trim()}</code></pre>`
-    );
+    // 2) Escape everything else (XSS-safe; placeholders survive — only [_a-zA-Z0-9]).
+    html = escapeHtml(html);
 
-    // Inline code (`...`)
-    html = html.replace(/`([^`]+)`/g, '<code class="bg-white/10 px-1.5 py-0.5 rounded text-[12px] text-sky-400">$1</code>');
+    // 3) Inline code — single-line only so it can't swallow line breaks.
+    html = html.replace(/`([^`\n]+)`/g, '<code class="bg-white/10 px-1.5 py-0.5 rounded text-[12px] text-sky-400 font-mono">$1</code>');
 
-    // Bold (**...**)
+    // 4) Bold / italic.
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong class="text-white font-bold">$1</strong>');
-
-    // Italic (*...*)
     html = html.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em class="text-slate-300 italic">$1</em>');
 
-    // Headers (### ... at line start)
-    html = html.replace(/^### (.+)$/gm, '<h3 class="text-sm font-bold text-white mt-3 mb-1">$1</h3>');
-    html = html.replace(/^## (.+)$/gm, '<h2 class="text-base font-bold text-white mt-3 mb-1">$1</h2>');
-    html = html.replace(/^# (.+)$/gm, '<h1 class="text-lg font-bold text-white mt-3 mb-1">$1</h1>');
+    // 5) Headers (single line, line start). prose-invert in chat.html owns the
+    //    visual styling (font-family, size) so they don't pick up mono drift.
+    html = html.replace(/^### (.+)$/gm, '<h3 class="font-bold text-white">$1</h3>');
+    html = html.replace(/^## (.+)$/gm, '<h2 class="font-bold text-white">$1</h2>');
+    html = html.replace(/^# (.+)$/gm, '<h1 class="font-bold text-white">$1</h1>');
 
-    // Unordered lists (- item)
+    // 6) Lists.
     html = html.replace(/^- (.+)$/gm, '<li class="ml-4 list-disc text-slate-300">$1</li>');
-
-    // Ordered lists (1. item)
     html = html.replace(/^\d+\. (.+)$/gm, '<li class="ml-4 list-decimal text-slate-300">$1</li>');
 
-    // Line breaks
+    // 7) Paragraph breaks. Safe to do globally now — code blocks are still
+    //    placeholders, so their internal newlines never reach this regex.
     html = html.replace(/\n/g, '<br>');
 
+    // 8) Restore code blocks. Escape ONLY the content (lang is whitelisted),
+    //    preserve internal whitespace via white-space:pre on .hljs (chat.html).
+    //    .language-X is the hint highlight.js uses to pick the grammar; the
+    //    copy button sits inside <pre> so the delegated handler can grab the
+    //    sibling <code>'s textContent.
+    html = html.replace(CODE_PLACEHOLDER_RE, (_, i) => {
+        const block = codeBlocks[parseInt(i, 16)];
+        if (!block) return '';
+        // Trim surrounding blank lines only, never internal whitespace.
+        const stripped = block.code.replace(/^\n+|\n+$/g, '');
+        const escaped = escapeHtml(stripped);
+        const langAttr = block.lang ? ` language-${block.lang}` : '';
+        const langLabel = block.lang
+            ? `<span class="code-lang">${block.lang}</span>`
+            : '';
+        return `<pre>${langLabel}<button type="button" class="copy-btn" aria-label="Copy code">Copy</button><code class="hljs${langAttr}">${escaped}</code></pre>`;
+    });
+
     return html;
+}
+
+// Run highlight.js over any <pre><code> in the given root that hasn't been
+// colorized yet. Called once per assistant message AFTER the stream ends so
+// we don't re-tokenize partial code on every delta. Safe if hljs isn't loaded
+// (the CDN is `defer`-loaded and may not have arrived for the first turn).
+function highlightCodeBlocks(root) {
+    const hl = window.hljs;
+    if (!hl || !root) return;
+    root.querySelectorAll('pre > code:not([data-hl])').forEach(el => {
+        try { hl.highlightElement(el); } catch { /* unknown language → leave plain */ }
+        el.setAttribute('data-hl', '1');
+    });
 }
 
 // ── Init ──
@@ -338,6 +378,11 @@ async function sendMessage() {
 
         conversationHistory.push({ role: 'assistant', content: fullContent || '(empty response)' });
 
+        // Stream is done — colorize any code blocks in this message exactly
+        // once. Doing it earlier would re-tokenize partial code on every
+        // delta and burn CPU for no visual gain.
+        highlightCodeBlocks(bodyEl);
+
         // Calculate metrics
         const totalTime = ((performance.now() - startTime) / 1000).toFixed(1);
         const completionTokens = usage?.completion_tokens || tokenCount;
@@ -391,5 +436,28 @@ inputEl.addEventListener('keydown', (e) => {
 });
 
 sendBtn.addEventListener('click', sendMessage);
+
+// Delegated copy handler — clicks on any `.copy-btn` grab the sibling
+// <code>'s textContent. Single listener on the message stream avoids
+// having to rewire after every progressive innerHTML re-render.
+messagesEl.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.copy-btn');
+    if (!btn) return;
+    const code = btn.parentElement?.querySelector('code');
+    if (!code) return;
+    try {
+        await navigator.clipboard.writeText(code.textContent || '');
+        const prev = btn.textContent;
+        btn.textContent = 'Copied';
+        btn.classList.add('copied');
+        setTimeout(() => {
+            btn.textContent = prev;
+            btn.classList.remove('copied');
+        }, 1200);
+    } catch {
+        btn.textContent = 'Failed';
+        setTimeout(() => { btn.textContent = 'Copy'; }, 1200);
+    }
+});
 
 init();
