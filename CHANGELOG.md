@@ -2,6 +2,20 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.54] — 2026-05-14
+
+### Fix Guards page cramped layout — nested grid bug
+
+The Guards page rendered the 8-card grid clumped into roughly the left quarter of the content area, with cards so narrow that titles wrapped to two lines (`Language Guard` → `anguage` + `Guard`) and the toggle switches collided with the title text.
+
+Root cause: a **nested grid**. The host element in `index.html:855` already carries `class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"`, and `mountGuardsGrid` in `Grid.ts:33-36` was creating a SECOND `<div class="grid ...">` inside it. The outer grid treated the inner grid as a single cell — so every card lived inside the first column of an xl:grid-cols-4 layout, getting ~1/4 of the width it should have had, with the rest of the row sitting empty.
+
+Fix: `Grid.ts` now uses the container element directly as the grid root. If the container already carries `class="grid"` (production HTML), we leave it alone; otherwise (unit tests with bare containers) we add the grid classes ourselves. Either way, exactly one grid layer wraps the cards. After the fix, cards fill the entire main content width — 4 columns at ≥1280px, 3 at ≥1024px, 2 at ≥768px, 1 below.
+
+Validation: 16/16 guards unit tests ✓ (Grid, GuardCard, Toggles), 4/4 guards e2e ✓ (including the previously-flaky toggle test from 1.21.53), full vitest 344/344 ✓, build ✓.
+
+---
+
 ## [1.21.53] — 2026-05-14
 
 ### Chat playground — kill 4 S-tier bugs blocking daily use
