@@ -115,10 +115,7 @@ export function createSparkline(opts: SparklineOptions): SVGSVGElement {
         svg.appendChild(defs);
 
         const areaPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        areaPath.setAttribute(
-            'd',
-            `M${points[0]} L${points.join(' L')} L${w},${h} L0,${h} Z`,
-        );
+        areaPath.setAttribute('d', `M${points[0]} L${points.join(' L')} L${w},${h} L0,${h} Z`);
         areaPath.setAttribute('fill', `url(#${gradId})`);
         svg.appendChild(areaPath);
     }

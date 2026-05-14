@@ -172,13 +172,16 @@ export function createAddEndpointForm(deps: AddFormDeps): AddFormHandle {
         const original = labelSpan?.textContent ?? 'Scan local';
         if (labelSpan) labelSpan.textContent = 'Scanning…';
         try {
-            const token = typeof localStorage !== 'undefined' ? localStorage.getItem('proxy_key') ?? '' : '';
+            const token = typeof localStorage !== 'undefined' ? (localStorage.getItem('proxy_key') ?? '') : '';
             const res = await fetch(`${window.location.origin}/api/v1/registry/scan`, {
                 method: 'POST',
                 headers: token ? { Authorization: `Bearer ${token}` } : {},
             });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const body = (await res.json()) as { candidates?: Array<{ id: string; provider: string; base_url: string; models?: string[] }>; total?: number };
+            const body = (await res.json()) as {
+                candidates?: Array<{ id: string; provider: string; base_url: string; models?: string[] }>;
+                total?: number;
+            };
             const candidates = body.candidates ?? [];
             if (candidates.length === 0) {
                 deps.toast?.('No local LLM endpoints found on 127.0.0.1 / host.docker.internal', 'info');
@@ -196,9 +199,13 @@ export function createAddEndpointForm(deps: AddFormDeps): AddFormHandle {
             if (providerOptions.includes(first.provider)) {
                 providerSelect.value = first.provider;
             }
-            const note = candidates.length === 1
-                ? `Found ${first.id} @ ${first.base_url} — review + Add`
-                : `Found ${candidates.length} endpoints — using ${first.id} (others: ${candidates.slice(1).map((c) => c.id).join(', ')})`;
+            const note =
+                candidates.length === 1
+                    ? `Found ${first.id} @ ${first.base_url} — review + Add`
+                    : `Found ${candidates.length} endpoints — using ${first.id} (others: ${candidates
+                          .slice(1)
+                          .map((c) => c.id)
+                          .join(', ')})`;
             deps.toast?.(note, 'success');
         } catch (err) {
             deps.toast?.(`Scan failed: ${(err as Error)?.message ?? err}`, 'error');

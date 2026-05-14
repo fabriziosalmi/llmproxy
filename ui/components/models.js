@@ -8,10 +8,19 @@
 import { api } from '../services/api.js';
 import { store } from '../services/store.js';
 
-const EMBEDDING_PREFIXES = ['text-embedding', 'embedding-', 'nomic-embed', 'mxbai-embed', 'all-minilm', 'bge-', 'snowflake-arctic', 'mistral-embed'];
+const EMBEDDING_PREFIXES = [
+    'text-embedding',
+    'embedding-',
+    'nomic-embed',
+    'mxbai-embed',
+    'all-minilm',
+    'bge-',
+    'snowflake-arctic',
+    'mistral-embed',
+];
 
 function isEmbeddingModel(id) {
-    return EMBEDDING_PREFIXES.some(p => id.toLowerCase().startsWith(p));
+    return EMBEDDING_PREFIXES.some((p) => id.toLowerCase().startsWith(p));
 }
 
 let _allChat = [];
@@ -29,8 +38,12 @@ export function initModels() {
             clearTimeout(debounceTimer);
             debounceTimer = setTimeout(() => {
                 const q = searchInput.value.toLowerCase().trim();
-                const fc = q ? _allChat.filter(m => m.id.toLowerCase().includes(q) || m.owned_by.toLowerCase().includes(q)) : _allChat;
-                const fe = q ? _allEmbed.filter(m => m.id.toLowerCase().includes(q) || m.owned_by.toLowerCase().includes(q)) : _allEmbed;
+                const fc = q
+                    ? _allChat.filter((m) => m.id.toLowerCase().includes(q) || m.owned_by.toLowerCase().includes(q))
+                    : _allChat;
+                const fe = q
+                    ? _allEmbed.filter((m) => m.id.toLowerCase().includes(q) || m.owned_by.toLowerCase().includes(q))
+                    : _allEmbed;
                 renderModelsTable(fc, fe);
             }, 150);
         });
@@ -51,7 +64,7 @@ export function initModels() {
                 {
                     api: { fetchModels: api.fetchModels },
                     poll: (fn, intervalMs) => store.poll(fn, intervalMs, 'models'),
-                },
+                }
             );
         })
         .catch(() => {
@@ -69,9 +82,9 @@ async function refreshModels() {
         const data = await api.fetchModels();
         const models = data.data || [];
 
-        const providers = new Set(models.map(m => m.owned_by));
-        _allEmbed = models.filter(m => isEmbeddingModel(m.id));
-        _allChat = models.filter(m => !isEmbeddingModel(m.id));
+        const providers = new Set(models.map((m) => m.owned_by));
+        _allEmbed = models.filter((m) => isEmbeddingModel(m.id));
+        _allChat = models.filter((m) => !isEmbeddingModel(m.id));
 
         setText('kpi-active-models', models.length);
         setText('kpi-providers', providers.size);
@@ -133,16 +146,20 @@ function renderModelsTable(chatModels, embeddingModels) {
                 </thead>
                 <tbody>
                     ${chatModels.map(modelRow).join('')}
-                    ${embeddingModels.length > 0 ? `
+                    ${
+                        embeddingModels.length > 0
+                            ? `
                         <tr><td colspan="2" class="px-4 pt-4 pb-2">
                             <p class="text-[9px] font-bold text-violet-400 uppercase tracking-widest">Embedding Models</p>
                         </td></tr>
                         ${embeddingModels.map(modelRow).join('')}
-                    ` : ''}
+                    `
+                            : ''
+                    }
                 </tbody>
             </table>
         </div>
-        <p class="text-[9px] text-slate-600 mt-3 px-1">${chatModels.length + embeddingModels.length} models across ${new Set([...chatModels, ...embeddingModels].map(m => m.owned_by)).size} providers</p>
+        <p class="text-[9px] text-slate-600 mt-3 px-1">${chatModels.length + embeddingModels.length} models across ${new Set([...chatModels, ...embeddingModels].map((m) => m.owned_by)).size} providers</p>
     `;
 }
 

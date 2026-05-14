@@ -64,7 +64,7 @@ export function initThreats() {
                     },
                     poll: (fn, intervalMs) => store.poll(fn, intervalMs, 'threats'),
                     onFirewallState: (state) => store.update({ firewall: state }),
-                },
+                }
             );
         })
         .catch(() => {
@@ -132,7 +132,6 @@ async function refreshMetrics() {
                 });
             }
         }
-
     } catch {
         // Backend unavailable — replace "Loading..." placeholders with a
         // visible degraded state so the operator knows the widget is stale
@@ -189,7 +188,9 @@ function renderBudgetGauge(consumed, limit, totalCost, guardsStatus) {
             </div>
             <span class="text-[9px] font-mono text-${color}-400">${limit > 0 ? pct.toFixed(0) + '% used' : 'tracking'}</span>
         </div>
-        ${limit > 0 ? `
+        ${
+            limit > 0
+                ? `
             <div class="w-full h-2 bg-white/5 rounded-full overflow-hidden">
                 <div class="h-full bg-${color}-500/60 rounded-full transition-all" style="width: ${pct}%"></div>
             </div>
@@ -197,7 +198,9 @@ function renderBudgetGauge(consumed, limit, totalCost, guardsStatus) {
                 <span class="text-[10px] text-slate-600 font-mono">$${remaining} remaining</span>
                 <span class="text-[10px] text-slate-600 font-mono">Daily reset</span>
             </div>
-        ` : ''}
+        `
+                : ''
+        }
     `;
     container.dataset.ready = '1';
 }
@@ -233,10 +236,16 @@ function renderEndpointBreakdown(text) {
     }
 
     container.dataset.ready = '1';
-    container.innerHTML = entries.map(([ep, data]) => {
-        const errRate = data.requests > 0 ? ((data.errors / data.requests) * 100).toFixed(1) : '0.0';
-        const errColor = parseFloat(errRate) > 5 ? 'text-rose-400' : parseFloat(errRate) > 0 ? 'text-amber-400' : 'text-emerald-400';
-        return `
+    container.innerHTML = entries
+        .map(([ep, data]) => {
+            const errRate = data.requests > 0 ? ((data.errors / data.requests) * 100).toFixed(1) : '0.0';
+            const errColor =
+                parseFloat(errRate) > 5
+                    ? 'text-rose-400'
+                    : parseFloat(errRate) > 0
+                      ? 'text-amber-400'
+                      : 'text-emerald-400';
+            return `
             <div class="flex items-center justify-between py-1.5 border-b border-white/[0.04] last:border-0">
                 <span class="text-[9px] font-mono text-slate-400 truncate max-w-[200px]">${ep}</span>
                 <div class="flex items-center gap-4">
@@ -245,7 +254,8 @@ function renderEndpointBreakdown(text) {
                 </div>
             </div>
         `;
-    }).join('');
+        })
+        .join('');
 }
 
 function renderFirewallStats(guardsStatus) {
@@ -270,16 +280,24 @@ function renderFirewallStats(guardsStatus) {
                 <span class="text-[9px] text-slate-500 ml-1">blocked</span>
             </div>
         </div>
-        ${sigEntries.length > 0 ? `
+        ${
+            sigEntries.length > 0
+                ? `
             <div class="space-y-1 mt-2 pt-2 border-t border-white/[0.04]">
-                ${sigEntries.map(([sig, count]) => `
+                ${sigEntries
+                    .map(
+                        ([sig, count]) => `
                     <div class="flex items-center justify-between">
                         <span class="text-[10px] font-mono text-slate-500 truncate max-w-[250px]">${sig}</span>
                         <span class="text-[10px] font-mono text-rose-400">${count}x</span>
                     </div>
-                `).join('')}
+                `
+                    )
+                    .join('')}
             </div>
-        ` : ''}
+        `
+                : ''
+        }
     `;
 }
 
@@ -312,18 +330,19 @@ function renderRingLatencyBars(latency) {
 
     const rings = latency.rings || {};
     const ringNames = Object.keys(RING_COLORS);
-    const maxP99 = Math.max(1, ...ringNames.map(r => (rings[r]?.p99 || 0)));
+    const maxP99 = Math.max(1, ...ringNames.map((r) => rings[r]?.p99 || 0));
 
-    if (ringNames.every(r => !rings[r]?.count)) {
+    if (ringNames.every((r) => !rings[r]?.count)) {
         container.innerHTML = `<p class="text-[9px] text-slate-600 font-mono">Collecting samples...</p>`;
         return;
     }
 
-    container.innerHTML = ringNames.map(ring => {
-        const r = rings[ring] || { p50: 0, p95: 0, p99: 0, count: 0 };
-        const rc = RING_COLORS[ring];
-        const barWidth = maxP99 > 0 ? Math.max(2, (r.p99 / maxP99) * 100) : 0;
-        return `
+    container.innerHTML = ringNames
+        .map((ring) => {
+            const r = rings[ring] || { p50: 0, p95: 0, p99: 0, count: 0 };
+            const rc = RING_COLORS[ring];
+            const barWidth = maxP99 > 0 ? Math.max(2, (r.p99 / maxP99) * 100) : 0;
+            return `
             <div class="mb-2">
                 <div class="flex items-center justify-between mb-0.5">
                     <span class="text-[10px] font-bold ${rc.text} uppercase tracking-wider">${rc.label}</span>
@@ -339,7 +358,8 @@ function renderRingLatencyBars(latency) {
                 </div>
             </div>
         `;
-    }).join('');
+        })
+        .join('');
 }
 
 function renderTTFT(ttft) {
@@ -386,29 +406,40 @@ function renderRingTimeline(traces) {
         return;
     }
 
-    container.innerHTML = traces.map(trace => {
-        const rings = trace.rings || {};
-        const total = trace.total_ms || 0;
-        const upstream = trace.upstream_ms || 0;
-        const ringNames = ['ingress', 'pre_flight', 'routing', 'post_flight', 'background'];
-        const maxMs = Math.max(1, total || Object.values(rings).reduce((s, r) => s + (r.duration_ms || 0), 0) + upstream);
+    container.innerHTML = traces
+        .map((trace) => {
+            const rings = trace.rings || {};
+            const total = trace.total_ms || 0;
+            const upstream = trace.upstream_ms || 0;
+            const ringNames = ['ingress', 'pre_flight', 'routing', 'post_flight', 'background'];
+            const maxMs = Math.max(
+                1,
+                total || Object.values(rings).reduce((s, r) => s + (r.duration_ms || 0), 0) + upstream
+            );
 
-        const segments = ringNames.map(ring => {
-            const r = rings[ring];
-            if (!r) return '';
-            const rc = RING_COLORS[ring];
-            const width = Math.max(1, (r.duration_ms / maxMs) * 100);
-            const plugins = (r.plugins || []).map(p => `${p.name}: ${p.ms}ms`).join(', ');
-            return `<div class="${rc.bar} h-full rounded-sm" style="width: ${width}%" title="${rc.label}: ${r.duration_ms}ms\n${plugins}"></div>`;
-        }).join('');
+            const segments = ringNames
+                .map((ring) => {
+                    const r = rings[ring];
+                    if (!r) return '';
+                    const rc = RING_COLORS[ring];
+                    const width = Math.max(1, (r.duration_ms / maxMs) * 100);
+                    const plugins = (r.plugins || []).map((p) => `${p.name}: ${p.ms}ms`).join(', ');
+                    return `<div class="${rc.bar} h-full rounded-sm" style="width: ${width}%" title="${rc.label}: ${r.duration_ms}ms\n${plugins}"></div>`;
+                })
+                .join('');
 
-        const upstreamWidth = upstream > 0 ? Math.max(1, (upstream / maxMs) * 100) : 0;
-        const upstreamSeg = upstreamWidth > 0 ? `<div class="bg-emerald-500/60 h-full rounded-sm" style="width: ${upstreamWidth}%" title="Upstream: ${upstream}ms"></div>` : '';
+            const upstreamWidth = upstream > 0 ? Math.max(1, (upstream / maxMs) * 100) : 0;
+            const upstreamSeg =
+                upstreamWidth > 0
+                    ? `<div class="bg-emerald-500/60 h-full rounded-sm" style="width: ${upstreamWidth}%" title="Upstream: ${upstream}ms"></div>`
+                    : '';
 
-        const ts = trace.timestamp ? new Date(trace.timestamp * 1000).toLocaleTimeString() : '--';
-        const ttftBadge = trace.ttft_ms ? `<span class="text-[9px] font-mono text-sky-400 bg-sky-500/10 px-1 py-0.5 rounded">TTFT ${trace.ttft_ms}ms</span>` : '';
+            const ts = trace.timestamp ? new Date(trace.timestamp * 1000).toLocaleTimeString() : '--';
+            const ttftBadge = trace.ttft_ms
+                ? `<span class="text-[9px] font-mono text-sky-400 bg-sky-500/10 px-1 py-0.5 rounded">TTFT ${trace.ttft_ms}ms</span>`
+                : '';
 
-        return `
+            return `
             <div class="flex items-center gap-3 group">
                 <span class="text-[10px] font-mono text-slate-600 w-16 shrink-0">${ts}</span>
                 <span class="text-[9px] font-mono text-slate-500 w-12 shrink-0">${trace.req_id || '--'}</span>
@@ -419,7 +450,8 @@ function renderRingTimeline(traces) {
                 ${ttftBadge}
             </div>
         `;
-    }).join('');
+        })
+        .join('');
 }
 
 function extractMetric(text, name) {
@@ -476,8 +508,16 @@ function initChart() {
                 },
             },
             scales: {
-                x: { stacked: true, ticks: { color: '#334155', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.03)' } },
-                y: { stacked: true, ticks: { color: '#334155', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.03)' } },
+                x: {
+                    stacked: true,
+                    ticks: { color: '#334155', font: { size: 9 } },
+                    grid: { color: 'rgba(255,255,255,0.03)' },
+                },
+                y: {
+                    stacked: true,
+                    ticks: { color: '#334155', font: { size: 9 } },
+                    grid: { color: 'rgba(255,255,255,0.03)' },
+                },
             },
         },
     });
@@ -531,17 +571,29 @@ function initEventFeed() {
 function isSecurityEvent(entry) {
     const level = (entry.level || '').toUpperCase();
     const msg = (entry.message || '').toUpperCase();
-    return level === 'SECURITY' || level === 'WARNING' || level === 'ERROR' || level === 'CRITICAL' ||
-        msg.includes('SHIELD') || msg.includes('BLOCK') || msg.includes('INJECT') ||
-        msg.includes('PII') || msg.includes('FIREWALL') || msg.includes('AUTH') ||
-        msg.includes('RATE') || msg.includes('ZT') || msg.includes('PANIC') || msg.includes('BUDGET');
+    return (
+        level === 'SECURITY' ||
+        level === 'WARNING' ||
+        level === 'ERROR' ||
+        level === 'CRITICAL' ||
+        msg.includes('SHIELD') ||
+        msg.includes('BLOCK') ||
+        msg.includes('INJECT') ||
+        msg.includes('PII') ||
+        msg.includes('FIREWALL') ||
+        msg.includes('AUTH') ||
+        msg.includes('RATE') ||
+        msg.includes('ZT') ||
+        msg.includes('PANIC') ||
+        msg.includes('BUDGET')
+    );
 }
 
 function updateChart(entry) {
     if (!chart) return;
     const hour = new Date().getHours();
-    const isBlocked = (entry.level || '').toUpperCase() === 'SECURITY' ||
-        (entry.message || '').toUpperCase().includes('BLOCK');
+    const isBlocked =
+        (entry.level || '').toUpperCase() === 'SECURITY' || (entry.message || '').toUpperCase().includes('BLOCK');
     if (isBlocked) {
         chart.data.datasets[0].data[hour] += 1;
     } else {

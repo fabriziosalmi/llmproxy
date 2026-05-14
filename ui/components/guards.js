@@ -115,7 +115,7 @@ export function initGuards() {
                         firewall: store.state.firewall,
                     },
                     poll: (fn, intervalMs) => store.poll(fn, intervalMs, 'guards'),
-                },
+                }
             );
         })
         .catch(() => {
@@ -148,7 +148,11 @@ function initOperations() {
             btn.disabled = false;
             btn.textContent = btn.textContent === 'Working...' ? op.label.split(' ')[0] : btn.textContent;
             // Restore original text
-            const origTexts = { 'reset-firewall-btn': 'Reset WAF Counters', 'clear-caches-btn': 'Clear Caches', 'reset-security-btn': 'Reset Sessions & Ledger' };
+            const origTexts = {
+                'reset-firewall-btn': 'Reset WAF Counters',
+                'clear-caches-btn': 'Clear Caches',
+                'reset-security-btn': 'Reset Sessions & Ledger',
+            };
             btn.textContent = origTexts[op.id] || btn.textContent;
         });
     }
@@ -200,7 +204,8 @@ function updateToggleUI(btnId, dotId, enabled, color) {
         dot.className = `absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-${color}-400 transition-transform translate-x-7 shadow-lg shadow-${color}-500/30`;
     } else {
         btn.className = 'relative w-14 h-7 rounded-full transition-colors bg-slate-700/50 border border-slate-600/30';
-        dot.className = 'absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-slate-500 transition-transform translate-x-0';
+        dot.className =
+            'absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-slate-500 transition-transform translate-x-0';
     }
 }
 
@@ -223,9 +228,7 @@ export function renderGuards() {
         let statusLabel;
         if (key === 'firewall') {
             enabled = firewallState.enabled !== false;
-            statusLabel = enabled
-                ? 'ALWAYS ON'
-                : `OFF &middot; ${firewallState.disabled_reason || 'config'}`;
+            statusLabel = enabled ? 'ALWAYS ON' : `OFF &middot; ${firewallState.disabled_reason || 'config'}`;
         } else {
             enabled = info.toggleable ? features[key] !== false : true;
             statusLabel = info.status;
@@ -240,14 +243,18 @@ export function renderGuards() {
                     <div class="text-${c}-400">${info.icon}</div>
                     <h3 class="text-xs font-bold text-white">${info.name}</h3>
                 </div>
-                ${info.toggleable ? `
+                ${
+                    info.toggleable
+                        ? `
                     <button data-guard="${key}" role="switch" aria-checked="${enabled}" aria-label="Toggle ${info.name}" class="guard-toggle relative w-10 h-5 rounded-full transition-colors ${enabled ? `bg-${c}-500/30 border border-${c}-500/40` : 'bg-slate-700/50 border border-slate-600/30'}">
                         <div class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full transition-transform ${enabled ? `bg-${c}-400 translate-x-5` : 'bg-slate-500 translate-x-0'}"></div>
                     </button>
-                ` : `
+                `
+                        : `
                     <span class="text-[10px] font-bold font-mono ${enabled ? `text-${c}-400/60 bg-${c}-500/10` : 'text-slate-500 bg-slate-500/10'} px-2 py-0.5 rounded"
                           data-explain="${key === 'firewall' ? 'firewall' : 'guard:' + key}">${statusLabel}</span>
-                `}
+                `
+                }
             </div>
             <p class="text-[10px] text-slate-400 leading-relaxed">${info.desc}</p>
             <div class="mt-3 flex items-center gap-2">
@@ -258,7 +265,7 @@ export function renderGuards() {
     }
 
     // Wire toggles
-    grid.querySelectorAll('.guard-toggle').forEach(btn => {
+    grid.querySelectorAll('.guard-toggle').forEach((btn) => {
         btn.addEventListener('click', async () => {
             const name = btn.dataset.guard;
             const current = store.state.features[name] !== false;

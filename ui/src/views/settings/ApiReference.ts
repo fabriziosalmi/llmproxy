@@ -63,8 +63,22 @@ export function mountApiReference(host: HTMLElement, api: ApiReferenceApi): ApiR
         summarySlot.replaceChildren();
         const chips = document.createElement('div');
         chips.className = 'flex items-center gap-2';
-        chips.appendChild(createBadge({ label: `OpenAPI ${sum.version}`, intent: 'info', size: 'sm', testId: 'api-reference-version' }));
-        chips.appendChild(createBadge({ label: `${sum.pathCount} paths`, intent: 'neutral', size: 'sm', testId: 'api-reference-path-count' }));
+        chips.appendChild(
+            createBadge({
+                label: `OpenAPI ${sum.version}`,
+                intent: 'info',
+                size: 'sm',
+                testId: 'api-reference-version',
+            })
+        );
+        chips.appendChild(
+            createBadge({
+                label: `${sum.pathCount} paths`,
+                intent: 'neutral',
+                size: 'sm',
+                testId: 'api-reference-path-count',
+            })
+        );
         summarySlot.appendChild(chips);
 
         const wrap = document.createElement('div');
@@ -130,7 +144,7 @@ export function mountApiReference(host: HTMLElement, api: ApiReferenceApi): ApiR
                     detail: message,
                     onRetry: () => void refresh(),
                     testId: 'api-reference-error',
-                }),
+                })
             );
             summarySlot.replaceChildren();
         }

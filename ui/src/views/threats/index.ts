@@ -16,11 +16,7 @@ import { renderEndpointBreakdown } from './sections/EndpointBreakdown';
 import { renderFirewallStats } from './sections/FirewallStats';
 import { renderRingLatencyBars, renderTtft } from './sections/RingLatency';
 import { renderRingTimeline } from './sections/RingTimeline';
-import {
-    renderSpendForecast,
-    type SpendForecastApi,
-    type SpendForecastBlock,
-} from './sections/SpendForecast';
+import { renderSpendForecast, type SpendForecastApi, type SpendForecastBlock } from './sections/SpendForecast';
 import { mountThreatChart, type ThreatChartHandle } from './sections/ThreatChart';
 import { renderTrafficFlow, type FlowData, type FlowNode } from './sections/TrafficFlow';
 import type { GuardsStatus, LatencyMetrics, TimelinePayload } from './sections/types';
@@ -142,7 +138,11 @@ export function mountThreatsSections(hosts: SectionsHosts, opts: SectionsOptions
             opts.api.fetchGuardsStatus().catch(() => null),
             opts.api.fetchLatencyMetrics().catch(() => null),
             opts.api.fetchRingTimeline().catch(() => null),
-            opts.api.fetchSpendForecast().catch((err) => ({ __error: (err as Error)?.message ?? 'unreachable' } as unknown as SpendForecastBlock)),
+            opts.api
+                .fetchSpendForecast()
+                .catch(
+                    (err) => ({ __error: (err as Error)?.message ?? 'unreachable' }) as unknown as SpendForecastBlock
+                ),
         ]);
 
         // Budget + firewall are powered by /metrics + guards-status combined.
@@ -231,11 +231,7 @@ function _buildFlowData(promText: string, guards: GuardsStatus | null): FlowData
     const fwBlocked = guards?.firewall?.total_blocked ?? 0;
     const fwBlockRatio = fwScanned > 0 ? Math.min(1, fwBlocked / fwScanned) : 0;
     const firewallState: FlowNode['state'] =
-        guards?.firewall?.enabled === false
-            ? 'down'
-            : Object.keys(blockBySig).length > 0
-              ? 'blocked'
-              : 'live';
+        guards?.firewall?.enabled === false ? 'down' : Object.keys(blockBySig).length > 0 ? 'blocked' : 'live';
     const guardNodes: FlowNode[] = [
         {
             id: 'firewall',
@@ -284,9 +280,8 @@ function _buildFlowData(promText: string, guards: GuardsStatus | null): FlowData
         const state = (cbInfo.state ?? 'closed').toLowerCase();
         const failures = cbInfo.failure_count ?? 0;
         const threshold = cbInfo.failure_threshold ?? 5;
-        const failPenalty = threshold > 0 ? Math.min(0.4, failures / threshold * 0.4) : 0;
-        const nodeState: FlowNode['state'] =
-            state === 'open' ? 'down' : state === 'half_open' ? 'blocked' : 'live';
+        const failPenalty = threshold > 0 ? Math.min(0.4, (failures / threshold) * 0.4) : 0;
+        const nodeState: FlowNode['state'] = state === 'open' ? 'down' : state === 'half_open' ? 'blocked' : 'live';
         return {
             id,
             label: id.length > 14 ? id.slice(0, 12) + '…' : id,

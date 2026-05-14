@@ -37,7 +37,13 @@ window.addEventListener('DOMContentLoaded', () => {
         btn.addEventListener('click', () => {
             setTheme(getTheme() === 'dark' ? 'light' : 'dark');
             refreshThemeIcons();
-            if (_rumRef) { try { _rumRef.action('theme_toggle', { to: getTheme() }); } catch { /* silent */ } }
+            if (_rumRef) {
+                try {
+                    _rumRef.action('theme_toggle', { to: getTheme() });
+                } catch {
+                    /* silent */
+                }
+            }
         });
     }
 });
@@ -137,7 +143,11 @@ store.subscribe((state) => {
     // `from` threaded through by the rum facade. No-op until initTelemetry
     // registers a sink.
     if (_rumRef && state.currentTab !== _prevState.currentTab) {
-        try { _rumRef.tabChange(state.currentTab); } catch { /* silent */ }
+        try {
+            _rumRef.tabChange(state.currentTab);
+        } catch {
+            /* silent */
+        }
     }
 
     _prevState = { ...state };
@@ -148,32 +158,40 @@ store.subscribe((state) => {
 // Vite resolve to .ts at build; the source-tree fallback gets a 404 and
 // we silently skip telemetry, which is fine because it is no-op anyway.
 function initTelemetry() {
-    Promise.all([
-        import('./src/services/logger'),
-        import('./src/services/rum'),
-        import('./src/services/perf'),
-    ])
+    Promise.all([import('./src/services/logger'), import('./src/services/rum'), import('./src/services/perf')])
         .then(([loggerMod, rumMod, perfMod]) => {
             const sinks = [loggerMod.consoleSink];
             // Backend sink: ships error/warn batches to /api/v1/logs/client.
             // The endpoint is auth-gated, so a missing token simply drops the
             // batch on the floor (the console sink remains the source of truth).
-            sinks.push(loggerMod.backendSink({
-                endpoint: `${window.location.origin}/api/v1/logs/client`,
-                getToken: () => localStorage.getItem('proxy_key') || '',
-            }));
+            sinks.push(
+                loggerMod.backendSink({
+                    endpoint: `${window.location.origin}/api/v1/logs/client`,
+                    getToken: () => localStorage.getItem('proxy_key') || '',
+                })
+            );
             const logger = loggerMod.createLogger({ sinks, minLevel: 'warn' });
             loggerMod.installGlobalErrorHandlers(logger);
             window.__llmproxy_logger = logger;
             _rumRef = rumMod.rum;
             window.__llmproxy_rum = rumMod.rum;
-            try { rumMod.rum.pageView(store.state.currentTab || 'threats'); } catch { /* silent */ }
+            try {
+                rumMod.rum.pageView(store.state.currentTab || 'threats');
+            } catch {
+                /* silent */
+            }
             // N.8: capture FCP / LCP / DCL / load and route through rum.
             // Default no-op sink means metrics only ship if the operator
             // wires up an analytics backend (e.g. PostHog) via rum.setSink.
-            try { perfMod.reportPagePerf(); } catch { /* silent */ }
+            try {
+                perfMod.reportPagePerf();
+            } catch {
+                /* silent */
+            }
         })
-        .catch(() => { /* no TS chunk — telemetry stays off */ });
+        .catch(() => {
+            /* no TS chunk — telemetry stays off */
+        });
 }
 initTelemetry();
 
@@ -198,7 +216,9 @@ async function init() {
                 window.location.reload();
                 return;
             }
-        } catch { /* ignore */ }
+        } catch {
+            /* ignore */
+        }
     }
 
     // Wire logout button
@@ -229,7 +249,11 @@ async function init() {
 
         const doApiKeyLogin = async () => {
             const key = apiKeyInput.value.trim();
-            if (!key) { showErr('API key is required.'); apiKeyInput.focus(); return; }
+            if (!key) {
+                showErr('API key is required.');
+                apiKeyInput.focus();
+                return;
+            }
             const originalLabel = apiKeyBtn.textContent;
             apiKeyBtn.disabled = true;
             apiKeyInput.disabled = true;
@@ -243,7 +267,7 @@ async function init() {
                 // endpoint (e.g. /version) would accept any garbage when
                 // server.auth is disabled.
                 const res = await fetch(`${window.location.origin}/api/v1/identity/me`, {
-                    headers: { 'Authorization': `Bearer ${key}` },
+                    headers: { Authorization: `Bearer ${key}` },
                 });
                 if (!res.ok) {
                     showErr(`Backend returned HTTP ${res.status}. Try again.`);
@@ -268,7 +292,9 @@ async function init() {
             }
         };
         apiKeyBtn.addEventListener('click', doApiKeyLogin);
-        apiKeyInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doApiKeyLogin(); });
+        apiKeyInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') doApiKeyLogin();
+        });
 
         // Focus trap + initial focus while the overlay is shown. The overlay
         // is a real dialog (role="dialog" aria-modal="true"); Tab stays
@@ -276,9 +302,10 @@ async function init() {
         // safe fallback when the app itself is the thing being gated.
         const overlay = document.getElementById('login-overlay');
         if (overlay) {
-            const focusable = () => Array.from(overlay.querySelectorAll(
-                'button:not([disabled]), input:not([disabled]):not([type="hidden"])'
-            ));
+            const focusable = () =>
+                Array.from(
+                    overlay.querySelectorAll('button:not([disabled]), input:not([disabled]):not([type="hidden"])')
+                );
             overlay.addEventListener('keydown', (e) => {
                 if (e.key !== 'Tab' || overlay.classList.contains('hidden')) return;
                 const nodes = focusable();
@@ -286,9 +313,11 @@ async function init() {
                 const first = nodes[0];
                 const last = nodes[nodes.length - 1];
                 if (e.shiftKey && document.activeElement === first) {
-                    e.preventDefault(); last.focus();
+                    e.preventDefault();
+                    last.focus();
                 } else if (!e.shiftKey && document.activeElement === last) {
-                    e.preventDefault(); first.focus();
+                    e.preventDefault();
+                    first.focus();
                 }
             });
             // Send focus to the key input whenever the overlay becomes
@@ -322,7 +351,7 @@ async function init() {
         { name: 'threats', fn: initThreats },
     ];
 
-    initWrappers.forEach(w => {
+    initWrappers.forEach((w) => {
         try {
             w.fn();
         } catch (e) {
@@ -350,18 +379,15 @@ async function init() {
 
     // Fetch critical system state from backend
     try {
-        const [status, features] = await Promise.all([
-            api.fetchProxyStatus(),
-            api.fetchFeatures(),
-        ]);
+        const [status, features] = await Promise.all([api.fetchProxyStatus(), api.fetchFeatures()]);
 
         store.update({
             proxyEnabled: status.enabled,
             priorityMode: status.priority_mode || false,
-            features: features
+            features: features,
         });
     } catch (err) {
-        console.warn("Backend unavailable — running in offline mode.", err);
+        console.warn('Backend unavailable — running in offline mode.', err);
     }
 
     // R.1 — Eager registry fetch loop. Inlined here (rather than dragging in
@@ -374,11 +400,13 @@ async function init() {
         try {
             const data = await api.fetchRegistry();
             store.update({ registry: data });
-        } catch { /* offline — keep last good state */ }
+        } catch {
+            /* offline — keep last good state */
+        }
     }
     store.poll(_refreshRegistry, 30000, 'endpoints');
 
-    console.info("LLMPROXY Modular UI Environment: READY");
+    console.info('LLMPROXY Modular UI Environment: READY');
 }
 
 function initHUD() {
@@ -386,13 +414,19 @@ function initHUD() {
     const palette = document.getElementById('cmd-palette-overlay');
     const box = document.getElementById('cmd-palette-box');
     const input = document.getElementById('cmd-input');
-    
+
     if (palette && box && input) {
         const togglePalette = () => {
             if (palette.classList.contains('hidden')) {
                 palette.classList.remove('hidden');
                 palette.classList.add('flex');
-                if (_rumRef) { try { _rumRef.action('palette_open'); } catch { /* silent */ } }
+                if (_rumRef) {
+                    try {
+                        _rumRef.action('palette_open');
+                    } catch {
+                        /* silent */
+                    }
+                }
                 // Seed the full command list and focus the input so the palette
                 // is immediately useful without requiring the user to type first.
                 input.value = '';
@@ -427,7 +461,7 @@ function initHUD() {
                 togglePalette();
             }
         });
-        
+
         palette.addEventListener('click', (e) => {
             if (e.target === palette) togglePalette();
         });
@@ -440,7 +474,11 @@ function initHUD() {
             { id: 'view-endpoints', name: 'Nav: Endpoints', desc: 'LLM endpoint registry' },
             { id: 'view-models', name: 'Nav: Models', desc: 'LLM model registry across all providers' },
             { id: 'view-analytics', name: 'Nav: Analytics', desc: 'Spend breakdown by model and provider' },
-            { id: 'view-security', name: 'Nav: Security Events', desc: 'Threat ledger, audit chain, GDPR, semantic corpus' },
+            {
+                id: 'view-security',
+                name: 'Nav: Security Events',
+                desc: 'Threat ledger, audit chain, GDPR, semantic corpus',
+            },
             { id: 'view-logs', name: 'Nav: Live Logs', desc: 'Real-time SSE log stream' },
             { id: 'view-settings', name: 'Nav: Settings', desc: 'Identity, rate limits, system info' },
             { id: 'toggle-proxy', name: 'System: Kill Switch', desc: 'Emergency halt all traffic' },
@@ -486,10 +524,22 @@ function initHUD() {
                 `;
                 item.onclick = () => {
                     if (res.id.startsWith('__jump:') || res.id.startsWith('__hint:')) {
-                        if (_rumRef) { try { _rumRef.action('palette_jump', { target: res.id }); } catch { /* silent */ } }
+                        if (_rumRef) {
+                            try {
+                                _rumRef.action('palette_jump', { target: res.id });
+                            } catch {
+                                /* silent */
+                            }
+                        }
                         _executeJump(res.id);
                     } else {
-                        if (_rumRef) { try { _rumRef.action('palette_command', { id: res.id }); } catch { /* silent */ } }
+                        if (_rumRef) {
+                            try {
+                                _rumRef.action('palette_command', { id: res.id });
+                            } catch {
+                                /* silent */
+                            }
+                        }
                         executeCommand(res.id);
                         togglePalette();
                     }
@@ -523,10 +573,16 @@ function initHUD() {
         const _jumpCache = { models: null, plugins: null };
         async function _loadJumpCaches() {
             if (!_jumpCache.models) {
-                _jumpCache.models = api.fetchModels().then(d => d.data || []).catch(() => []);
+                _jumpCache.models = api
+                    .fetchModels()
+                    .then((d) => d.data || [])
+                    .catch(() => []);
             }
             if (!_jumpCache.plugins) {
-                _jumpCache.plugins = api.fetchPlugins().then(d => Array.isArray(d) ? d : (d.plugins || d.data || [])).catch(() => []);
+                _jumpCache.plugins = api
+                    .fetchPlugins()
+                    .then((d) => (Array.isArray(d) ? d : d.plugins || d.data || []))
+                    .catch(() => []);
             }
         }
 
@@ -539,44 +595,57 @@ function initHUD() {
 
             if (!kind) {
                 return [
-                    { id: '__hint:ep',     name: '> ep <query>',     desc: 'Jump to an endpoint drilldown' },
-                    { id: '__hint:model',  name: '> model <query>',  desc: 'Jump to a model drilldown' },
+                    { id: '__hint:ep', name: '> ep <query>', desc: 'Jump to an endpoint drilldown' },
+                    { id: '__hint:model', name: '> model <query>', desc: 'Jump to a model drilldown' },
                     { id: '__hint:plugin', name: '> plugin <query>', desc: 'Jump to a plugin drilldown' },
-                    { id: '__hint:req',    name: '> req <req_id>',   desc: 'Open a request audit entry' },
+                    { id: '__hint:req', name: '> req <req_id>', desc: 'Open a request audit entry' },
                 ];
             }
 
             if (kind === 'ep' || kind === 'endpoint') {
                 const registry = store.state.registry || [];
-                const matches = registry.filter(e =>
-                    !q || e.id.toLowerCase().includes(q)
-                       || (e.url || '').toLowerCase().includes(q)
-                       || (e.type || '').toLowerCase().includes(q));
-                return matches.slice(0, 8).map(e => ({
-                    id: `__jump:endpoint:${e.id}`, name: e.id, desc: `${e.status} · ${e.url}`,
+                const matches = registry.filter(
+                    (e) =>
+                        !q ||
+                        e.id.toLowerCase().includes(q) ||
+                        (e.url || '').toLowerCase().includes(q) ||
+                        (e.type || '').toLowerCase().includes(q)
+                );
+                return matches.slice(0, 8).map((e) => ({
+                    id: `__jump:endpoint:${e.id}`,
+                    name: e.id,
+                    desc: `${e.status} · ${e.url}`,
                 }));
             }
 
             if (kind === 'model') {
                 const models = await _jumpCache.models;
-                const matches = (models || []).filter(m => !q || m.id.toLowerCase().includes(q));
-                return matches.slice(0, 8).map(m => ({
-                    id: `__jump:model:${m.id}`, name: m.id, desc: `owned_by: ${m.owned_by}`,
+                const matches = (models || []).filter((m) => !q || m.id.toLowerCase().includes(q));
+                return matches.slice(0, 8).map((m) => ({
+                    id: `__jump:model:${m.id}`,
+                    name: m.id,
+                    desc: `owned_by: ${m.owned_by}`,
                 }));
             }
 
             if (kind === 'plugin') {
                 const plugins = await _jumpCache.plugins;
-                const matches = (plugins || []).filter(p => !q || p.name.toLowerCase().includes(q));
-                return matches.slice(0, 8).map(p => ({
-                    id: `__jump:plugin:${p.name}`, name: p.name,
+                const matches = (plugins || []).filter((p) => !q || p.name.toLowerCase().includes(q));
+                return matches.slice(0, 8).map((p) => ({
+                    id: `__jump:plugin:${p.name}`,
+                    name: p.name,
                     desc: `${p.hook || p.ring || ''} · ${p.enabled === false ? 'disabled' : 'active'}`,
                 }));
             }
 
             if (kind === 'req' || kind === 'request') {
-                if (!q) return [{ id: '__hint:req', name: '> req <req_id>', desc: 'Paste a request id from the audit log' }];
-                return [{ id: `__jump:request:${q}`, name: q, desc: 'Open audit drilldown (pulled from last 500 entries)' }];
+                if (!q)
+                    return [
+                        { id: '__hint:req', name: '> req <req_id>', desc: 'Paste a request id from the audit log' },
+                    ];
+                return [
+                    { id: `__jump:request:${q}`, name: q, desc: 'Open audit drilldown (pulled from last 500 entries)' },
+                ];
             }
 
             return [];
@@ -612,17 +681,20 @@ function initHUD() {
                 return;
             }
             const query = raw.toLowerCase();
-            const results = commands.filter(c =>
-                c.name.toLowerCase().includes(query) ||
-                c.desc.toLowerCase().includes(query)
+            const results = commands.filter(
+                (c) => c.name.toLowerCase().includes(query) || c.desc.toLowerCase().includes(query)
             );
             renderResults(results);
         });
 
         input.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowDown') { e.preventDefault(); highlightIdx(selectedIdx + 1); }
-            else if (e.key === 'ArrowUp') { e.preventDefault(); highlightIdx(selectedIdx - 1); }
-            else if (e.key === 'Enter' && lastResults[selectedIdx]) {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                highlightIdx(selectedIdx + 1);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                highlightIdx(selectedIdx - 1);
+            } else if (e.key === 'Enter' && lastResults[selectedIdx]) {
                 e.preventDefault();
                 const sel = lastResults[selectedIdx];
                 if (sel.id.startsWith('__jump:') || sel.id.startsWith('__hint:')) {
@@ -664,11 +736,7 @@ function initHUD() {
         const t = e.target;
         if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
         document.body.classList.toggle('cinema-mode');
-        toast(
-            document.body.classList.contains('cinema-mode') ? 'Cinema mode on' : 'Cinema mode off',
-            'info',
-            1500,
-        );
+        toast(document.body.classList.contains('cinema-mode') ? 'Cinema mode on' : 'Cinema mode off', 'info', 1500);
     });
 
     // 15.15 Copy-to-id (One-Click)
@@ -678,7 +746,7 @@ function initHUD() {
             const text = copyEl.innerText.replace('ID: ', '').trim();
             navigator.clipboard.writeText(text);
             const originalText = copyEl.innerText;
-            copyEl.innerText = "COPIED!";
+            copyEl.innerText = 'COPIED!';
             copyEl.classList.add('text-emerald-400');
             setTimeout(() => {
                 copyEl.innerText = originalText;
@@ -691,7 +759,13 @@ function initHUD() {
     const panicBtn = document.getElementById('panic-btn');
     if (panicBtn) {
         panicBtn.addEventListener('click', async () => {
-            if (_rumRef) { try { _rumRef.action('panic_open'); } catch { /* silent */ } }
+            if (_rumRef) {
+                try {
+                    _rumRef.action('panic_open');
+                } catch {
+                    /* silent */
+                }
+            }
             const { confirm } = await import('./src/ui');
             const ok = await confirm({
                 title: 'Emergency kill switch',
@@ -701,7 +775,13 @@ function initHUD() {
                 danger: true,
             });
             if (!ok) return;
-            if (_rumRef) { try { _rumRef.action('panic_confirm'); } catch { /* silent */ } }
+            if (_rumRef) {
+                try {
+                    _rumRef.action('panic_confirm');
+                } catch {
+                    /* silent */
+                }
+            }
             try {
                 const data = await api.panic();
                 if (data.status === 'HALTED') {
@@ -731,13 +811,14 @@ function initHUD() {
         if (!statusDot || !statusText) return;
         try {
             await api.fetchProxyStatus();
-            statusDot.className = "w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.4)] animate-pulse";
-            statusText.innerText = "Live";
-            statusText.className = "text-[9px] font-black text-emerald-400 uppercase tracking-widest";
+            statusDot.className =
+                'w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.4)] animate-pulse';
+            statusText.innerText = 'Live';
+            statusText.className = 'text-[9px] font-black text-emerald-400 uppercase tracking-widest';
         } catch {
-            statusDot.className = "w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]";
-            statusText.innerText = "Offline";
-            statusText.className = "text-[9px] font-black text-rose-500 uppercase tracking-widest";
+            statusDot.className = 'w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]';
+            statusText.innerText = 'Offline';
+            statusText.className = 'text-[9px] font-black text-rose-500 uppercase tracking-widest';
         }
     }, 5000);
 

@@ -14,7 +14,7 @@ afterEach(() => {
 
 describe('mountConfigYaml', () => {
     it('renders the YAML inside a Snippet primitive on success', async () => {
-        const yaml = "endpoints:\n  openai:\n    api_key: <REDACTED>\n";
+        const yaml = 'endpoints:\n  openai:\n    api_key: <REDACTED>\n';
         const refresh = mountConfigYaml(host, {
             fetchConfigYaml: vi.fn().mockResolvedValue({ yaml }),
         });

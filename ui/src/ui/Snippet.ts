@@ -66,7 +66,7 @@ export function createSnippet(opts: SnippetOptions): SnippetHandle {
     const root = document.createElement('div');
     root.className = cx(
         'relative bg-white/[0.02] border border-white/[0.06] rounded-xl overflow-hidden',
-        opts.className,
+        opts.className
     );
     if (opts.testId) root.setAttribute('data-testid', opts.testId);
 
@@ -91,7 +91,7 @@ export function createSnippet(opts: SnippetOptions): SnippetHandle {
     copyBtn.className = cx(
         'inline-flex items-center gap-1 text-[10px] font-mono text-slate-500 hover:text-cyan-300',
         'px-2 py-0.5 rounded transition-colors',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40'
     );
     copyBtn.innerHTML = `${ICON_COPY}<span>copy</span>`;
     if (opts.testId) copyBtn.setAttribute('data-testid', `${opts.testId}-copy`);
@@ -108,9 +108,7 @@ export function createSnippet(opts: SnippetOptions): SnippetHandle {
     let resetTimer: ReturnType<typeof setTimeout> | null = null;
     const flashCopied = (success: boolean): void => {
         if (resetTimer) clearTimeout(resetTimer);
-        copyBtn.innerHTML = success
-            ? `${ICON_OK}<span>copied</span>`
-            : `${ICON_COPY}<span>failed</span>`;
+        copyBtn.innerHTML = success ? `${ICON_OK}<span>copied</span>` : `${ICON_COPY}<span>failed</span>`;
         copyBtn.classList.toggle('text-emerald-300', success);
         copyBtn.classList.toggle('text-rose-300', !success);
         resetTimer = setTimeout(() => {

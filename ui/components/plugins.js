@@ -46,7 +46,7 @@ export async function initPlugins() {
                         reloadPlugins: api.reloadPlugins,
                     },
                     toast,
-                },
+                }
             );
         })
         .catch(() => {
@@ -118,7 +118,7 @@ export async function initPlugins() {
     const submitBtn = document.getElementById('install-submit-btn');
     if (submitBtn) {
         // Clear the inline error on first keystroke after a failed submit.
-        ['install-name', 'install-entrypoint'].forEach(id => {
+        ['install-name', 'install-entrypoint'].forEach((id) => {
             document.getElementById(id)?.addEventListener('input', () => _clearPluginFieldError(id));
         });
 
@@ -135,7 +135,10 @@ export async function initPlugins() {
                 _setPluginFieldError('install-name', 'Required.');
                 firstInvalid = firstInvalid || 'install-name';
             } else if (!/^[a-z_][a-z0-9_]*$/i.test(name)) {
-                _setPluginFieldError('install-name', 'Use letters, digits or underscore. Must start with a letter or underscore (Python module convention).');
+                _setPluginFieldError(
+                    'install-name',
+                    'Use letters, digits or underscore. Must start with a letter or underscore (Python module convention).'
+                );
                 firstInvalid = firstInvalid || 'install-name';
             } else {
                 _clearPluginFieldError('install-name');
@@ -158,7 +161,9 @@ export async function initPlugins() {
             submitBtn.disabled = true;
             try {
                 const result = await api.installPlugin({
-                    name, hook, entrypoint,
+                    name,
+                    hook,
+                    entrypoint,
                     type: 'python',
                     timeout_ms: timeout,
                     fail_policy: failPolicy,
@@ -190,14 +195,11 @@ async function renderPluginList() {
     if (!grid) return;
 
     try {
-        const [data, stats] = await Promise.all([
-            api.fetchPlugins(),
-            api.fetchPluginStats().catch(() => ({})),
-        ]);
+        const [data, stats] = await Promise.all([api.fetchPlugins(), api.fetchPluginStats().catch(() => ({}))]);
         const plugins = data.plugins || data || [];
         grid.innerHTML = '';
 
-        plugins.forEach(p => {
+        plugins.forEach((p) => {
             const ring = (p.hook || 'unknown').toLowerCase();
             const color = RING_COLORS[ring] || 'slate';
             const enabled = p.enabled !== false;
@@ -248,7 +250,9 @@ async function renderPluginList() {
                         <p class="text-[9px] text-slate-600 uppercase">ms avg</p>
                     </div>
                 </div>
-                ${hasPercentiles ? `
+                ${
+                    hasPercentiles
+                        ? `
                     <div class="mt-2 pt-2 border-t border-white/[0.04]">
                         <div class="flex items-center justify-between">
                             <span class="text-[9px] text-slate-600 uppercase font-bold">Latency</span>
@@ -259,7 +263,9 @@ async function renderPluginList() {
                             </div>
                         </div>
                     </div>
-                ` : ''}
+                `
+                        : ''
+                }
                 ${renderConfigFields(p)}
                 <div class="mt-2 pt-2 border-t border-white/[0.04] flex items-center justify-end gap-2">
                     <button type="button" data-drilldown="plugin:${p.name}" class="text-[10px] text-slate-500 hover:text-cyan-400 px-2 py-0.5 rounded hover:bg-white/5 transition-colors">Inspect</button>
@@ -270,12 +276,12 @@ async function renderPluginList() {
             grid.appendChild(card);
         });
         // Wire toggle/uninstall buttons
-        grid.querySelectorAll('button[data-action]').forEach(btn => {
+        grid.querySelectorAll('button[data-action]').forEach((btn) => {
             btn.addEventListener('click', async () => {
                 const action = btn.dataset.action;
                 const name = btn.dataset.name;
                 if (action === 'toggle-plugin') {
-                    const plugin = plugins.find(p => p.name === name);
+                    const plugin = plugins.find((p) => p.name === name);
                     if (plugin) {
                         await api.togglePlugin(name, plugin.enabled === false);
                         await renderPluginList();
@@ -314,12 +320,16 @@ function renderConfigFields(plugin) {
     const schema = plugin.ui_schema;
     if (!schema || !Array.isArray(schema) || schema.length === 0) return '';
 
-    const fields = schema.map(f => `
+    const fields = schema
+        .map(
+            (f) => `
         <div class="flex items-center justify-between">
             <span class="text-[10px] text-slate-500">${f.label || f.key}</span>
             <span class="text-[10px] font-mono text-slate-400">${f.default !== undefined ? f.default : '--'}</span>
         </div>
-    `).join('');
+    `
+        )
+        .join('');
 
     return `
         <div class="mt-2 pt-2 border-t border-white/[0.04] space-y-1">
@@ -336,7 +346,10 @@ function _setPluginFieldError(inputId, msg) {
     input.setAttribute('aria-invalid', 'true');
     input.classList.add('border-rose-500/50');
     input.classList.remove('border-white/10');
-    if (err) { err.textContent = msg; err.classList.remove('hidden'); }
+    if (err) {
+        err.textContent = msg;
+        err.classList.remove('hidden');
+    }
 }
 
 function _clearPluginFieldError(inputId) {
@@ -346,5 +359,8 @@ function _clearPluginFieldError(inputId) {
     input.removeAttribute('aria-invalid');
     input.classList.remove('border-rose-500/50');
     input.classList.add('border-white/10');
-    if (err) { err.classList.add('hidden'); err.textContent = ''; }
+    if (err) {
+        err.classList.add('hidden');
+        err.textContent = '';
+    }
 }

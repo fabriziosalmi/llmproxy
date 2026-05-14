@@ -53,7 +53,7 @@ export function mountConfigYaml(host: HTMLElement, api: ConfigYamlApi): () => Pr
                         title: 'Empty config',
                         description: 'Backend returned no YAML body.',
                         testId: 'config-yaml-empty',
-                    }),
+                    })
                 );
                 return;
             }
@@ -71,7 +71,7 @@ export function mountConfigYaml(host: HTMLElement, api: ConfigYamlApi): () => Pr
                     detail: (err as Error)?.message,
                     onRetry: () => void refresh(),
                     testId: 'config-yaml-error',
-                }),
+                })
             );
         }
     }

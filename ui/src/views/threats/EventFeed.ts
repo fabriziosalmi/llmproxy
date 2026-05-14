@@ -246,7 +246,7 @@ export class ThreatEventFeed {
         };
         const cfg = map[this.status];
         this.statusEl.replaceChildren(
-            createBadge({ label: cfg.label, intent: cfg.intent, dot: cfg.dot, pulse: cfg.pulse, size: 'sm' }),
+            createBadge({ label: cfg.label, intent: cfg.intent, dot: cfg.dot, pulse: cfg.pulse, size: 'sm' })
         );
     }
 

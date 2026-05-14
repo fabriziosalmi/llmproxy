@@ -87,7 +87,7 @@ export function renderSpendForecast(host: HTMLElement, forecast: SpendForecastBl
                 value: '',
                 error,
                 testId: 'spend-forecast-time-tile',
-            }),
+            })
         );
         return;
     }
@@ -109,7 +109,7 @@ export function renderSpendForecast(host: HTMLElement, forecast: SpendForecastBl
                 'GET /api/v1/analytics/forecast: headroom_usd ÷ burn_rate_usd_per_hour. ' +
                 'null means insufficient data (< 5 min elapsed) or zero rate.',
             testId: 'spend-forecast-time-tile',
-        }),
+        })
     );
 
     // Tile 2 — current burn rate.
@@ -121,7 +121,7 @@ export function renderSpendForecast(host: HTMLElement, forecast: SpendForecastBl
             sub: `over ${fc.elapsed_hours.toFixed(1)}h`,
             provenance: 'current_spend_usd ÷ elapsed_hours since local midnight.',
             testId: 'spend-forecast-burn-tile',
-        }),
+        })
     );
 
     // Tile 3 — projected 24h total.
@@ -143,7 +143,7 @@ export function renderSpendForecast(host: HTMLElement, forecast: SpendForecastBl
                     : 'no limit',
             provenance: 'burn_rate × 24. Compared with daily_limit_usd to flag projected overage.',
             testId: 'spend-forecast-projected-tile',
-        }),
+        })
     );
 }
 
