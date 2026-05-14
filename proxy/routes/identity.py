@@ -14,8 +14,19 @@ def create_router(agent) -> APIRouter:
 
     @router.get("/api/v1/identity/config")
     async def get_identity_config():
+        # proxy_auth_enabled is the SECOND axis the UI needs: SSO (identity)
+        # and API-key auth (server.auth) are independent. The UI must know
+        # whether ANY credential is required so it can skip the overlay
+        # entirely in fully-open dev mode.
+        proxy_auth_enabled = (
+            agent.config.get("server", {}).get("auth", {}).get("enabled", False)
+        )
         if not agent.identity.enabled:
-            return {"enabled": False, "providers": []}
+            return {
+                "enabled": False,
+                "providers": [],
+                "proxy_auth_enabled": proxy_auth_enabled,
+            }
         providers = []
         for name, p in agent.identity.providers.items():
             providers.append({
@@ -23,7 +34,11 @@ def create_router(agent) -> APIRouter:
                 "client_id": p.client_id,
                 "issuer": p.issuer,
             })
-        return {"enabled": True, "providers": providers}
+        return {
+            "enabled": True,
+            "providers": providers,
+            "proxy_auth_enabled": proxy_auth_enabled,
+        }
 
     @router.get("/api/v1/identity/me")
     async def get_identity(request: Request, api_key: str = Depends(API_KEY_HEADER)):
