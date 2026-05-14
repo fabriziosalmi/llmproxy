@@ -22,7 +22,7 @@ set -euo pipefail
 # ── Config (env-overridable) ────────────────────────────────────────────────
 REMOTE_HOST="${REMOTE_HOST:-100.76.251.33}"
 REMOTE_USER="${REMOTE_USER:-root}"
-REMOTE_DIR="${REMOTE_DIR:-/opt/llmproxy}"
+REMOTE_DIR="${REMOTE_DIR:-/opt/llmproxy-src}"
 REMOTE_PORT="${REMOTE_PORT:-11434}"
 PROBE_KEY="${PROBE_KEY:-}"
 HEALTH_TIMEOUT_S="${HEALTH_TIMEOUT_S:-90}"
