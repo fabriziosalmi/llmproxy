@@ -30,10 +30,17 @@ export function mountGuardsGrid(
     let errorMessage: string | null = null;
     let errorDetail: string | undefined;
 
-    const grid = document.createElement('div');
-    grid.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4';
+    // The host element in index.html already carries the grid classes
+    // (id="guards-grid" class="grid ..."). Wrapping the cards in ANOTHER
+    // <div class="grid"> here nests grids: the outer grid treats the inner
+    // grid as a single cell, so the cards rendered inside end up at ~1/4
+    // of the available width and titles wrap to two lines. Use the host
+    // directly as our grid root.
+    const grid = container;
+    if (!grid.classList.contains('grid')) {
+        grid.className = `${grid.className} grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4`.trim();
+    }
     grid.setAttribute('data-testid', 'guards-grid');
-    container.replaceChildren(grid);
 
     function render(): void {
         if (errorMessage) {
