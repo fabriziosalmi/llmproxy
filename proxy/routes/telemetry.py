@@ -43,6 +43,12 @@ def create_router(agent) -> APIRouter:
             return
         auth_header = request.headers.get("Authorization", "")
         token = auth_header.replace("Bearer ", "").strip()
+        # SSE (EventSource) cannot send custom headers — accept the token
+        # from the query string as a fallback, mirroring what the global
+        # ASGI middleware does. Without this, browsers can never subscribe
+        # to /api/v1/logs even with a valid key.
+        if not token:
+            token = request.query_params.get("token", "")
         if not agent._verify_api_key(token):
             raise HTTPException(status_code=401, detail="Telemetry: Unauthorized")
 

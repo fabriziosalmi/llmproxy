@@ -722,13 +722,15 @@ function initHUD() {
     }
 
     // 15.18 Network Status Heartbeat
+    // Uses api.fetchProxyStatus() so the Bearer header is auto-injected.
+    // A raw fetch() loops 401 in API-key mode and lights the dot red even
+    // when the proxy is healthy — the user is just unauthenticated.
     setInterval(async () => {
         const statusDot = document.getElementById('status-dot');
         const statusText = document.getElementById('status-text');
         if (!statusDot || !statusText) return;
         try {
-            const res = await fetch('/api/v1/proxy/status');
-            if (!res.ok) throw new Error();
+            await api.fetchProxyStatus();
             statusDot.className = "w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.4)] animate-pulse";
             statusText.innerText = "Live";
             statusText.className = "text-[9px] font-black text-emerald-400 uppercase tracking-widest";
