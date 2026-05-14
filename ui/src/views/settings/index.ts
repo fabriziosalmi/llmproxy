@@ -21,7 +21,8 @@ import { mountSystemInfo, type SystemInfoApi } from './SystemInfo';
 import { mountWebhooks, type WebhooksApi } from './Webhooks';
 
 export interface SettingsApi
-    extends SystemInfoApi,
+    extends
+        SystemInfoApi,
         IdentityApi,
         RbacApi,
         WebhooksApi,

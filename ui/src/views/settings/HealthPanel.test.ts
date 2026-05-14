@@ -41,7 +41,10 @@ describe('mountHealthPanel', () => {
         const handle = mountHealthPanel(host, {
             fetchHealth: vi.fn().mockResolvedValue({
                 ..._ok,
-                components: { ..._ok.components, endpoints: { status: 'degraded', total: 3, healthy: 1, circuits_open: 1 } },
+                components: {
+                    ..._ok.components,
+                    endpoints: { status: 'degraded', total: 3, healthy: 1, circuits_open: 1 },
+                },
             }),
         });
         await handle.refresh();

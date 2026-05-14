@@ -21,11 +21,11 @@ const STORAGE_KEY = 'llmproxy.timerange';
 const DEFAULT = { preset: '24h', from: null, to: null };
 
 const PRESET_WINDOW_MS = {
-    '1h':  1  * 3600 * 1000,
-    '4h':  4  * 3600 * 1000,
+    '1h': 1 * 3600 * 1000,
+    '4h': 4 * 3600 * 1000,
     '24h': 24 * 3600 * 1000,
-    '7d':  7  * 24 * 3600 * 1000,
-    all:   null,
+    '7d': 7 * 24 * 3600 * 1000,
+    all: null,
 };
 
 function _loadInitial() {
@@ -47,7 +47,9 @@ function _loadInitial() {
             const parsed = JSON.parse(stored);
             if (parsed && parsed.preset) return parsed;
         }
-    } catch { /* ignore */ }
+    } catch {
+        /* ignore */
+    }
     return { ...DEFAULT };
 }
 
@@ -64,22 +66,33 @@ function _persistHash() {
     const next = `${view}?tr=${encodeURIComponent(tag)}`;
     try {
         history.replaceState(null, '', next);
-    } catch { /* ignore */ }
+    } catch {
+        /* ignore */
+    }
 }
 
 function _persistStorage() {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(_state)); }
-    catch { /* quota, etc. — non-critical */ }
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(_state));
+    } catch {
+        /* quota, etc. — non-critical */
+    }
 }
 
 function _broadcast() {
     for (const fn of _listeners) {
-        try { fn(_state); } catch (e) { console.warn('timerange listener failed:', e); }
+        try {
+            fn(_state);
+        } catch (e) {
+            console.warn('timerange listener failed:', e);
+        }
     }
 }
 
 export const timerange = {
-    get() { return { ..._state }; },
+    get() {
+        return { ..._state };
+    },
 
     set(partial) {
         _state = { ..._state, ...partial };
@@ -119,8 +132,12 @@ export const timerange = {
     /** Human label for the current selection — used by the context bar. */
     label() {
         const m = {
-            '1h': 'Last hour', '4h': 'Last 4 hours', '24h': 'Last 24 hours', '7d': 'Last 7 days',
-            all: 'All time', custom: 'Custom',
+            '1h': 'Last hour',
+            '4h': 'Last 4 hours',
+            '24h': 'Last 24 hours',
+            '7d': 'Last 7 days',
+            all: 'All time',
+            custom: 'Custom',
         };
         return m[_state.preset] || _state.preset;
     },

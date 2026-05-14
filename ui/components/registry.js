@@ -48,7 +48,7 @@ export function initRegistry() {
                     toast,
                     initial: store.state.registry || [],
                     poll: (fn, intervalMs) => store.poll(fn, intervalMs, 'endpoints'),
-                },
+                }
             );
         })
         .catch(() => {
@@ -68,11 +68,11 @@ export function initRegistry() {
     if (addBtn) {
         const fields = [
             { input: 'ep-name', err: 'ep-name-err' },
-            { input: 'ep-url',  err: 'ep-url-err' },
+            { input: 'ep-url', err: 'ep-url-err' },
         ];
         // Clear the error decoration as soon as the user types — lets the
         // alert text disappear without waiting for another submit round.
-        fields.forEach(f => {
+        fields.forEach((f) => {
             const el = document.getElementById(f.input);
             if (el) el.addEventListener('input', () => _clearFieldError(f.input, f.err));
         });
@@ -84,7 +84,10 @@ export function initRegistry() {
             const priority = document.getElementById('ep-priority')?.value || '0';
             const apiKey = document.getElementById('ep-api-key')?.value || '';
             const modelsRaw = document.getElementById('ep-models')?.value || '';
-            const models = modelsRaw.split(',').map(s => s.trim()).filter(Boolean);
+            const models = modelsRaw
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean);
 
             let firstInvalid = null;
             // ID: non-empty, alphanumeric + dash/underscore only
@@ -92,7 +95,11 @@ export function initRegistry() {
                 _setFieldError('ep-name', 'ep-name-err', 'Required.');
                 firstInvalid = firstInvalid || 'ep-name';
             } else if (!/^[a-z0-9][a-z0-9_-]*$/i.test(id)) {
-                _setFieldError('ep-name', 'ep-name-err', 'Use letters, digits, - or _ (must start with a letter or digit).');
+                _setFieldError(
+                    'ep-name',
+                    'ep-name-err',
+                    'Use letters, digits, - or _ (must start with a letter or digit).'
+                );
                 firstInvalid = firstInvalid || 'ep-name';
             } else {
                 _clearFieldError('ep-name', 'ep-name-err');
@@ -122,7 +129,9 @@ export function initRegistry() {
             addBtn.disabled = true;
             try {
                 await api.addEndpoint({
-                    id, url, provider,
+                    id,
+                    url,
+                    provider,
                     priority: parseInt(priority),
                     models,
                     api_key: apiKey,
@@ -133,7 +142,7 @@ export function initRegistry() {
                 document.getElementById('ep-url').value = '';
                 if (document.getElementById('ep-api-key')) document.getElementById('ep-api-key').value = '';
                 if (document.getElementById('ep-models')) document.getElementById('ep-models').value = '';
-                fields.forEach(f => _clearFieldError(f.input, f.err));
+                fields.forEach((f) => _clearFieldError(f.input, f.err));
                 await fetchRegistry();
             } catch (e) {
                 toast(`Failed: ${e.message}`, 'error');
@@ -178,7 +187,8 @@ let _sortAsc = false;
 function sortEndpoints(endpoints) {
     const sorted = [...endpoints];
     sorted.sort((a, b) => {
-        let va = a[_sortKey] ?? '', vb = b[_sortKey] ?? '';
+        let va = a[_sortKey] ?? '',
+            vb = b[_sortKey] ?? '';
         if (typeof va === 'string') va = va.toLowerCase();
         if (typeof vb === 'string') vb = vb.toLowerCase();
         if (va < vb) return _sortAsc ? -1 : 1;
@@ -222,7 +232,10 @@ LLM_PROXY_ENDPOINT_LOCAL_MODELS=llama-3.3-70b</code></pre>
         if (onboardBtn) {
             onboardBtn.addEventListener('click', () => {
                 const form = document.getElementById('add-endpoint-form');
-                if (form) { form.classList.remove('hidden'); form.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+                if (form) {
+                    form.classList.remove('hidden');
+                    form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
                 document.getElementById('ep-name')?.focus();
             });
         }
@@ -262,7 +275,7 @@ LLM_PROXY_ENDPOINT_LOCAL_MODELS=llama-3.3-70b</code></pre>
     `;
 
     const tbody = document.getElementById('registry-body');
-    endpoints.forEach(ep => {
+    endpoints.forEach((ep) => {
         const statusColor = ep.status === 'Live' ? 'emerald' : ep.status === 'IGNORED' ? 'slate' : 'amber';
         const circuit = CIRCUIT_STATES[(ep.circuit_state || 'closed').toLowerCase()] || CIRCUIT_STATES.closed;
 
@@ -308,16 +321,21 @@ LLM_PROXY_ENDPOINT_LOCAL_MODELS=llama-3.3-70b</code></pre>
     // Wire sort headers — <button> natively handles Enter/Space, so no
     // extra keydown handler is needed. Column becomes accessible for
     // keyboard users at zero custom cost.
-    container.querySelectorAll('button[data-sort]').forEach(btn => {
+    container.querySelectorAll('button[data-sort]').forEach((btn) => {
         btn.addEventListener('click', () => {
             const key = btn.dataset.sort;
-            if (_sortKey === key) { _sortAsc = !_sortAsc; } else { _sortKey = key; _sortAsc = true; }
+            if (_sortKey === key) {
+                _sortAsc = !_sortAsc;
+            } else {
+                _sortKey = key;
+                _sortAsc = true;
+            }
             renderRegistry();
         });
     });
 
     // Wire actions
-    tbody.querySelectorAll('button[data-action]').forEach(btn => {
+    tbody.querySelectorAll('button[data-action]').forEach((btn) => {
         btn.addEventListener('click', async () => {
             const id = btn.dataset.id;
             const action = btn.dataset.action;
@@ -340,10 +358,10 @@ LLM_PROXY_ENDPOINT_LOCAL_MODELS=llama-3.3-70b</code></pre>
                     await api.deleteEndpoint(id);
                     toast(`Endpoint ${id} deleted`, 'success');
                 } else if (action === 'priority-up') {
-                    const ep = endpoints.find(e => e.id === id);
+                    const ep = endpoints.find((e) => e.id === id);
                     if (ep) await api.updatePriority(id, (ep.priority || 0) + 1);
                 } else if (action === 'priority-down') {
-                    const ep = endpoints.find(e => e.id === id);
+                    const ep = endpoints.find((e) => e.id === id);
                     if (ep) await api.updatePriority(id, Math.max(0, (ep.priority || 0) - 1));
                 }
             } catch (e) {

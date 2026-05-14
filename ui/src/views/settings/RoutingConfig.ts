@@ -45,7 +45,7 @@ export interface RoutingConfigHandle {
 export function mountRoutingConfig(
     host: HTMLElement,
     api: RoutingConfigApi,
-    toast?: (m: string, k?: 'success' | 'error' | 'warning' | 'info') => void,
+    toast?: (m: string, k?: 'success' | 'error' | 'warning' | 'info') => void
 ): RoutingConfigHandle {
     const card = document.createElement('div');
     card.className = 'bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6';
@@ -78,7 +78,7 @@ export function mountRoutingConfig(
                 dot: true,
                 pulse: cfg.strategy !== 'priority',
                 testId: 'routing-strategy-badge',
-            }),
+            })
         );
 
         const wrap = document.createElement('div');
@@ -201,7 +201,7 @@ export function mountRoutingConfig(
                     detail: (err as Error)?.message,
                     onRetry: () => void refresh(),
                     testId: 'routing-config-error',
-                }),
+                })
             );
             strategySlot.replaceChildren();
         }

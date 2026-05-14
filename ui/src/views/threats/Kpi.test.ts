@@ -29,8 +29,12 @@ describe('renderThreatKpis', () => {
         const host = document.createElement('div');
         const series: Record<string, number[]> = {
             requests: Array.from({ length: 24 }, (_, i) => i * 5),
-            blocked: Array.from({ length: 24 }, () => 0).concat([3]).slice(-24),
-            errors: Array.from({ length: 24 }, () => 0).concat([1, 2]).slice(-24),
+            blocked: Array.from({ length: 24 }, () => 0)
+                .concat([3])
+                .slice(-24),
+            errors: Array.from({ length: 24 }, () => 0)
+                .concat([1, 2])
+                .slice(-24),
         };
         renderThreatKpis(host, _data, undefined, series);
 
