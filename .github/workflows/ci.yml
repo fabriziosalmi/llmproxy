@@ -42,8 +42,9 @@ jobs:
           cache: pip
       - run: pip install pip-audit
       - name: pip-audit
-        run: pip-audit -r requirements.txt --skip-editable --ignore-vuln PYSEC-2024-62 || true
-        # Non-blocking — tracks known vulnerabilities without failing CI.
+        run: pip-audit -r requirements.txt --skip-editable --ignore-vuln PYSEC-2024-62
+        # BLOCKING: A security gateway must fail CI on known dependency CVEs.
+        # Assessed non-risks are explicitly ignored via --ignore-vuln above.
 
   supply-chain:
     name: Supply Chain Integrity

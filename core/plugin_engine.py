@@ -29,9 +29,13 @@ from dataclasses import dataclass, field
 from core.plugin_sdk import BasePlugin, PluginResponse, PluginResponseError
 from core.wasm_runner import WasmRunner
 
-# Bounded executor for sync plugin execution — prevents unbounded thread growth
-# under load. max_workers capped at 32 to avoid memory exhaustion from
-# non-cancellable threads (asyncio timeout stops waiting but thread keeps running).
+# Bounded executor for sync plugin execution.
+#
+# IMPORTANT: threads are NON-CANCELLABLE. If a sync plugin hangs (e.g.
+# `while True: pass`), asyncio.wait_for() stops waiting but the thread
+# keeps running, permanently consuming one of the 32 worker slots.
+# Prefer async plugins for anything non-trivial. This executor is a
+# compatibility shim for legacy sync code, not a sandbox.
 _PLUGIN_EXECUTOR = ThreadPoolExecutor(
     max_workers=min(32, (os.cpu_count() or 4) + 4),
     thread_name_prefix="plugin-sync",

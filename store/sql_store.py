@@ -260,6 +260,9 @@ class SQLiteStore:
         """Aggregate spend data grouped by model, provider, key, or date."""
         valid_groups = {"model", "provider", "key_prefix", "date"}
         col = group_by if group_by in valid_groups else "model"
+        # Defensive: col is already validated above, but assert guards
+        # against future maintainers expanding the whitelist carelessly.
+        assert col in valid_groups, f"BUG: col '{col}' escaped whitelist"
 
         where = "WHERE 1=1"
         params: list = []
@@ -573,8 +576,15 @@ class SQLiteStore:
                 return row is not None and row[0] == "ok"
         except Exception as e:
             logger.error(f"SQLiteStore health check failed: {e}")
-            # Connection is dead — reset so _get_conn() recreates it
+            # Connection is dead — close it (if possible) to release the fd,
+            # then reset so _get_conn() recreates it on next call.
+            old = self._conn
             self._conn = None
+            if old is not None:
+                try:
+                    await old.close()
+                except Exception:
+                    pass  # already broken — swallow; the fd is released
             return False
 
     async def close(self):

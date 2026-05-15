@@ -510,18 +510,34 @@ function initHUD() {
                 item.className = `flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all border border-transparent group ${i === selectedIdx ? 'bg-white/5 border-white/10' : 'hover:bg-white/5 hover:border-white/10'}`;
                 item.setAttribute('role', 'option');
                 item.setAttribute('aria-selected', i === selectedIdx ? 'true' : 'false');
-                item.innerHTML = `
-                    <div class="flex items-center gap-4">
-                        <div class="p-2 bg-sky-500/10 rounded-lg text-sky-400 group-hover:scale-110 transition-transform">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                        </div>
-                        <div>
-                            <p class="text-[11px] font-bold text-slate-100">${res.name}</p>
-                            <p class="text-[9px] text-slate-500 font-medium">${res.desc}</p>
-                        </div>
-                    </div>
-                    <div class="text-[9px] font-mono text-slate-500 bg-white/5 px-2 py-1 rounded">ENTER</div>
-                `;
+                // XSS-safe: res.name / res.desc may contain server-sourced data
+                // (endpoint ids, model names, plugin names). Use textContent, not innerHTML.
+                const leftCol = document.createElement('div');
+                leftCol.className = 'flex items-center gap-4';
+
+                const iconWrap = document.createElement('div');
+                iconWrap.className = 'p-2 bg-sky-500/10 rounded-lg text-sky-400 group-hover:scale-110 transition-transform';
+                iconWrap.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>';
+
+                const textWrap = document.createElement('div');
+                const nameEl = document.createElement('p');
+                nameEl.className = 'text-[11px] font-bold text-slate-100';
+                nameEl.textContent = res.name;
+                const descEl = document.createElement('p');
+                descEl.className = 'text-[9px] text-slate-500 font-medium';
+                descEl.textContent = res.desc;
+                textWrap.appendChild(nameEl);
+                textWrap.appendChild(descEl);
+
+                leftCol.appendChild(iconWrap);
+                leftCol.appendChild(textWrap);
+
+                const badge = document.createElement('div');
+                badge.className = 'text-[9px] font-mono text-slate-500 bg-white/5 px-2 py-1 rounded';
+                badge.textContent = 'ENTER';
+
+                item.appendChild(leftCol);
+                item.appendChild(badge);
                 item.onclick = () => {
                     if (res.id.startsWith('__jump:') || res.id.startsWith('__hint:')) {
                         if (_rumRef) {
