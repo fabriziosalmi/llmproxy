@@ -3,6 +3,8 @@ import binascii
 import codecs
 import logging
 import re
+import time
+import threading
 import unicodedata
 from collections import defaultdict
 
@@ -50,11 +52,10 @@ class ByteLevelFirewallMiddleware:
       8. Signature matching     — 11 known injection patterns
     """
     # Class-level counters (shared across instances for metrics).
-    # R2-08: These are approximate — class-level += is not atomic under
-    # concurrent async tasks (LOAD_ATTR + BINARY_ADD + STORE_ATTR).
-    # Using a lock for exact metrics would add latency on every request.
-    # Accepted trade-off: counters may drift by ~0.1% under high load.
-    # For exact metrics, use Prometheus client counters externally.
+    # Protected by _metrics_lock for atomicity under concurrent async
+    # tasks and free-threaded Python 3.13+. The lock is only held for
+    # simple int/float increments (~0.5µs), so latency impact is nil.
+    _metrics_lock = threading.Lock()
     total_scanned = 0
     total_blocked = 0
     block_by_signature: defaultdict = defaultdict(int)
@@ -384,19 +385,23 @@ class ByteLevelFirewallMiddleware:
                 break
 
         full_body = b"".join(body_parts)
-        ByteLevelFirewallMiddleware.total_scanned += 1
 
-        import time as _time
-        _scan_start = _time.perf_counter()
+        _scan_start = time.perf_counter()
         blocked, sig, encoding = self._scan_payload(full_body)
-        _scan_ms = (_time.perf_counter() - _scan_start) * 1000
-        ByteLevelFirewallMiddleware.total_scan_time_ms += _scan_ms
-        if _scan_ms > ByteLevelFirewallMiddleware.max_scan_time_ms:
-            ByteLevelFirewallMiddleware.max_scan_time_ms = _scan_ms
+        _scan_ms = (time.perf_counter() - _scan_start) * 1000
+
+        cls = ByteLevelFirewallMiddleware
+        with cls._metrics_lock:
+            cls.total_scanned += 1
+            cls.total_scan_time_ms += _scan_ms
+            if _scan_ms > cls.max_scan_time_ms:
+                cls.max_scan_time_ms = _scan_ms
+            if blocked:
+                cls.total_blocked += 1
+                cls.block_by_signature[sig] += 1
+                cls.block_by_encoding[encoding] += 1
+
         if blocked:
-            ByteLevelFirewallMiddleware.total_blocked += 1
-            ByteLevelFirewallMiddleware.block_by_signature[sig] += 1
-            ByteLevelFirewallMiddleware.block_by_encoding[encoding] += 1
             logger.critical(
                 f"FIREWALL BLOCKED: [{sig}] detected via {encoding} decoding. "
                 f"Socket terminated."

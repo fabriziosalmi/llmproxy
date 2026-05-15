@@ -25,12 +25,27 @@ wheels/
 venv/
 ENV/
 
-# Environment Variables
+# ── Secrets & credentials ──────────────────────────────────
+# NEVER track secrets. If you see a secret file not covered here,
+# add it BEFORE committing.
 .env
+.env.*
+*.env
+temp_secrets*
+*_secrets*
+*.secrets.*
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
 
 # Database
 *.db
 *.sqlite3
+*.db-shm
+*.db-wal
+*.db-journal
 
 # Logs
 *.log
@@ -50,7 +65,6 @@ dist/
 docs/.vitepress/cache/
 docs/.vitepress/dist/
 .vitepress/cache/
-
 demo/
 
 # Claude Code & personal session files
@@ -59,42 +73,36 @@ CLAUDE.md
 OGGI.md
 FEATURES.md
 OPPORTUNITIES.md
-AUDIT.md
-AUDIT_v2.md
+AUDIT*.md
 UI_AUDIT.md
-AUDIT_WAF.md
-AUDIT_WAF_HACKER.md
+UI_REVIEW.md
+ROADMAP.md
 
 # Runtime artifacts
 .proxy.pid
 distillation_data.jsonl
 test_ui/
-ROADMAP.md
-
-# SQLite WAL/SHM sidecars (any DB, any path)
-*.db-shm
-*.db-wal
 
 # Export dataset files
 exports/
 
-# pytest cache
+# pytest / linting / type-checking cache
 .pytest_cache/
 .ruff_cache/
-demo/
-
-# Runtime
-dlq.jsonl
-
-# temp files
-.vitepress/cache/
 .mypy_cache/
 .hypothesis/
 .coverage
 htmlcov/
 
+# Runtime
+dlq.jsonl
+
+# Dev debris (must never be tracked)
+context.txt
+kill
+screenshot.png
+
 # homelab
 docs/CYBERAPI_INTEGRATION.md
 docs/ECOSYSTEM_MAP.md
 docs/INTEGRATION_ARCHITECTURE.md
-UI_REVIEW.md

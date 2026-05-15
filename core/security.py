@@ -814,7 +814,7 @@ class SecurityShield:
 
         # Evaluate thresholds
         text_len = len(text)
-        if invisible_count > max(3, text_len * 0.01):
+        if invisible_count > max(1, text_len * 0.01):
             findings.append(f"invisible_chars={invisible_count}")
 
         if double_space_count > 10:
