@@ -10,6 +10,7 @@ Anthropic has no embeddings API — requests for Anthropic models return 400.
 import json
 import time
 import logging
+import hashlib
 
 from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.security import APIKeyHeader
@@ -97,7 +98,13 @@ def create_router(agent) -> APIRouter:
         else:
             inspect_text = str(text_input)
 
-        session_id = token or (request.client.host if request.client else "anon")
+        if token:
+            session_id = hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
+        else:
+            ip = request.client.host if request.client else "anon"
+            ua = request.headers.get("user-agent", "")
+            lang = request.headers.get("accept-language", "")
+            session_id = hashlib.sha256(f"{ip}:{ua}:{lang}".encode("utf-8")).hexdigest()[:16]
         security_error = await agent.security.inspect(
             {"messages": [{"role": "user", "content": inspect_text}]},
             session_id,

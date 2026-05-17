@@ -48,7 +48,10 @@ def create_router(agent) -> APIRouter:
         if not token:
             return {"authenticated": False}
         if agent.identity.enabled:
-            identity = agent.identity.verify_proxy_jwt(token)
+            try:
+                identity = agent.identity.verify_proxy_jwt(token)
+            except ValueError:
+                identity = None
             if not identity:
                 try:
                     identity = await agent.identity.verify_token(token)

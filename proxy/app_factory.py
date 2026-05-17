@@ -126,7 +126,8 @@ def create_app(agent) -> FastAPI:
     # (those closures remain as defence-in-depth only).
     @app.middleware("http")
     async def global_admin_auth(request: Request, call_next):
-        if not auth_enabled:
+        auth_enabled_live = agent.config.get("server", {}).get("auth", {}).get("enabled", False)
+        if not auth_enabled_live:
             return await call_next(request)
 
         path = request.url.path
@@ -168,7 +169,15 @@ def create_app(agent) -> FastAPI:
         if request.method in ("POST", "PUT", "PATCH"):
             content_length = request.headers.get("content-length")
             if content_length:
-                if int(content_length) > max_payload_bytes:
+                try:
+                    cl_value = int(content_length)
+                except ValueError:
+                    from fastapi.responses import JSONResponse
+                    return JSONResponse(
+                        status_code=400,
+                        content={"detail": "Invalid Content-Length header"},
+                    )
+                if cl_value > max_payload_bytes:
                     from fastapi.responses import JSONResponse
                     return JSONResponse(
                         status_code=413,
