@@ -181,6 +181,12 @@ const CIRCUIT_STATES = {
     half_open: { label: 'HALF', dot: 'bg-amber-400 shadow-amber-500/40', text: 'text-amber-400' },
 };
 
+function esc(value) {
+    const d = document.createElement('div');
+    d.textContent = String(value ?? '');
+    return d.innerHTML;
+}
+
 let _sortKey = 'priority';
 let _sortAsc = false;
 
@@ -276,43 +282,48 @@ LLM_PROXY_ENDPOINT_LOCAL_MODELS=llama-3.3-70b</code></pre>
 
     const tbody = document.getElementById('registry-body');
     endpoints.forEach((ep) => {
-        const statusColor = ep.status === 'Live' ? 'emerald' : ep.status === 'IGNORED' ? 'slate' : 'amber';
+        const statusClass =
+            ep.status === 'Live'
+                ? 'text-emerald-400 bg-emerald-500/10'
+                : ep.status === 'IGNORED'
+                  ? 'text-slate-400 bg-slate-500/10'
+                  : 'text-amber-400 bg-amber-500/10';
         const circuit = CIRCUIT_STATES[(ep.circuit_state || 'closed').toLowerCase()] || CIRCUIT_STATES.closed;
 
         const row = document.createElement('tr');
         row.className = 'border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors';
         row.innerHTML = `
             <td class="px-4 py-3">
-                <p class="text-[11px] font-bold text-white">${ep.name || ep.id}</p>
-                <p class="text-[9px] text-slate-500 font-mono truncate max-w-xs">${ep.url}</p>
+                <p class="text-[11px] font-bold text-white">${esc(ep.name || ep.id)}</p>
+                <p class="text-[9px] text-slate-500 font-mono truncate max-w-xs">${esc(ep.url)}</p>
             </td>
             <td class="px-4 py-3">
-                <span class="text-[9px] font-bold text-${statusColor}-400 bg-${statusColor}-500/10 px-2 py-0.5 rounded">${ep.status}</span>
+                <span class="text-[9px] font-bold ${statusClass} px-2 py-0.5 rounded">${esc(ep.status)}</span>
             </td>
             <td class="px-4 py-3">
-                <div class="flex items-center gap-1.5" data-explain="circuit:${ep.id}">
+                <div class="flex items-center gap-1.5" data-explain="circuit:${esc(ep.id)}">
                     <div class="w-2 h-2 rounded-full ${circuit.dot} shadow-[0_0_6px]"></div>
                     <span class="text-[9px] font-bold font-mono ${circuit.text}">${circuit.label}</span>
-                    ${(ep.failure_count || 0) > 0 ? `<span class="text-[10px] font-mono text-slate-600">${ep.failure_count}/${ep.failure_threshold || 5}</span>` : ''}
+                    ${(ep.failure_count || 0) > 0 ? `<span class="text-[10px] font-mono text-slate-600">${esc(ep.failure_count)}/${esc(ep.failure_threshold || 5)}</span>` : ''}
                 </div>
             </td>
-            <td class="px-4 py-3 text-[10px] font-mono text-slate-400">${ep.latency || '--'}</td>
+            <td class="px-4 py-3 text-[10px] font-mono text-slate-400">${esc(ep.latency || '--')}</td>
             <td class="px-4 py-3">
                 <div class="flex items-center gap-1">
-                    <button data-action="priority-down" data-id="${ep.id}" class="text-slate-600 hover:text-white p-0.5 rounded hover:bg-white/5 transition-colors">
+                    <button data-action="priority-down" data-id="${esc(ep.id)}" class="text-slate-600 hover:text-white p-0.5 rounded hover:bg-white/5 transition-colors">
                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                     </button>
-                    <span class="text-[10px] font-mono text-slate-400 w-4 text-center">${ep.priority}</span>
-                    <button data-action="priority-up" data-id="${ep.id}" class="text-slate-600 hover:text-white p-0.5 rounded hover:bg-white/5 transition-colors">
+                    <span class="text-[10px] font-mono text-slate-400 w-4 text-center">${esc(ep.priority)}</span>
+                    <button data-action="priority-up" data-id="${esc(ep.id)}" class="text-slate-600 hover:text-white p-0.5 rounded hover:bg-white/5 transition-colors">
                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>
                     </button>
                 </div>
             </td>
             <td class="px-4 py-3 text-right">
-                <button type="button" data-drilldown="endpoint:${ep.id}" class="text-[9px] text-slate-500 hover:text-cyan-400 px-2 py-1 rounded hover:bg-white/5 transition-colors">Inspect</button>
-                <button type="button" data-action="reset-cb" data-id="${ep.id}" class="text-[9px] text-slate-500 hover:text-emerald-400 px-2 py-1 rounded hover:bg-white/5 transition-colors">Reset CB</button>
-                <button type="button" data-action="toggle" data-id="${ep.id}" class="text-[9px] text-slate-500 hover:text-amber-400 px-2 py-1 rounded hover:bg-white/5 transition-colors">Toggle</button>
-                <button type="button" data-action="delete" data-id="${ep.id}" class="text-[9px] text-slate-500 hover:text-rose-400 px-2 py-1 rounded hover:bg-white/5 transition-colors">Delete</button>
+                <button type="button" data-drilldown="endpoint:${esc(ep.id)}" class="text-[9px] text-slate-500 hover:text-cyan-400 px-2 py-1 rounded hover:bg-white/5 transition-colors">Inspect</button>
+                <button type="button" data-action="reset-cb" data-id="${esc(ep.id)}" class="text-[9px] text-slate-500 hover:text-emerald-400 px-2 py-1 rounded hover:bg-white/5 transition-colors">Reset CB</button>
+                <button type="button" data-action="toggle" data-id="${esc(ep.id)}" class="text-[9px] text-slate-500 hover:text-amber-400 px-2 py-1 rounded hover:bg-white/5 transition-colors">Toggle</button>
+                <button type="button" data-action="delete" data-id="${esc(ep.id)}" class="text-[9px] text-slate-500 hover:text-rose-400 px-2 py-1 rounded hover:bg-white/5 transition-colors">Delete</button>
             </td>
         `;
         tbody.appendChild(row);

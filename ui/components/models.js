@@ -27,6 +27,12 @@ let _allChat = [];
 let _allEmbed = [];
 let _tsMounted = false;
 
+function esc(value) {
+    const d = document.createElement('div');
+    d.textContent = String(value ?? '');
+    return d.innerHTML;
+}
+
 export function initModels() {
     refreshModels();
     store.poll(refreshModels, 30000, 'models');
@@ -122,15 +128,15 @@ function renderModelsTable(chatModels, embeddingModels) {
             : '';
         return `
             <tr class="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors cursor-pointer"
-                data-drilldown="model:${m.id}"
+                data-drilldown="model:${esc(m.id)}"
                 tabindex="0"
                 role="button"
-                aria-label="Inspect model ${m.id}">
+                aria-label="Inspect model ${esc(m.id)}">
                 <td class="px-4 py-2.5">
-                    <span class="text-[11px] font-bold text-white font-mono">${m.id}</span>${badge}
+                    <span class="text-[11px] font-bold text-white font-mono">${esc(m.id)}</span>${badge}
                 </td>
                 <td class="px-4 py-2.5">
-                    <span class="text-[10px] font-semibold ${color} uppercase">${m.owned_by}</span>
+                    <span class="text-[10px] font-semibold ${color} uppercase">${esc(m.owned_by)}</span>
                 </td>
             </tr>`;
     }

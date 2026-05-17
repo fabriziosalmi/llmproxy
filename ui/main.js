@@ -14,7 +14,7 @@ import { auth } from './services/auth.js';
 import { toast } from './services/toast.js';
 import { initExplain } from './src/services/explain';
 import { initDrilldown, drilldown } from './src/services/drilldown';
-import { initTimerange } from './services/timerange.js';
+import { initTimerange, timerange } from './services/timerange.js';
 import { initTheme, getTheme, setTheme } from './src/services/theme';
 
 // Apply persisted theme before any render so we don't flash dark→light.
@@ -58,6 +58,31 @@ let _rumRef = null; // Filled lazily by initTelemetry() — no-op until then.
 // silent failure).
 const _lazy = { registry: null, guards: null, security: null };
 const _loadedTabs = new Set();
+
+function getSecurityDeps() {
+    return {
+        fetchGuardsStatus: api.fetchGuardsStatus,
+        getToken: () => localStorage.getItem('proxy_key') || '',
+        origin: window.location.origin,
+        toast,
+        timerange: {
+            sinceEpochMs: () => timerange.sinceEpochMs(),
+            untilEpochMs: () => timerange.untilEpochMs(),
+            label: () => timerange.label(),
+        },
+    };
+}
+
+function getSecurityTargets() {
+    return {
+        trackedIps: document.getElementById('sec-tracked-ips'),
+        signingStatus: document.getElementById('sec-signing-status'),
+        retentionInfo: document.getElementById('sec-retention-info'),
+        corpusPatterns: document.getElementById('sec-corpus-patterns'),
+        corpusCategories: document.getElementById('sec-corpus-categories'),
+    };
+}
+
 // Each loader is a thunk so Vite can statically analyse the import path
 // and emit one chunk per component (template-string imports defeat the
 // static analysis pass in Rollup/Vite).
@@ -95,10 +120,11 @@ const _tabLoaders = {
         m.initAnalytics();
     },
     security: async () => {
-        const m = await import('./components/security.js');
+        const m = await import('./src/views/security/index');
         _lazy.security = m;
-        m.initSecurity();
-        m.renderSecurity();
+        const deps = getSecurityDeps();
+        m.initSecurityView(deps);
+        await m.renderSecurityView(deps, getSecurityTargets());
     },
 };
 function _ensureTabLoaded(tab) {
@@ -136,7 +162,7 @@ store.subscribe((state) => {
         _lazy.guards?.renderGuards?.();
     }
     if (state.currentTab === 'security' && state.currentTab !== _prevState.currentTab) {
-        _lazy.security?.renderSecurity?.();
+        _lazy.security?.renderSecurityView?.(getSecurityDeps(), getSecurityTargets());
     }
 
     // Tab navigation telemetry — fires after the tab actually flipped, with
@@ -194,6 +220,14 @@ function initTelemetry() {
         });
 }
 initTelemetry();
+
+function initShortcutHints() {
+    const paletteShortcut = document.getElementById('kbd-palette-shortcut');
+    if (!paletteShortcut) return;
+    const isMacLike = /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform || navigator.userAgent || '');
+    paletteShortcut.textContent = isMacLike ? '⌘K' : 'Ctrl+K';
+}
+initShortcutHints();
 
 async function init() {
     // Session C: Initialize auth — check if SSO is required
@@ -416,10 +450,16 @@ function initHUD() {
     const input = document.getElementById('cmd-input');
 
     if (palette && box && input) {
+        let lastPaletteTrigger = null;
+        const getPaletteFocusable = () =>
+            palette.querySelectorAll(
+                'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+            );
         const togglePalette = () => {
             if (palette.classList.contains('hidden')) {
                 palette.classList.remove('hidden');
                 palette.classList.add('flex');
+                lastPaletteTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
                 if (_rumRef) {
                     try {
                         _rumRef.action('palette_open');
@@ -448,6 +488,7 @@ function initHUD() {
                     lastResults = [];
                     selectedIdx = -1;
                     cmdList.innerHTML = '';
+                    lastPaletteTrigger?.focus?.();
                 }, 200);
             }
         };
@@ -464,6 +505,22 @@ function initHUD() {
 
         palette.addEventListener('click', (e) => {
             if (e.target === palette) togglePalette();
+        });
+        palette.addEventListener('keydown', (e) => {
+            if (palette.classList.contains('hidden') || e.key !== 'Tab') return;
+            const nodes = Array.from(getPaletteFocusable()).filter(
+                (n) => !n.hasAttribute('disabled') && !n.getAttribute('aria-hidden')
+            );
+            if (!nodes.length) return;
+            const first = nodes[0];
+            const last = nodes[nodes.length - 1];
+            if (e.shiftKey && document.activeElement === first) {
+                e.preventDefault();
+                last.focus();
+            } else if (!e.shiftKey && document.activeElement === last) {
+                e.preventDefault();
+                first.focus();
+            }
         });
 
         // 11.7: WASM-accelerated (simulated) High-Performance Indexer
