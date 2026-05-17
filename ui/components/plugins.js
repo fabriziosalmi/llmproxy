@@ -18,6 +18,21 @@ const RING_COLORS = {
     background: 'teal',
 };
 
+const RING_STYLES = {
+    rose: 'text-rose-400 bg-rose-500/10',
+    amber: 'text-amber-400 bg-amber-500/10',
+    sky: 'text-sky-400 bg-sky-500/10',
+    violet: 'text-violet-400 bg-violet-500/10',
+    teal: 'text-teal-400 bg-teal-500/10',
+    slate: 'text-slate-400 bg-slate-500/10',
+};
+
+function esc(value) {
+    const d = document.createElement('div');
+    d.textContent = String(value ?? '');
+    return d.innerHTML;
+}
+
 export async function initPlugins() {
     await renderPluginList().catch(() => {});
 
@@ -202,6 +217,7 @@ async function renderPluginList() {
         plugins.forEach((p) => {
             const ring = (p.hook || 'unknown').toLowerCase();
             const color = RING_COLORS[ring] || 'slate';
+            const ringClass = RING_STYLES[color] || RING_STYLES.slate;
             const enabled = p.enabled !== false;
             const s = stats[p.name] || {};
             const inv = s.invocations || 0;
@@ -219,19 +235,19 @@ async function renderPluginList() {
             card.innerHTML = `
                 <div class="flex items-start justify-between mb-2">
                     <div class="flex-1 min-w-0">
-                        <h3 class="text-[11px] font-bold text-white truncate">${p.name || 'Unknown'}</h3>
+                        <h3 class="text-[11px] font-bold text-white truncate">${esc(p.name || 'Unknown')}</h3>
                         <div class="flex items-center gap-2 mt-1">
-                            <span class="text-[10px] font-mono text-${color}-400 bg-${color}-500/10 px-1.5 py-0.5 rounded">${ring.toUpperCase()}</span>
+                            <span class="text-[10px] font-mono ${ringClass} px-1.5 py-0.5 rounded">${esc(ring.toUpperCase())}</span>
                             <span class="text-[10px] font-mono text-slate-600">${p.timeout_ms || 500}ms</span>
-                            <span class="text-[10px] font-mono text-slate-600">${p.fail_policy || 'open'}</span>
+                            <span class="text-[10px] font-mono text-slate-600">${esc(p.fail_policy || 'open')}</span>
                         </div>
                     </div>
                     <div class="flex items-center gap-1.5 shrink-0">
-                        ${p.version && p.version !== '0.0.0' ? `<span class="text-[10px] font-mono text-slate-500">v${p.version}</span>` : ''}
+                        ${p.version && p.version !== '0.0.0' ? `<span class="text-[10px] font-mono text-slate-500">v${esc(p.version)}</span>` : ''}
                         <div class="w-2 h-2 rounded-full ${enabled ? 'bg-emerald-400' : 'bg-slate-600'}"></div>
                     </div>
                 </div>
-                ${p.description ? `<p class="text-[9px] text-slate-500 mb-2 line-clamp-2">${p.description}</p>` : ''}
+                ${p.description ? `<p class="text-[9px] text-slate-500 mb-2 line-clamp-2">${esc(p.description)}</p>` : ''}
                 <div class="grid grid-cols-4 gap-1 mt-2 pt-2 border-t border-white/[0.04]">
                     <div class="text-center">
                         <p class="text-[10px] font-bold font-mono ${hasStats ? 'text-white' : 'text-slate-600'}">${inv.toLocaleString()}</p>
@@ -268,9 +284,9 @@ async function renderPluginList() {
                 }
                 ${renderConfigFields(p)}
                 <div class="mt-2 pt-2 border-t border-white/[0.04] flex items-center justify-end gap-2">
-                    <button type="button" data-drilldown="plugin:${p.name}" class="text-[10px] text-slate-500 hover:text-cyan-400 px-2 py-0.5 rounded hover:bg-white/5 transition-colors">Inspect</button>
-                    <button type="button" data-action="toggle-plugin" data-name="${p.name}" class="text-[10px] text-slate-500 hover:text-amber-400 px-2 py-0.5 rounded hover:bg-white/5 transition-colors">${enabled ? 'Disable' : 'Enable'}</button>
-                    <button type="button" data-action="uninstall-plugin" data-name="${p.name}" class="text-[10px] text-slate-500 hover:text-rose-400 px-2 py-0.5 rounded hover:bg-white/5 transition-colors">Uninstall</button>
+                    <button type="button" data-drilldown="plugin:${esc(p.name)}" class="text-[10px] text-slate-500 hover:text-cyan-400 px-2 py-0.5 rounded hover:bg-white/5 transition-colors">Inspect</button>
+                    <button type="button" data-action="toggle-plugin" data-name="${esc(p.name)}" class="text-[10px] text-slate-500 hover:text-amber-400 px-2 py-0.5 rounded hover:bg-white/5 transition-colors">${enabled ? 'Disable' : 'Enable'}</button>
+                    <button type="button" data-action="uninstall-plugin" data-name="${esc(p.name)}" class="text-[10px] text-slate-500 hover:text-rose-400 px-2 py-0.5 rounded hover:bg-white/5 transition-colors">Uninstall</button>
                 </div>
             `;
             grid.appendChild(card);
@@ -324,8 +340,8 @@ function renderConfigFields(plugin) {
         .map(
             (f) => `
         <div class="flex items-center justify-between">
-            <span class="text-[10px] text-slate-500">${f.label || f.key}</span>
-            <span class="text-[10px] font-mono text-slate-400">${f.default !== undefined ? f.default : '--'}</span>
+            <span class="text-[10px] text-slate-500">${esc(f.label || f.key)}</span>
+            <span class="text-[10px] font-mono text-slate-400">${f.default !== undefined ? esc(f.default) : '--'}</span>
         </div>
     `
         )

@@ -619,6 +619,22 @@ tr {
     will-change: transform, opacity;
 }
 
+/* Sprint 1 readability lift:
+ * existing UI uses many 9/10/11px utility classes; bump them globally
+ * without editing every template node. */
+.text-\[9px\] {
+    font-size: 11px !important;
+    line-height: 1.35 !important;
+}
+.text-\[10px\] {
+    font-size: 12px !important;
+    line-height: 1.4 !important;
+}
+.text-\[11px\] {
+    font-size: 13px !important;
+    line-height: 1.4 !important;
+}
+
 /* O.2 — Subtle "alive" affordance for status dots and cards.
  * Used on success-intent badges (e.g. Endpoint Live, sidebar proxy active)
  * and on the surrounding card to give a premium "breathing" cue without

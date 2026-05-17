@@ -415,6 +415,7 @@
                         </svg>
                     </button>
                     <kbd
+                        id="kbd-palette-shortcut"
                         class="hidden md:inline text-[9px] font-mono text-slate-600 bg-white/5 px-2 py-0.5 rounded border border-white/10"
                         title="Command palette"
                         >⌘K</kbd
@@ -1639,7 +1640,13 @@
         </div>
 
         <!-- Toast container -->
-        <div id="toast-container" class="fixed bottom-6 right-6 z-[110] flex flex-col gap-2 pointer-events-none"></div>
+        <div
+            id="toast-container"
+            class="fixed bottom-6 right-6 z-[110] flex flex-col gap-2 pointer-events-none"
+            role="status"
+            aria-live="polite"
+            aria-atomic="false"
+        ></div>
 
         <script type="module" src="main.js"></script>
     </body>
