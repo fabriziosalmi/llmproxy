@@ -191,10 +191,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         # Key: prefer API key prefix, fall back to IP
         auth = request.headers.get("authorization", "")
-        if auth.startswith("Bearer ") and len(auth) > 15:
+        token = ""
+        if auth.lower().startswith("bearer "):
+            token = auth[7:].strip()
+        if token:
             # Use a stable hash of the full bearer token to avoid collisions
             # from short prefixes in multi-tenant environments.
-            token = auth[7:].strip()
             token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
             key = f"key:{token_hash}"
         else:

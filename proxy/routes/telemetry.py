@@ -13,6 +13,7 @@ _CTRL_RE = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
 # SSE connection limit — prevents resource exhaustion from stale consumers
 _MAX_SSE_CONNECTIONS = 20
 _active_log_streams = 0
+_sse_connections_lock = asyncio.Lock()
 
 def _sanitize_log(log: dict) -> dict:
     """Strip terminal escape sequences from log string values."""
@@ -188,12 +189,13 @@ def create_router(agent) -> APIRouter:
     async def stream_logs(request: Request):
         _check_auth(request)
         global _active_log_streams
-        if _active_log_streams >= _MAX_SSE_CONNECTIONS:
-            raise HTTPException(status_code=503, detail="Too many SSE connections")
+        async with _sse_connections_lock:
+            if _active_log_streams >= _MAX_SSE_CONNECTIONS:
+                raise HTTPException(status_code=503, detail="Too many SSE connections")
+            _active_log_streams += 1
 
         async def log_generator():
             global _active_log_streams
-            _active_log_streams += 1
             try:
                 while True:
                     if await request.is_disconnected():
@@ -208,7 +210,8 @@ def create_router(agent) -> APIRouter:
             except (asyncio.CancelledError, GeneratorExit):
                 pass
             finally:
-                _active_log_streams -= 1
+                async with _sse_connections_lock:
+                    _active_log_streams = max(0, _active_log_streams - 1)
 
         return StreamingResponse(log_generator(), media_type="text/event-stream")
 
