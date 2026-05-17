@@ -57,6 +57,13 @@ def _compute_forecast(*, spent: float, daily_limit: float, elapsed_hours: float)
 def create_router(agent) -> APIRouter:
     router = APIRouter()
 
+    def _parse_int_param(raw: str | None, *, default: int, minimum: int, maximum: int) -> int:
+        try:
+            val = int(raw) if raw is not None else default
+        except (TypeError, ValueError):
+            val = default
+        return max(minimum, min(maximum, val))
+
     def _check_admin_auth(request: Request):
         """Enforce API key auth on mutating admin endpoints when auth is enabled.
 
@@ -424,11 +431,12 @@ def create_router(agent) -> APIRouter:
         """Spend breakdown by model, provider, key, or date."""
         _check_admin_auth(request)
         params = request.query_params
+        limit = _parse_int_param(params.get("limit"), default=50, minimum=1, maximum=1000)
         result = await agent.store.query_spend(
             date_from=params.get("from", ""),
             date_to=params.get("to", ""),
             group_by=params.get("group_by", "model"),
-            limit=int(params.get("limit", "50")),
+            limit=limit,
         )
         total = await agent.store.get_spend_total(
             date_from=params.get("from", ""),
@@ -445,9 +453,10 @@ def create_router(agent) -> APIRouter:
     async def analytics_top_models(request: Request):
         """Top models by spend."""
         _check_admin_auth(request)
+        limit = _parse_int_param(request.query_params.get("limit"), default=10, minimum=1, maximum=200)
         result = await agent.store.query_spend(
             group_by="model",
-            limit=int(request.query_params.get("limit", "10")),
+            limit=limit,
         )
         return result
 
@@ -601,15 +610,19 @@ def create_router(agent) -> APIRouter:
         """Query persistent audit log with filters."""
         _check_admin_auth(request)
         params = request.query_params
+        status = _parse_int_param(params.get("status"), default=0, minimum=0, maximum=599)
+        blocked = _parse_int_param(params.get("blocked"), default=-1, minimum=-1, maximum=1)
+        limit = _parse_int_param(params.get("limit"), default=100, minimum=1, maximum=1000)
+        offset = _parse_int_param(params.get("offset"), default=0, minimum=0, maximum=1_000_000)
         return await agent.store.query_audit(
             date_from=params.get("from", ""),
             date_to=params.get("to", ""),
             model=params.get("model", ""),
             key_prefix=params.get("key_prefix", ""),
-            status=int(params.get("status", "0")),
-            blocked=int(params.get("blocked", "-1")),
-            limit=int(params.get("limit", "100")),
-            offset=int(params.get("offset", "0")),
+            status=status,
+            blocked=blocked,
+            limit=limit,
+            offset=offset,
         )
 
     # ── Operations: Reset & Clear ──
