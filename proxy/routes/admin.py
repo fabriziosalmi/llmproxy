@@ -1,9 +1,12 @@
 """Admin routes: proxy toggle, status, version, service-info, features, priority, panic."""
 import os
 import time
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Request, HTTPException
+
+logger = logging.getLogger("llmproxy.routes.admin")
 
 
 # ── Spend forecasting math (M.2) ────────────────────────────────────────
@@ -399,20 +402,31 @@ def create_router(agent) -> APIRouter:
     async def reload_config(request: Request):
         """Hot-reload config.yaml without restart."""
         _check_admin_auth(request)
+        old_cfg = agent.config
+        old_hash = agent._config_hash
+        old_webhooks = getattr(agent, "webhooks", None)
         try:
-            old_hash = agent._config_hash
             agent.config = agent._load_config()
             new_hash = agent._compute_config_hash_sync()
             agent._config_hash = new_hash
             # Reinitialize config-dependent subsystems
             from core.webhooks import WebhookDispatcher
-            agent.webhooks = WebhookDispatcher(agent.config)
+            new_webhooks = WebhookDispatcher(agent.config)
+            agent.webhooks = new_webhooks
+            if old_webhooks and old_webhooks is not new_webhooks:
+                try:
+                    await old_webhooks.close()
+                except Exception:
+                    logger.warning("Previous webhook dispatcher close failed during reload", exc_info=True)
             from core.security import SecurityShield
             agent.security = SecurityShield(agent.config, assistant=agent.security.assistant)
             await agent._add_log("Config reloaded via admin API", level="SYSTEM")
             return {"status": "reloaded", "changed": old_hash != new_hash}
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Config reload failed: {e}")
+            agent.config = old_cfg
+            agent._config_hash = old_hash
+            logger.error(f"Config reload failed: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Config reload failed")
 
     @router.post("/api/v1/panic")
     async def emergency_panic(request: Request):
@@ -567,7 +581,8 @@ def create_router(agent) -> APIRouter:
         try:
             schema = request.app.openapi()
         except Exception as e:  # noqa: BLE001
-            raise HTTPException(status_code=500, detail=f"OpenAPI schema build failed: {e}") from e
+            logger.error(f"OpenAPI schema build failed: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="OpenAPI schema build failed") from e
         return schema
 
     @router.get("/api/v1/config/yaml")
@@ -589,7 +604,8 @@ def create_router(agent) -> APIRouter:
             redacted = scrub_dict(agent.config or {})
             text = _yaml.safe_dump(redacted, default_flow_style=False, sort_keys=False)
         except Exception as e:  # noqa: BLE001 — surface, don't crash the route
-            raise HTTPException(status_code=500, detail=f"YAML serialisation failed: {e}") from e
+            logger.error(f"YAML serialisation failed: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="YAML serialisation failed") from e
         return {"yaml": text}
 
     @router.get("/api/v1/config/warnings")
@@ -697,6 +713,7 @@ def create_router(agent) -> APIRouter:
             )
             return {"status": "sent", "message": "Test payload dispatched to all endpoints"}
         except Exception as e:
-            return {"status": "error", "message": str(e)}
+            logger.error(f"Webhook test dispatch failed: {e}", exc_info=True)
+            raise HTTPException(status_code=502, detail="Webhook test dispatch failed")
 
     return router
