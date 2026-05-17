@@ -177,14 +177,16 @@ def test_data_drilldown_is_wired():
     """Entry points that open drilldown: registry (Inspect), audit rows,
     models table row, plugins card Inspect."""
     registry = (UI_ROOT / "components/registry.js").read_text()
-    security = (UI_ROOT / "components/security.js").read_text()
+    # Security view was migrated to TypeScript; drilldown wiring for audit rows
+    # now lives in src/views/security/AuditResultsTable.ts.
+    security = (UI_ROOT / "src/views/security/AuditResultsTable.ts").read_text()
     models = (UI_ROOT / "components/models.js").read_text()
     plugins = (UI_ROOT / "components/plugins.js").read_text()
 
     assert "data-drilldown" in registry and "endpoint:" in registry, \
         "Registry must expose data-drilldown='endpoint:<id>'"
-    assert "data-drilldown" in security and "request:" in security, \
-        "Audit table rows must carry data-drilldown='request:<req_id>'"
+    assert ("data-drilldown" in security or "dataset.drilldown" in security) and "request:" in security, \
+        "Audit table rows must carry data-drilldown/dataset.drilldown='request:<req_id>'"
     assert "data-drilldown" in models and "model:" in models, \
         "Models table rows must carry data-drilldown='model:<id>'"
     assert "data-drilldown" in plugins and "plugin:" in plugins, \
