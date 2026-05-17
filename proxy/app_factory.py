@@ -59,6 +59,12 @@ _PROTECTED_PREFIXES: tuple = ("/api/v1/", "/admin/")
 _ALSO_PROTECT: frozenset = frozenset({
     "/metrics",
 })
+
+# Query-string auth fallback is allowed only for browser EventSource endpoints
+# that cannot attach custom Authorization headers.
+_QUERY_TOKEN_FALLBACK_PATHS: frozenset = frozenset({
+    "/api/v1/logs",
+})
 # ───────────────────────────────────────────────────────────────────────────
 
 
@@ -133,9 +139,9 @@ def create_app(agent) -> FastAPI:
         if needs_auth and path not in _PUBLIC_EXACT:
             auth_header = request.headers.get("Authorization", "")
             token = auth_header.replace("Bearer ", "").strip()
-            # SSE (EventSource) cannot send custom headers — accept token
-            # from query parameter as fallback for streaming endpoints.
-            if not token:
+            # Limit query-string token fallback to explicit EventSource paths.
+            # Never accept query tokens on generic protected endpoints.
+            if not token and path in _QUERY_TOKEN_FALLBACK_PATHS:
                 token = request.query_params.get("token", "")
             if not agent._verify_api_key(token):
                 from fastapi.responses import JSONResponse
