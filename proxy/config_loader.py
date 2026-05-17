@@ -12,23 +12,39 @@ from __future__ import annotations
 
 import hashlib
 import os
+import logging
 from typing import Any, Dict
 
 import yaml
+
+logger = logging.getLogger("llmproxy.config_loader")
 
 
 def load_config(config_path: str) -> Dict[str, Any]:
     """Load YAML config + apply env overlays.
 
-    Missing file → minimal default with auth disabled (dev mode). Env
-    overlays are reapplied on every call so hot-reload picks up new env
-    values without needing a YAML edit.
+    Missing file → fail-closed default (auth enabled). Set
+    `LLM_PROXY_DEV_MODE=1` to intentionally run open in local development.
+    Env overlays are reapplied on every call so hot-reload picks up new
+    env values without needing a YAML edit.
     """
     if os.path.exists(config_path):
         with open(config_path, 'r') as f:
             cfg = yaml.safe_load(f) or {}
     else:
-        cfg = {"server": {"auth": {"enabled": False}}}
+        dev_mode = os.environ.get("LLM_PROXY_DEV_MODE", "").strip().lower() in ("1", "true", "yes", "on")
+        cfg = {"server": {"auth": {"enabled": not dev_mode}}}
+        if dev_mode:
+            logger.warning(
+                "Config file '%s' not found — running in DEV MODE with auth disabled "
+                "(LLM_PROXY_DEV_MODE=1). Do not use in production.",
+                config_path,
+            )
+        else:
+            logger.warning(
+                "Config file '%s' not found — fail-closed defaults applied (auth enabled).",
+                config_path,
+            )
 
     # Env-based endpoint overlay — runs on every config reload (boot + hot
     # reload watcher). Keeps LLM_PROXY_ENDPOINT_<NAME>_* declarations in

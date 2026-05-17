@@ -14,7 +14,7 @@ batch processing scripts, and any pre-2023 code.
 import json
 import logging
 
-from fastapi import APIRouter, Request, Depends
+from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import APIKeyHeader
 
@@ -72,6 +72,38 @@ def create_router(agent) -> APIRouter:
 
     @router.post("/v1/completions")
     async def text_completions(request: Request, api_key: str = Depends(API_KEY_HEADER)):
+        # Auth parity with /v1/chat/completions.
+        token = ""
+        if agent.config["server"]["auth"]["enabled"]:
+            if not api_key:
+                raise HTTPException(status_code=401, detail="Unauthorized: Missing API key")
+            token = api_key.replace("Bearer ", "").strip()
+            if not token:
+                raise HTTPException(status_code=401, detail="Unauthorized: Empty token")
+
+            identity = None
+            if agent.identity.enabled:
+                try:
+                    identity = agent.identity.verify_proxy_jwt(token)
+                    if not identity:
+                        identity = await agent.identity.verify_token(token)
+                except ValueError:
+                    raise HTTPException(status_code=401, detail="Unauthorized: Invalid or expired token")
+
+            if identity and identity.verified:
+                request.state.identity = identity
+                request.state.user = identity.email or identity.subject
+                request.state.roles = identity.roles
+                if not agent.rbac.check_permission(identity.roles, "proxy:use"):
+                    raise HTTPException(status_code=403, detail="Insufficient permissions")
+                await agent.rbac.set_user_roles(identity.subject, identity.email, identity.roles)
+            else:
+                if not agent._verify_api_key(token):
+                    raise HTTPException(status_code=401, detail="Unauthorized: Invalid API key or JWT")
+
+                if not await agent.rbac.check_quota(token):
+                    raise HTTPException(status_code=402, detail="Enterprise Quota Exceeded for this API Key.")
+
         body = await request.json()
 
         # Translate legacy format → chat format
@@ -85,9 +117,6 @@ def create_router(agent) -> APIRouter:
         }
 
         # Session ID for security pipeline
-        token = ""
-        if api_key:
-            token = api_key.replace("Bearer ", "").strip()
         session_id = token or (request.client.host if request.client else "anon")
 
         # Run through full proxy pipeline

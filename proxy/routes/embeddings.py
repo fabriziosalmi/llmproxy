@@ -52,7 +52,7 @@ def create_router(agent) -> APIRouter:
         from core.metrics import MetricsTracker
         from core.pricing import estimate_cost
 
-        # Auth — same as chat endpoint
+        # Auth parity with /v1/chat/completions.
         token = ""
         if agent.config["server"]["auth"]["enabled"]:
             if not api_key:
@@ -61,10 +61,30 @@ def create_router(agent) -> APIRouter:
             if not token:
                 raise HTTPException(status_code=401, detail="Unauthorized: Empty token")
 
-            if not agent.identity.enabled:
+            identity = None
+            if agent.identity.enabled:
+                try:
+                    identity = agent.identity.verify_proxy_jwt(token)
+                    if not identity:
+                        identity = await agent.identity.verify_token(token)
+                except ValueError:
+                    MetricsTracker.track_auth_failure("jwt_invalid")
+                    raise HTTPException(status_code=401, detail="Unauthorized: Invalid or expired token")
+
+            if identity and identity.verified:
+                request.state.identity = identity
+                request.state.user = identity.email or identity.subject
+                request.state.roles = identity.roles
+                if not agent.rbac.check_permission(identity.roles, "proxy:use"):
+                    raise HTTPException(status_code=403, detail="Insufficient permissions")
+                await agent.rbac.set_user_roles(identity.subject, identity.email, identity.roles)
+            else:
                 if not agent._verify_api_key(token):
                     MetricsTracker.track_auth_failure("invalid_key")
-                    raise HTTPException(status_code=401, detail="Unauthorized: Invalid API key")
+                    raise HTTPException(status_code=401, detail="Unauthorized: Invalid API key or JWT")
+
+                if not await agent.rbac.check_quota(token):
+                    raise HTTPException(status_code=402, detail="Enterprise Quota Exceeded for this API Key.")
 
         body = await request.json()
         model = body.get("model", "text-embedding-3-small")

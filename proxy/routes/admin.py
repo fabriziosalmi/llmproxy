@@ -113,7 +113,7 @@ def create_router(agent) -> APIRouter:
             "host": agent.config.get("server", {}).get("host", "0.0.0.0"),  # nosec B104
             "port": agent.config.get("server", {}).get("port", 8090),
             "tailscale_active": agent.config.get("server", {}).get("host") not in ("0.0.0.0", "127.0.0.1"),  # nosec B104
-            "version": "1.10.8"
+            "version": getattr(agent, "_version", "0.0.0")
         }
 
     @router.post("/api/v1/features/toggle")

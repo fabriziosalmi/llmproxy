@@ -8,6 +8,7 @@ Configurable via config.yaml `rate_limiting` section.
 import time
 import asyncio
 import logging
+import hashlib
 from collections import OrderedDict
 from typing import Dict, Optional, Tuple
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -191,7 +192,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # Key: prefer API key prefix, fall back to IP
         auth = request.headers.get("authorization", "")
         if auth.startswith("Bearer ") and len(auth) > 15:
-            key = f"key:{auth[7:15]}"  # First 8 chars of token
+            # Use a stable hash of the full bearer token to avoid collisions
+            # from short prefixes in multi-tenant environments.
+            token = auth[7:].strip()
+            token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
+            key = f"key:{token_hash}"
         else:
             key = f"ip:{request.client.host}" if request.client else "ip:unknown"
 
