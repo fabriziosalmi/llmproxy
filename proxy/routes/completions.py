@@ -13,6 +13,7 @@ batch processing scripts, and any pre-2023 code.
 
 import json
 import logging
+import hashlib
 
 from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -117,7 +118,13 @@ def create_router(agent) -> APIRouter:
         }
 
         # Session ID for security pipeline
-        session_id = token or (request.client.host if request.client else "anon")
+        if token:
+            session_id = hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
+        else:
+            ip = request.client.host if request.client else "anon"
+            ua = request.headers.get("user-agent", "")
+            lang = request.headers.get("accept-language", "")
+            session_id = hashlib.sha256(f"{ip}:{ua}:{lang}".encode("utf-8")).hexdigest()[:16]
 
         # Run through full proxy pipeline
         response = await agent.proxy_request(request, body=chat_body, session_id=session_id)
