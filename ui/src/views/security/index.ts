@@ -243,7 +243,10 @@ function wireAuditQuery(deps: SecurityDeps): void {
             const data = await authJson(deps, `/api/v1/audit?${params.toString()}`);
             const sinceMs = deps.timerange.sinceEpochMs();
             const untilMs = deps.timerange.untilEpochMs();
-            let items = data.items || [];
+            // Backend payloads can transiently return `items: null` (or a non-array
+            // value during partial failures). Normalize aggressively so the UI never
+            // dereferences `.length`/`.filter` on null.
+            let items = Array.isArray(data?.items) ? data.items : [];
             if (sinceMs != null) items = items.filter((r: any) => (r.ts || 0) * 1000 >= sinceMs);
             if (untilMs != null) items = items.filter((r: any) => (r.ts || 0) * 1000 <= untilMs);
             if (!items.length) {

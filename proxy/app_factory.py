@@ -27,6 +27,7 @@ import logging
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from core.tracing import TraceManager
@@ -305,6 +306,13 @@ def create_app(agent) -> FastAPI:
             "npm run build  (or use ./install.sh which builds automatically).",
             ui_dist,
         )
+
+    # Browsers probe `/favicon.ico` from origin root by default. The UI lives
+    # under `/ui`, so expose a tiny redirect to prevent noisy 401s/missing-icon
+    # errors when auth is enabled for API/admin paths.
+    @app.get("/favicon.ico", include_in_schema=False)
+    async def _favicon_redirect():
+        return RedirectResponse(url="/ui/favicon.svg", status_code=307)
 
     @app.on_event("shutdown")
     async def _shutdown():
