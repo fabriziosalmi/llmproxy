@@ -24,10 +24,13 @@ Config (via manifest ui_schema):
 """
 
 import re
+import logging
 from typing import Dict, Any
 
 from core.plugin_sdk import BasePlugin, PluginResponse, PluginHook
 from core.plugin_engine import PluginContext
+
+logger = logging.getLogger("plugin.response_quality_gate")
 
 
 class ResponseQualityGate(BasePlugin):
@@ -74,7 +77,8 @@ class ResponseQualityGate(BasePlugin):
             if not choices:
                 return ""
             return choices[0].get("message", {}).get("content", "")
-        except Exception:
+        except (json.JSONDecodeError, AttributeError, UnicodeDecodeError, TypeError) as e:
+            logger.debug("ResponseQualityGate response parse skipped: %s", e)
             return ""
 
     def _is_trivial_prompt(self, ctx: PluginContext) -> bool:

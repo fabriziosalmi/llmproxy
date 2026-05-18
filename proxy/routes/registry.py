@@ -1,5 +1,6 @@
 """Registry routes: endpoint CRUD (toggle, delete, priority, list)."""
 import asyncio
+import ipaddress
 import logging
 import os
 import re
@@ -30,6 +31,21 @@ def create_router(agent) -> APIRouter:
             raise HTTPException(status_code=400, detail="url must start with http:// or https://")
         if not parsed.netloc:
             raise HTTPException(status_code=400, detail="url must include host")
+        if parsed.username or parsed.password:
+            raise HTTPException(status_code=400, detail="url must not contain embedded credentials")
+        if parsed.query or parsed.fragment:
+            raise HTTPException(status_code=400, detail="url must not include query or fragment")
+        host = parsed.hostname or ""
+        if not host:
+            raise HTTPException(status_code=400, detail="url must include valid host")
+        try:
+            ip = ipaddress.ip_address(host)
+            # Always block clearly dangerous/non-routable classes.
+            if ip.is_multicast or ip.is_unspecified or ip.is_reserved:
+                raise HTTPException(status_code=400, detail="url host IP range is not allowed")
+        except ValueError:
+            # Hostname (non-IP literal): accepted.
+            pass
         return raw.strip()
 
     def _check_admin_auth(request: Request):
