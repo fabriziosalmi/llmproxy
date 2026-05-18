@@ -14,6 +14,7 @@ const latencyInfo = document.getElementById('latency-info');
 
 const conversationHistory = [];
 let isStreaming = false;
+const MAX_INPUT_HEIGHT = 200;
 
 // ── Auth ──
 
@@ -436,12 +437,49 @@ async function sendMessage() {
 
 // ── Input Handling ──
 
-inputEl.addEventListener('input', () => {
+function resizeComposer() {
     inputEl.style.height = 'auto';
-    inputEl.style.height = Math.min(inputEl.scrollHeight, 200) + 'px';
+    inputEl.style.height = Math.min(inputEl.scrollHeight, MAX_INPUT_HEIGHT) + 'px';
+}
+
+function insertAtCursor(text) {
+    const start = inputEl.selectionStart ?? inputEl.value.length;
+    const end = inputEl.selectionEnd ?? inputEl.value.length;
+    inputEl.setRangeText(text, start, end, 'end');
+    inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+inputEl.addEventListener('input', resizeComposer);
+
+// Smart paste for multiline content:
+// - normalizes CRLF/CR to LF
+// - strips NUL bytes that occasionally leak from terminal copy buffers
+// - preserves newlines/indentation (no lossy rewriting)
+inputEl.addEventListener('paste', (e) => {
+    const raw = e.clipboardData?.getData('text/plain');
+    if (typeof raw !== 'string') return;
+    const normalized = raw.replace(/\r\n?/g, '\n').split('\0').join('');
+    if (normalized === raw) return;
+    e.preventDefault();
+    insertAtCursor(normalized);
 });
 
 inputEl.addEventListener('keydown', (e) => {
+    // Editor-like Tab indent in textarea.
+    if (e.key === 'Tab' && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        insertAtCursor('    ');
+        return;
+    }
+
+    // Keep existing UX: Enter sends, Shift+Enter inserts newline.
+    // Add Cmd/Ctrl+Enter as an explicit send shortcut for power users.
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        sendMessage();
+        return;
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         sendMessage();
