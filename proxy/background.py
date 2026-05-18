@@ -23,9 +23,15 @@ async def config_watch_loop(agent, interval: int = 30):
         try:
             new_hash = await asyncio.to_thread(agent._compute_config_hash_sync)
             if new_hash and new_hash != agent._config_hash:
+                old_webhooks = getattr(agent, "webhooks", None)
                 agent.config = agent._load_config()
                 agent._config_hash = new_hash
                 agent.webhooks = WebhookDispatcher(agent.config)
+                if old_webhooks and old_webhooks is not agent.webhooks:
+                    try:
+                        await old_webhooks.close()
+                    except Exception as e:
+                        logger.warning("Config reload: previous webhook dispatcher close failed: %s", e)
                 prev_assistant = getattr(agent.security, 'assistant', None)
                 agent.security = SecurityShield(agent.config, assistant=prev_assistant)
                 # Reload circuit breaker thresholds on existing breakers
@@ -38,7 +44,7 @@ async def config_watch_loop(agent, interval: int = 30):
                         cb.recovery_timeout = rt
                 # Reload cache TTL from new config
                 if hasattr(agent, 'cache_backend'):
-                    cache_cfg = agent.config.get("cache", {})
+                    cache_cfg = agent.config.get("caching", {})
                     agent.cache_backend._ttl = cache_cfg.get("ttl", 3600)
                 # Trigger plugin hot-reload
                 if hasattr(agent, 'plugin_manager'):

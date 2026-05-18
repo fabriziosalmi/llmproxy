@@ -326,6 +326,31 @@ def create_app(agent) -> FastAPI:
                     await conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         except Exception as e:
             logger.error(f"WAL checkpoint failed on shutdown: {e}")
+        try:
+            if getattr(agent, "_session", None) and not agent._session.closed:
+                await agent._session.close()
+        except Exception as e:
+            logger.error(f"HTTP session close failed on shutdown: {e}")
+        try:
+            if getattr(agent, "webhooks", None):
+                await agent.webhooks.close()
+        except Exception as e:
+            logger.error(f"Webhook dispatcher close failed on shutdown: {e}")
+        try:
+            if getattr(agent, "identity", None):
+                await agent.identity.close()
+        except Exception as e:
+            logger.error(f"Identity manager close failed on shutdown: {e}")
+        try:
+            if getattr(agent, "zt_manager", None):
+                await agent.zt_manager.close()
+        except Exception as e:
+            logger.error(f"ZeroTrust manager close failed on shutdown: {e}")
+        try:
+            if getattr(agent, "exporter", None):
+                await agent.exporter.close()
+        except Exception as e:
+            logger.error(f"Exporter close failed on shutdown: {e}")
         await agent.cache_backend.close()
 
     return app

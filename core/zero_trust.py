@@ -95,3 +95,8 @@ class ZeroTrustManager:
             logger.error(f"ZeroTrust: Tailscale Socket Error: {e}")
 
         return {"status": "unverified", "reason": "api_error"}
+
+    async def close(self) -> None:
+        """Close internal HTTP resources."""
+        if self._ts_session and not self._ts_session.closed:
+            await self._ts_session.close()
