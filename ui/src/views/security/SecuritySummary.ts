@@ -26,7 +26,11 @@ export function renderRetentionInfo(elm: HTMLElement | null, text: string): void
     elm.textContent = text;
 }
 
-export function renderCorpus(countElm: HTMLElement | null, categoriesElm: HTMLElement | null, stats: CorpusStats): void {
+export function renderCorpus(
+    countElm: HTMLElement | null,
+    categoriesElm: HTMLElement | null,
+    stats: CorpusStats
+): void {
     if (countElm) countElm.textContent = String(stats.total_patterns ?? 0);
     if (!categoriesElm) return;
     const categories = stats.categories || {};
