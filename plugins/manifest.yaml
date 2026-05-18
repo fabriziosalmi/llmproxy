@@ -10,6 +10,7 @@ plugins:
     hook: "pre_flight"
     priority: 20
     enabled: true
+    fail_policy: "closed"
     version: "1.0.0"
     entrypoint: "default.pii_masker:mask"
 
@@ -46,6 +47,7 @@ plugins:
     hook: "pre_flight"
     priority: 15
     enabled: true
+    fail_policy: "closed"
     version: "1.0.0"
     entrypoint: "default.context_minifier:compress"
 
@@ -69,6 +71,7 @@ plugins:
     hook: "pre_flight"
     priority: 12
     enabled: true
+    fail_policy: "closed"
     type: "python"
     entrypoint: "marketplace.agentic_loop_breaker:AgenticLoopBreaker"
     version: "1.0.0"
@@ -106,6 +109,7 @@ plugins:
     hook: "pre_flight"
     priority: 11
     enabled: true
+    fail_policy: "closed"
     type: "python"
     entrypoint: "marketplace.smart_budget_guard:SmartBudgetGuard"
     version: "1.0.0"

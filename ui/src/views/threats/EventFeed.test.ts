@@ -106,10 +106,16 @@ describe('ThreatEventFeed', () => {
     });
 
     it('opens an EventSource against /api/v1/logs and streams events into the list', () => {
-        const feed = new ThreatEventFeed(container, { storage, getToken: () => 'TOKEN', eventSourceFactory: factory });
+        const feed = new ThreatEventFeed(container, {
+            storage,
+            getToken: () => 'TOKEN',
+            eventSourceFactory: factory,
+            mintSseToken: () => 'SSE_TOKEN',
+        });
         feed.connect();
+        vi.runAllTimers();
         const es = createdSources[0]!;
-        expect(es.url).toContain('/api/v1/logs?token=TOKEN');
+        expect(es.url).toContain('/api/v1/logs?sse_token=SSE_TOKEN');
         es.open();
         es.emit({ level: 'SECURITY', message: 'WAF blocked', req_id: 'r1', signature: 'rl_429' });
         const list = container.querySelector('[data-testid="threat-feed-list"]') as HTMLElement;
@@ -119,7 +125,9 @@ describe('ThreatEventFeed', () => {
     });
 
     it('adds Investigate + Explain actions when req_id and signature are present', () => {
-        const feed = new ThreatEventFeed(container, { storage, getToken: () => 'TOKEN', eventSourceFactory: factory });
+        const feed = new ThreatEventFeed(container, {
+            storage, getToken: () => 'TOKEN', eventSourceFactory: factory, mintSseToken: () => 'SSE_TOKEN',
+        });
         feed.addEvent({ level: 'SECURITY', message: 'rl', req_id: 'abc', signature: 'rl_429' });
         const investigate = container.querySelector('[data-testid="threat-investigate-abc"]');
         const explain = container.querySelector('[data-testid="threat-explain-rl_429"]');
@@ -130,7 +138,9 @@ describe('ThreatEventFeed', () => {
     });
 
     it('mute persists to storage and hides the event', () => {
-        const feed = new ThreatEventFeed(container, { storage, getToken: () => 'TOKEN', eventSourceFactory: factory });
+        const feed = new ThreatEventFeed(container, {
+            storage, getToken: () => 'TOKEN', eventSourceFactory: factory, mintSseToken: () => 'SSE_TOKEN',
+        });
         const ev: SecurityEvent = { level: 'WARNING', message: 'auth fail', signature: 'auth_bad' };
         feed.addEvent(ev);
 
@@ -150,12 +160,16 @@ describe('ThreatEventFeed', () => {
         const ev: SecurityEvent = { level: 'WARNING', signature: 'auth_bad' };
         storage.setItem('llmproxy:muted-threats', JSON.stringify([muteKeyFor(ev)]));
 
-        const feed = new ThreatEventFeed(container, { storage, getToken: () => 'TOKEN', eventSourceFactory: factory });
+        const feed = new ThreatEventFeed(container, {
+            storage, getToken: () => 'TOKEN', eventSourceFactory: factory, mintSseToken: () => 'SSE_TOKEN',
+        });
         expect(feed.isMuted(ev)).toBe(true);
     });
 
     it('falls into the error state and shows a Reconnect button after repeated SSE errors', () => {
-        const feed = new ThreatEventFeed(container, { storage, getToken: () => 'TOKEN', eventSourceFactory: factory });
+        const feed = new ThreatEventFeed(container, {
+            storage, getToken: () => 'TOKEN', eventSourceFactory: factory, mintSseToken: () => 'SSE_TOKEN',
+        });
         feed.connect();
         const es = createdSources[0]!;
         for (let i = 0; i < 6; i++) es.error();
@@ -177,6 +191,7 @@ describe('ThreatEventFeed', () => {
             storage,
             getToken: () => tokens[i++] ?? 'eventually',
             eventSourceFactory: factory,
+            mintSseToken: () => 'SSE_TOKEN',
         });
         feed.connect();
         // First call had no token; nothing connects yet

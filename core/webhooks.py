@@ -59,14 +59,26 @@ class WebhookConfig:
 
 # SSRF — private/reserved CIDR ranges that webhook URLs must not target
 _PRIVATE_NETWORKS = [
+    ipaddress.ip_network("0.0.0.0/8"),        # "this host"
     ipaddress.ip_network("127.0.0.0/8"),      # loopback
     ipaddress.ip_network("10.0.0.0/8"),        # RFC-1918
     ipaddress.ip_network("172.16.0.0/12"),     # RFC-1918
     ipaddress.ip_network("192.168.0.0/16"),    # RFC-1918
+    ipaddress.ip_network("100.64.0.0/10"),     # carrier-grade NAT
+    ipaddress.ip_network("192.0.0.0/24"),      # IETF protocol assignments
+    ipaddress.ip_network("192.0.2.0/24"),      # TEST-NET-1
+    ipaddress.ip_network("198.18.0.0/15"),     # benchmark tests
+    ipaddress.ip_network("198.51.100.0/24"),   # TEST-NET-2
+    ipaddress.ip_network("203.0.113.0/24"),    # TEST-NET-3
+    ipaddress.ip_network("224.0.0.0/4"),       # multicast
+    ipaddress.ip_network("240.0.0.0/4"),       # reserved/future
     ipaddress.ip_network("169.254.0.0/16"),    # link-local / AWS IMDS
+    ipaddress.ip_network("::/128"),            # unspecified
     ipaddress.ip_network("::1/128"),           # IPv6 loopback
     ipaddress.ip_network("fc00::/7"),          # IPv6 ULA
     ipaddress.ip_network("fe80::/10"),         # IPv6 link-local
+    ipaddress.ip_network("ff00::/8"),          # IPv6 multicast
+    ipaddress.ip_network("2001:db8::/32"),     # documentation range
 ]
 
 
@@ -86,6 +98,12 @@ def _validate_webhook_url(url: str) -> None:
 
     if parsed.scheme not in ("http", "https"):
         raise ValueError(f"Webhook URL scheme '{parsed.scheme}' is not allowed (must be http/https)")
+    if parsed.username or parsed.password:
+        raise ValueError("Webhook URL with embedded credentials is not allowed")
+    if parsed.query:
+        raise ValueError("Webhook URL with query string is not allowed")
+    if parsed.fragment:
+        raise ValueError("Webhook URL with fragment is not allowed")
 
     host = parsed.hostname or ""
     if not host:

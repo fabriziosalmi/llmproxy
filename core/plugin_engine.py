@@ -88,7 +88,7 @@ FAIL_OPEN = "open"    # Plugin failure → request continues (default for Backgr
 FAIL_CLOSED = "closed"  # Plugin failure → request blocked (default for Ingress/Routing)
 
 # Rings that default to fail-closed (errors stop the chain)
-FAIL_CLOSED_RINGS = {PluginHook.INGRESS, PluginHook.ROUTING}
+FAIL_CLOSED_RINGS = {PluginHook.INGRESS, PluginHook.PRE_FLIGHT, PluginHook.ROUTING}
 
 # ── AST Lint Scanner ──
 # NOTE: This is a LINT CHECK, not a security boundary. It catches accidental
@@ -191,8 +191,9 @@ def ast_scan(source: str, plugin_name: str) -> bool:
 
 
 class PluginManager:
-    def __init__(self, plugins_dir: str = "plugins"):
+    def __init__(self, plugins_dir: str = "plugins", config: Optional[Dict[str, Any]] = None):
         self.plugins_dir = plugins_dir
+        self._config = config or {}
         # Writable dir for runtime-installed plugins (Docker: separate volume)
         self.installed_dir = os.path.join(plugins_dir, "installed")
         self.rings: Dict[PluginHook, List[Dict[str, Any]]] = {hook: [] for hook in PluginHook}
@@ -210,6 +211,32 @@ class PluginManager:
         self._ring_traces: deque = deque()  # ordered, O(1) popleft eviction
         self._ring_traces_index: Dict[str, dict] = {}  # req_id → trace dict (O(1) lookup)
         self._ring_traces_max = 100
+
+    def update_runtime_config(self, config: Optional[Dict[str, Any]]) -> None:
+        """Update runtime config used for plugin loading policy decisions."""
+        self._config = config or {}
+
+    def _allow_legacy_sync_plugins(self) -> bool:
+        """Policy gate for legacy raw-function plugins.
+
+        By default they are disabled in production to reduce risk from
+        non-cancellable sync threads. Operators can explicitly override via:
+          - plugins.runtime.allow_legacy_sync_plugins (config)
+          - LLM_PROXY_ALLOW_LEGACY_SYNC_PLUGINS (env)
+        """
+        env_override = os.environ.get("LLM_PROXY_ALLOW_LEGACY_SYNC_PLUGINS")
+        if env_override is not None:
+            return env_override.strip().lower() in ("1", "true", "yes", "on")
+
+        runtime_cfg = (self._config.get("plugins", {}) or {}).get("runtime", {})
+        explicit = runtime_cfg.get("allow_legacy_sync_plugins")
+        if explicit is not None:
+            return bool(explicit)
+
+        env_name = os.environ.get("LLM_PROXY_ENV", "").strip().lower()
+        app_env = os.environ.get("ENV", "").strip().lower()
+        is_prod = env_name in ("prod", "production") or app_env in ("prod", "production")
+        return not is_prod
 
     # Plugin circuit breaker: auto-quarantine after consecutive failures
     PLUGIN_CB_THRESHOLD = 10   # consecutive errors to trip
@@ -532,6 +559,10 @@ class PluginManager:
             else:
                 # Legacy raw function
                 func = target
+                if not inspect.iscoroutinefunction(func) and not self._allow_legacy_sync_plugins():
+                    raise RuntimeError(
+                        f"Plugin '{name}': legacy sync function plugins are disabled by runtime policy"
+                    )
                 rings[hook].append({
                     "type": "python",
                     "func": func,

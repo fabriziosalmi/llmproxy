@@ -2,6 +2,9 @@
 import re
 import json
 import asyncio
+import time
+import hmac
+import hashlib
 
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse, Response, StreamingResponse
@@ -30,6 +33,36 @@ def _sanitize_log(log: dict) -> dict:
 def create_router(agent) -> APIRouter:
     router = APIRouter()
 
+    def _sse_token_secret() -> str:
+        cfg_secret = (agent.config.get("security", {}).get("sse", {}) or {}).get("signing_secret", "")
+        if cfg_secret:
+            return str(cfg_secret)
+        keys = agent._get_api_keys()
+        return keys[0] if keys else "llmproxy-dev-sse-secret"
+
+    def _mint_sse_token(ttl_s: int = 120) -> str:
+        exp = int(time.time()) + max(10, min(ttl_s, 600))
+        nonce = hashlib.sha256(f"{time.time()}:{id(agent)}".encode("utf-8")).hexdigest()[:16]
+        payload = f"{exp}.{nonce}"
+        sig = hmac.new(_sse_token_secret().encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+        return f"{payload}.{sig}"
+
+    def _verify_sse_token(token: str) -> bool:
+        parts = (token or "").split(".")
+        if len(parts) != 3:
+            return False
+        exp_s, nonce, sig = parts
+        if not exp_s.isdigit() or len(nonce) < 8 or len(sig) != 64:
+            return False
+        exp = int(exp_s)
+        if exp < int(time.time()):
+            return False
+        payload = f"{exp}.{nonce}"
+        expected = hmac.new(
+            _sse_token_secret().encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
+        ).hexdigest()
+        return hmac.compare_digest(expected, sig)
+
     def _check_auth(request: Request):
         """Enforce API key auth on sensitive streaming endpoints.
 
@@ -44,13 +77,21 @@ def create_router(agent) -> APIRouter:
             return
         auth_header = request.headers.get("Authorization", "")
         token = auth_header.replace("Bearer ", "").strip()
-        # SSE (EventSource) cannot send custom headers — accept the token
-        # from the query string as a fallback, mirroring what the global
-        # ASGI middleware does. Without this, browsers can never subscribe
-        # to /api/v1/logs even with a valid key.
-        if not token:
-            token = request.query_params.get("token", "")
-        if not agent._verify_api_key(token):
+        if token and agent._verify_api_key(token):
+            return
+        # EventSource cannot set Authorization headers; accept only
+        # short-lived, dedicated SSE tokens (not raw API keys in URL).
+        sse_token = request.query_params.get("sse_token", "")
+        if not _verify_sse_token(sse_token):
+            raise HTTPException(status_code=401, detail="Telemetry: Unauthorized")
+
+    def _check_header_auth_only(request: Request):
+        """Require API key/JWT via Authorization header only."""
+        if not agent.config.get("server", {}).get("auth", {}).get("enabled", False):
+            return
+        auth_header = request.headers.get("Authorization", "")
+        token = auth_header.replace("Bearer ", "").strip()
+        if not token or not agent._verify_api_key(token):
             raise HTTPException(status_code=401, detail="Telemetry: Unauthorized")
 
     @router.get("/health")
@@ -216,6 +257,17 @@ def create_router(agent) -> APIRouter:
                     _active_log_streams = max(0, _active_log_streams - 1)
 
         return StreamingResponse(log_generator(), media_type="text/event-stream")
+
+    @router.post("/api/v1/logs/token")
+    async def issue_logs_token(request: Request):
+        # Requires normal auth to mint a short-lived token for EventSource.
+        _check_header_auth_only(request)
+        ttl_cfg = (agent.config.get("security", {}).get("sse", {}) or {}).get("token_ttl_seconds", 120)
+        try:
+            ttl_s = int(ttl_cfg)
+        except Exception:
+            ttl_s = 120
+        return {"sse_token": _mint_sse_token(ttl_s), "expires_in": max(10, min(ttl_s, 600))}
 
     # ── Client-log ingest ──────────────────────────────────────────────────
     # The browser logger (ui/src/services/logger.ts → backendSink) batches

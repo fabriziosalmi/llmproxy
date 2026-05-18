@@ -70,7 +70,21 @@ export function initLogs() {
     term.writeln('\x1b[32m[SYSTEM]\x1b[0m Waiting for neural traffic link...');
     setStreamStatus('waiting', 'waiting for auth');
 
-    function connectLogStream() {
+    async function mintSseToken(baseToken) {
+        try {
+            const res = await fetch(`${BASE_URL}/api/v1/logs/token`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${baseToken}` },
+            });
+            if (!res.ok) return null;
+            const data = await res.json();
+            return data?.sse_token || null;
+        } catch {
+            return null;
+        }
+    }
+
+    async function connectLogStream() {
         const token = localStorage.getItem('proxy_key') || '';
         if (!token) {
             // Retry in 2s — user hasn't logged in yet
@@ -79,7 +93,13 @@ export function initLogs() {
         }
         if (store.state.logSource) store.state.logSource.close();
         setStreamStatus('connecting', 'connecting…');
-        const logSource = new EventSource(`${BASE_URL}/api/v1/logs?token=${encodeURIComponent(token)}`);
+        const sseToken = await mintSseToken(token);
+        if (!sseToken) {
+            setStreamStatus('reconnect', 'token mint failed, retrying…');
+            setTimeout(connectLogStream, 5000);
+            return;
+        }
+        const logSource = new EventSource(`${BASE_URL}/api/v1/logs?sse_token=${encodeURIComponent(sseToken)}`);
         store.update({ logSource });
         logSource.onopen = () => setStreamStatus('live', 'live');
         logSource.onmessage = (ev) => {
