@@ -134,33 +134,33 @@ export class ThreatEventFeed {
                 return;
             }
             try {
-            const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1/logs?sse_token=${encodeURIComponent(sseToken)}`;
-            const factory = this.deps.eventSourceFactory ?? ((u: string) => new EventSource(u));
-            if (this.es) this.es.close();
-            this.es = factory(url);
+                const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1/logs?sse_token=${encodeURIComponent(sseToken)}`;
+                const factory = this.deps.eventSourceFactory ?? ((u: string) => new EventSource(u));
+                if (this.es) this.es.close();
+                this.es = factory(url);
 
-            this.es.onopen = () => {
-                this.errorCount = 0;
-                this.setStatus('streaming');
-            };
-            this.es.onmessage = (ev: MessageEvent) => {
-                this.errorCount = 0;
-                try {
-                    const entry = JSON.parse(ev.data) as SecurityEvent;
-                    if (!isSecurityEvent(entry)) return;
-                    this.addEvent(entry);
-                } catch {
-                    /* drop invalid JSON */
-                }
-            };
-            this.es.onerror = () => {
-                this.errorCount++;
-                if (this.errorCount > 5) {
-                    this.es?.close();
-                    this.es = null;
-                    this.setStatus('error');
-                }
-            };
+                this.es.onopen = () => {
+                    this.errorCount = 0;
+                    this.setStatus('streaming');
+                };
+                this.es.onmessage = (ev: MessageEvent) => {
+                    this.errorCount = 0;
+                    try {
+                        const entry = JSON.parse(ev.data) as SecurityEvent;
+                        if (!isSecurityEvent(entry)) return;
+                        this.addEvent(entry);
+                    } catch {
+                        /* drop invalid JSON */
+                    }
+                };
+                this.es.onerror = () => {
+                    this.errorCount++;
+                    if (this.errorCount > 5) {
+                        this.es?.close();
+                        this.es = null;
+                        this.setStatus('error');
+                    }
+                };
             } catch (err) {
                 this.setStatus('error');
                 this.renderListError((err as Error)?.message);
@@ -181,10 +181,13 @@ export class ThreatEventFeed {
 
     private async defaultMintSseToken(token: string): Promise<string | null> {
         try {
-            const res = await fetch(`${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1/logs/token`, {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${token}` },
-            });
+            const res = await fetch(
+                `${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1/logs/token`,
+                {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}` },
+                }
+            );
             if (!res.ok) return null;
             const data = (await res.json()) as { sse_token?: string };
             return data?.sse_token ?? null;
