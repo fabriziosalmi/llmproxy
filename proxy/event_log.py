@@ -25,6 +25,10 @@ class EventLogger:
         # so events are broadcast (not consumed by only one client).
         self._log_subscribers: set[asyncio.Queue[dict[str, Any]]] = set()
         self._telemetry_subscribers: set[asyncio.Queue[dict[str, Any]]] = set()
+        # Dedicated async queue/worker for DLQ writes to avoid spawning an
+        # unbounded number of tasks under sustained overflow.
+        self._dlq_queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=1000)
+        self._dlq_worker_task: asyncio.Task | None = None
 
     @staticmethod
     def _fanout(subscribers: set[asyncio.Queue[dict[str, Any]]], item: dict[str, Any]) -> None:
@@ -88,13 +92,37 @@ class EventLogger:
     _DLQ_PATH = "dlq.jsonl"
     _DLQ_MAX_BYTES = 10 * 1024 * 1024  # 10 MB — rotate when exceeded
 
+    async def _dlq_worker(self) -> None:
+        while True:
+            entry = await self._dlq_queue.get()
+            try:
+                await asyncio.to_thread(self._dlq_write_sync, entry)
+            except Exception:
+                # Best-effort only; never escalate into request path failures.
+                pass
+
+    def _ensure_dlq_worker(self) -> None:
+        if self._dlq_worker_task is None or self._dlq_worker_task.done():
+            self._dlq_worker_task = asyncio.create_task(self._dlq_worker())
+
     def _schedule_dlq_write(self, entry: Any) -> None:
         """Write dropped entries off-loop to avoid blocking request processing."""
         try:
-            asyncio.create_task(asyncio.to_thread(self._dlq_write_sync, entry))
+            self._ensure_dlq_worker()
+            self._dlq_queue.put_nowait(entry)
+        except asyncio.QueueFull:
+            # Keep the newest entries: drop one oldest queued item, enqueue current.
+            try:
+                _ = self._dlq_queue.get_nowait()
+                self._dlq_queue.put_nowait(entry)
+            except Exception:
+                pass
         except Exception:
-            # If scheduling fails, fallback to sync best-effort write.
-            self._dlq_write_sync(entry)
+            # If scheduling fails unexpectedly, fallback to sync best-effort write.
+            try:
+                self._dlq_write_sync(entry)
+            except Exception:
+                pass
 
     def _dlq_write_sync(self, entry: Any):
         """Dead-letter queue: persist dropped log/telemetry entries to file.

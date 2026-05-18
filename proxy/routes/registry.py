@@ -1,15 +1,36 @@
 """Registry routes: endpoint CRUD (toggle, delete, priority, list)."""
 import asyncio
+import logging
 import os
+import re
+from urllib.parse import urlparse
 from typing import Any
 
 from fastapi import APIRouter, Request, HTTPException
 
 from models import EndpointStatus
 
+logger = logging.getLogger("llmproxy.routes.registry")
+
 
 def create_router(agent) -> APIRouter:
     router = APIRouter()
+    _ENDPOINT_ID_RE = re.compile(r"^[a-z0-9._-]{1,64}$")
+
+    def _parse_priority(raw: Any) -> int:
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="priority must be an integer")
+        return max(-1000, min(1000, value))
+
+    def _validate_base_url(raw: str) -> str:
+        parsed = urlparse(raw.strip())
+        if parsed.scheme not in ("http", "https"):
+            raise HTTPException(status_code=400, detail="url must start with http:// or https://")
+        if not parsed.netloc:
+            raise HTTPException(status_code=400, detail="url must include host")
+        return raw.strip()
 
     def _check_admin_auth(request: Request):
         """Enforce API key auth on all registry mutating endpoints.
@@ -53,7 +74,8 @@ def create_router(agent) -> APIRouter:
         try:
             found = await discover_local_endpoints(scratch)
         except Exception as e:  # noqa: BLE001
-            raise HTTPException(status_code=500, detail=f"Discovery failed: {e}") from e
+            logger.error(f"Local discovery scan failed: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Discovery failed") from e
 
         # Drop candidates whose base_url is already wired up in live config
         # so the UI doesn't suggest dups the operator would have to dedupe.
@@ -137,11 +159,19 @@ def create_router(agent) -> APIRouter:
         the onboarding wizard end-to-end usable from the UI.
         """
         _check_admin_auth(request)
-        data = await request.json()
+        try:
+            data = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid JSON body")
         ep_id = data.get("id", "").strip().lower()
-        url = data.get("url", "").strip()
+        if not _ENDPOINT_ID_RE.match(ep_id):
+            raise HTTPException(
+                status_code=400,
+                detail="id must match [a-z0-9._-] and be 1-64 chars",
+            )
+        url = _validate_base_url(data.get("url", ""))
         provider = (data.get("provider") or "openai-compatible").strip()
-        priority = int(data.get("priority", 0))
+        priority = _parse_priority(data.get("priority", 0))
         raw_models = data.get("models", [])
         if isinstance(raw_models, str):
             models = [m.strip() for m in raw_models.split(",") if m.strip()]
@@ -181,7 +211,15 @@ def create_router(agent) -> APIRouter:
             status=EndpointStatus.VERIFIED,
             metadata={"provider": provider, "priority": priority, "models": models},
         )
-        await agent.store.add_endpoint(ep)
+        try:
+            await agent.store.add_endpoint(ep)
+        except Exception as e:
+            # Roll back live runtime mutation on persistence failure.
+            endpoints_cfg.pop(ep_id, None)
+            if api_key:
+                os.environ.pop(key_env, None)
+            logger.error(f"Failed to persist new endpoint '{ep_id}': {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Failed to add endpoint")
         await agent._add_log(
             f"ENDPOINT: {ep_id} ADDED ({provider} @ {url}, {len(models)} models)",
             level="SYSTEM",
@@ -192,6 +230,11 @@ def create_router(agent) -> APIRouter:
     async def delete_endpoint(endpoint_id: str, request: Request):
         _check_admin_auth(request)
         await agent.store.remove_endpoint(endpoint_id)
+        entry = (agent.config.get("endpoints", {}) or {}).pop(endpoint_id, None)
+        if isinstance(entry, dict):
+            key_env = entry.get("api_key_env")
+            if key_env:
+                os.environ.pop(str(key_env), None)
         await agent._add_log(f"ENDPOINT: {endpoint_id} DELETED", level="WARNING")
         return {"status": "deleted"}
 
@@ -199,7 +242,7 @@ def create_router(agent) -> APIRouter:
     async def set_priority(endpoint_id: str, request: Request):
         _check_admin_auth(request)
         data = await request.json()
-        priority = data.get("priority", 0)
+        priority = _parse_priority(data.get("priority", 0))
         all_endpoints = await agent.store.get_all()
         target = next((e for e in all_endpoints if e.id == endpoint_id), None)
         if not target:
