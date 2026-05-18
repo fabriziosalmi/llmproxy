@@ -126,7 +126,10 @@ describe('ThreatEventFeed', () => {
 
     it('adds Investigate + Explain actions when req_id and signature are present', () => {
         const feed = new ThreatEventFeed(container, {
-            storage, getToken: () => 'TOKEN', eventSourceFactory: factory, mintSseToken: () => 'SSE_TOKEN',
+            storage,
+            getToken: () => 'TOKEN',
+            eventSourceFactory: factory,
+            mintSseToken: () => 'SSE_TOKEN',
         });
         feed.addEvent({ level: 'SECURITY', message: 'rl', req_id: 'abc', signature: 'rl_429' });
         const investigate = container.querySelector('[data-testid="threat-investigate-abc"]');
@@ -139,7 +142,10 @@ describe('ThreatEventFeed', () => {
 
     it('mute persists to storage and hides the event', () => {
         const feed = new ThreatEventFeed(container, {
-            storage, getToken: () => 'TOKEN', eventSourceFactory: factory, mintSseToken: () => 'SSE_TOKEN',
+            storage,
+            getToken: () => 'TOKEN',
+            eventSourceFactory: factory,
+            mintSseToken: () => 'SSE_TOKEN',
         });
         const ev: SecurityEvent = { level: 'WARNING', message: 'auth fail', signature: 'auth_bad' };
         feed.addEvent(ev);
@@ -161,14 +167,20 @@ describe('ThreatEventFeed', () => {
         storage.setItem('llmproxy:muted-threats', JSON.stringify([muteKeyFor(ev)]));
 
         const feed = new ThreatEventFeed(container, {
-            storage, getToken: () => 'TOKEN', eventSourceFactory: factory, mintSseToken: () => 'SSE_TOKEN',
+            storage,
+            getToken: () => 'TOKEN',
+            eventSourceFactory: factory,
+            mintSseToken: () => 'SSE_TOKEN',
         });
         expect(feed.isMuted(ev)).toBe(true);
     });
 
     it('falls into the error state and shows a Reconnect button after repeated SSE errors', () => {
         const feed = new ThreatEventFeed(container, {
-            storage, getToken: () => 'TOKEN', eventSourceFactory: factory, mintSseToken: () => 'SSE_TOKEN',
+            storage,
+            getToken: () => 'TOKEN',
+            eventSourceFactory: factory,
+            mintSseToken: () => 'SSE_TOKEN',
         });
         feed.connect();
         const es = createdSources[0]!;
