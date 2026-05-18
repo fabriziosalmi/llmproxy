@@ -6,13 +6,49 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
+  workflow-hardening:
+    name: Workflow Hardening Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - name: Enforce SHA-pinned GitHub Actions
+        run: |
+          python - <<'PY'
+          import glob, re, sys
+          bad=[]
+          pat=re.compile(r'^\s*-\s*uses:\s*([^\s#]+)')
+          for path in sorted(glob.glob('.github/workflows/*.yml')):
+              for i,line in enumerate(open(path, encoding='utf-8'), 1):
+                  m=pat.search(line)
+                  if not m:
+                      continue
+                  ref=m.group(1)
+                  if ref.startswith('./'):
+                      continue
+                  if '@' not in ref:
+                      bad.append((path,i,ref,'missing @ref'))
+                      continue
+                  _,tag=ref.rsplit('@',1)
+                  if not re.fullmatch(r'[0-9a-f]{40}', tag):
+                      bad.append((path,i,ref,'not SHA-pinned'))
+          if bad:
+              for p,i,ref,why in bad:
+                  print(f'{p}:{i}: {why}: {ref}')
+              sys.exit(1)
+          print('All workflow actions are SHA-pinned.')
+          PY
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    needs: workflow-hardening
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: "3.12"
       - run: pip install ruff
@@ -21,9 +57,10 @@ jobs:
   typecheck:
     name: Type Check
     runs-on: ubuntu-latest
+    needs: workflow-hardening
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: "3.12"
           cache: pip
@@ -34,9 +71,10 @@ jobs:
   security:
     name: Dependency Audit
     runs-on: ubuntu-latest
+    needs: workflow-hardening
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: "3.12"
           cache: pip
@@ -49,9 +87,10 @@ jobs:
   supply-chain:
     name: Supply Chain Integrity
     runs-on: ubuntu-latest
+    needs: workflow-hardening
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: "3.12"
           cache: pip
@@ -92,8 +131,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: lint
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: "3.12"
           cache: pip
@@ -119,8 +158,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: lint
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: "3.12"
           cache: pip
@@ -138,9 +177,10 @@ jobs:
   syntax-check:
     name: Syntax Check
     runs-on: ubuntu-latest
+    needs: workflow-hardening
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: "3.12"
       - name: Compile all Python files
@@ -150,8 +190,9 @@ jobs:
   docker-size:
     name: Docker Image Size
     runs-on: ubuntu-latest
+    needs: workflow-hardening
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - name: Build Docker image
         run: docker build -t llmproxy:ci .
       - name: Check image size
