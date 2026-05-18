@@ -196,12 +196,13 @@ def create_router(agent) -> APIRouter:
 
         async def log_generator():
             global _active_log_streams
+            stream_q = agent._event_logger.subscribe_logs()
             try:
                 while True:
                     if await request.is_disconnected():
                         break
                     try:
-                        log = await asyncio.wait_for(agent.log_queue.get(), timeout=1.0)
+                        log = await asyncio.wait_for(stream_q.get(), timeout=1.0)
                         yield f"data: {json.dumps(_sanitize_log(log) if isinstance(log, dict) else log)}\n\n"
                     except asyncio.TimeoutError:
                         yield ": keep-alive\n\n"
@@ -210,6 +211,7 @@ def create_router(agent) -> APIRouter:
             except (asyncio.CancelledError, GeneratorExit):
                 pass
             finally:
+                agent._event_logger.unsubscribe_logs(stream_q)
                 async with _sse_connections_lock:
                     _active_log_streams = max(0, _active_log_streams - 1)
 

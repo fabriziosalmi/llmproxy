@@ -1,4 +1,5 @@
 """Registry routes: endpoint CRUD (toggle, delete, priority, list)."""
+import asyncio
 import os
 from typing import Any
 
@@ -88,6 +89,7 @@ def create_router(agent) -> APIRouter:
     # SSE connection limit — prevents resource exhaustion
     _MAX_TELEMETRY_STREAMS = 20
     _active_telemetry = {"count": 0}
+    _telemetry_lock = asyncio.Lock()
 
     @router.get("/api/v1/telemetry/stream")
     async def telemetry_stream(request: Request):
@@ -97,17 +99,19 @@ def create_router(agent) -> APIRouter:
         import json
         from fastapi.responses import StreamingResponse
 
-        if _active_telemetry["count"] >= _MAX_TELEMETRY_STREAMS:
-            raise HTTPException(status_code=503, detail="Too many SSE connections")
+        async with _telemetry_lock:
+            if _active_telemetry["count"] >= _MAX_TELEMETRY_STREAMS:
+                raise HTTPException(status_code=503, detail="Too many SSE connections")
+            _active_telemetry["count"] += 1
 
         async def event_generator():
-            _active_telemetry["count"] += 1
+            stream_q = agent._event_logger.subscribe_telemetry()
             try:
                 while True:
                     if await request.is_disconnected():
                         break
                     try:
-                        event = await asyncio.wait_for(agent.telemetry_queue.get(), timeout=1.0)
+                        event = await asyncio.wait_for(stream_q.get(), timeout=1.0)
                         yield f"data: {json.dumps(event)}\n\n"
                     except asyncio.TimeoutError:
                         yield ": keep-alive\n\n"
@@ -116,7 +120,9 @@ def create_router(agent) -> APIRouter:
             except (asyncio.CancelledError, GeneratorExit):
                 pass
             finally:
-                _active_telemetry["count"] -= 1
+                agent._event_logger.unsubscribe_telemetry(stream_q)
+                async with _telemetry_lock:
+                    _active_telemetry["count"] = max(0, _active_telemetry["count"] - 1)
 
         return StreamingResponse(event_generator(), media_type="text/event-stream")
 
