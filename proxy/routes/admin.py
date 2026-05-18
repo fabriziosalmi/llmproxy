@@ -670,8 +670,9 @@ def create_router(agent) -> APIRouter:
             try:
                 evicted = await agent.cache_backend.evict_expired()
                 result["positive_cache"] = f"evicted {evicted} entries"
-            except Exception:
-                result["positive_cache"] = "evict failed"
+            except Exception as e:
+                logger.error(f"Cache eviction failed during clear_caches: {e}", exc_info=True)
+                raise HTTPException(status_code=502, detail="Cache eviction failed")
         return {"status": "cleared", **result}
 
     @router.post("/api/v1/security/reset")
