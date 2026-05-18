@@ -1,6 +1,9 @@
 import time
 import json
+import logging
 from core.plugin_engine import PluginContext
+
+logger = logging.getLogger("llmproxy.plugins.telemetry_ops")
 
 async def record(ctx: PluginContext):
     """Ring 5: Background Telemetry & FinOps."""
@@ -19,7 +22,7 @@ async def record(ctx: PluginContext):
             in_tokens = usage.get("prompt_tokens", 0)
             out_tokens = usage.get("completion_tokens", 0)
         except Exception:
-            pass
+            logger.debug("Telemetry usage parse skipped", exc_info=True)
 
     # Fall back to tiktoken estimation if response didn't include usage
     if not in_tokens:
@@ -31,7 +34,7 @@ async def record(ctx: PluginContext):
                 content = choices[0].get("message", {}).get("content", "")
                 out_tokens = count_tokens(content, model_name)
         except (json.JSONDecodeError, AttributeError, UnicodeDecodeError):
-            pass
+            logger.debug("Telemetry output token estimate fallback parse skipped", exc_info=True)
 
     # 2. Cost calculation using per-model pricing table
     from core.pricing import estimate_cost

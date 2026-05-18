@@ -175,7 +175,7 @@ class RequestForwarder:
             except Exception:
                 # Defensive: provider failure shouldn't 500 the request path.
                 # Fall back to the last-known static config.
-                pass
+                logger.debug("Config provider read failed; using static config", exc_info=True)
         return self._static_config
 
     def resolve_endpoint_for_provider(self, provider: str) -> Any:
@@ -404,14 +404,14 @@ class RequestForwarder:
                                     if u:
                                         stream_usage = u
                         except (json.JSONDecodeError, KeyError, UnicodeDecodeError):
-                            pass
+                            logger.debug("Stream usage chunk parse skipped", exc_info=True)
                     # Feed decoded text to the speculative analyzer via the
                     # bounded rolling-window buffer.
                     if speculative_task is not None:
                         try:
                             stream_buf.append(chunk.decode("utf-8", errors="replace"))
                         except Exception:
-                            pass
+                            logger.debug("Stream buffer append skipped", exc_info=True)
                     yield chunk
             except (asyncio.TimeoutError, OSError, RuntimeError) as e:
                 if not circuit_success_reported:
