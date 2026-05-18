@@ -760,6 +760,24 @@ function initHUD() {
             renderResults(results);
         });
 
+        // Command palette is single-line by design. If a multiline chunk is
+        // pasted (from docs/terminal), flatten it deterministically so parser
+        // state and selection navigation stay stable.
+        input.addEventListener('paste', (e) => {
+            const raw = e.clipboardData?.getData('text/plain');
+            if (typeof raw !== 'string') return;
+            if (!/[\r\n]/.test(raw)) return;
+            e.preventDefault();
+            const flat = raw
+                .replace(/\r\n?/g, '\n')
+                .split('\n')
+                .map((s) => s.trim())
+                .filter(Boolean)
+                .join(' ');
+            input.setRangeText(flat, input.selectionStart ?? 0, input.selectionEnd ?? 0, 'end');
+            input.dispatchEvent(new Event('input'));
+        });
+
         input.addEventListener('keydown', (e) => {
             if (e.key === 'ArrowDown') {
                 e.preventDefault();
