@@ -73,7 +73,7 @@ class EventLogger:
             entry["trace_id"] = trace_id
         if self.log_queue.full():
             dropped = self.log_queue.get_nowait()
-            self._dlq_write(dropped)
+            self._schedule_dlq_write(dropped)
         await self.log_queue.put(entry)
         self._fanout(self._log_subscribers, entry)
 
@@ -81,14 +81,22 @@ class EventLogger:
         event = {"type": event_type, "timestamp": datetime.now().isoformat(), "data": data}
         if self.telemetry_queue.full():
             dropped = self.telemetry_queue.get_nowait()
-            self._dlq_write(dropped)
+            self._schedule_dlq_write(dropped)
         await self.telemetry_queue.put(event)
         self._fanout(self._telemetry_subscribers, event)
 
     _DLQ_PATH = "dlq.jsonl"
     _DLQ_MAX_BYTES = 10 * 1024 * 1024  # 10 MB — rotate when exceeded
 
-    def _dlq_write(self, entry: Any):
+    def _schedule_dlq_write(self, entry: Any) -> None:
+        """Write dropped entries off-loop to avoid blocking request processing."""
+        try:
+            asyncio.create_task(asyncio.to_thread(self._dlq_write_sync, entry))
+        except Exception:
+            # If scheduling fails, fallback to sync best-effort write.
+            self._dlq_write_sync(entry)
+
+    def _dlq_write_sync(self, entry: Any):
         """Dead-letter queue: persist dropped log/telemetry entries to file.
         Non-blocking, best-effort -- prevents silent data loss under load spikes.
         Rotates the file when it exceeds _DLQ_MAX_BYTES to prevent unbounded growth."""
