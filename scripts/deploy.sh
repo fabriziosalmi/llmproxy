@@ -161,21 +161,28 @@ log "Reading remote state..."
 # Using $(...) instead of <(...) because bash doesn't parse heredocs nested
 # inside process-substitution cleanly ("bad substitution: no closing ')' ").
 # All silent-except-the-final-printf, so the captured stdout is one line.
-REMOTE_PREFLIGHT=$(ssh_exec bash -s <<'REMOTE_PRE'
+REMOTE_PREFLIGHT=$(ssh_exec env \
+    REMOTE_DIR="$REMOTE_DIR" \
+    REMOTE_UNIT_PATH="$REMOTE_UNIT_PATH" \
+    REMOTE_UNIT_NAME="$REMOTE_UNIT_NAME" \
+    IMAGE_REPO="$IMAGE_REPO" \
+    IMAGE_TAG_PREFIX="$IMAGE_TAG_PREFIX" \
+    bash -s <<'REMOTE_PRE'
 set -euo pipefail
 
 # Each piece is whitespace-free; we'll join them by '|' on one line so the
 # caller can parse with `read -r`. Missing → empty field, never absent.
 
-git_sha=$(cd /opt/llmproxy-src 2>/dev/null && git rev-parse --short HEAD 2>/dev/null || echo "")
-git_dirty=$(cd /opt/llmproxy-src 2>/dev/null && git status --porcelain 2>/dev/null | head -c1 | tr -d '\n' || echo "")
-unit_exists=$( [ -f /etc/systemd/system/llmproxy.service ] && echo "yes" || echo "no" )
-unit_image=$(grep -oE "llmproxy:local-[a-f0-9]+" /etc/systemd/system/llmproxy.service 2>/dev/null | head -1 || echo "")
-unit_active=$(systemctl is-active llmproxy 2>/dev/null || echo "")
-unit_enabled=$(systemctl is-enabled llmproxy 2>/dev/null || echo "")
+git_sha=$(cd "$REMOTE_DIR" 2>/dev/null && git rev-parse --short HEAD 2>/dev/null || echo "")
+git_dirty=$(cd "$REMOTE_DIR" 2>/dev/null && git status --porcelain 2>/dev/null | head -c1 | tr -d '\n' || echo "")
+unit_exists=$( [ -f "$REMOTE_UNIT_PATH" ] && echo "yes" || echo "no" )
+tag_re="${IMAGE_REPO}:${IMAGE_TAG_PREFIX}[a-f0-9]+"
+unit_image=$(grep -oE "$tag_re" "$REMOTE_UNIT_PATH" 2>/dev/null | head -1 || echo "")
+unit_active=$(systemctl is-active "$REMOTE_UNIT_NAME" 2>/dev/null || echo "")
+unit_enabled=$(systemctl is-enabled "$REMOTE_UNIT_NAME" 2>/dev/null || echo "")
 docker_ok=$(docker info >/dev/null 2>&1 && echo "yes" || echo "no")
 disk_free_mb=$(df -m /var/lib/docker 2>/dev/null | awk 'NR==2 {print $4}' || echo "0")
-running_image=$(docker inspect llmproxy --format '{{.Config.Image}}' 2>/dev/null || echo "")
+running_image=$(docker inspect "$REMOTE_UNIT_NAME" --format '{{.Config.Image}}' 2>/dev/null || echo "")
 
 printf '%s|%s|%s|%s|%s|%s|%s|%s|%s\n' \
     "$git_sha" "$git_dirty" "$unit_exists" "$unit_image" \
@@ -198,7 +205,7 @@ if [ "${DISK_FREE_MB:-0}" -lt 500 ]; then
     exit 1
 fi
 if [ -n "$REMOTE_DIRTY" ]; then
-    err "Remote /opt/llmproxy-src has uncommitted changes. Refusing to clobber."
+    err "Remote ${REMOTE_DIR} has uncommitted changes. Refusing to clobber."
     exit 1
 fi
 
@@ -221,7 +228,7 @@ printf '  image tag: %-22s → %s\n' "${UNIT_IMAGE:-?}" "$NEW_TAG"
 printf '  version:   %s\n'                  "$EXPECTED_VERSION"
 printf '  rollback:  %s\n'                  "${UNIT_IMAGE:-<none>}"
 printf '  smoke:     /health, /version, /identity/config'
-[ -n "$PROBE_KEY" ] && printf ', /identity/me, /api/v1/logs?token=…'
+[ -n "$PROBE_KEY" ] && printf ', /identity/me, /api/v1/logs/token + /api/v1/logs?sse_token=…'
 printf '\n'
 
 if [ "$DRY_RUN" -eq 1 ]; then
@@ -307,7 +314,8 @@ if ! docker image inspect "$NEW_TAG" >/dev/null 2>&1; then
 fi
 
 # 3c. systemd unit patch (idempotent + backup)
-cur_tag=$(grep -oE "llmproxy:local-[a-f0-9]+" "$REMOTE_UNIT_PATH" | head -1 || true)
+tag_re="${IMAGE_REPO}:${IMAGE_TAG_PREFIX}[a-f0-9]+"
+cur_tag=$(grep -oE "$tag_re" "$REMOTE_UNIT_PATH" | head -1 || true)
 if [ "$cur_tag" = "$NEW_TAG" ] && [ "$FORCE" -ne 1 ]; then
     echo "STEP unit: already references $NEW_TAG, skipping sed"
 else
@@ -316,7 +324,7 @@ else
         sed -i "s|$cur_tag|$NEW_TAG|g" "$REMOTE_UNIT_PATH"
     else
         # No prior tag found — pathological, refuse rather than corrupt the unit.
-        echo "ERR: no llmproxy:local-<sha> pattern in $REMOTE_UNIT_PATH — manual recovery required" >&2
+        echo "ERR: no ${IMAGE_REPO}:${IMAGE_TAG_PREFIX}<sha> pattern in $REMOTE_UNIT_PATH — manual recovery required" >&2
         audit "deploy-fail step=unit-patch reason=no-pattern"
         exit 15
     fi
@@ -364,7 +372,7 @@ log "Waiting for /health (≤${HEALTH_TIMEOUT_S}s)..."
 DEADLINE=$(( $(date +%s) + HEALTH_TIMEOUT_S ))
 HEALTH_OK=0
 while [ "$(date +%s)" -lt "$DEADLINE" ]; do
-    if curl -fsS -m 3 -o /dev/null "$PROBE_URL/health"; then
+    if curl -fsS -m 3 -o /dev/null "$PROBE_URL/health" 2>/dev/null; then
         HEALTH_OK=1
         break
     fi
@@ -417,14 +425,24 @@ if [ "$HEALTH_OK" -eq 1 ]; then
             SMOKE_FAILED=1
         fi
 
-        # SSE query-token fallback
-        code=$(curl -s -o /dev/null -m 2 -w '%{http_code}' \
-            "$PROBE_URL/api/v1/logs?token=$PROBE_KEY" 2>/dev/null || true)
-        if [ "$code" = "200" ] || [ "$code" = "000" ]; then
-            ok "/api/v1/logs accepts query-token (HTTP $code)"
-        else
-            err "/api/v1/logs rejected query-token: HTTP $code"
+        # SSE short-lived token flow
+        sse_token=$(curl -fsS -m 5 "$PROBE_URL/api/v1/logs/token" \
+            -X POST \
+            -H "Authorization: Bearer $PROBE_KEY" 2>/dev/null \
+            | python3 -c 'import sys,json; print(json.load(sys.stdin).get("sse_token",""))' 2>/dev/null \
+            || true)
+        if [ -z "$sse_token" ]; then
+            err "/api/v1/logs/token did not return sse_token"
             SMOKE_FAILED=1
+        else
+            code=$(curl -s -o /dev/null -m 2 -w '%{http_code}' \
+                "$PROBE_URL/api/v1/logs?sse_token=$sse_token" 2>/dev/null || true)
+            if [ "$code" = "200" ] || [ "$code" = "000" ]; then
+                ok "/api/v1/logs accepts short-lived sse_token (HTTP $code)"
+            else
+                err "/api/v1/logs rejected sse_token: HTTP $code"
+                SMOKE_FAILED=1
+            fi
         fi
     fi
 fi
