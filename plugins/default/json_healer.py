@@ -1,6 +1,9 @@
 import json
+import logging
 from fastapi.responses import Response
 from core.plugin_engine import PluginContext
+
+logger = logging.getLogger("llmproxy.plugins.json_healer")
 
 async def repair(ctx: PluginContext):
     """Ring 4: Post-Flight JSON Auto-Healer.
@@ -38,6 +41,6 @@ async def repair(ctx: PluginContext):
                 )
                 await rotator._add_log("JSON-HEALER: Repaired truncated response stream.", level="WARNING")
             except Exception:
-                pass
+                logger.debug("JSON healer produced invalid repaired payload", exc_info=True)
     except Exception:
-        pass
+        logger.debug("JSON healer skipped due to unexpected error", exc_info=True)
