@@ -51,7 +51,7 @@ export async function installSseMock(page: Page): Promise<void> {
         // Threat feed now mints a short-lived SSE token first.
         // Keep this deterministic in E2E by short-circuiting that call.
         const originalFetch = window.fetch.bind(window);
-        window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+        window.fetch = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
             const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
             if (url.includes('/api/v1/logs/token')) {
                 return new Response(JSON.stringify({ sse_token: 'e2e-sse-token', expires_in: 120 }), {
@@ -59,7 +59,7 @@ export async function installSseMock(page: Page): Promise<void> {
                     headers: { 'Content-Type': 'application/json' },
                 });
             }
-            return originalFetch(input as RequestInfo, init);
+            return originalFetch(input, init);
         };
 
         (window as unknown as { __sseEmit: (data: unknown) => void }).__sseEmit = (data) => {
