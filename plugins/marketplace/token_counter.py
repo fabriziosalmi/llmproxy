@@ -52,8 +52,8 @@ class TokenCounter(BasePlugin):
             usage = data.get("usage")
             if usage and "prompt_tokens" in usage:
                 return usage
-        except Exception:
-            pass
+        except (json.JSONDecodeError, AttributeError, UnicodeDecodeError) as e:
+            logger.debug("TokenCounter usage parse skipped: %s", e)
         return None
 
     def _compute_cost(self, model: str, input_tokens: int, output_tokens: int) -> float:

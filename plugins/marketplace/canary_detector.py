@@ -21,10 +21,13 @@ Config (via manifest ui_schema):
 """
 
 import json
+import logging
 from typing import Dict, Any, Optional
 
 from core.plugin_sdk import BasePlugin, PluginResponse, PluginHook
 from core.plugin_engine import PluginContext
+
+logger = logging.getLogger("plugin.canary_detector")
 
 
 class CanaryDetector(BasePlugin):
@@ -65,7 +68,8 @@ class CanaryDetector(BasePlugin):
             if not choices:
                 return ""
             return choices[0].get("message", {}).get("content", "")
-        except Exception:
+        except (json.JSONDecodeError, AttributeError, UnicodeDecodeError, TypeError) as e:
+            logger.debug("CanaryDetector response parse skipped: %s", e)
             return ""
 
     def _detect_leakage(self, system_prompt: str, response: str) -> Dict[str, Any]:
