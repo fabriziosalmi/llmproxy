@@ -181,8 +181,8 @@ def create_router(agent) -> APIRouter:
                         status_code=200,
                         media_type="application/json",
                     )
-            except (json.JSONDecodeError, KeyError):
-                pass
+            except (json.JSONDecodeError, KeyError) as e:
+                logger.warning("Embedding response translation skipped: %s", e)
 
         # Cost tracking. Embeddings is its own route — no downstream
         # enqueue runs (unlike /v1/chat/completions), so without persistence
@@ -194,8 +194,8 @@ def create_router(agent) -> APIRouter:
                 cost_usd = estimate_cost(model, tokens, 0)
                 from proxy.budget import charge_and_persist
                 await charge_and_persist(agent, agent._budget_lock, cost_usd)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Embedding cost tracking skipped: %s", e)
 
         return response
 

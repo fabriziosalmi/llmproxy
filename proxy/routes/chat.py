@@ -130,8 +130,8 @@ def create_router(agent) -> APIRouter:
                     in_tok = usage.get("prompt_tokens") or count_messages_tokens(body.get("messages", []), model_name)
                     out_tok = usage.get("completion_tokens", 0)
                     cost_usd = estimate_cost(model_name, in_tok, out_tok)
-            except (json.JSONDecodeError, AttributeError, UnicodeDecodeError):
-                pass
+            except (json.JSONDecodeError, AttributeError, UnicodeDecodeError) as e:
+                logger.warning("Cost estimate parse skipped: %s", e)
             async with agent._budget_lock:
                 budget_cfg = agent.config.get("budget", {})
                 daily_limit = budget_cfg.get("daily_limit", 50.0)
@@ -164,8 +164,8 @@ def create_router(agent) -> APIRouter:
                     _usage = json.loads(response.body).get("usage", {})
                     _in_tok = _usage.get("prompt_tokens", 0)
                     _out_tok = _usage.get("completion_tokens", 0)
-            except (json.JSONDecodeError, AttributeError, UnicodeDecodeError):
-                pass
+            except (json.JSONDecodeError, AttributeError, UnicodeDecodeError) as e:
+                logger.warning("Audit usage parse skipped: %s", e)
             _status = response.status_code if response and hasattr(response, "status_code") else 200
 
             async def _persist_logs():
