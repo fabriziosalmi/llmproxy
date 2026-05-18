@@ -30,7 +30,9 @@ export function renderAuditEmpty(container: HTMLElement, suffix = ''): void {
 
 export function renderAuditTable(container: HTMLElement, items: AuditItem[], rangeLabel: string): void {
     const fragment = document.createDocumentFragment();
-    fragment.appendChild(el('div', 'text-[9px] text-slate-600 font-mono mb-2', `${items.length} entries · ${rangeLabel}`));
+    fragment.appendChild(
+        el('div', 'text-[9px] text-slate-600 font-mono mb-2', `${items.length} entries · ${rangeLabel}`)
+    );
 
     const table = el('table', 'w-full');
     const thead = document.createElement('thead');
@@ -55,11 +57,7 @@ export function renderAuditTable(container: HTMLElement, items: AuditItem[], ran
         const statusClass = status >= 400 ? 'text-rose-400' : 'text-emerald-400';
         const cost = r.cost_usd ? `$${r.cost_usd.toFixed(4)}` : '--';
         const blockedCell = el('td', 'px-2 py-1 text-[9px] font-mono');
-        const blockedTag = el(
-            'span',
-            r.blocked ? 'text-rose-400' : 'text-emerald-400',
-            r.blocked ? 'YES' : 'no'
-        );
+        const blockedTag = el('span', r.blocked ? 'text-rose-400' : 'text-emerald-400', r.blocked ? 'YES' : 'no');
         blockedCell.appendChild(blockedTag);
 
         row.appendChild(el('td', 'px-2 py-1 text-[9px] font-mono text-slate-500', ts));
