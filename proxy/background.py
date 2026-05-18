@@ -48,6 +48,7 @@ async def config_watch_loop(agent, interval: int = 30):
                     agent.cache_backend._ttl = cache_cfg.get("ttl", 3600)
                 # Trigger plugin hot-reload
                 if hasattr(agent, 'plugin_manager'):
+                    agent.plugin_manager.update_runtime_config(agent.config)
                     await agent.plugin_manager.load_plugins()
                 # Invalidate model resolver provider cache
                 try:

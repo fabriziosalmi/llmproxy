@@ -529,7 +529,21 @@ function initEventFeed() {
 
     let errorCount = 0;
 
-    function connect() {
+    async function mintSseToken(baseToken) {
+        try {
+            const res = await fetch(`${window.location.origin}/api/v1/logs/token`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${baseToken}` },
+            });
+            if (!res.ok) return null;
+            const data = await res.json();
+            return data?.sse_token || null;
+        } catch {
+            return null;
+        }
+    }
+
+    async function connect() {
         try {
             const _token = localStorage.getItem('proxy_key') || '';
             if (!_token) {
@@ -539,7 +553,12 @@ function initEventFeed() {
             }
             if (eventSource) eventSource.close();
             errorCount = 0;
-            eventSource = new EventSource(`${window.location.origin}/api/v1/logs?token=${encodeURIComponent(_token)}`);
+            const sseToken = await mintSseToken(_token);
+            if (!sseToken) {
+                setTimeout(connect, 3000);
+                return;
+            }
+            eventSource = new EventSource(`${window.location.origin}/api/v1/logs?sse_token=${encodeURIComponent(sseToken)}`);
             eventSource.onmessage = (e) => {
                 errorCount = 0;
                 try {

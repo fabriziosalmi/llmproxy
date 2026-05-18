@@ -134,7 +134,7 @@ class ProxyOrchestrator(BaseAgent):
         self.deduplicator = RequestDeduplicator(ttl_seconds=300)
 
         # Plugin engine
-        self.plugin_manager = PluginManager()
+        self.plugin_manager = PluginManager(config=self.config)
         self.plugin_state = PluginState(
             cache=self.cache_backend,
             metrics=MetricsTracker,

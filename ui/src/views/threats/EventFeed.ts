@@ -52,14 +52,16 @@ interface EventFeedDeps {
     storage?: Storage;
     /** Time window the feed claims to cover, surfaced in the empty state. */
     windowLabel?: string;
+    /** Optional SSE token minter (tests/dev overrides). */
+    mintSseToken?: (token: string) => string | null | Promise<string | null>;
 }
 
 export class ThreatEventFeed {
     private readonly container: HTMLElement;
     private readonly listEl: HTMLElement;
     private readonly statusEl: HTMLElement;
-    private readonly deps: Required<Omit<EventFeedDeps, 'eventSourceFactory'>> &
-        Pick<EventFeedDeps, 'eventSourceFactory'>;
+    private readonly deps: Required<Omit<EventFeedDeps, 'eventSourceFactory' | 'mintSseToken'>> &
+        Pick<EventFeedDeps, 'eventSourceFactory' | 'mintSseToken'>;
 
     private status: EventFeedStatus = 'idle';
     private es: EventSource | null = null;
@@ -80,6 +82,7 @@ export class ThreatEventFeed {
                 deps.storage ??
                 (typeof localStorage !== 'undefined' ? localStorage : (undefined as unknown as Storage)),
             windowLabel: deps.windowLabel ?? 'live',
+            mintSseToken: deps.mintSseToken,
         };
         this.muted = this.loadMuted();
 
@@ -124,8 +127,14 @@ export class ThreatEventFeed {
         }
 
         this.setStatus(this.errorCount > 0 ? 'reconnecting' : 'connecting');
-        try {
-            const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1/logs?token=${encodeURIComponent(token)}`;
+        const openWithToken = (sseToken: string | null) => {
+            if (!sseToken) {
+                this.setStatus('error');
+                this.retryTimer = setTimeout(() => this.connect(), 3_000);
+                return;
+            }
+            try {
+            const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1/logs?sse_token=${encodeURIComponent(sseToken)}`;
             const factory = this.deps.eventSourceFactory ?? ((u: string) => new EventSource(u));
             if (this.es) this.es.close();
             this.es = factory(url);
@@ -152,9 +161,35 @@ export class ThreatEventFeed {
                     this.setStatus('error');
                 }
             };
-        } catch (err) {
-            this.setStatus('error');
-            this.renderListError((err as Error)?.message);
+            } catch (err) {
+                this.setStatus('error');
+                this.renderListError((err as Error)?.message);
+            }
+        };
+        const minted = this.deps.mintSseToken ? this.deps.mintSseToken(token) : this.defaultMintSseToken(token);
+        if (typeof minted === 'string' || minted === null) {
+            openWithToken(minted);
+            return;
+        }
+        void Promise.resolve(minted)
+            .then((sseToken) => openWithToken(sseToken))
+            .catch(() => {
+                this.setStatus('error');
+                this.retryTimer = setTimeout(() => this.connect(), 3_000);
+            });
+    }
+
+    private async defaultMintSseToken(token: string): Promise<string | null> {
+        try {
+            const res = await fetch(`${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1/logs/token`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!res.ok) return null;
+            const data = (await res.json()) as { sse_token?: string };
+            return data?.sse_token ?? null;
+        } catch {
+            return null;
         }
     }
 

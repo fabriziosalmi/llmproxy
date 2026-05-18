@@ -30,6 +30,7 @@ logger = logging.getLogger("llmproxy.forwarder")
 # request OOM under streaming load. The total-char counter is preserved
 # so missing-usage token estimation scales correctly for long responses.
 _MAX_STREAM_BUFFER_CHARS = 131_072
+_MAX_STREAM_HOLD_BYTES = 1_048_576  # 1 MiB hard-cap for buffered security gate
 
 
 class _BoundedStreamBuffer:
@@ -370,9 +371,24 @@ class RequestForwarder:
             speculative_task = asyncio.create_task(
                 self._security.analyze_speculative(prompt, stream_text_chunks, kill_event)
             )
+        sec_cfg = self._live_config().get("security", {}) or {}
+        gate_cfg = sec_cfg.get("streaming_buffered_gate", {}) or {}
+        gate_enabled = bool(gate_cfg.get("enabled", False))
+        gate_tenants = gate_cfg.get("tenants", ["*"]) or ["*"]
+        tenant_id = (
+            ctx.metadata.get("_cache_tenant")
+            or ctx.metadata.get("_key_prefix")
+            or ctx.session_id
+            or "default"
+        )
+        tenant_match = "*" in gate_tenants or tenant_id in gate_tenants
+        buffered_gate = gate_enabled and tenant_match
+        hold_limit = int(gate_cfg.get("max_buffer_bytes", _MAX_STREAM_HOLD_BYTES))
+        held_chunks: list[bytes] = []
+        held_bytes = 0
 
         async def stream_generator():
-            nonlocal first_chunk_seen, circuit_success_reported
+            nonlocal first_chunk_seen, circuit_success_reported, held_bytes
             stream_usage = {}
             try:
                 async for chunk in adapter.stream(target_url, translated_body, translated_headers, session):
@@ -412,7 +428,33 @@ class RequestForwarder:
                             stream_buf.append(chunk.decode("utf-8", errors="replace"))
                         except Exception:
                             logger.debug("Stream buffer append skipped", exc_info=True)
-                    yield chunk
+                    if buffered_gate:
+                        held_chunks.append(chunk)
+                        held_bytes += len(chunk)
+                        if held_bytes > hold_limit:
+                            logger.warning(
+                                "Buffered gate overflow (%s bytes > %s) for tenant=%s; "
+                                "failing closed",
+                                held_bytes, hold_limit, tenant_id,
+                            )
+                            yield (
+                                b'data: {"error":"stream_buffer_overflow",'
+                                b'"message":"Buffered security gate overflow"}\n\n'
+                            )
+                            return
+                    else:
+                        yield chunk
+                if buffered_gate:
+                    # Release buffered chunks only after full upstream completion
+                    # and after speculative guardrail had the full response.
+                    if kill_event.is_set():
+                        yield (
+                            b'data: {"error":"stream_blocked",'
+                            b'"message":"Response blocked by content policy"}\n\n'
+                        )
+                        return
+                    for c in held_chunks:
+                        yield c
             except (asyncio.TimeoutError, OSError, RuntimeError) as e:
                 if not circuit_success_reported:
                     await cb.report_failure()
