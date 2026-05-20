@@ -369,7 +369,13 @@ class ProxyOrchestrator(BaseAgent):
             )
         except Exception as e:  # banner is informational — never fail startup on it
             self.logger.debug("Ready banner skipped: %s", e)
-        config = uvicorn.Config(self.app, host=host, port=port, log_level="info")
+        config = uvicorn.Config(
+            self.app,
+            host=host,
+            port=port,
+            log_level="info",
+            server_header=False,  # strip `Server: uvicorn` banner; security_headers middleware sets its own
+        )
         server = uvicorn.Server(config)
         await server.serve()
 
