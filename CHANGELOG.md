@@ -2,6 +2,35 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.64] — 2026-05-20
+
+### Spec — MCP-native gateway (1.22 design doc)
+
+First-class design for the strategic next move: turn LLMProxy into the first
+open-source AI gateway with full Model Context Protocol support. Three
+components in one declarative config:
+
+1. **Bridge** — any configured MCP server appears as a standard OpenAI `tool`
+   in `/v1/chat/completions`, so every OpenAI-compatible client (Cline,
+   Cursor, raw SDK, …) gets MCP for free with one config line.
+2. **MITM proxy** — sit between MCP-native clients (Claude Desktop) and MCP
+   servers, applying the existing 5-ring defense pipeline (auth, audit,
+   threat ledger, budget, PII) to every tool call.
+3. **Server-mode** — LLMProxy itself exposes an MCP endpoint so MCP clients
+   can introspect/drive the gateway (audit log resources, panic/hot-swap
+   tools, RBAC-gated).
+
+Spec covers: architecture, config schema (yaml + env), security model
+(sandboxing, secrets, ring integration), observability (Prometheus +
+audit chain), phased rollout (1.22 → 1.24), test plan, 6 risks +
+mitigations, 5 open questions, end-to-end trace, and a launch-day
+distribution checklist with the HN title pre-drafted.
+
+Live in [docs/specs/mcp-native.md](docs/specs/mcp-native.md). No runtime
+change — this is the alignment artifact before implementation begins.
+
+---
+
 ## [1.21.63] — 2026-05-20
 
 ### `scripts/deploy.sh` — smoke headers, audit-chain check, drift detection, optional prune
