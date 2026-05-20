@@ -2,6 +2,35 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.58] — 2026-05-20
+
+### Headers hardening — strip uvicorn banner, lock down CSP/COOP/CORP/Permissions-Policy
+
+External probe of the live instance surfaced 5 hardening gaps visible to anyone running a header scan against the proxy:
+1. `Server: uvicorn` leaked the stack to fingerprinters.
+2. No CSP on non-UI responses (JSON/API) — defense-in-depth gap if a confused client ever rendered a payload as HTML.
+3. No `Cross-Origin-Opener-Policy` / `Cross-Origin-Resource-Policy` — same-origin isolation only enforced via CSP `frame-ancestors`.
+4. No `Permissions-Policy` — every browser API (camera, mic, geo, payment, USB, …) implicitly allowed.
+5. No `base-uri` / `form-action` directives in the UI CSP — base-tag injection and form-action hijack were both possible.
+
+All five closed in one pass:
+
+- **`Server` banner** — `uvicorn.Config(server_header=False)` in [rotator.py:372-378](proxy/rotator.py#L372-L378) suppresses the default; `security_headers` middleware now emits `Server: llmproxy` instead. No stack disclosure.
+- **API CSP** — non-`/ui/*` responses now carry `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'`. Hardest possible.
+- **UI CSP extended** — existing UI policy gains `base-uri 'self'` and `form-action 'self'`.
+- **`Cross-Origin-Opener-Policy: same-origin`** and **`Cross-Origin-Resource-Policy: same-origin`** on every response. COEP `require-corp` deliberately omitted — `/ui/chat.html` pulls highlight.js from `cdn.jsdelivr.net` and `require-corp` would block it; revisit when chat.html bundles its own highlight.js.
+- **`Permissions-Policy`** denies 22 browser APIs (`accelerometer`, `camera`, `display-capture`, `geolocation`, `gyroscope`, `microphone`, `payment`, `usb`, `xr-spatial-tracking`, …). `clipboard-write=(self)` preserved so chat.html's per-block Copy buttons keep working. `fullscreen=(self)` preserved for future viewer needs.
+
+**Refactor** — the inline middleware in `create_app()` was extracted to a module-level `install_security_headers(app)` function. Unit tests now mount it on a bare FastAPI in [tests/test_security_headers.py](tests/test_security_headers.py) — 14 tests covering banner rebrand, global hardening, CSP differentiation (UI vs API), Permissions-Policy coverage, and trace-id injection safety (5 malicious payloads × parametrized).
+
+Validation: lint ✓, vitest 344/344 ✓, pytest `make test` 1006/1006 + e2e+new 54/54 = 1060/1060 ✓, build ✓ (771ms).
+
+**Out of scope, follow-up needed:**
+- TLS — the live instance is still HTTP-only. A "security gateway" branding requires TLS termination (Traefik/Caddy + Let's Encrypt + HSTS preload). Code-side `tls_cfg` exists in `app_factory.py:223` but is disabled by default; needs an opinionated install path or reverse-proxy docs.
+- COEP `require-corp` — blocked on bundling highlight.js into `chat.html` instead of CDN-loading it.
+
+---
+
 ## [1.21.54] — 2026-05-14
 
 ### Fix Guards page cramped layout — nested grid bug

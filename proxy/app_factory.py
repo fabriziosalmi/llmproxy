@@ -94,6 +94,67 @@ def _resolve_cors_origins(config: dict) -> list:
     return [f"http://localhost:{port}", f"http://127.0.0.1:{port}"]
 
 
+_PERMISSIONS_POLICY = (
+    "accelerometer=(), autoplay=(), camera=(), display-capture=(), "
+    "encrypted-media=(), fullscreen=(self), gamepad=(), geolocation=(), "
+    "gyroscope=(), hid=(), idle-detection=(), magnetometer=(), "
+    "microphone=(), midi=(), payment=(), picture-in-picture=(), "
+    "publickey-credentials-get=(), screen-wake-lock=(), serial=(), "
+    "usb=(), web-share=(), xr-spatial-tracking=(), "
+    "clipboard-write=(self)"  # /ui/chat.html copy buttons need this
+)
+_UI_CSP = (
+    "default-src 'self'; "
+    "script-src 'self'; "                  # Tailwind is compiled at build time — no JIT eval
+    "style-src 'self' 'unsafe-inline'; "   # Inline style attrs (gauge widths, color overrides)
+    "font-src 'self'; "                    # Fonts are local (vendor/fonts/)
+    "img-src 'self' data:; "
+    "connect-src 'self'; "
+    "frame-ancestors 'none'; "
+    "base-uri 'self'; "
+    "form-action 'self'"
+)
+_API_CSP = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+_TRACE_ID_RE = re.compile(r'^[a-fA-F0-9-]{1,64}$')
+
+
+def install_security_headers(app: FastAPI) -> None:
+    """Register the security-headers middleware.
+
+    Extracted so unit tests can mount it on a bare FastAPI without pulling
+    in the full create_app() dependency tree (store, plugins, tracing, ...).
+    """
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next):
+        response = await call_next(request)
+        # Anti-fingerprint banner — replace uvicorn's default with a fixed string
+        # (uvicorn.Config(server_header=False) suppresses the default; we set our own).
+        response.headers["Server"] = "llmproxy"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        # Cross-origin isolation — defense in depth. COEP omitted intentionally:
+        # /ui/chat.html pulls highlight.js from jsDelivr; require-corp would block it.
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+        response.headers["Permissions-Policy"] = _PERMISSIONS_POLICY
+        # W3C Trace Context: propagate trace ID for full-stack observability.
+        # Validate trace_id is hex+dash only to prevent log injection via
+        # crafted X-Trace-Id headers (e.g. SQL/SIEM injection).
+        traceparent = request.headers.get("traceparent", "")
+        trace_id = request.headers.get("x-trace-id") or (traceparent.split("-")[1] if "-" in traceparent else None)
+        if trace_id and _TRACE_ID_RE.match(trace_id):
+            response.headers["X-Trace-Id"] = trace_id
+        # CSP differentiated by path: UI shell needs script/style/connect,
+        # API responses should be locked to default-src 'none' (defense in depth
+        # in case a JSON payload ever gets rendered as HTML by a confused client).
+        if request.url.path.startswith("/ui"):
+            response.headers["Content-Security-Policy"] = _UI_CSP
+        else:
+            response.headers["Content-Security-Policy"] = _API_CSP
+        return response
+
+
 def create_app(agent) -> FastAPI:
     """App factory: builds the FastAPI application with middleware and routes."""
     from core.rate_limiter import RateLimitMiddleware
@@ -195,30 +256,7 @@ def create_app(agent) -> FastAPI:
                 pass  # Allow — ByteLevelFirewall handles actual body size
         return await call_next(request)
 
-    # Security + observability response headers
-    @app.middleware("http")
-    async def security_headers(request: Request, call_next):
-        response = await call_next(request)
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        # W3C Trace Context: propagate trace ID for full-stack observability
-        # H8: Validate trace_id is alphanumeric+dash only to prevent log
-        # injection via crafted X-Trace-Id headers (e.g. SQL/SIEM injection).
-        trace_id = request.headers.get("x-trace-id") or (request.headers.get("traceparent", "").split("-")[1] if "-" in request.headers.get("traceparent", "") else None)
-        if trace_id and re.match(r'^[a-fA-F0-9-]{1,64}$', trace_id):
-            response.headers["X-Trace-Id"] = trace_id
-        if request.url.path.startswith("/ui"):
-            response.headers["Content-Security-Policy"] = (
-                "default-src 'self'; "
-                "script-src 'self'; "                  # Tailwind is compiled at build time — no JIT eval
-                "style-src 'self' 'unsafe-inline'; "   # Inline style attrs (gauge widths, color overrides)
-                "font-src 'self'; "                    # Fonts are local (vendor/fonts/)
-                "img-src 'self' data:; "
-                "connect-src 'self'; "
-                "frame-ancestors 'none'"
-            )
-        return response
+    install_security_headers(app)
 
     tls_cfg = agent.config.get("server", {}).get("tls", {})
     if not tls_cfg.get("enabled", False):
