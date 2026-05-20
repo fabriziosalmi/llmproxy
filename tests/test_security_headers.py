@@ -98,6 +98,22 @@ async def test_ui_csp_keeps_self_and_chat_dependencies(client, path):
     assert "base-uri 'self'" in csp
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["/ui/", "/ui/chat.html"])
+async def test_coep_require_corp_on_ui(client, path):
+    """COEP require-corp is enabled on UI paths after the highlight.js bundle
+    fix (1.21.61) removed the last cross-origin subresource."""
+    resp = await client.get(path)
+    assert resp.headers["cross-origin-embedder-policy"] == "require-corp"
+
+
+@pytest.mark.asyncio
+async def test_coep_not_on_api_responses(client):
+    """API responses don't need COEP — keep the header surface minimal there."""
+    resp = await client.get("/api/v1/ping")
+    assert "cross-origin-embedder-policy" not in {k.lower() for k in resp.headers.keys()}
+
+
 # ── Trace propagation safety ──
 
 @pytest.mark.asyncio

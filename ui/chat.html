@@ -7,14 +7,13 @@
         <title>LLMProxy — Chat</title>
         <link rel="stylesheet" href="style.css" />
         <link rel="stylesheet" href="vendor/fonts.css" />
-        <!-- highlight.js GitHub-dark theme: scoped to .hljs nodes so it doesn't
-         bleed into surrounding chrome. Loaded ahead of chat.js so the first
-         render after stream completion can colorize without a FOUC. -->
-        <link
-            rel="stylesheet"
-            href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css"
-        />
-        <script defer src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+        <!-- highlight.js is bundled by Vite into chat.js (see import at top of
+         that file). The github-dark theme is imported as a CSS module so
+         Vite emits it into the chat-*.css bundle. Previously this was two
+         <script>+<link> tags pointing at cdn.jsdelivr.net, which forced
+         CSP to allow third-party assets and blocked us from turning on
+         Cross-Origin-Embedder-Policy: require-corp. -->
+
         <style>
             * {
                 box-sizing: border-box;

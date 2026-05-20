@@ -1,7 +1,50 @@
 /**
  * LLMProxy — Chat Interface
  * Safe markdown rendering (no innerHTML on user content), TPS metrics, provider labels.
+ *
+ * highlight.js is bundled here (was a jsDelivr CDN <script> tag); registering a
+ * curated set of languages keeps the chunk small (~50 KB gz) instead of pulling
+ * the full ~700 KB grammar pack. Add languages here as the LLM emits new ones.
  */
+
+import hljs from 'highlight.js/lib/core';
+import bash from 'highlight.js/lib/languages/bash';
+import css from 'highlight.js/lib/languages/css';
+import go from 'highlight.js/lib/languages/go';
+import java from 'highlight.js/lib/languages/java';
+import javascript from 'highlight.js/lib/languages/javascript';
+import json from 'highlight.js/lib/languages/json';
+import markdown from 'highlight.js/lib/languages/markdown';
+import python from 'highlight.js/lib/languages/python';
+import rust from 'highlight.js/lib/languages/rust';
+import shell from 'highlight.js/lib/languages/shell';
+import sql from 'highlight.js/lib/languages/sql';
+import typescript from 'highlight.js/lib/languages/typescript';
+import xml from 'highlight.js/lib/languages/xml';
+import yaml from 'highlight.js/lib/languages/yaml';
+import 'highlight.js/styles/github-dark.css';
+
+hljs.registerLanguage('bash', bash);
+hljs.registerLanguage('css', css);
+hljs.registerLanguage('go', go);
+hljs.registerLanguage('java', java);
+hljs.registerLanguage('javascript', javascript);
+hljs.registerLanguage('js', javascript);
+hljs.registerLanguage('json', json);
+hljs.registerLanguage('markdown', markdown);
+hljs.registerLanguage('md', markdown);
+hljs.registerLanguage('python', python);
+hljs.registerLanguage('py', python);
+hljs.registerLanguage('rust', rust);
+hljs.registerLanguage('shell', shell);
+hljs.registerLanguage('sh', shell);
+hljs.registerLanguage('sql', sql);
+hljs.registerLanguage('typescript', typescript);
+hljs.registerLanguage('ts', typescript);
+hljs.registerLanguage('xml', xml);
+hljs.registerLanguage('html', xml);
+hljs.registerLanguage('yaml', yaml);
+hljs.registerLanguage('yml', yaml);
 
 const BASE = window.location.origin;
 const messagesEl = document.getElementById('messages');
@@ -107,14 +150,13 @@ function renderMarkdown(text) {
 
 // Run highlight.js over any <pre><code> in the given root that hasn't been
 // colorized yet. Called once per assistant message AFTER the stream ends so
-// we don't re-tokenize partial code on every delta. Safe if hljs isn't loaded
-// (the CDN is `defer`-loaded and may not have arrived for the first turn).
+// we don't re-tokenize partial code on every delta. Bundled (not CDN) so it
+// is available synchronously from the first render.
 function highlightCodeBlocks(root) {
-    const hl = window.hljs;
-    if (!hl || !root) return;
+    if (!root) return;
     root.querySelectorAll('pre > code:not([data-hl])').forEach((el) => {
         try {
-            hl.highlightElement(el);
+            hljs.highlightElement(el);
         } catch {
             /* unknown language → leave plain */
         }

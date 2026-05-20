@@ -133,8 +133,11 @@ def install_security_headers(app: FastAPI) -> None:
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        # Cross-origin isolation — defense in depth. COEP omitted intentionally:
-        # /ui/chat.html pulls highlight.js from jsDelivr; require-corp would block it.
+        # Cross-origin isolation — defense in depth. COOP/CORP apply to every
+        # response; COEP require-corp is enabled only on UI paths (1.21.61
+        # bundled chat.html's last CDN dep — highlight.js — so the policy is
+        # safe to enforce now that every UI subresource is same-origin and
+        # carries a CORP header via this same middleware).
         response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
         response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
         response.headers["Permissions-Policy"] = _PERMISSIONS_POLICY
@@ -150,6 +153,7 @@ def install_security_headers(app: FastAPI) -> None:
         # in case a JSON payload ever gets rendered as HTML by a confused client).
         if request.url.path.startswith("/ui"):
             response.headers["Content-Security-Policy"] = _UI_CSP
+            response.headers["Cross-Origin-Embedder-Policy"] = "require-corp"
         else:
             response.headers["Content-Security-Policy"] = _API_CSP
         return response
