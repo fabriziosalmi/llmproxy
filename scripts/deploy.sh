@@ -23,11 +23,13 @@
 # Usage:
 #   scripts/deploy.sh                                # deploy HEAD of main
 #   scripts/deploy.sh --dry-run                      # show plan, change nothing
-#   scripts/deploy.sh --probe-key sk-clai-...        # +auth smoke
-#   PROBE_KEY=$(cat ~/.llmproxy-key) scripts/deploy.sh
+#   PROBE_KEY=$(cat ~/.llmproxy-key) scripts/deploy.sh    # +auth smoke (preferred)
+#   scripts/deploy.sh --probe-key sk-...              # +auth smoke (leaks to ps/history)
 #   scripts/deploy.sh --no-rollback                  # don't auto-revert
 #   scripts/deploy.sh --force                        # redeploy same SHA
 #   scripts/deploy.sh --yes                          # skip confirmation
+#   scripts/deploy.sh --prune-old                    # remove old <repo>:<prefix>* images
+#                                                    # older than 7 days, post-smoke.
 #
 # Env overrides (with defaults):
 #   REMOTE_HOST=100.76.251.33
@@ -65,6 +67,7 @@ DRY_RUN=0
 NO_ROLLBACK=0
 FORCE=0
 ASSUME_YES=0
+PRUNE_OLD=0
 
 # ── Arg parse ───────────────────────────────────────────────────────────────
 usage() { sed -n '2,55p' "$0" | sed 's/^# \{0,1\}//'; }
@@ -75,7 +78,11 @@ while [[ $# -gt 0 ]]; do
         --no-rollback)  NO_ROLLBACK=1; shift;;
         --force)        FORCE=1; shift;;
         --yes|-y)       ASSUME_YES=1; shift;;
-        --probe-key)    PROBE_KEY="$2"; shift 2;;
+        --prune-old)    PRUNE_OLD=1; shift;;
+        --probe-key)
+            printf '\033[1;33m!\033[0m --probe-key on the CLI leaves the key in shell history and `ps`.\n' >&2
+            printf '\033[1;33m!\033[0m Prefer:  PROBE_KEY=$(cat ~/.llmproxy-key) scripts/deploy.sh\n' >&2
+            PROBE_KEY="$2"; shift 2;;
         -h|--help)      usage; exit 0;;
         *) printf 'Unknown arg: %s\n' "$1" >&2; exit 2;;
     esac
@@ -213,6 +220,13 @@ ok "Remote git: ${REMOTE_SHA:-<unknown>}"
 ok "Remote unit: image=${UNIT_IMAGE:-<unset>} active=${UNIT_ACTIVE} enabled=${UNIT_ENABLED}"
 ok "Disk free: ${DISK_FREE_MB} MB"
 [ "$UNIT_ENABLED" = "enabled" ] || warn "Unit is not enabled — deploys will survive a restart but not a reboot."
+# Drift check: the systemd unit and the actually-running container can diverge
+# if someone bypasses `systemctl restart` (e.g. `docker run` by hand). Surface
+# it so the rollback target captured below (UNIT_IMAGE) isn't a lie.
+if [ -n "${RUNNING_IMAGE:-}" ] && [ -n "${UNIT_IMAGE:-}" ] && [ "$RUNNING_IMAGE" != "$UNIT_IMAGE" ]; then
+    warn "Drift: container is running ${RUNNING_IMAGE} but unit file references ${UNIT_IMAGE}"
+    warn "Rollback will revert the unit, not the running container — manual check recommended."
+fi
 
 # Already-deployed shortcut.
 if [ "$REMOTE_SHA" = "$LOCAL_SHA" ] && [ "$UNIT_IMAGE" = "$NEW_TAG" ] && [ "$FORCE" -ne 1 ]; then
@@ -416,6 +430,62 @@ if [ "$HEALTH_OK" -eq 1 ]; then
         SMOKE_FAILED=1
     fi
 
+    # Security headers (post-1.21.58/62 hardening). Anything in front of the
+    # proxy that strips headers (CDN, reverse proxy, …) shows up here BEFORE
+    # users find out the hard way.
+    # `/api/v1/identity/config` is anon-accessible, so we don't need auth.
+    headers=$(curl -sS -m 5 -D - -o /dev/null "$PROBE_URL/api/v1/identity/config" 2>/dev/null || true)
+    headers_lc=$(printf '%s' "$headers" | tr '[:upper:]' '[:lower:]')
+    missing_headers=""
+    for h in \
+        "x-content-type-options" \
+        "x-frame-options" \
+        "referrer-policy" \
+        "cross-origin-opener-policy" \
+        "cross-origin-resource-policy" \
+        "permissions-policy" \
+        "content-security-policy"; do
+        if ! printf '%s' "$headers_lc" | grep -q "^$h:"; then
+            missing_headers="${missing_headers}${h} "
+        fi
+    done
+    if [ -n "$missing_headers" ]; then
+        err "Missing response headers: ${missing_headers}"
+        err "If something terminates TLS or proxies in front, ensure header pass-through."
+        SMOKE_FAILED=1
+    else
+        ok "Security headers present (CSP, COOP, CORP, Permissions-Policy, …)"
+    fi
+    # Banner rebrand (1.21.58): Server must NOT leak the WSGI/ASGI stack.
+    if printf '%s' "$headers_lc" | grep -qE '^server: uvicorn'; then
+        err "Server header still leaks 'uvicorn' — server_header=False not applied (image staler than 1.21.58?)"
+        SMOKE_FAILED=1
+    elif printf '%s' "$headers_lc" | grep -qE '^server: llmproxy'; then
+        ok "Server banner: llmproxy"
+    fi
+    # COEP require-corp (1.21.62) is /ui only — don't enforce on API.
+    ui_headers=$(curl -sS -m 5 -D - -o /dev/null "$PROBE_URL/ui/" 2>/dev/null || true)
+    if printf '%s' "$ui_headers" | tr '[:upper:]' '[:lower:]' | grep -q '^cross-origin-embedder-policy: require-corp'; then
+        ok "/ui/ has COEP require-corp"
+    elif printf '%s' "$ui_headers" | grep -qE '^HTTP/[12].[1]? +200'; then
+        warn "/ui/ reachable but COEP require-corp not set — staler than 1.21.62?"
+    fi
+
+    # Audit hash-chain liveness (1.21.60). The chain may be empty on a fresh
+    # box, but /audit/verify must still return a parseable {valid: true} body.
+    if [ -n "$PROBE_KEY" ]; then
+        av=$(curl -fsS -m 5 "$PROBE_URL/api/v1/audit/verify" \
+            -H "Authorization: Bearer $PROBE_KEY" 2>/dev/null || true)
+        if echo "$av" | grep -q '"valid":true'; then
+            ok "/api/v1/audit/verify reports valid chain"
+        elif echo "$av" | grep -q '"valid":false'; then
+            err "/api/v1/audit/verify reports BROKEN chain: $av"
+            SMOKE_FAILED=1
+        else
+            warn "/api/v1/audit/verify unreachable or admin-only for this key — skipped"
+        fi
+    fi
+
     # identity/me (if PROBE_KEY)
     if [ -n "$PROBE_KEY" ]; then
         me=$(curl -fsS -m 5 "$PROBE_URL/api/v1/identity/me" \
@@ -512,6 +582,47 @@ REMOTE_ROLLBACK
     fi
     err "Rolled back to ${UNIT_IMAGE}. Investigate the failure before re-trying."
     exit 1
+fi
+
+# ── 5b. Optional image prune ────────────────────────────────────────────────
+# Only after a clean deploy + green smoke. Keeps NEW_TAG and UNIT_IMAGE
+# (the rollback target) and removes other ${IMAGE_REPO}:${IMAGE_TAG_PREFIX}*
+# tags older than 7 days. Off by default — opt in with --prune-old.
+if [ "$PRUNE_OLD" -eq 1 ]; then
+    step "5b. Prune old images"
+    ssh_exec env \
+        IMAGE_REPO="$IMAGE_REPO" \
+        IMAGE_TAG_PREFIX="$IMAGE_TAG_PREFIX" \
+        NEW_TAG="$NEW_TAG" \
+        OLD_TAG="${UNIT_IMAGE:-}" \
+        DEPLOY_LOG="$DEPLOY_LOG" \
+        REMOTE_UNIT_NAME="$REMOTE_UNIT_NAME" \
+        bash -s <<'REMOTE_PRUNE' || warn "Prune step failed (non-fatal)"
+set -euo pipefail
+ts() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+audit() { printf '%s | %s | %s\n' "$(ts)" "$REMOTE_UNIT_NAME" "$*" >>"$DEPLOY_LOG"; }
+
+# Cutoff: 7 days ago, epoch seconds.
+CUTOFF=$(( $(date +%s) - 7*24*3600 ))
+removed=0
+# Format: <repo>:<tag>|<image_id>|<created_epoch>
+docker images "${IMAGE_REPO}" --format '{{.Repository}}:{{.Tag}}|{{.ID}}|{{.CreatedAt}}' \
+  | while IFS='|' read -r ref id created_at; do
+    case "$ref" in *":${IMAGE_TAG_PREFIX}"*) ;; *) continue;; esac
+    [ "$ref" = "$NEW_TAG" ] && continue
+    [ "$ref" = "$OLD_TAG" ] && continue
+    # CreatedAt format: "2026-05-01 12:34:56 +0000 UTC" — parseable by GNU date.
+    created_epoch=$(date -d "$created_at" +%s 2>/dev/null || echo 0)
+    if [ "$created_epoch" -ne 0 ] && [ "$created_epoch" -lt "$CUTOFF" ]; then
+        if docker rmi "$ref" >/dev/null 2>&1; then
+            echo "PRUNED $ref"
+            removed=$((removed + 1))
+        fi
+    fi
+done
+audit "prune-ok removed=$removed kept=[$NEW_TAG,$OLD_TAG]"
+REMOTE_PRUNE
+    ok "Prune step finished"
 fi
 
 # ── 6. Summary ──────────────────────────────────────────────────────────────
