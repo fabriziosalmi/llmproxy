@@ -2,6 +2,47 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.62] — 2026-05-20
+
+### Bundle highlight.js into chat.html + enable COEP `require-corp`
+
+`/ui/chat.html` was loading the highlight.js JavaScript and the github-dark
+theme from `cdn.jsdelivr.net` via two top-of-page `<link>` / `<script defer>`
+tags. That single cross-origin dependency was the last thing preventing the
+UI from running under `Cross-Origin-Embedder-Policy: require-corp` — every
+other subresource (fonts, css, js bundles) already lives same-origin and
+carries `Cross-Origin-Resource-Policy: same-origin` from the response
+headers middleware (1.21.58).
+
+Bundled the dependency:
+- `npm install --save highlight.js@11.9.0` — same version that was on the CDN.
+- [chat.js](ui/chat.js) now imports `highlight.js/lib/core` plus a curated
+  set of 14 grammars (bash/css/go/java/js/json/markdown/python/rust/sh/sql/ts/xml/yaml)
+  registered via `hljs.registerLanguage`. Picking specific languages keeps
+  the chunk at ~80 KB raw / ~26 KB gzipped instead of the ~700 KB full pack.
+- `highlight.js/styles/github-dark.css` imported as a CSS module so Vite
+  emits it into `dist/assets/chat-*.css` alongside the chat bundle.
+- [chat.html](ui/chat.html) lost the two `cdn.jsdelivr.net` tags; replaced
+  with a comment explaining the migration rationale.
+- `highlightCodeBlocks(root)` no longer reads `window.hljs`; uses the
+  imported `hljs` object directly. Synchronous from the first render, so
+  the previous "CDN may not have arrived for first turn" caveat is gone.
+
+Headers tightening on top of the bundle:
+- `Cross-Origin-Embedder-Policy: require-corp` is now emitted on `/ui/*`
+  responses. The 14 same-origin asset types are already covered by CORP.
+- Test surface extended in [tests/test_security_headers.py](tests/test_security_headers.py)
+  — COEP must appear on `/ui/` + `/ui/chat.html` and must NOT appear on
+  API responses (keep the header surface minimal there). 17/17 ✓.
+
+Bundle impact: chat-*.js 9.28 KB → 80.38 KB raw / 3.94 KB → 26.37 KB gzipped.
+~16 KB gzip cost for a one-shot playground load is fine; the trade is that
+the page now works under strict CSP and COEP with zero third-party trust.
+
+Validation: lint ✓ · pytest 1013 + 17 security_headers = 1030 ✓ · vitest 344/344 ✓ · build ✓ (887 ms).
+
+---
+
 ## [1.21.61] — 2026-05-20
 
 ### Docs — `.env.example` reorg + KEK warning so master key isn't mistaken for a Bearer
