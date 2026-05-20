@@ -2,6 +2,47 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.63] — 2026-05-20
+
+### `scripts/deploy.sh` — smoke headers, audit-chain check, drift detection, optional prune
+
+Five hardening additions to the remote deploy script so a "deploy ok" actually
+means "the things we shipped are live", not just "the unit is `active`":
+
+1. **Security-headers smoke**. Probes `/api/v1/identity/config` and asserts the
+   7-header hardening bundle (X-Content-Type-Options, X-Frame-Options,
+   Referrer-Policy, COOP, CORP, Permissions-Policy, CSP) is present. Catches
+   any reverse-proxy or CDN in front that silently strips headers — the kind
+   of regression you only notice when an external scanner flags it.
+2. **Server banner check**. Fails the smoke if `Server: uvicorn` still leaks
+   (means the image is older than 1.21.58 — `server_header=False` not applied).
+   Confirms the post-1.21.58 banner is `Server: llmproxy`.
+3. **COEP require-corp on /ui/**. Tested on `/ui/` only (the policy is intentionally
+   scoped). Surfaces a `warn` if the image is older than 1.21.62.
+4. **Audit-chain integrity probe** (when `PROBE_KEY` is set). Calls
+   `/api/v1/audit/verify` and fails the smoke on `{valid: false}`. Empty chain
+   is treated as fine — pinning the contract, not the data.
+5. **Drift detection in pre-flight**. Compares `docker inspect <unit>`'s
+   `Config.Image` against the tag baked into the systemd unit file. A mismatch
+   means someone bypassed `systemctl restart` and the rollback target captured
+   from the unit file is wrong — surface it before mutating anything.
+
+Operational:
+
+- **`--prune-old`** flag — opt-in post-deploy cleanup of `<repo>:<prefix>*`
+  images older than 7 days, keeping the new tag and the rollback target.
+  Runs only after a green smoke, never on failure. Stops the slow disk-fill
+  that eventually trips the `disk_free < 500 MB` guard.
+- **`--probe-key`** flag now prints a deprecation warning at parse time —
+  the env-var path (`PROBE_KEY=$(cat ~/.llmproxy-key) scripts/deploy.sh`)
+  keeps the key out of shell history and `ps aux`.
+
+Validation: `bash -n` ✓, `shellcheck -S warning` ✓ (clean).
+Live `--dry-run` against `100.76.251.33` exercised the local + remote
+pre-flight path end to end without mutating remote state.
+
+---
+
 ## [1.21.62] — 2026-05-20
 
 ### Bundle highlight.js into chat.html + enable COEP `require-corp`
