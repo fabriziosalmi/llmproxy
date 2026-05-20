@@ -2,6 +2,54 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.65] — 2026-05-20
+
+### Spec — MCP-native gateway REVIEWED-1 (refinements before implementation)
+
+Cold-read review of the 1.21.64 design doc surfaced 9 weak spots; all
+applied. Top changes:
+
+- **Timeline reframed honestly.** Phase 1 estimate moved from "2 weeks"
+  to **3–4 weeks for a solo dev**, with a sub-phase table (1.1 config →
+  1.9 buffer) calling out the actually-hard pieces (streaming
+  state machine = 4-5 days, not 1).
+- **Streaming tool-call state machine spelled out** as its own §, with
+  the pause/resolve/resume sequence and the explicit failure mode
+  (fail clean on partial stream, no silent recovery). New risk **R7**
+  added.
+- **Threat-ledger scoping made honest.** Naively running
+  `semantic_analyzer` on filesystem dumps produces false positives.
+  Phase 1 policy: score tool *arguments* always (ring 2),
+  tool *outputs* opt-in only and only on `mimeType: text/*`.
+- **Sandboxing matrix honest.** No more pretending `cap-drop=ALL` works
+  outside Docker. Phase 1 ships rlimits + pgid + env-scrubbing only;
+  full sandbox lands in Phase 2 with a deployment matrix.
+- **Token-bloat default lowered** from 50 to **10** for
+  `mcp.bridge.max_advertised` (schemas ~1.5K tokens × 30 = 45K burned).
+- **Streamable HTTP** (2025-03 MCP spec) is now the primary transport;
+  SSE kept as legacy fallback.
+- **Reserved `mcp__` namespace enforced at the request boundary** —
+  client-declared tools with that prefix get HTTP 400. New risk **R8**
+  (subprocess credential exfil via env) added with mitigation.
+- **Open questions Q1–Q5 decided.** Both opt-in surfaces shipped;
+  official `mcp` PyPI client wrapped in `proxy/mcp/client.py`;
+  aggregate-with-cap; Bearer-only on Component C; Phase 1 max 10
+  advertised tools.
+- **EU AI Act synergy made explicit** — the same hash-chained audit
+  log covers both model decisions and tool invocations once MCP
+  rides through the existing ring 5, making MCP a prerequisite for
+  the future compliance pack, not a separate workstream.
+
+Companion artifact (NOT committed, local-only): a Phases Plan PDF
+("roccia") at `~/Documents/llmproxy-roadmap/phases-plan.pdf` lists
+Phase 1 → 5 windows, sub-phase day estimates, distribution timing,
+and the abandon-criteria for each.
+
+Implementation Phase 1 (sub-phase 1.1, config schema, ~2-3 days)
+is the next build step.
+
+---
+
 ## [1.21.64] — 2026-05-20
 
 ### Spec — MCP-native gateway (1.22 design doc)
