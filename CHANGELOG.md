@@ -2,6 +2,34 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.61] — 2026-05-20
+
+### Docs — `.env.example` reorg + KEK warning so master key isn't mistaken for a Bearer
+
+Live walkthrough exposed a user-error trap: `LLM_PROXY_MASTER_KEY` was tucked
+inside the "OPTIONAL — Security & Encryption" section at the bottom of
+`.env.example`, alongside `LLM_PROXY_IDENTITY_SECRET` and the Infisical
+client secret. At a glance it reads as just "another API-shaped credential",
+which made it natural to try as a Bearer when chasing admin endpoints. It
+isn't — it's the KEK that derives the Fernet key used to encrypt secrets at
+rest (`core/secrets.py:26-52`). Pasting it in a header grants nothing and
+risks key disclosure via access logs.
+
+Reorg:
+- New **KEY GLOSSARY** block at the top of the file naming each variable's
+  exact role: `LLM_PROXY_API_KEYS` = client Bearer; `LLM_PROXY_MASTER_KEY`
+  = KEK (not a credential); `OIDC_*` = SSO path.
+- `LLM_PROXY_MASTER_KEY` promoted to **REQUIRED** (the proxy can't decrypt
+  anything in `data/` without it) and placed next to `LLM_PROXY_API_KEYS`
+  with an explicit "this is NOT a Bearer credential" warning.
+- "Security & Encryption" renamed to "Security toggles"; `LLM_PROXY_IDENTITY_SECRET`
+  and `LLM_PROXY_FEDERATION_SECRET` kept there with their relationship to
+  the master key spelled out.
+
+Pure docs change. No runtime impact.
+
+---
+
 ## [1.21.60] — 2026-05-20
 
 ### Audit ledger writes — fix silent gap that left the chain empty in production
