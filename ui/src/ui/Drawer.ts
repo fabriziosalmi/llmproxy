@@ -83,7 +83,7 @@ export function createDrawer(opts: CreateDrawerOptions = {}): DrawerHandle {
     // forcing the whole panel to scroll horizontally.
     panel.className = cx(
         'fixed top-0 right-0 h-full bg-[#0a0a0c] border-l border-white/[0.08] shadow-2xl',
-        'overflow-y-auto overflow-x-hidden',
+        'overflow-y-auto overflow-x-hidden pointer-events-auto',
         'translate-x-full transition-transform duration-200 ease-out'
     );
     if (opts.testId) panel.setAttribute('data-testid', opts.testId);

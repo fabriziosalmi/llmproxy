@@ -2,6 +2,50 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.59] — 2026-05-20
+
+### Live-bug fixes — SSE log stream 401 + drilldown drawer tabs unresponsive
+
+Two regressions surfaced during a live walkthrough against `100.76.251.33:11434`:
+
+**1. `GET /api/v1/logs?sse_token=...` → 401**
+
+The UI's `EventFeed.ts:137` mints a short-lived HMAC SSE token via
+`/api/v1/telemetry/sse-token` and connects to `/api/v1/logs?sse_token=<HMAC>`.
+The per-route handler at `telemetry.py:84` validates the HMAC correctly, but
+the global auth middleware in `app_factory.py:208` was checking only the
+literal `?token=...` query parameter as fallback — so for `sse_token=...` the
+middleware never saw a token, called `_verify_api_key("")`, and returned 401
+before the route handler ever ran.
+
+Fix: in the middleware, when the path is in `_QUERY_TOKEN_FALLBACK_PATHS` and
+the request carries `?sse_token=...`, defer to the route handler (which
+HMAC-validates the token). The middleware still rejects requests with neither
+a Bearer header nor a query token, so this isn't a bypass — it's a one-way
+delegation to the route-level HMAC check.
+
+**2. Drilldown drawer tabs (Timeline / Config / Related / Actions) unresponsive**
+
+Live screenshot showed the Endpoint drilldown opens, Overview renders, but
+clicking on the other tabs does nothing. Root cause is the drawer host
+[Drawer.ts:43](ui/src/ui/Drawer.ts#L43) carries `pointer-events-none` so the
+empty fixed-inset overlay doesn't trap clicks on the rest of the page. The
+backdrop child explicitly re-enables `pointer-events-auto`, but the panel
+relied on the CSS default — which *should* still let children receive
+events. Adding `pointer-events-auto` explicitly to the panel
+([Drawer.ts:86](ui/src/ui/Drawer.ts#L86)) defuses any browser-specific
+fixed/transform stacking-context corner case that may be eating the events.
+
+This is a best-effort defensive fix: the tabs are wired with regular DOM
+event listeners and the layout invariants look correct on paper. After
+deploy, please confirm the tabs respond — if not, the next hypothesis is
+the global `[data-drilldown]` click handler interfering with bubbling.
+
+Validation: lint ✓, vitest Drawer 8/8 + Tabs 8/8 + headers 14/14 ✓,
+pytest e2e 40/40 + security_headers 14/14 ✓, build ✓ (798ms).
+
+---
+
 ## [1.21.58] — 2026-05-20
 
 ### Headers hardening — strip uvicorn banner, lock down CSP/COOP/CORP/Permissions-Policy

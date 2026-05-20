@@ -205,6 +205,13 @@ def create_app(agent) -> FastAPI:
             # Limit query-string token fallback to explicit EventSource paths.
             # Never accept query tokens on generic protected endpoints.
             if not token and path in _QUERY_TOKEN_FALLBACK_PATHS:
+                # SSE clients mint a short-lived HMAC token via
+                # /api/v1/telemetry/sse-token and pass it as `?sse_token=`.
+                # The per-route handler (telemetry._check_auth) validates
+                # the HMAC — defer to it rather than re-implementing the
+                # validation in the global middleware.
+                if request.query_params.get("sse_token"):
+                    return await call_next(request)
                 token = request.query_params.get("token", "")
             if not agent._verify_api_key(token):
                 from fastapi.responses import JSONResponse
