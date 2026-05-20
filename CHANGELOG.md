@@ -2,6 +2,61 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.60] — 2026-05-20
+
+### Audit ledger writes — fix silent gap that left the chain empty in production
+
+Live walkthrough surfaced an S-tier finding: `/api/v1/analytics/spend` reported
+12 completed requests while `/api/v1/audit/verify` returned `{total: 0, valid: true}`.
+The "immutable audit ledger" promised in the README was empty despite real traffic.
+
+**Root cause** (three holes):
+
+1. **`/v1/completions` legacy never wrote audit nor spend.** [completions.py:130](proxy/routes/completions.py#L130)
+   called `agent.proxy_request(...)` and translated the response, with no
+   post-call persistence. Live traffic was almost certainly a coding client
+   (Cline/Cursor) hitting `/v1/completions` streaming — bypassing every audit
+   entrypoint.
+2. **`forwarder._handle_streaming` only wrote `log_spend`, not `log_audit`.**
+   For streaming through `/v1/chat/completions`, chat.py:182 tried to write
+   audit with `prompt_tokens=0, completion_tokens=0` because `response.body`
+   isn't readable on a `StreamingResponse`. For streaming through legacy
+   completions, nobody wrote anything at all.
+3. **Audit failures were silently swallowed** — `logger.warning(...)` with
+   no metric, so operators had no signal the ledger was broken.
+
+**Fix:**
+
+- `forwarder._handle_streaming` ([forwarder.py:517-558](proxy/forwarder.py#L517-L558))
+  is now the single chokepoint for streaming: it writes both `log_spend` and
+  `log_audit` with the real post-stream token counts and cost. Both routes
+  (chat + legacy completions) route through here for streaming.
+- `proxy/routes/completions.py` legacy now persists spend + audit for
+  non-streaming responses, mirroring chat.py.
+- `proxy/routes/chat.py` no longer double-writes audit for streaming
+  (was writing with zeros; the forwarder now owns it with real counts).
+- New Prometheus counter `llm_proxy_audit_persistence_total{route, outcome}`
+  in [core/metrics.py:70-74](core/metrics.py#L70-L74) — operators can now
+  alert on `outcome="fail"` to catch silent regressions.
+
+**Tests:** [tests/test_audit_persistence.py](tests/test_audit_persistence.py) — 4 cases pinning the
+contract: chat writes audit, legacy completions writes audit, legacy completions
+writes spend, counter increments on both routes. All wire through the real
+route handlers (no shortcuts).
+
+Validation: lint ✓ · pytest 1010 (make test) + 4 (audit) + 40 (e2e) = 1054/1054 ✓.
+
+**Out of scope, follow-up:**
+- Backfill: there's no migration to retroactively populate the ledger from
+  the spend table (the data shape is similar but req_id/session_id are not
+  in the spend table). Live operators with historical traffic will see the
+  ledger fill only with traffic post-deploy.
+- Streaming audit coverage in tests requires a streaming-upstream mock,
+  which the current LightweightAgent doesn't have. The forwarder's streaming
+  branch is covered by existing tests but not the new audit write specifically.
+
+---
+
 ## [1.21.59] — 2026-05-20
 
 ### Live-bug fixes — SSE log stream 401 + drilldown drawer tabs unresponsive
