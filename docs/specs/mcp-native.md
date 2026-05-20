@@ -1,8 +1,22 @@
 # Spec — MCP-Native Gateway
 
-| Status | Author | Created   | Target  | Owners      |
-| ------ | ------ | --------- | ------- | ----------- |
-| DRAFT  | fab    | 2026-05-20 | 1.22.0 | @fab (solo) |
+| Status     | Author | Created    | Last review | Target | Owners      |
+| ---------- | ------ | ---------- | ----------- | ------ | ----------- |
+| REVIEWED-1 | fab    | 2026-05-20 | 2026-05-20  | 1.22.0 | @fab (solo) |
+
+> **Review 1 changelog (2026-05-20)** — Timeline reframed to 3–4 weeks for a
+> solo dev (was 2 weeks, optimistic). Streaming-tool-call state machine
+> spelled out. Tool-output threat scoring scoped (filesystem dumps are
+> not user-controlled prompts; ledger restricted to text/* tool outputs
+> and only after explicit operator opt-in). Stdio sandboxing matrix made
+> honest (no `cap-drop` outside Docker; macOS dev = no sandbox + warning).
+> Default `mcp.bridge.max_advertised` lowered from 50 to 10 (schema
+> bloat: ~1.5K tokens/tool × 30 = 45K token budget burn). MCP transport
+> updated to **Streamable HTTP (2025-03 spec)** with SSE-legacy fallback.
+> Hard cap added: tool-name `mcp__` prefix is reserved; client requests
+> declaring `mcp__*` tools get a 400. Python SDK choice resolved
+> (Q2): official `mcp` PyPI package, wrapped in `proxy/mcp/client.py`.
+> EU AI Act compliance synergy with the audit chain made explicit.
 
 ---
 
@@ -287,12 +301,15 @@ mcp:
   enabled: true
   bridge:
     default_on: false           # bridge per-request opt-in by default
-    namespace: "mcp__"          # tool-name prefix
+    namespace: "mcp__"          # tool-name prefix (reserved — clients
+                                # using it directly get HTTP 400)
     tools_ttl_s: 300            # tools/list cache TTL
-  server:                       # Component C — LLMProxy AS an MCP server
-    enabled: true
+    max_advertised: 10          # cap tools sent upstream (context bloat guard)
+    max_tool_calls_per_request: 8   # loop-budget cap for Phase 1
+  server:                       # Component C — LLMProxy AS an MCP server (Phase 3)
+    enabled: false              # off until 1.24.0
     base_path: /mcp
-    auth: bearer                # bearer | none (auth disabled = dev only)
+    auth: bearer
     rbac:
       tools_require_role: admin # except verify_audit_chain / query_audit (user)
   upstream:
@@ -301,18 +318,18 @@ mcp:
       command: ["npx", "-y", "@modelcontextprotocol/server-git",
                 "--repository", "/workspace"]
       bridge: true
-      proxy_upstream: false
+      score_outputs: false      # default — don't run injection scoring on tool output
     - id: filesystem
       transport: stdio
       command: ["npx", "-y", "@modelcontextprotocol/server-filesystem",
                 "/srv/safe"]
       bridge: true
-      proxy_upstream: true     # also exposed at /mcp/upstream/filesystem
+      proxy_upstream: true      # Phase 2 — also exposed at /mcp/upstream/filesystem
       allowed_tools: ["read_file", "list_directory"]
       denied_tools: ["write_file", "delete"]
     - id: github
-      transport: http
-      url: https://mcp.github.example/sse
+      transport: streamable_http     # 2025-03 MCP spec, preferred
+      url: https://mcp.github.example/mcp
       key_env: GITHUB_MCP_TOKEN
       bridge: true
       tools_allowlist:
@@ -405,21 +422,32 @@ filesystem MCP server.
   an MCP server's `tools/call` returns text containing one of the
   configured secrets, the PII scrubber pattern set picks it up.
 
-### Sandboxing of stdio servers
+### Sandboxing of stdio servers — honest capability matrix
 
-- stdio MCP servers run as subprocesses with:
-  - dropped capabilities (Linux: `cap-drop=ALL` if Docker;
-    `unshare`+`--mount-proc` if bare Linux);
-  - read-only root FS except `/tmp` and explicit operator-mounted dirs;
-  - a process group so the proxy can SIGKILL the whole tree on
-    hot-reload removal;
-  - a soft 30 MB RSS limit and a hard 60 MB cap;
-  - no network egress unless `network: true` in the server config.
-- For the MVP (Phase 1), sandboxing is a config flag (`sandbox: strict
-  | none`) that requires Linux + Docker. macOS dev workflow disables
-  it with a warning. Phase 2 introduces a `wasm:` transport that runs
-  the MCP server in the existing `core/wasm_runner.py` for true
-  cross-platform isolation.
+**Phase 1 ships WITHOUT sandboxing.** stdio MCP servers run as
+unprivileged subprocesses with only:
+- a process group + dedicated session, so the proxy can SIGKILL the
+  whole tree on shutdown or hot-reload-removal;
+- a soft 100 MB RSS limit (resource.RLIMIT_AS) and a 10 s
+  `initialize` timeout;
+- inherited env scrubbed of any `LLM_PROXY_*` variable so a server
+  can't read the master key from `os.environ`.
+
+This is **deliberate scope honesty**: real sandboxing depends on the
+host. Below is the matrix Phase 2+ will follow:
+
+| Deployment      | Available primitives                                     | Phase    |
+| --------------- | -------------------------------------------------------- | -------- |
+| Docker (Linux)  | `--cap-drop=ALL --network=none --read-only --tmpfs=/tmp` | Phase 2  |
+| Bare Linux root | `unshare(CLONE_NEWUSER, CLONE_NEWNET, CLONE_NEWNS)` + seccomp | Phase 2  |
+| Bare Linux non-root | namespaces unavailable; rlimits + pgid + no-net only | Phase 1 (= MVP) |
+| macOS dev       | no real sandbox available; warning on boot               | Phase 1 (= MVP) |
+| WASM transport  | `core/wasm_runner.py` (already exists)                   | Phase 2  |
+
+The MVP's threat model is "the operator declared this MCP server
+and trusts the binary". If the operator wants stronger isolation in
+Phase 1, the supported answer is: run the proxy inside Docker and
+declare MCP servers in a sibling container that you control.
 
 ### Ring integration
 
@@ -431,13 +459,70 @@ filesystem MCP server.
 | 4 post-flight | tool result body: PII mask, schema validate, threat ledger |
 | 5 background | audit log entry per call (req_id, tool, args_hash, cost_ms, status) |
 
-### Threat ledger
+### Threat ledger — scoped, not enthusiastic
 
-Each MCP server gets a synthetic provider id `mcp:<server>`. Tool
-calls increment the same threat-trajectory counters as model calls.
-A server emitting consistent prompt-injection-shaped output (`ignore
-previous instructions`, etc.) lights up the ledger and can be
+Naively running `semantic_analyzer` on every tool output produces
+false positives: a filesystem dump containing the literal string
+"ignore previous instructions" (from a README example, a security
+test fixture, a chat log file) is not a prompt injection — it's
+content. The analyzer was tuned for user-controlled chat input.
+
+**Phase 1 policy:**
+
+- Each MCP server gets a synthetic provider id `mcp:<server>`.
+- Tool **arguments** (LLM → MCP, i.e. attacker-controlled if the
+  upstream model was hijacked) ARE scored through `semantic_analyzer`,
+  same as chat input. Ring 2 path.
+- Tool **outputs** (MCP → LLM) are NOT scored by default. Operators
+  who want it must opt in per server with `score_outputs: true`,
+  and the proxy applies scoring only when the response `mimeType`
+  starts with `text/` (not JSON, not binary).
+- The threat ledger gets a tool-call entry regardless (req_id,
+  server, tool, args_sha256, latency, status). Threat **scoring**
+  is the optional layer on top.
+
+A server emitting consistent injection-shaped *arguments* (the
+upstream model is hallucinating jailbreaks and the bridge is
+faithfully forwarding them) lights up the ledger and can be
 auto-blocked by the existing `ZeroTrust` plugin.
+
+### Streaming tool-call state machine
+
+`gpt-4o` emits `tool_calls` as part of an SSE stream — the bridge
+cannot wait for `end-of-message` to detect them. State machine:
+
+1. Forwarder sees `delta.tool_calls[i]` chunks accumulating.
+2. When `finish_reason == "tool_calls"` arrives, **pause** the stream
+   (do not forward to client yet).
+3. For each accumulated tool call:
+   - If name starts with `mcp__`, look up server/tool, invoke
+     `tools/call` synchronously.
+   - Else, leave for the client (existing behaviour).
+4. Append synthetic `tool` role messages to the conversation; re-call
+   the upstream model with the augmented history.
+5. Resume streaming the second turn's deltas to the client.
+
+The client sees one continuous SSE stream where the assistant's
+final answer follows the tool result inline. No new client capability
+required. `req_id` is preserved across the two upstream calls so
+the audit chain shows a linked pair plus the tool entry.
+
+If at step 3 the upstream model emits N tool calls and `N >
+mcp.bridge.max_tool_calls_per_request` (default 8 in Phase 1),
+the proxy short-circuits with a `429`-style tool message and an
+`llm_proxy_mcp_tool_budget_exhausted_total` counter increment.
+
+### EU AI Act synergy
+
+The hash-chained audit log (req_id, key_prefix, model, provider,
+timestamps, costs) is already a passable AI Act Article 12 logging
+record for chat traffic. Once MCP tool calls write through the same
+chain — same hash, same `provider=mcp:<server>` rows — the audit
+trail covers *both* the model decision and every tool invocation
+the model triggered. That's the harder half of "high-risk AI system"
+record-keeping done. The MCP-native gateway is therefore a
+prerequisite for the EU AI Act compliance pack on the strategic
+roadmap, not a separate workstream.
 
 ---
 
@@ -479,24 +564,46 @@ on a stdio server config.
 
 ## Phased rollout
 
-### Phase 1 — Bridge MVP (1.22.0)
+### Phase 1 — Bridge MVP (1.22.0, ~3-4 weeks solo)
+
+Honest pacing for a solo dev. Original estimate was 2 weeks; a sober
+breakdown:
+
+| Sub-phase     | Days | Deliverable                                                           |
+| ------------- | ---- | --------------------------------------------------------------------- |
+| 1.1 Config    | 2-3  | yaml + env schema, hot-load wiring (read-only at boot for Phase 1)    |
+| 1.2 stdio     | 3-4  | subprocess lifecycle, JSON-RPC framing, `initialize` / `tools/list`   |
+| 1.3 Streamable HTTP | 2-3 | HTTP POST + optional SSE-legacy fallback for older servers          |
+| 1.4 Cache     | 1-2  | per-server `tools/list` cache + `tools/list_changed` invalidation     |
+| 1.5 Bridge    | 4-5  | advertise into chat completions + resolve `tool_calls` round-trip     |
+| 1.6 Rings     | 2-3  | PII + audit + budget hooks on tool I/O (esp. streaming state machine) |
+| 1.7 Tests     | 3-4  | 8 unit + 3 e2e against real npm servers                               |
+| 1.8 Metrics + UI | 2-3 | Prometheus counters + read-only MCP list panel in dashboard         |
+| Buffer        | 2-3  | bug-fix, doc, blog post draft                                         |
+
+**~21-30 working days** — shorter only if other priorities are paused.
 
 In scope:
 - Configuration model + boot-time MCP server registration
 - `tools/list` discovery + cache + advertisement in `/v1/chat/completions`
 - `tools/call` round-trip + ring 2/4/5 integration
-- stdio + HTTP/SSE transport
+- **stdio + Streamable HTTP transport** (SSE fallback for legacy servers)
 - New Prometheus counters
-- 8 unit tests + 3 e2e tests
+- 8 unit tests + 3 e2e tests (real npm `@modelcontextprotocol/server-*`)
 - UI: read-only MCP server list (no drilldown yet)
 - 3 reference MCP servers tested: git, filesystem (read-only), github
+- Hard cap `mcp.bridge.max_tool_calls_per_request` (default 8) — break
+  the loop budget before agentic budgets ship.
+- Tool-name reserved namespace enforced at the request boundary —
+  any client-declared tool with `mcp__` prefix → HTTP 400.
 
 Out of scope (Phase 1):
 - LLMProxy AS MCP server (Component C)
 - MCP MITM (Component B)
-- Sandboxing beyond `cap-drop=ALL`
+- Sandboxing (deferred to Phase 2 — see "Security" §, dev = no sandbox + warning)
 - UI drilldown
-- Hot-reload of MCP config
+- Hot-reload of MCP config (boot-only for now)
+- Threat scoring on tool outputs (false-positive risk — see R5)
 
 ### Phase 2 — Hardening + MITM (1.23.0)
 
@@ -597,39 +704,65 @@ the existing PII regex set (the regex set was tuned for chat
 text, not e.g. structured filesystem dumps). Mitigation: ring 4 PII
 runs on the tool result body before it's materialised back into the
 chat trace; pattern set expanded with file-path / SSH-key patterns
-in Phase 1.
+in Phase 1. PII scrubbing applies regardless of `score_outputs`
+(scrubbing is policy enforcement; threat scoring is detection).
 
 **R6. Marketing wedge slips.** Someone (LiteLLM most likely) ships
-MCP bridge first. Mitigation: ship Phase 1 in two weeks; do not
-let scope creep delay it. The MITM and "LLMProxy as MCP server"
-components can come later — what wins HN is the
-"any OpenAI client now has MCP for free" claim.
+MCP bridge first. Mitigation: ship Phase 1 within ~4 weeks;
+parallel-track the blog draft + HN post from Day 1 (don't write
+them at the end). The MITM and Component C can come later — what
+wins HN is the "any OpenAI client now has MCP for free" claim.
+**Be honest with yourself**: 2 weeks was optimism. 4 weeks is
+ambitious-but-achievable for a solo dev. 6+ weeks = the wedge
+likely closes.
+
+**R7. Streaming tool-call state machine bugs.** The pause-resolve-
+resume flow (see §Streaming) is the single most failure-prone
+piece. Recovery from a partial tool stream is tricky: if a stream
+breaks mid-tool-call accumulation, the proxy must either complete
+the call from the partial JSON (lossy) or fail the request (clean).
+**Phase 1 choice: fail clean** with a `502 Bad Gateway` + explicit
+error body. No silent partial calls. Test: kill the upstream
+connection mid-tool-emission, assert the client sees a 502 and the
+audit log records the abort.
+
+**R8. Subprocess credential exfil via env.** A malicious or
+compromised stdio MCP server reads `os.environ` and ships
+`LLM_PROXY_MASTER_KEY` to a remote server. Mitigation: the
+subprocess spawn path scrubs the env of any `LLM_PROXY_*` variable
+before exec. Tested in `test_mcp_stdio_transport.py`.
 
 ---
 
-## Open questions
+## Open questions (and Phase-1 decisions)
 
-- **Q1.** What is the right opt-in surface? `extra_body:
-  {"mcp_bridge": true}` is OpenAI-SDK-friendly, but a header
-  (`X-LLMProxy-MCP: 1`) is friendlier to raw curl. Ship both?
-- **Q2.** Should the proxy run an in-process MCP client library, or
-  shell out to the official Anthropic Python `mcp` package?
-  In-process is faster but pulls a heavier dep. **Lean: official
-  package**, hidden behind `proxy/mcp/client.py` adapter so we can
-  swap later.
-- **Q3.** Do we expose the MCP fleet as one aggregate tool surface
-  per request (all 30 tools across 6 servers), or filter by
-  client-declared interest? MVP says aggregate. If the LLM context
-  bloats, add a request-level `mcp_servers: ["git", "filesystem"]`
-  filter.
-- **Q4.** For component C (LLMProxy AS MCP server), is OAuth
-  worth the cost in 1.24, or do we ship Bearer-only and let
-  operators front it with Caddy/Pomerium for OAuth?
-- **Q5.** Do `mcp__*` tools count toward the per-request token
-  budget when we advertise them? The schemas can be large. Phase
-  1: yes, the operator can cap with `mcp.bridge.max_advertised:
-  N` (default 50). Phase 2: smart shortlist via semantic match
-  against the prompt.
+- **Q1. Opt-in surface.** `extra_body: {"mcp_bridge": true}` is OpenAI-
+  SDK-friendly; `X-LLMProxy-MCP: 1` header is friendlier to raw curl.
+  **Decided:** ship both in Phase 1. Header wins if both set.
+- **Q2. MCP client library.** Roll our own JSON-RPC layer vs use the
+  official Anthropic `mcp` PyPI package?
+  **Decided:** use the official `mcp` package (already at 1.x, MIT-
+  licensed, ~12 deps), wrapped behind `proxy/mcp/client.py` so the
+  surface area we depend on is minimal and the dep is swappable. Pin
+  to a known-good version; bump in minor releases. Adds ~1.5 MB to
+  the image, acceptable.
+- **Q3. Tool aggregation vs filter.** Aggregate fleet (all tools from
+  all servers) or per-request filter?
+  **Decided:** aggregate in Phase 1, capped at
+  `mcp.bridge.max_advertised` (default **10**, see Q5).
+  Per-request `mcp_servers: ["git", "filesystem"]` filter ships in
+  Phase 2.
+- **Q4. OAuth on Component C.** OAuth in 1.24 or Bearer-only?
+  **Decided:** Bearer-only in Phase 3; OAuth lands in Phase 4 if any
+  hosted offering is built. Operators wanting OAuth front the
+  endpoint with Caddy/Pomerium/oauth2-proxy.
+- **Q5. Tool schemas eating the context window.** Schemas average
+  500–2000 tokens each. Naively advertising 30 tools = 15-60 K
+  tokens burned in the request before the LLM sees the user prompt.
+  **Decided:** Phase 1 hard default is
+  `mcp.bridge.max_advertised: 10`. Operators with bigger budgets
+  raise it; semantic shortlisting (rank by prompt similarity)
+  ships in Phase 2.
 
 ---
 
