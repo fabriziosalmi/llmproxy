@@ -67,6 +67,11 @@ RING_LATENCY = Histogram(
 # ─── Security metrics ───
 INJECTION_BLOCKED = Counter('llm_proxy_injection_blocked_total', 'Injection attempts blocked')
 AUTH_FAILURES = Counter('llm_proxy_auth_failures_total', 'Authentication failures', ['reason'])
+AUDIT_PERSISTENCE = Counter(
+    'llm_proxy_audit_persistence_total',
+    'Audit-log write attempts and outcomes',
+    ['route', 'outcome'],  # route: chat|completions|forwarder_stream ; outcome: ok|fail
+)
 
 
 def start_metrics_server(port: int = 9091):
@@ -118,6 +123,10 @@ class MetricsTracker:
     @staticmethod
     def track_auth_failure(reason: str):
         AUTH_FAILURES.labels(reason=reason).inc()
+
+    @staticmethod
+    def track_audit_persistence(route: str, outcome: str):
+        AUDIT_PERSISTENCE.labels(route=route, outcome=outcome).inc()
 
     @staticmethod
     def track_ring_latency(ring: str, duration: float):

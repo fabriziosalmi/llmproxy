@@ -14,10 +14,15 @@ batch processing scripts, and any pre-2023 code.
 import json
 import logging
 import hashlib
+import time
+import datetime as _dt
 
 from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import APIKeyHeader
+
+from core.metrics import MetricsTracker
+from core.pricing import estimate_cost
 
 logger = logging.getLogger("llmproxy.routes.completions")
 
@@ -127,7 +132,64 @@ def create_router(agent) -> APIRouter:
             session_id = hashlib.sha256(f"{ip}:{ua}:{lang}".encode("utf-8")).hexdigest()[:16]
 
         # Run through full proxy pipeline
+        _start = time.time()
         response = await agent.proxy_request(request, body=chat_body, session_id=session_id)
+        _duration = time.time() - _start
+
+        # Audit + spend persistence for NON-streaming legacy completions.
+        # Streaming requests are logged by forwarder._handle_streaming (single
+        # chokepoint). chat.py has its own block; this is parity for the legacy
+        # path which otherwise leaves the audit ledger silent (live walkthrough
+        # 2026-05-20: 12 completions, 0 audit entries — root cause was this gap).
+        if not isinstance(response, StreamingResponse) and response is not None and hasattr(response, "body"):
+            try:
+                _now = int(time.time())
+                _date = _dt.date.today().isoformat()
+                _key = (token[:8] + "...") if token else ""
+                _provider = ""
+                _req_id = ""
+                if hasattr(response, "headers"):
+                    _provider = response.headers.get("X-LLMProxy-Provider", "")
+                    _req_id = response.headers.get("X-LLMProxy-Request-Id", "")
+                _in_tok = 0
+                _out_tok = 0
+                _cost_usd = 0.0
+                _model_name = chat_body.get("model", "")
+                try:
+                    _data = json.loads(response.body)
+                    _usage = _data.get("usage", {}) or {}
+                    _in_tok = int(_usage.get("prompt_tokens", 0) or 0)
+                    _out_tok = int(_usage.get("completion_tokens", 0) or 0)
+                    _cost_usd = estimate_cost(_model_name, _in_tok, _out_tok)
+                except (json.JSONDecodeError, AttributeError, TypeError, UnicodeDecodeError) as e:
+                    logger.debug("Legacy completion usage parse skipped: %s", e)
+                _status = response.status_code if hasattr(response, "status_code") else 200
+                _latency_ms = round(_duration * 1000, 1)
+                if hasattr(agent.store, "log_spend"):
+                    try:
+                        await agent.store.log_spend(
+                            ts=_now, date=_date, key_prefix=_key,
+                            model=_model_name, provider=_provider,
+                            prompt_tokens=_in_tok, completion_tokens=_out_tok,
+                            cost_usd=_cost_usd, latency_ms=_latency_ms,
+                            status=_status,
+                        )
+                    except Exception as e:
+                        logger.warning("Legacy completion spend log failed: %s", e)
+                if hasattr(agent.store, "log_audit"):
+                    try:
+                        await agent.store.log_audit(
+                            ts=_now, req_id=_req_id, session_id=session_id[:16],
+                            key_prefix=_key, model=_model_name, provider=_provider,
+                            status=_status, prompt_tokens=_in_tok, completion_tokens=_out_tok,
+                            cost_usd=_cost_usd, latency_ms=_latency_ms, metadata="{}",
+                        )
+                        MetricsTracker.track_audit_persistence("completions", "ok")
+                    except Exception as e:
+                        MetricsTracker.track_audit_persistence("completions", "fail")
+                        logger.warning("Legacy completion audit log failed: %s", e)
+            except Exception as e:
+                logger.warning("Legacy completion post-call persistence skipped: %s", e)
 
         # Streaming: translate each SSE chunk from chat to legacy format
         if isinstance(response, StreamingResponse):

@@ -169,15 +169,22 @@ def create_router(agent) -> APIRouter:
             _status = response.status_code if response and hasattr(response, "status_code") else 200
 
             async def _persist_logs():
+                # Streaming requests are logged by forwarder._handle_streaming
+                # (single chokepoint with real post-stream token counts and
+                # cost). Writing here would create a duplicate audit entry
+                # with token_counts=0 because response.body is not readable
+                # for StreamingResponse.
+                if _is_streaming:
+                    return
                 try:
-                    # Spend log: only for non-streaming (streaming is logged
-                    # by the forwarder with real post-stream token counts).
-                    if not _is_streaming:
-                        await agent.store.log_spend(
-                            ts=_now, date=_date, key_prefix=_key, model=model_name,
-                            provider=_provider, prompt_tokens=_in_tok, completion_tokens=_out_tok,
-                            cost_usd=cost_usd, latency_ms=round(duration * 1000, 1), status=_status,
-                        )
+                    await agent.store.log_spend(
+                        ts=_now, date=_date, key_prefix=_key, model=model_name,
+                        provider=_provider, prompt_tokens=_in_tok, completion_tokens=_out_tok,
+                        cost_usd=cost_usd, latency_ms=round(duration * 1000, 1), status=_status,
+                    )
+                except Exception as e:
+                    logger.warning(f"Chat spend log failed: {e}")
+                try:
                     _audit_meta = json.dumps({"model_version": model_version}) if model_version else "{}"
                     await agent.store.log_audit(
                         ts=_now, req_id=_req_id, session_id=session_id[:16],
@@ -186,8 +193,10 @@ def create_router(agent) -> APIRouter:
                         cost_usd=cost_usd, latency_ms=round(duration * 1000, 1),
                         metadata=_audit_meta,
                     )
+                    MetricsTracker.track_audit_persistence("chat", "ok")
                 except Exception as e:
-                    logger.warning(f"Audit/spend log persistence failed: {e}")
+                    MetricsTracker.track_audit_persistence("chat", "fail")
+                    logger.warning(f"Chat audit log failed: {e}")
             task = agent._spawn_task(_persist_logs())
             def _on_audit_error(t: asyncio.Task) -> None:
                 if t.exception():
