@@ -2,6 +2,21 @@ import asyncio
 import aiohttp
 import logging
 import sys
+import socket
+import pytest
+
+def is_port_open(port: int) -> bool:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(0.1)
+            return s.connect_ex(("localhost", port)) == 0
+    except Exception:
+        return False
+
+pytestmark = pytest.mark.skipif(
+    not is_port_open(8000),
+    reason="Integrated tests require a running LLMProxy instance on port 8000"
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
