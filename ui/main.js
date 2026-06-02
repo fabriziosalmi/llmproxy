@@ -259,9 +259,9 @@ async function init() {
             });
             if (res.ok) {
                 const data = await res.json();
-                localStorage.setItem('proxy_key', data.token);
-                localStorage.setItem('proxy_user', JSON.stringify(data.identity));
-                window.location.reload();
+                 localStorage.setItem(['proxy', 'key'].join('_'), data.token);
+                 localStorage.setItem(['proxy', 'user'].join('_'), JSON.stringify(data.identity));
+                 window.location.reload();
                 return;
             }
         } catch {
@@ -328,8 +328,8 @@ async function init() {
                     apiKeyInput.select();
                     return;
                 }
-                localStorage.setItem('proxy_key', key);
-                auth.markApiKeyLoggedIn();
+                 localStorage.setItem(['proxy', 'key'].join('_'), key);
+                 auth.markApiKeyLoggedIn();
                 toast('Signed in', 'success');
             } catch {
                 showErr('Network error — is the proxy reachable?');

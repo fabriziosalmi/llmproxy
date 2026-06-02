@@ -110,15 +110,15 @@ def get_secret(
                     secret_path=secret_path,
                 )
                 value = secret.secret_value
-                logger.debug(f"Secret '{key}' loaded from Infisical.")
+                logger.debug("Secret loaded from Infisical.")
             except Exception as e:
-                logger.warning(f"Infisical lookup failed for '{key}': {e}")
+                logger.warning(f"Infisical lookup failed: {type(e).__name__}")
 
     # 2. Fallback to environment variable
     if value is None:
         value = os.environ.get(key)
         if value is not None:
-            logger.debug(f"Secret '{key}' loaded from environment variable.")
+            logger.debug("Secret loaded from environment variable.")
 
     # 3. Apply default or raise
     if value is None:

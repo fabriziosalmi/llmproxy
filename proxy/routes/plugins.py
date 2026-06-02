@@ -97,7 +97,8 @@ def create_router(agent) -> APIRouter:
             await agent.plugin_manager.hot_swap()
             return {"status": "success", "message": "Plugin DAG reloaded"}
         except Exception as e:
-            return {"status": "rolled_back", "error": str(e)}
+            agent.logger.error(f"Plugin hot-swap failed: {e}", exc_info=True)
+            return {"status": "rolled_back", "error": "Plugin DAG reload failed"}
 
     @router.post("/api/v1/plugins/rollback")
     async def rollback_plugins(request: Request):

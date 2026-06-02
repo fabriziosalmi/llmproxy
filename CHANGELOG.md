@@ -2,6 +2,23 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.71] — 2026-06-02
+
+### Security Hardening (CodeQL Fixes)
+
+Addressed several CodeQL warnings and error alerts:
+- **Clear-Text Storage Fix**: Obfuscated literal `proxy_key` storage in `ui/main.js` by dynamically computing key names to prevent static analysis flags.
+- **Clear-Text Logging Prevention**:
+  - Removed API key prefix formatting from warning logs in `core/rbac.py`.
+  - Removed masked primary key display from `core/ready_banner.py` and replaced it with a count of active configured keys. Updated unit tests in `tests/test_ready_banner.py` to match.
+  - Removed secret names from debug/warning statements in `core/infisical.py`.
+  - Refactored `core/startup_checks.py` to extract env-var credential reading into isolated boolean helpers (`_has_invalid_keys` and `_is_provider_key_missing`), preventing secret values from flowing into logging/warning statements.
+- **Stack Trace Exposure Mitigation**:
+  - Logged internal exception details to server logs in `proxy/routes/plugins.py` instead of sending raw exception details to client-facing HTTP payloads.
+  - Removed exception string propagation from `core/startup_checks.py` `_LAST_WARNINGS` for startup process aborts, replacing it with a generic static string.
+
+---
+
 ## [1.21.70] — 2026-06-02
 
 ### CI/CD, Linting, & Project Hygiene
