@@ -2600,3 +2600,9 @@ Review item #9 (mobile card layout) remains partial — tables scroll horizontal
 ### Added
 - 4 new marketplace plugins: ToolGuard, TenantQoS, SchemaEnforcer, ShadowTraffic
 - Self-audit: 2 critical race conditions fixed, 4 high-severity hardening fixes
+
+## [1.21.74] - 2026-06-03
+### Security
+- Fixed unbounded memory allocation (OOM DoS) in ASGI firewall middleware by enforcing default 5MB `max_body_bytes`.
+- Remediated Stored/Reflected XSS vulnerability in SOC Dashboard real-time threat feed (`innerHTML` interpolation).
+- Hardened Base64 evasion detection in ASGI firewall, supporting URL-safe characters (`-_`) and whitespace padding.
