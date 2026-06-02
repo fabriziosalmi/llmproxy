@@ -14,7 +14,7 @@ LLMProxy supports WebAssembly plugins via the [Extism](https://extism.org/) SDK,
 pip install extism
 ```
 
-If Extism is not installed, WASM plugins are skipped silently (no crash).
+If the `extism` python package or the underlying system shared library `libextism` is missing or incompatible, WASM plugins are skipped to prevent crashes, but LLMProxy logs clear diagnostic warnings/errors at startup detailing the root cause to assist operators in troubleshooting.
 
 ## JSON I/O Protocol
 

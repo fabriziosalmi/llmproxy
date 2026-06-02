@@ -28,6 +28,10 @@ server:
     enabled: false            # Enable local vLLM integration
     model_path: ""            # Local model path
     fallback_threshold: 0.1   # Budget threshold to fallback to local
+  storage:
+    type: "sqlite"            # Storage type (sqlite or postgres)
+    dsn_env: "DATABASE_URL"   # Environment variable containing the database DSN
+    dsn: ""                   # Fallback database DSN if env var is empty
 ```
 
 ## Security
