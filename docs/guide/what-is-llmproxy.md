@@ -41,7 +41,7 @@ The `RotatorAgent` orchestrates 9 route modules under `proxy/routes/`:
 |-------|-----------|
 | Backend | Python 3.12+, FastAPI, uvicorn, aiohttp |
 | Frontend | Vanilla JS (ES Modules), Tailwind CSS, Chart.js, xterm.js |
-| Database | SQLite (aiosqlite) |
+| Database | SQLite (aiosqlite) + Redis (Rate Limiting & Circuit Breakers) |
 | Observability | OpenTelemetry, Prometheus, Sentry |
 | Security | PyJWT, OIDC/JWKS, mTLS, Tailscale Zero-Trust |
 | Secrets | Infisical SDK + env fallback |
@@ -50,6 +50,6 @@ The `RotatorAgent` orchestrates 9 route modules under `proxy/routes/`:
 
 - **Security-first**: Every request passes through injection detection, PII masking, and trajectory analysis before reaching any LLM
 - **Provider-agnostic**: Single API endpoint supporting 15 providers with automatic format translation
-- **Cost control**: Per-model pricing, budget enforcement, automatic model downgrading for simple prompts
+- **Cost control**: Per-model pricing, Predictive FinOps (HTTP 402 budget enforcement), automatic model downgrading for simple prompts
 - **Observable**: Prometheus metrics, OpenTelemetry traces, real-time SOC dashboard, webhook alerts
 - **Extensible**: Ring-based plugin pipeline with Python SDK and WASM sandbox for untrusted code

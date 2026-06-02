@@ -17,8 +17,8 @@ Security gateway for Large Language Models. Routes requests across 15 providers 
 
 - **One endpoint, 15 providers** -- Send OpenAI-compatible requests and let the proxy handle translation, failover, and cost optimization across 14 dedicated providers (OpenAI, Anthropic, Google, Azure, Ollama, Groq, Together, Mistral, DeepSeek, xAI, Perplexity, Fireworks, OpenRouter, and SambaNova) plus a generic OpenAI-compatible adapter.
 - **Security by default** -- Byte-level ASGI firewall, injection scoring, PII masking, cross-session threat intelligence, immutable audit ledger, HMAC response signing. Fail-closed auth middleware denies all admin paths unless explicitly whitelisted.
-- **Cost control** -- Per-model pricing for 30+ models, daily budget limits with automatic downgrade across fallback chains (FinOps Routing), per-session spend tracking, cost-efficiency analytics.
-- **Extensible** -- 18 marketplace plugins (budget guard, A/B routing, schema enforcement, canary detection, ...) with a ring-based pipeline. Write your own in Python or WASM.
+- **Cost control** -- Per-model pricing for 30+ models, daily budget limits with automatic downgrade across fallback chains (Predictive FinOps Routing with HTTP 402 rejection), per-session spend tracking, cost-efficiency analytics.
+- **Extensible** -- 18 marketplace plugins (budget guard, A/B routing, schema enforcement, canary detection, ...) with a Redis-backed distributed ring pipeline. Write your own in Python or WASM.
 
 ---
 
@@ -50,7 +50,7 @@ docker run -d --name llmproxy -p 8090:8090 \
   -e LLM_PROXY_API_KEYS=sk-proxy-test \
   -e OPENAI_API_KEY=$OPENAI_API_KEY \
   -v llmproxy-data:/app/data \
-  ghcr.io/fabriziosalmi/llmproxy:1.21.72
+  ghcr.io/fabriziosalmi/llmproxy:1.21.73
 ```
 
 Each release publishes `:latest`, the full semver (`:X.Y.Z`), the minor (`:X.Y`), plus a per-commit short SHA tag for reproducible deploys.
@@ -126,7 +126,7 @@ OpenAI, Anthropic, Google (Gemini), Azure OpenAI, Ollama, Groq, Together, Mistra
 
 ### Smart Routing
 
-Endpoints are scored using an EMA-weighted formula: `score = (success^2 / latency) * cost_factor^w`. The proxy automatically routes to the best-scoring endpoint, with configurable fallback chains (e.g., GPT-4o fails -> Claude Sonnet -> Gemini Pro). When the daily budget is exhausted, requests are automatically skipped over the primary endpoint and downgraded via these fallback chains (FinOps Routing).
+Endpoints are scored using an EMA-weighted formula: `score = (success^2 / latency) * cost_factor^w`. The proxy automatically routes to the best-scoring endpoint, with configurable fallback chains (e.g., GPT-4o fails -> Claude Sonnet -> Gemini Pro). When the daily budget is exhausted, requests are automatically skipped over the primary endpoint and downgraded via these fallback chains (Predictive FinOps Routing with HTTP 402 rejection).
 
 ---
 
