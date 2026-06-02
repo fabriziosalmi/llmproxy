@@ -11,7 +11,8 @@ from collections import defaultdict
 logger = logging.getLogger(__name__)
 
 # Pre-compiled regex for base64 detection (min 20 chars to avoid false positives)
-_B64_RE = re.compile(rb"[A-Za-z0-9+/]{20,}={0,2}")
+# Updated to support URL-Safe base64 (-_) and whitespace padding evasion
+_B64_RE = re.compile(rb"[A-Za-z0-9+/\-_=\s]{20,}")
 # Hex string detection: sequences of hex pairs (min 20 chars = 10 bytes decoded)
 _HEX_RE = re.compile(rb"(?:\\x[0-9a-f]{2}){10,}|(?:[0-9a-f]{2}\s*){10,}", re.IGNORECASE)
 # Unicode escape sequences: \uXXXX or &#xXXXX; or &#DDDD;
@@ -102,7 +103,7 @@ class ByteLevelFirewallMiddleware:
         b"emergency override authorized",
     ]
 
-    def __init__(self, app, max_body_bytes: int = 0, signature_store=None):
+    def __init__(self, app, max_body_bytes: int = 5_000_000, signature_store=None):
         self.app = app
         self.max_body_bytes = max_body_bytes
         self._signature_store = signature_store
@@ -187,7 +188,13 @@ class ByteLevelFirewallMiddleware:
         for match in _B64_RE.finditer(data):
             candidate = match.group()
             try:
-                decoded = base64.b64decode(candidate, validate=True)
+                # Strip whitespaces used for evasion and convert URL-safe to standard base64
+                clean_candidate = candidate.translate(None, delete=b" \n\r\t").replace(b"-", b"+").replace(b"_", b"/")
+                # Fix missing padding
+                missing_padding = len(clean_candidate) % 4
+                if missing_padding:
+                    clean_candidate += b"=" * (4 - missing_padding)
+                decoded = base64.b64decode(clean_candidate, validate=True)
                 # Only keep if it looks like text (>80% printable ASCII)
                 printable = sum(1 for b in decoded if 32 <= b < 127)
                 if len(decoded) > 0 and printable / len(decoded) > 0.8:
