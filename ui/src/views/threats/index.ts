@@ -20,6 +20,7 @@ import { renderSpendForecast, type SpendForecastApi, type SpendForecastBlock } f
 import { mountThreatChart, type ThreatChartHandle } from './sections/ThreatChart';
 import { renderTrafficFlow, type FlowData, type FlowNode } from './sections/TrafficFlow';
 import type { GuardsStatus, LatencyMetrics, TimelinePayload } from './sections/types';
+import { renderTriageDashboard, type DashboardSummary } from './sections/TriageDashboard';
 
 interface ThreatsApi {
     fetchMetrics: () => Promise<string>;
@@ -93,6 +94,7 @@ export interface SectionsApi extends SpendForecastApi {
     fetchGuardsStatus: () => Promise<GuardsStatus | null>;
     fetchLatencyMetrics: () => Promise<LatencyMetrics | null>;
     fetchRingTimeline: () => Promise<TimelinePayload | null>;
+    fetchDashboardSummary: () => Promise<DashboardSummary | null>;
 }
 
 export interface SectionsHosts {
@@ -133,7 +135,7 @@ export function mountThreatsSections(hosts: SectionsHosts, opts: SectionsOptions
     if (hosts.spendForecast) renderSpendForecast(hosts.spendForecast, null);
 
     const refresh = async (): Promise<void> => {
-        const [promText, guards, latency, timeline, forecast] = await Promise.all([
+        const [promText, guards, latency, timeline, forecast, summary] = await Promise.all([
             opts.api.fetchMetrics().catch(() => ''),
             opts.api.fetchGuardsStatus().catch(() => null),
             opts.api.fetchLatencyMetrics().catch(() => null),
@@ -143,7 +145,12 @@ export function mountThreatsSections(hosts: SectionsHosts, opts: SectionsOptions
                 .catch(
                     (err) => ({ __error: (err as Error)?.message ?? 'unreachable' }) as unknown as SpendForecastBlock
                 ),
+            opts.api.fetchDashboardSummary().catch(() => null),
         ]);
+
+        if (summary) {
+            renderTriageDashboard(summary, () => void refresh());
+        }
 
         // Budget + firewall are powered by /metrics + guards-status combined.
         if (hosts.budget) {

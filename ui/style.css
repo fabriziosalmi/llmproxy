@@ -700,3 +700,44 @@ html.theme-light .glow-live {
 .explain-target:focus-visible::after {
     color: rgb(148, 163, 184);
 }
+
+/* ─── 8. Density Modes (Overview vs. Investigate) ─── */
+body.density-overview .investigate-only {
+    display: none !important;
+}
+
+body.density-investigate .content-view {
+    padding: 0.75rem !important;
+}
+body.density-investigate #triage-dashboard {
+    gap: 1rem !important;
+    margin-bottom: 1rem !important;
+}
+body.density-investigate .investigate-only {
+    margin-top: 1rem !important;
+}
+body.density-investigate .investigate-only > * {
+    margin-bottom: 1rem !important;
+}
+body.density-investigate .content-view .grid {
+    gap: 1rem !important;
+}
+body.density-investigate .content-view .p-6 {
+    padding: 1rem !important;
+}
+body.density-investigate .content-view .p-5 {
+    padding: 0.75rem !important;
+}
+body.density-investigate .content-view .p-4 {
+    padding: 0.625rem !important;
+}
+body.density-investigate .content-view h2 {
+    font-size: 11px !important;
+}
+body.density-investigate .content-view table td,
+body.density-investigate .content-view table th {
+    padding-top: 0.25rem !important;
+    padding-bottom: 0.25rem !important;
+    font-size: 11px !important;
+}
+

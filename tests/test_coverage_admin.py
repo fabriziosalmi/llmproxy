@@ -729,3 +729,39 @@ class TestForecastMath:
         data = resp.json()
         assert "enabled" in data
         assert "endpoints" in data
+
+    @pytest.mark.asyncio
+    async def test_dashboard_summary(self):
+        app, agent = _make_admin_app()
+        
+        # Mock active circuit breakers
+        agent.circuit_manager.get_all_states.return_value = {
+            "openai": {"state": "open", "last_state_change": 1234567}
+        }
+        # Mock pool
+        mock_ep = MagicMock()
+        mock_ep.id = "openai"
+        agent.store.get_pool = AsyncMock(return_value=[mock_ep])
+        
+        # Mock breaker returning from get_breaker
+        mock_breaker = MagicMock()
+        mock_breaker.can_execute = AsyncMock(return_value=True)
+        agent.circuit_manager.get_breaker = AsyncMock(return_value=mock_breaker)
+        
+        # Mock audit
+        agent.store.query_audit = AsyncMock(return_value={"items": []})
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            resp = await c.get("/api/v1/dashboard/summary")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "now" in data
+        assert "attention" in data
+        assert "do_next" in data
+        assert "recent_changes" in data
+        
+        assert data["now"]["health"] == "degraded"
+        assert len(data["attention"]) > 0
+        assert data["attention"][0]["kind"] == "circuit_breaker_open"

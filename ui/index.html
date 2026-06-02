@@ -136,14 +136,9 @@
                     class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all active"
                 >
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-                        />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                     </svg>
-                    <span class="text-[11px] font-semibold">Threats</span>
+                    <span class="text-[11px] font-semibold">Home</span>
                 </button>
                 <button
                     type="button"
@@ -373,8 +368,31 @@
                         </svg>
                     </button>
                     <h1 id="view-title-text" class="text-sm font-black text-white tracking-tight">Threats</h1>
+                    
+                    <!-- Global Context Bar -->
+                    <div class="hidden lg:flex items-center gap-2 border-l border-white/10 pl-4" id="global-context-bar" aria-label="Global context bar">
+                        <span class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-400 font-mono">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                            ENV: PROD
+                        </span>
+                        <span id="context-auth-scope" class="px-2 py-0.5 rounded-full bg-sky-500/10 border border-sky-500/20 text-[10px] text-sky-400 font-mono">
+                            SCOPE: ADMIN
+                        </span>
+                        <span class="px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-[10px] text-slate-400 font-mono">
+                            WORKSPACE: DEFAULT
+                        </span>
+                        <span id="context-incident-state" class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-400 font-mono">
+                            <span class="w-1 h-1 rounded-full bg-emerald-400"></span>
+                            NOMINAL
+                        </span>
+                    </div>
                 </div>
                 <div class="flex items-center gap-3">
+                    <!-- Density Mode Selector -->
+                    <div id="density-selector" class="flex items-center gap-1 bg-white/5 p-0.5 rounded-lg border border-white/10 text-[10px] font-mono shrink-0" aria-label="Density mode selection">
+                        <button id="density-overview-btn" type="button" class="px-2 py-1 rounded-md text-white bg-white/10 hover:text-white transition-all font-semibold">Overview</button>
+                        <button id="density-investigate-btn" type="button" class="px-2 py-1 rounded-md text-slate-500 hover:text-white transition-all font-semibold">Investigate</button>
+                    </div>
                     <div id="timerange-slot" class="hidden md:flex items-center" aria-label="Active time range"></div>
                     <button
                         type="button"
@@ -432,261 +450,243 @@
             <div class="p-6">
                 <!-- THREATS VIEW -->
                 <div id="view-threats" class="content-view">
-                    <!-- KPI Grid (mounted by src/views/threats/Kpi.ts; the markup
-                     below is the legacy fallback used when no Vite build is
-                     present — TS rendering replaces it via replaceChildren). -->
-                    <div id="threats-kpi-grid" data-testid="threats-kpi-grid" class="contents">
-                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                            <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4">
-                                <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">
-                                    Requests Today
-                                </p>
-                                <p id="kpi-requests" class="text-2xl font-black text-white font-mono skeleton">0000</p>
-                            </div>
-                            <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-rose-500/20 p-4">
-                                <p class="text-[9px] font-bold text-rose-400 uppercase tracking-widest mb-1">
-                                    Threats Blocked
-                                </p>
-                                <p id="kpi-blocked" class="text-2xl font-black text-rose-400 font-mono skeleton">000</p>
-                            </div>
-                            <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-amber-500/20 p-4">
-                                <p class="text-[9px] font-bold text-amber-400 uppercase tracking-widest mb-1">
-                                    PII Masked
-                                </p>
-                                <p id="kpi-pii" class="text-2xl font-black text-amber-400 font-mono skeleton">000</p>
-                            </div>
-                            <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-emerald-500/20 p-4">
-                                <p class="text-[9px] font-bold text-emerald-400 uppercase tracking-widest mb-1">
-                                    Pass Rate
-                                </p>
-                                <p id="kpi-passrate" class="text-2xl font-black text-emerald-400 font-mono skeleton">
-                                    000%
-                                </p>
-                            </div>
-                        </div>
-                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                            <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4">
-                                <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Errors</p>
-                                <p id="kpi-errors" class="text-lg font-black text-red-400 font-mono skeleton">000</p>
-                            </div>
-                            <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4">
-                                <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Tokens</p>
-                                <p id="kpi-tokens" class="text-lg font-black text-sky-400 font-mono skeleton">0000</p>
-                            </div>
-                            <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4">
-                                <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Uptime</p>
-                                <p id="kpi-uptime" class="text-lg font-black text-teal-400 font-mono skeleton">
-                                    00h 00m
-                                </p>
-                            </div>
-                            <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4">
-                                <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">
-                                    Healthy Endpoints
-                                </p>
-                                <p id="kpi-pool-health" class="text-lg font-black text-emerald-400 font-mono skeleton">
-                                    0/0
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- P.2 — Spend Forecast (3-tile grid: time-to-limit / burn rate / projected) -->
-                    <div id="threats-spend-forecast" data-testid="threats-spend-forecast"></div>
-
-                    <!-- Budget Gauge -->
-                    <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-6">
-                        <h2 class="text-xs font-bold text-white mb-3">Daily Budget</h2>
-                        <div id="budget-gauge">
-                            <div class="text-[9px] text-slate-600 font-mono">Loading...</div>
-                        </div>
-                    </div>
-
-                    <!-- Firewall & Endpoint Breakdown -->
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-                        <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-5">
-                            <h2 class="text-xs font-bold text-white mb-3">ASGI Firewall</h2>
-                            <div id="firewall-stats">
-                                <p class="text-[9px] text-slate-600 font-mono">Loading...</p>
-                            </div>
-                        </div>
-                        <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-5">
-                            <h2 class="text-xs font-bold text-white mb-3">Per-Endpoint Breakdown</h2>
-                            <div id="endpoint-breakdown">
-                                <p class="text-[9px] text-slate-600 font-mono">Loading...</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Latency Percentiles (P50/P95/P99) -->
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-                        <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-5">
-                            <div class="flex items-center justify-between mb-3">
-                                <h2 class="text-xs font-bold text-white">Ring Latency</h2>
-                                <span class="text-[10px] font-mono text-slate-600">P50 / P95 / P99</span>
-                            </div>
-                            <div id="ring-latency-bars">
-                                <p class="text-[9px] text-slate-600 font-mono">Collecting samples...</p>
-                            </div>
-                        </div>
-                        <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-5">
-                            <div class="flex items-center justify-between mb-3">
-                                <h2 class="text-xs font-bold text-white">TTFT — Time to First Token</h2>
-                                <span class="text-[10px] font-mono text-slate-600">Streaming</span>
-                            </div>
-                            <div id="ttft-metrics">
-                                <p class="text-[9px] text-slate-600 font-mono">No streaming data yet</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Ring Execution Timeline -->
-                    <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-6">
-                        <div class="flex items-center justify-between mb-4">
-                            <h2 class="text-xs font-bold text-white">Ring Execution Timeline</h2>
-                            <span class="text-[9px] font-mono text-slate-500">Last 20 requests</span>
-                        </div>
-                        <div id="ring-timeline" class="space-y-2 max-h-72 overflow-y-auto">
-                            <p class="text-[9px] text-slate-600 font-mono">No request traces yet</p>
-                        </div>
-                    </div>
-
-                    <!-- Threat Timeline Chart -->
-                    <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-6">
-                        <div class="flex items-center justify-between mb-4">
-                            <h2 class="text-xs font-bold text-white">Threat Timeline</h2>
-                            <span class="text-[9px] font-mono text-slate-500">Last 24h</span>
-                        </div>
-                        <div class="h-48">
-                            <canvas id="threat-chart"></canvas>
-                        </div>
-                    </div>
-
-                    <!-- Security Pipeline Status -->
-                    <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6 mb-6">
-                        <h2 class="text-xs font-bold text-white mb-4">Security Pipeline</h2>
-                        <div class="flex items-center gap-2 overflow-x-auto pb-2">
-                            <div class="flex items-center gap-2 shrink-0">
-                                <div class="px-3 py-2 bg-rose-500/10 border border-rose-500/20 rounded-xl text-center">
-                                    <p class="text-[9px] font-bold text-rose-400 uppercase">Firewall</p>
-                                    <p class="text-[10px] text-slate-500 mt-0.5">ASGI L7</p>
+                    <!-- Centralized Operational Dashboard (Triage Surface) -->
+                    <div id="triage-dashboard" class="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
+                        <!-- Zone 1: NOW -->
+                        <div class="xl:col-span-2 space-y-6">
+                            <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-5">
+                                <div class="flex items-center justify-between mb-4">
+                                    <div class="flex items-center gap-2">
+                                        <span class="pulse-live w-2 h-2 rounded-full bg-emerald-400"></span>
+                                        <h2 class="text-xs font-bold text-white uppercase tracking-wider">Now — Live Status</h2>
+                                    </div>
+                                    <span id="now-health-badge" class="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">NOMINAL</span>
                                 </div>
-                                <svg
-                                    class="w-4 h-4 text-slate-600 shrink-0"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        stroke-width="2"
-                                        d="M9 5l7 7-7 7"
-                                    />
-                                </svg>
-                            </div>
-                            <div class="flex items-center gap-2 shrink-0">
-                                <div
-                                    class="px-3 py-2 bg-amber-500/10 border border-amber-500/20 rounded-xl text-center"
-                                >
-                                    <p class="text-[9px] font-bold text-amber-400 uppercase">Shield</p>
-                                    <p class="text-[10px] text-slate-500 mt-0.5">Injection + PII</p>
+                                
+                                <!-- Embedded KPI Grid for E2E tests & glanceability -->
+                                <div id="threats-kpi-grid" data-testid="threats-kpi-grid" class="contents">
+                                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                                        <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4">
+                                            <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">
+                                                Requests Today
+                                            </p>
+                                            <p id="kpi-requests" class="text-2xl font-black text-white font-mono skeleton">0000</p>
+                                        </div>
+                                        <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-rose-500/20 p-4">
+                                            <p class="text-[9px] font-bold text-rose-400 uppercase tracking-widest mb-1">
+                                                Blocked Today
+                                            </p>
+                                            <p id="kpi-blocked" class="text-2xl font-black text-rose-400 font-mono skeleton">000</p>
+                                        </div>
+                                        <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-amber-500/20 p-4">
+                                            <p class="text-[9px] font-bold text-amber-400 uppercase tracking-widest mb-1">
+                                                PII Masked
+                                            </p>
+                                            <p id="kpi-pii" class="text-2xl font-black text-amber-400 font-mono skeleton">000</p>
+                                        </div>
+                                        <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-emerald-500/20 p-4">
+                                            <p class="text-[9px] font-bold text-emerald-400 uppercase tracking-widest mb-1">
+                                                Pass Rate
+                                            </p>
+                                            <p id="kpi-passrate" class="text-2xl font-black text-emerald-400 font-mono skeleton">
+                                                100%
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                                        <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4">
+                                            <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Errors</p>
+                                            <p id="kpi-errors" class="text-lg font-black text-red-400 font-mono skeleton">000</p>
+                                        </div>
+                                        <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4">
+                                            <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Tokens</p>
+                                            <p id="kpi-tokens" class="text-lg font-black text-sky-400 font-mono skeleton">0000</p>
+                                        </div>
+                                        <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4">
+                                            <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Uptime</p>
+                                            <p id="kpi-uptime" class="text-lg font-black text-teal-400 font-mono skeleton">
+                                                00h 00m
+                                            </p>
+                                        </div>
+                                        <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-4">
+                                            <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">
+                                                Pool Health
+                                            </p>
+                                            <p id="kpi-pool-health" class="text-lg font-black text-emerald-400 font-mono skeleton">
+                                                0/0
+                                            </p>
+                                        </div>
+                                    </div>
                                 </div>
-                                <svg
-                                    class="w-4 h-4 text-slate-600 shrink-0"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        stroke-width="2"
-                                        d="M9 5l7 7-7 7"
-                                    />
-                                </svg>
-                            </div>
-                            <div class="flex items-center gap-2 shrink-0">
-                                <div class="px-3 py-2 bg-sky-500/10 border border-sky-500/20 rounded-xl text-center">
-                                    <p class="text-[9px] font-bold text-sky-400 uppercase">Ring 1</p>
-                                    <p class="text-[10px] text-slate-500 mt-0.5">Ingress</p>
+                                
+                                <!-- Traffic Flow topology diagram -->
+                                <div id="threats-traffic-flow" data-testid="threats-traffic-flow" class="mt-4 pt-4 border-t border-white/[0.04]">
+                                    <!-- mounted dynamically -->
                                 </div>
-                                <svg
-                                    class="w-4 h-4 text-slate-600 shrink-0"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        stroke-width="2"
-                                        d="M9 5l7 7-7 7"
-                                    />
-                                </svg>
                             </div>
-                            <div class="flex items-center gap-2 shrink-0">
-                                <div
-                                    class="px-3 py-2 bg-violet-500/10 border border-violet-500/20 rounded-xl text-center"
-                                >
-                                    <p class="text-[9px] font-bold text-violet-400 uppercase">Ring 2</p>
-                                    <p class="text-[10px] text-slate-500 mt-0.5">Pre-Flight</p>
+                        </div>
+
+                        <!-- Zones 2 & 3: Needs Attention & Do Next -->
+                        <div class="space-y-6">
+                            <!-- Zone 2: Needs Attention (Triage Issues Queue) -->
+                            <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-5 flex flex-col h-[280px]">
+                                <div class="flex items-center justify-between mb-3 shrink-0">
+                                    <h2 class="text-xs font-bold text-white uppercase tracking-wider">Needs Attention</h2>
+                                    <span id="triage-count-badge" class="text-[10px] font-mono text-slate-400 bg-white/5 px-2 py-0.5 rounded">0 Issues</span>
                                 </div>
-                                <svg
-                                    class="w-4 h-4 text-slate-600 shrink-0"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        stroke-width="2"
-                                        d="M9 5l7 7-7 7"
-                                    />
-                                </svg>
-                            </div>
-                            <div class="flex items-center gap-2 shrink-0">
-                                <div
-                                    class="px-3 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-center"
-                                >
-                                    <p class="text-[9px] font-bold text-emerald-400 uppercase">Proxy</p>
-                                    <p class="text-[10px] text-slate-500 mt-0.5">Forward</p>
+                                <div id="triage-issues-queue" class="space-y-2 flex-1 overflow-y-auto pr-1">
+                                    <p class="text-[11px] text-slate-500 italic">No urgent issues. System is running nominal.</p>
                                 </div>
-                                <svg
-                                    class="w-4 h-4 text-slate-600 shrink-0"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        stroke-width="2"
-                                        d="M9 5l7 7-7 7"
-                                    />
-                                </svg>
                             </div>
-                            <div class="shrink-0">
-                                <div class="px-3 py-2 bg-teal-500/10 border border-teal-500/20 rounded-xl text-center">
-                                    <p class="text-[9px] font-bold text-teal-400 uppercase">Ring 4-5</p>
-                                    <p class="text-[10px] text-slate-500 mt-0.5">Post + BG</p>
+
+                            <!-- Zone 3: Do Next -->
+                            <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-5 flex flex-col h-[200px]">
+                                <h2 class="text-xs font-bold text-white uppercase tracking-wider mb-3 shrink-0">Do Next</h2>
+                                <div id="do-next-tasks" class="space-y-2 flex-1 overflow-y-auto pr-1">
+                                    <!-- tasks populated dynamically -->
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- O.4 — Traffic Flow diagram (mounted by src/views/threats/sections/TrafficFlow.ts).
-                     Empty by default; the orchestrator hydrates with live counts on each
-                     refresh tick. -->
-                    <div id="threats-traffic-flow" data-testid="threats-traffic-flow" class="mb-6"></div>
-
-                    <!-- Live Security Event Feed (mounted by src/views/threats/EventFeed.ts; the
-                     markup below is the legacy fallback shown when TS hasn't loaded). -->
-                    <div id="threats-event-feed" data-testid="threats-event-feed">
+                    <!-- Progressive Disclosure: Investigate-Only details -->
+                    <div class="investigate-only space-y-6 animate-in">
+                        <!-- P.2 — Spend Forecast (3-tile grid) -->
+                        <div id="threats-spend-forecast" data-testid="threats-spend-forecast"></div>
+                        
+                        <!-- Daily Budget -->
                         <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6">
-                            <h2 class="text-xs font-bold text-white mb-4">Recent Security Events</h2>
-                            <div id="threat-feed" class="space-y-2 max-h-64 overflow-y-auto">
-                                <p class="text-[10px] text-slate-500 italic">Connecting to event stream...</p>
+                            <h2 class="text-xs font-bold text-white mb-3">Daily Budget</h2>
+                            <div id="budget-gauge">
+                                <div class="text-[9px] text-slate-600 font-mono">Loading...</div>
+                            </div>
+                        </div>
+
+                        <!-- Firewall & Endpoint Breakdown -->
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-5">
+                                <h2 class="text-xs font-bold text-white mb-3">ASGI Firewall</h2>
+                                <div id="firewall-stats">
+                                    <p class="text-[9px] text-slate-600 font-mono">Loading...</p>
+                                </div>
+                            </div>
+                            <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-5">
+                                <h2 class="text-xs font-bold text-white mb-3">Per-Endpoint Breakdown</h2>
+                                <div id="endpoint-breakdown">
+                                    <p class="text-[9px] text-slate-600 font-mono">Loading...</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Latency Percentiles (P50/P95/P99) -->
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-5">
+                                <div class="flex items-center justify-between mb-3">
+                                    <h2 class="text-xs font-bold text-white">Ring Latency</h2>
+                                    <span class="text-[10px] font-mono text-slate-600">P50 / P95 / P99</span>
+                                </div>
+                                <div id="ring-latency-bars">
+                                    <p class="text-[9px] text-slate-600 font-mono">Collecting samples...</p>
+                                </div>
+                            </div>
+                            <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-5">
+                                <div class="flex items-center justify-between mb-3">
+                                    <h2 class="text-xs font-bold text-white">TTFT — Time to First Token</h2>
+                                    <span class="text-[10px] font-mono text-slate-600">Streaming</span>
+                                </div>
+                                <div id="ttft-metrics">
+                                    <p class="text-[9px] text-slate-600 font-mono">No streaming data yet</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Ring Execution Timeline -->
+                        <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <h2 class="text-xs font-bold text-white">Ring Execution Timeline</h2>
+                                <span class="text-[9px] font-mono text-slate-500">Last 20 requests</span>
+                            </div>
+                            <div id="ring-timeline" class="space-y-2 max-h-72 overflow-y-auto">
+                                <p class="text-[9px] text-slate-600 font-mono">No request traces yet</p>
+                            </div>
+                        </div>
+
+                        <!-- Threat Timeline Chart -->
+                        <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <h2 class="text-xs font-bold text-white">Threat Timeline</h2>
+                                <span class="text-[9px] font-mono text-slate-500">Last 24h</span>
+                            </div>
+                            <div class="h-48">
+                                <canvas id="threat-chart"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Security Pipeline Status -->
+                        <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6">
+                            <h2 class="text-xs font-bold text-white mb-4">Security Pipeline</h2>
+                            <div class="flex items-center gap-2 overflow-x-auto pb-2">
+                                <div class="flex items-center gap-2 shrink-0">
+                                    <div class="px-3 py-2 bg-rose-500/10 border border-rose-500/20 rounded-xl text-center">
+                                        <p class="text-[9px] font-bold text-rose-400 uppercase">Firewall</p>
+                                        <p class="text-[10px] text-slate-500 mt-0.5">ASGI L7</p>
+                                    </div>
+                                    <svg class="w-4 h-4 text-slate-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                    </svg>
+                                </div>
+                                <div class="flex items-center gap-2 shrink-0">
+                                    <div class="px-3 py-2 bg-amber-500/10 border border-amber-500/20 rounded-xl text-center">
+                                        <p class="text-[9px] font-bold text-amber-400 uppercase">Shield</p>
+                                        <p class="text-[10px] text-slate-500 mt-0.5">Injection + PII</p>
+                                    </div>
+                                    <svg class="w-4 h-4 text-slate-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                    </svg>
+                                </div>
+                                <div class="flex items-center gap-2 shrink-0">
+                                    <div class="px-3 py-2 bg-sky-500/10 border border-sky-500/20 rounded-xl text-center">
+                                        <p class="text-[9px] font-bold text-sky-400 uppercase">Ring 1</p>
+                                        <p class="text-[10px] text-slate-500 mt-0.5">Ingress</p>
+                                    </div>
+                                    <svg class="w-4 h-4 text-slate-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                    </svg>
+                                </div>
+                                <div class="flex items-center gap-2 shrink-0">
+                                    <div class="px-3 py-2 bg-violet-500/10 border border-violet-500/20 rounded-xl text-center">
+                                        <p class="text-[9px] font-bold text-violet-400 uppercase">Ring 2</p>
+                                        <p class="text-[10px] text-slate-500 mt-0.5">Pre-Flight</p>
+                                    </div>
+                                    <svg class="w-4 h-4 text-slate-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                    </svg>
+                                </div>
+                                <div class="flex items-center gap-2 shrink-0">
+                                    <div class="px-3 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-center">
+                                        <p class="text-[9px] font-bold text-emerald-400 uppercase">Proxy</p>
+                                        <p class="text-[10px] text-slate-500 mt-0.5">Forward</p>
+                                    </div>
+                                    <svg class="w-4 h-4 text-slate-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                    </svg>
+                                </div>
+                                <div class="shrink-0">
+                                    <div class="px-3 py-2 bg-teal-500/10 border border-teal-500/20 rounded-xl text-center">
+                                        <p class="text-[9px] font-bold text-teal-400 uppercase">Ring 4-5</p>
+                                        <p class="text-[10px] text-slate-500 mt-0.5">Post + BG</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Live Security Event Feed -->
+                        <div id="threats-event-feed" data-testid="threats-event-feed">
+                            <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6">
+                                <h2 class="text-xs font-bold text-white mb-4">Recent Security Events</h2>
+                                <div id="threat-feed" class="space-y-2 max-h-64 overflow-y-auto">
+                                    <p class="text-[10px] text-slate-500 italic">Connecting to event stream...</p>
+                                </div>
                             </div>
                         </div>
                     </div>

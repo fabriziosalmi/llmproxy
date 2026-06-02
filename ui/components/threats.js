@@ -61,6 +61,7 @@ export function initThreats() {
                         fetchLatencyMetrics: api.fetchLatencyMetrics,
                         fetchRingTimeline: api.fetchRingTimeline,
                         fetchSpendForecast: api.fetchSpendForecast,
+                        fetchDashboardSummary: api.fetchDashboardSummary,
                     },
                     poll: (fn, intervalMs) => store.poll(fn, intervalMs, 'threats'),
                     onFirewallState: (state) => store.update({ firewall: state }),
