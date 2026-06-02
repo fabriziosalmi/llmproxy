@@ -252,7 +252,7 @@ class RequestForwarder:
             target, "provider_type", None
         )
         primary_adapter = get_adapter(primary_provider, original_model)
-        
+
         if not is_budget_saturated:
             attempts.append(
                 {

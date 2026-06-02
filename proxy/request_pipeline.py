@@ -159,7 +159,7 @@ async def process_proxy_request(
         async with orchestrator._budget_lock:
             global_over_budget = orchestrator.total_cost_today >= daily_limit
         app_over_budget = getattr(request.state, "quota_exceeded", False)
-        
+
         if global_over_budget or app_over_budget:
             ctx.metadata["_budget_saturated"] = True
             if global_over_budget:

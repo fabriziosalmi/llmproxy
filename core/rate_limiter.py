@@ -162,11 +162,11 @@ class RateLimiter:
         self.default_rate = float(default_rate)
         self._buckets: OrderedDict[str, TokenBucket] = OrderedDict()
         self._lock = asyncio.Lock()
-        
+
         self.redis_url = redis_url
         self.redis_client = None
         self._redis_script_sha = None
-        
+
         if redis_url and redis:
             self.redis_client = redis.from_url(redis_url, decode_responses=True)
             logger.info(f"RateLimiter configured with Redis backend: {redis_url}")

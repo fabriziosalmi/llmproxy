@@ -38,7 +38,7 @@ export function initRegistry() {
     import('../src/views/endpoints/index')
         .then(({ mountEndpointsView }) => {
             _tsMounted = true;
-            mountEndpointsView(
+            const stopPoll = mountEndpointsView(
                 {
                     view: document.getElementById('view-endpoints'),
                     addToggle: document.getElementById('add-endpoint-toggle'),
