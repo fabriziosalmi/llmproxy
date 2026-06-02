@@ -1,7 +1,7 @@
 {
   "name": "llmproxy-ui",
   "private": true,
-  "version": "1.21.72",
+  "version": "1.21.73",
   "type": "module",
   "scripts": {
     "dev": "vite",

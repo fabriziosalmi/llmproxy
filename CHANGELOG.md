@@ -2,6 +2,15 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.73] — 2026-06-02
+
+### Phase 4 Quality Assurance & Distributed Architecture
+
+- **Distributed Rate Limiting & Circuit Breaking**: Upgraded core traffic management to use Redis-backed Lua scripts for zero-race-condition distributed circuit breakers and rate limits across proxy replicas.
+- **Predictive FinOps Routing**: Added budget-aware prediction interceptors that block requests (HTTP 402) when their estimated token cost would exceed the daily budget limit, preventing catastrophic overruns.
+- **Identity & Auth**: Integrated fully featured OIDC authentication for `Admin UI` and strict RBAC context propagation for proxy routes via `IdentityManager`.
+- **Quality Assurance**: Raised global unit test coverage beyond 80% ensuring stability across all critical core modules and eliminating previous environment teardown race conditions in local pipelines.
+
 ## [1.21.72] — 2026-06-02
 
 ### UI v2: Triage-First Dashboard & Density Modes
