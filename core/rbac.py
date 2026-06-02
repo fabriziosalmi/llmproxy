@@ -94,7 +94,7 @@ class RBACManager:
             budget, consumed, hard_limit = row
             if hard_limit and consumed >= budget:
                 logger.warning(
-                    f"RBAC: Key {api_key[:8]}... exceeded budget ({consumed}/{budget})"
+                    f"RBAC: Quota exceeded ({consumed}/{budget})"
                 )
                 return False
             return True

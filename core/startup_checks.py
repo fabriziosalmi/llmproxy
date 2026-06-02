@@ -61,6 +61,27 @@ def get_startup_warnings() -> list[str]:
     return list(_LAST_WARNINGS)
 
 
+def _has_invalid_keys(keys_env: str) -> bool:
+    """Check if the proxy auth keys are missing or placeholders."""
+    val = os.environ.get(keys_env, "")
+    return not val or val == "sk-proxy-CHANGE-ME"
+
+
+def _is_provider_key_missing(api_key_env: str) -> bool:
+    """Check if the provider API key is missing or is a placeholder."""
+    val = os.environ.get(api_key_env, "")
+    _PLACEHOLDERS = {
+        "sk-proj-...",
+        "sk-ant-...",
+        "AIza...",
+        "gsk_...",
+        "your-api-key",
+        "CHANGE-ME",
+        "",
+    }
+    return not val or val in _PLACEHOLDERS
+
+
 def validate_config(config: dict) -> list[str]:
     """Validate config and return warnings. Raises StartupError on critical issues."""
     warnings = []
@@ -69,8 +90,7 @@ def validate_config(config: dict) -> list[str]:
     auth_cfg = config.get("server", {}).get("auth", {})
     if auth_cfg.get("enabled", True):
         keys_env = auth_cfg.get("api_keys_env", "LLM_PROXY_API_KEYS")
-        keys_val = os.environ.get(keys_env, "")
-        if not keys_val or keys_val == "sk-proxy-CHANGE-ME":
+        if _has_invalid_keys(keys_env):
             raise StartupError(
                 f"Proxy authentication requires {keys_env} to be set.\n"
                 f"  1. Edit .env and set: {keys_env}=sk-proxy-<your-key>\n"
@@ -104,20 +124,9 @@ def validate_config(config: dict) -> list[str]:
             continue
 
         if api_key_env:
-            val = os.environ.get(api_key_env, "")
-            # Check if the value is a real key (not a placeholder like "sk-proj-...")
-            _PLACEHOLDERS = {
-                "sk-proj-...",
-                "sk-ant-...",
-                "AIza...",
-                "gsk_...",
-                "your-api-key",
-                "CHANGE-ME",
-                "",
-            }
-            if val and val not in _PLACEHOLDERS:
+            if not _is_provider_key_missing(api_key_env):
                 active_providers.append(name)
-            elif not val:
+            else:
                 warnings.append(
                     f"Endpoint '{name}' needs {api_key_env} — skipped.\n"
                     f"  Set in .env: {api_key_env}=your-api-key"
@@ -166,6 +175,6 @@ def run_startup_checks(config: dict):
         else:
             logger.info("Startup checks passed")
     except StartupError as e:
-        _LAST_WARNINGS = [str(e)]
+        _LAST_WARNINGS = ["Startup configuration error: Please check server logs."]
         logger.critical(f"\n{'=' * 60}\n  STARTUP FAILED\n{'=' * 60}\n\n{e}\n")
         sys.exit(1)

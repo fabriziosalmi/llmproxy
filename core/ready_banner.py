@@ -84,6 +84,12 @@ def _active_providers(config: dict[str, Any]) -> list[tuple[str, str, list[str],
     return out
 
 
+def _get_key_count(key_env: str) -> int:
+    """Return the number of configured keys without loading/exposing the keys."""
+    raw = os.environ.get(key_env, "")
+    return len(raw.split(",")) if raw else 0
+
+
 def print_ready_banner(
     config: dict[str, Any],
     *,
@@ -97,8 +103,6 @@ def print_ready_banner(
     auth_cfg = config.get("server", {}).get("auth", {})
     auth_enabled = auth_cfg.get("enabled", False)
     key_env = auth_cfg.get("api_keys_env", "LLM_PROXY_API_KEYS")
-    raw_key = os.environ.get(key_env, "")
-    primary_key = raw_key.split(",")[0].strip() if raw_key else ""
 
     # Pick a user-reachable display host. "0.0.0.0" in the proxy means
     # "bind all interfaces" — the user still types localhost in curl.
@@ -161,11 +165,11 @@ def print_ready_banner(
             + _wrap(f"  ({firewall_reason})", _GRAY)
         )
     if auth_enabled:
+        key_count = _get_key_count(key_env)
         out.append(
             _wrap("  Auth:   ", _BOLD)
             + _wrap("required", _GREEN)
-            + _wrap(f"   Bearer key in ${key_env} → ", _GRAY)
-            + _wrap(_mask_key(primary_key), _CYAN)
+            + _wrap(f"   ({key_count} Bearer key(s) configured in ${key_env})", _GRAY)
         )
     else:
         out.append(

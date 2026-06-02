@@ -193,9 +193,8 @@ def test_banner_auth_required_masks_key(monkeypatch):
     )
     # Ensure we never print the full key in cleartext.
     assert "sk-proxy-abcdef1234567890" not in out
-    # The masked form must appear with the prefix + suffix.
-    assert "sk-proxy-a" in out
-    assert "7890" in out
+    # Assert that the number of configured keys is displayed instead.
+    assert "2 Bearer key(s) configured" in out
 
 
 def test_banner_smoke_curl_uses_first_model():
