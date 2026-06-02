@@ -622,12 +622,23 @@ function updateChart(entry) {
     chart.update('none'); // skip animation for perf
 }
 
+function escapeHTML(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function addEventToFeed(feed, entry) {
     const placeholder = feed.querySelector('p.italic');
     if (placeholder) placeholder.remove();
     updateChart(entry);
 
-    const level = (entry.level || 'INFO').toUpperCase();
+    const level = escapeHTML((entry.level || 'INFO').toUpperCase());
+    const message = escapeHTML(entry.message || '');
     const colors = {
         CRITICAL: 'text-red-300 bg-red-500/20 border-red-500/30',
         SECURITY: 'text-rose-400 bg-rose-500/10 border-rose-500/20',
@@ -642,7 +653,7 @@ function addEventToFeed(feed, entry) {
     el.innerHTML = `
         <span class="text-[9px] font-mono text-slate-500 shrink-0 mt-0.5">${entry.timestamp || '--:--'}</span>
         <span class="text-[9px] font-black uppercase w-16 shrink-0 mt-0.5">${level}</span>
-        <span class="text-[10px] font-mono flex-1">${entry.message || ''}</span>
+        <span class="text-[10px] font-mono flex-1">${message}</span>
     `;
 
     feed.insertBefore(el, feed.firstChild);
