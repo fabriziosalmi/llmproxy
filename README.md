@@ -9,8 +9,6 @@ Security gateway for Large Language Models. Routes requests across 15 providers 
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 [![CI](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml/badge.svg)](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml)
 
-![LLMProxy Dashboard](screenshot.png)
-
 ---
 
 ## Why LLMProxy
@@ -132,14 +130,14 @@ Endpoints are scored using an EMA-weighted formula: `score = (success^2 / latenc
 
 ## Security
 
-| Layer | What it does |
-|-------|-------------|
-| **ASGI Firewall** | 180 injection signatures (164 banned + 16 ROT13) across 8 encoding layers (URL, Unicode, Base64, hex, ROT13) with iterative chain decoding. Loaded from `data/signatures.yaml` (hot-reloadable). |
-| **SecurityShield** | Threat scoring (16 regex patterns, threshold 0.7), multi-turn trajectory detection, cross-session ThreatLedger. |
-| **Semantic Analyzer** | 156-pattern trigram Jaccard corpus across 20+ languages. Leetspeak normalization, Cyrillic/Greek confusable mapping. Bounded executor with 5s timeout. |
-| **PII Detection** | Dual-mode: Presidio NLP (11 entity types) or regex fallback (email, phone, SSN, credit card, IBAN, IP, API keys). Vault-based mask/demask roundtrip. |
-| **Response Sanitization** | Entropy guard, steganography detection (bidi overrides, zero-width chars, homoglyphs), prompt leak detection. |
-| **Audit Ledger** | SHA256 hash-chained audit log with tamper detection. GDPR compliance: right to erasure, DSAR export, configurable retention. |
+| Layer                     | What it does                                                                                                                                                                                     |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **ASGI Firewall**         | 180 injection signatures (164 banned + 16 ROT13) across 8 encoding layers (URL, Unicode, Base64, hex, ROT13) with iterative chain decoding. Loaded from `data/signatures.yaml` (hot-reloadable). |
+| **SecurityShield**        | Threat scoring (16 regex patterns, threshold 0.7), multi-turn trajectory detection, cross-session ThreatLedger.                                                                                  |
+| **Semantic Analyzer**     | 156-pattern trigram Jaccard corpus across 20+ languages. Leetspeak normalization, Cyrillic/Greek confusable mapping. Bounded executor with 5s timeout.                                           |
+| **PII Detection**         | Dual-mode: Presidio NLP (11 entity types) or regex fallback (email, phone, SSN, credit card, IBAN, IP, API keys). Vault-based mask/demask roundtrip.                                             |
+| **Response Sanitization** | Entropy guard, steganography detection (bidi overrides, zero-width chars, homoglyphs), prompt leak detection.                                                                                    |
+| **Audit Ledger**          | SHA256 hash-chained audit log with tamper detection. GDPR compliance: right to erasure, DSAR export, configurable retention.                                                                     |
 
 Auth: API keys, OIDC/JWT (Google, Microsoft, Apple), mTLS, Tailscale Zero-Trust. RBAC with four roles (admin, operator, user, viewer).
 
@@ -151,12 +149,12 @@ See [SECURITY.md](SECURITY.md) for the full security architecture and vulnerabil
 
 A curated adversarial corpus runs as a regression test on every build. Current per-category pass rate against `tests/corpus/owasp_llm_top10.yaml`:
 
-| Category | Coverage | Notes |
-|----------|---------:|-------|
-| LLM01 — Prompt Injection | **100 %** | All 12 corpus variants caught: direct, base64/hex/zero-width-encoded, leetspeak, role-play, suffix-injection, chain-of-thought, indirect tool-use |
-| LLM02 — Sensitive Info (PII) | **100 %** | Email · SSN · Visa · Amex · IBAN · phones · API keys |
-| LLM07 — System Prompt Leakage | **100 %** | Direct + indirect + continuation + translation + meta-instruction + persona-rebase |
-| Benign false-positive rate | **10 %** | Meta-discussion of attacks ("explain how prompt injection works") trips on purpose |
+| Category                      |  Coverage | Notes                                                                                                                                             |
+| ----------------------------- | --------: | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| LLM01 — Prompt Injection      | **100 %** | All 12 corpus variants caught: direct, base64/hex/zero-width-encoded, leetspeak, role-play, suffix-injection, chain-of-thought, indirect tool-use |
+| LLM02 — Sensitive Info (PII)  | **100 %** | Email · SSN · Visa · Amex · IBAN · phones · API keys                                                                                              |
+| LLM07 — System Prompt Leakage | **100 %** | Direct + indirect + continuation + translation + meta-instruction + persona-rebase                                                                |
+| Benign false-positive rate    |  **10 %** | Meta-discussion of attacks ("explain how prompt injection works") trips on purpose                                                                |
 
 LLM03/04/06/08/09/10 are **out-of-scope for the proxy itself** (build-time, training-time, caller-side, model-side) — documented as N/A in the report.
 
@@ -170,11 +168,11 @@ The corpus deliberately includes the AI-judgment-bypass path: deterministic chec
 
 Single-process throughput on Apple Silicon (M-series, dev mode, no upstream call — proxy stack only):
 
-| Endpoint | Req/s | p50 latency | p99 latency | Conditions |
-|----------|------:|------------:|------------:|------------|
-| `/health` (cold path, no upstream) | **1,313** | 7 ms | 28 ms | wrk · 2t · 10c · 20s |
-| `/health` (saturated) | 1,176 | 82 ms | 149 ms | wrk · 4t · 100c · 30s |
-| `/api/v1/registry` (light DB read) | 1,158 | 81 ms | 188 ms | wrk · 4t · 100c · 30s |
+| Endpoint                           |     Req/s | p50 latency | p99 latency | Conditions            |
+| ---------------------------------- | --------: | ----------: | ----------: | --------------------- |
+| `/health` (cold path, no upstream) | **1,313** |        7 ms |       28 ms | wrk · 2t · 10c · 20s  |
+| `/health` (saturated)              |     1,176 |       82 ms |      149 ms | wrk · 4t · 100c · 30s |
+| `/api/v1/registry` (light DB read) |     1,158 |       81 ms |      188 ms | wrk · 4t · 100c · 30s |
 
 These numbers measure the proxy stack overhead — the auth middleware, ASGI firewall, route dispatch, and JSON serialization — not the cost of a real LLM call (which is dominated by upstream provider latency).
 
@@ -190,32 +188,32 @@ LLMProxy exposes an OpenAI-compatible API on port 8090.
 
 ### Inference
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
+| Endpoint               | Method | Description                                                |
+| ---------------------- | ------ | ---------------------------------------------------------- |
 | `/v1/chat/completions` | `POST` | Chat completion (streaming + non-streaming). 15 providers. |
-| `/v1/completions` | `POST` | Legacy text completion. |
-| `/v1/embeddings` | `POST` | Embeddings (OpenAI, Google, Ollama, Azure). |
-| `/v1/models` | `GET` | Model discovery (aggregated from all providers). |
-| `/health` | `GET` | Liveness probe. |
-| `/metrics` | `GET` | Prometheus metrics. |
+| `/v1/completions`      | `POST` | Legacy text completion.                                    |
+| `/v1/embeddings`       | `POST` | Embeddings (OpenAI, Google, Ollama, Azure).                |
+| `/v1/models`           | `GET`  | Model discovery (aggregated from all providers).           |
+| `/health`              | `GET`  | Liveness probe.                                            |
+| `/metrics`             | `GET`  | Prometheus metrics.                                        |
 
 ### Administration
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/v1/registry` | `GET` | Endpoint pool state. |
-| `/api/v1/registry/{id}/toggle` | `POST` | Enable/disable an endpoint. |
-| `/api/v1/proxy/toggle` | `POST` | Enable/disable the proxy. |
-| `/api/v1/panic` | `POST` | Emergency kill switch. |
-| `/api/v1/features` | `GET` | Security guard feature flags. |
-| `/api/v1/features/toggle` | `POST` | Toggle a guard. |
-| `/api/v1/analytics/spend` | `GET` | Spend breakdown by model/provider/key/date. |
-| `/api/v1/audit` | `GET` | Audit log query with filters. |
-| `/api/v1/audit/verify` | `GET` | Verify audit chain integrity. |
-| `/api/v1/plugins` | `GET` | List installed plugins. |
-| `/api/v1/plugins/install` | `POST` | Install a plugin (AST-scanned, hot-swapped). |
-| `/api/v1/gdpr/erase/{subject}` | `POST` | Right to erasure (Article 17). |
-| `/api/v1/gdpr/export/{subject}` | `GET` | Data subject access request (Article 15). |
+| Endpoint                        | Method | Description                                  |
+| ------------------------------- | ------ | -------------------------------------------- |
+| `/api/v1/registry`              | `GET`  | Endpoint pool state.                         |
+| `/api/v1/registry/{id}/toggle`  | `POST` | Enable/disable an endpoint.                  |
+| `/api/v1/proxy/toggle`          | `POST` | Enable/disable the proxy.                    |
+| `/api/v1/panic`                 | `POST` | Emergency kill switch.                       |
+| `/api/v1/features`              | `GET`  | Security guard feature flags.                |
+| `/api/v1/features/toggle`       | `POST` | Toggle a guard.                              |
+| `/api/v1/analytics/spend`       | `GET`  | Spend breakdown by model/provider/key/date.  |
+| `/api/v1/audit`                 | `GET`  | Audit log query with filters.                |
+| `/api/v1/audit/verify`          | `GET`  | Verify audit chain integrity.                |
+| `/api/v1/plugins`               | `GET`  | List installed plugins.                      |
+| `/api/v1/plugins/install`       | `POST` | Install a plugin (AST-scanned, hot-swapped). |
+| `/api/v1/gdpr/erase/{subject}`  | `POST` | Right to erasure (Article 17).               |
+| `/api/v1/gdpr/export/{subject}` | `GET`  | Data subject access request (Article 15).    |
 
 Full API reference in the [docs](docs/).
 
@@ -225,20 +223,20 @@ Full API reference in the [docs](docs/).
 
 Ring-based pipeline with 18 marketplace plugins and 9 built-in defaults (plus a backward-compatibility shim).
 
-| Plugin | Ring | Description |
-|--------|------|-------------|
-| Smart Budget Guard | Pre-Flight | Per-session/team budget with SQLite persistence. |
-| Agentic Loop Breaker | Pre-Flight | Detects AI agents stuck in retry loops. |
-| Model Downgrader | Pre-Flight | Auto-downgrades expensive models for simple prompts. |
-| Context Window Guard | Pre-Flight | Blocks requests exceeding model context limit. |
-| Topic Blocklist | Pre-Flight | Keyword/regex topic filtering. |
-| Tool Guard | Pre-Flight | Strips restricted tools from agentic requests. |
-| A/B Model Router | Routing | Routes traffic percentage to variant model. |
-| Tenant QoS Router | Routing | Routes by tenant tier (free/basic/premium). |
-| Response Quality Gate | Post-Flight | Detects empty, refused, or truncated responses. |
-| Canary Detector | Post-Flight | Detects system prompt leakage. |
-| Schema Enforcer | Post-Flight | Validates JSON responses against schema. |
-| Shadow Traffic | Background | Dark-launch to shadow model for comparison. |
+| Plugin                | Ring        | Description                                          |
+| --------------------- | ----------- | ---------------------------------------------------- |
+| Smart Budget Guard    | Pre-Flight  | Per-session/team budget with SQLite persistence.     |
+| Agentic Loop Breaker  | Pre-Flight  | Detects AI agents stuck in retry loops.              |
+| Model Downgrader      | Pre-Flight  | Auto-downgrades expensive models for simple prompts. |
+| Context Window Guard  | Pre-Flight  | Blocks requests exceeding model context limit.       |
+| Topic Blocklist       | Pre-Flight  | Keyword/regex topic filtering.                       |
+| Tool Guard            | Pre-Flight  | Strips restricted tools from agentic requests.       |
+| A/B Model Router      | Routing     | Routes traffic percentage to variant model.          |
+| Tenant QoS Router     | Routing     | Routes by tenant tier (free/basic/premium).          |
+| Response Quality Gate | Post-Flight | Detects empty, refused, or truncated responses.      |
+| Canary Detector       | Post-Flight | Detects system prompt leakage.                       |
+| Schema Enforcer       | Post-Flight | Validates JSON responses against schema.             |
+| Shadow Traffic        | Background  | Dark-launch to shadow model for comparison.          |
 
 Write your own:
 
@@ -300,17 +298,17 @@ All secrets are loaded from environment variables (Infisical SDK supported). See
 
 Real-time Security Operations Center UI at `/ui`.
 
-| View | What it shows |
-|------|--------------|
-| Threats | KPI cards, threat timeline chart, ring latency (P50/P95/P99), live SSE event feed |
-| Guards | Master proxy toggle, per-guard enable/disable with descriptions |
-| Plugins | Pipeline grid with per-plugin stats, install/uninstall/hot-swap |
-| Models | Aggregated model registry with search/filter |
-| Analytics | Spend breakdown by model and provider |
-| Security | Audit chain verification, GDPR controls, semantic corpus stats |
-| Endpoints | Registry table with circuit breaker state, priority, toggle/delete |
-| Live Logs | xterm.js terminal with WebGL rendering and JSON syntax highlighting |
-| Settings | Identity, RBAC matrix, webhooks, data export |
+| View      | What it shows                                                                     |
+| --------- | --------------------------------------------------------------------------------- |
+| Threats   | KPI cards, threat timeline chart, ring latency (P50/P95/P99), live SSE event feed |
+| Guards    | Master proxy toggle, per-guard enable/disable with descriptions                   |
+| Plugins   | Pipeline grid with per-plugin stats, install/uninstall/hot-swap                   |
+| Models    | Aggregated model registry with search/filter                                      |
+| Analytics | Spend breakdown by model and provider                                             |
+| Security  | Audit chain verification, GDPR controls, semantic corpus stats                    |
+| Endpoints | Registry table with circuit breaker state, priority, toggle/delete                |
+| Live Logs | xterm.js terminal with WebGL rendering and JSON syntax highlighting               |
+| Settings  | Identity, RBAC matrix, webhooks, data export                                      |
 
 Keyboard shortcuts: `Cmd+K` (command palette), `F` (cinema mode). URL hash routing (`#/guards`, `#/logs`, ...).
 
@@ -343,14 +341,14 @@ The invariant suite proves correctness properties (Jaccard axioms, normalize ide
 
 ## Production Checklist
 
-| Setting | Default | Production |
-|---------|---------|------------|
-| TLS | Disabled | Enable or use a reverse proxy (Traefik, Caddy, nginx) |
-| CORS | `["*"]` | Restrict to your frontend origin(s) |
-| Auth | Enabled | Keep enabled, rotate API keys |
-| API keys | Placeholder | Replace with strong keys |
+| Setting  | Default       | Production                                                      |
+| -------- | ------------- | --------------------------------------------------------------- |
+| TLS      | Disabled      | Enable or use a reverse proxy (Traefik, Caddy, nginx)           |
+| CORS     | `["*"]`       | Restrict to your frontend origin(s)                             |
+| Auth     | Enabled       | Keep enabled, rotate API keys                                   |
+| API keys | Placeholder   | Replace with strong keys                                        |
 | Presidio | Not installed | `pip install presidio-analyzer presidio-anonymizer` for NLP PII |
-| tiktoken | Not installed | `pip install tiktoken` for accurate token counting |
+| tiktoken | Not installed | `pip install tiktoken` for accurate token counting              |
 
 The proxy logs warnings at startup when TLS is disabled or CORS is unrestricted.
 
