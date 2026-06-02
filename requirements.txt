@@ -14,7 +14,7 @@ prometheus-client==0.24.1
 
 # Security & Identity
 cryptography==46.0.7
-PyJWT==2.12.1
+PyJWT==2.13.0
 
 # Export & Observability
 aiofiles==25.1.0
