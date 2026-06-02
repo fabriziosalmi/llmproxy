@@ -245,20 +245,24 @@ class RequestForwarder:
         original_body = dict(ctx.body)
         attempts = []
 
+        is_budget_saturated = ctx.metadata.get("_budget_saturated", False)
+
         # Build attempt list: primary + fallback chain
         primary_provider = getattr(target, "provider", None) or getattr(
             target, "provider_type", None
         )
         primary_adapter = get_adapter(primary_provider, original_model)
-        attempts.append(
-            {
-                "target": target,
-                "adapter": primary_adapter,
-                "model": original_model,
-                "provider": primary_adapter.provider_name,
-                "is_fallback": False,
-            }
-        )
+        
+        if not is_budget_saturated:
+            attempts.append(
+                {
+                    "target": target,
+                    "adapter": primary_adapter,
+                    "model": original_model,
+                    "provider": primary_adapter.provider_name,
+                    "is_fallback": False,
+                }
+            )
 
         # Add fallback chain entries (read live so config hot-reloads apply)
         chain = self._live_config().get("fallback_chains", {}).get(original_model, [])
@@ -275,6 +279,11 @@ class RequestForwarder:
                         "is_fallback": True,
                     }
                 )
+
+        if not attempts:
+            if is_budget_saturated:
+                raise HTTPException(status_code=402, detail="Enterprise Quota Exceeded for this API Key (No Fallback Available)")
+            raise HTTPException(status_code=503, detail="No routable endpoints available")
 
         last_error: Exception | None = None
         for i, attempt in enumerate(attempts):

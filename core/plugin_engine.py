@@ -20,7 +20,6 @@ import yaml
 import asyncio
 import logging
 import inspect
-from concurrent.futures import ThreadPoolExecutor
 from collections import deque
 from enum import Enum
 from typing import List, Dict, Any, Optional, Sequence
@@ -28,18 +27,6 @@ from dataclasses import dataclass, field
 
 from core.plugin_sdk import BasePlugin, PluginResponse, PluginResponseError
 from core.wasm_runner import WasmRunner
-
-# Bounded executor for sync plugin execution.
-#
-# IMPORTANT: threads are NON-CANCELLABLE. If a sync plugin hangs (e.g.
-# `while True: pass`), asyncio.wait_for() stops waiting but the thread
-# keeps running, permanently consuming one of the 32 worker slots.
-# Prefer async plugins for anything non-trivial. This executor is a
-# compatibility shim for legacy sync code, not a sandbox.
-_PLUGIN_EXECUTOR = ThreadPoolExecutor(
-    max_workers=min(32, (os.cpu_count() or 4) + 4),
-    thread_name_prefix="plugin-sync",
-)
 
 
 class PluginHook(Enum):
@@ -272,31 +259,6 @@ class PluginManager:
     def update_runtime_config(self, config: Optional[Dict[str, Any]]) -> None:
         """Update runtime config used for plugin loading policy decisions."""
         self._config = config or {}
-
-    def _allow_legacy_sync_plugins(self) -> bool:
-        """Policy gate for legacy raw-function plugins.
-
-        By default they are disabled in production to reduce risk from
-        non-cancellable sync threads. Operators can explicitly override via:
-          - plugins.runtime.allow_legacy_sync_plugins (config)
-          - LLM_PROXY_ALLOW_LEGACY_SYNC_PLUGINS (env)
-        """
-        env_override = os.environ.get("LLM_PROXY_ALLOW_LEGACY_SYNC_PLUGINS")
-        if env_override is not None:
-            return env_override.strip().lower() in ("1", "true", "yes", "on")
-
-        runtime_cfg = (self._config.get("plugins", {}) or {}).get("runtime", {})
-        explicit = runtime_cfg.get("allow_legacy_sync_plugins")
-        if explicit is not None:
-            return bool(explicit)
-
-        env_name = os.environ.get("LLM_PROXY_ENV", "").strip().lower()
-        app_env = os.environ.get("ENV", "").strip().lower()
-        is_prod = env_name in ("prod", "production") or app_env in (
-            "prod",
-            "production",
-        )
-        return not is_prod
 
     # Plugin circuit breaker: auto-quarantine after consecutive failures
     PLUGIN_CB_THRESHOLD = 10  # consecutive errors to trip
@@ -644,12 +606,9 @@ class PluginManager:
             else:
                 # Legacy raw function
                 func = target
-                if (
-                    not inspect.iscoroutinefunction(func)
-                    and not self._allow_legacy_sync_plugins()
-                ):
+                if not inspect.iscoroutinefunction(func):
                     raise RuntimeError(
-                        f"Plugin '{name}': legacy sync function plugins are disabled by runtime policy"
+                        f"Plugin '{name}': sync functions are no longer supported. Use WASM or async classes."
                     )
                 rings[hook].append(
                     {
@@ -800,15 +759,7 @@ class PluginManager:
                     # ── Legacy raw function mode ──
                     func = p["func"]
                     try:
-                        if inspect.iscoroutinefunction(func):
-                            await asyncio.wait_for(func(context), timeout=timeout_s)
-                        else:
-                            # Sync functions run in executor with timeout
-                            loop = asyncio.get_running_loop()
-                            await asyncio.wait_for(
-                                loop.run_in_executor(_PLUGIN_EXECUTOR, func, context),
-                                timeout=timeout_s,
-                            )
+                        await asyncio.wait_for(func(context), timeout=timeout_s)
                     except asyncio.TimeoutError:
                         self.logger.warning(
                             f"Plugin {name} TIMEOUT ({timeout_ms}ms) in {hook.value}"

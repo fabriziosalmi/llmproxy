@@ -12,6 +12,15 @@ import { toast } from '../services/toast.js';
 
 let _tsMounted = false;
 
+export function unmount() {
+    const container = document.getElementById('view-endpoints');
+    if (container && typeof container.__stopPoll === 'function') {
+        container.__stopPoll();
+        container.__stopPoll = null;
+    }
+    _tsMounted = false;
+}
+
 export async function fetchRegistry() {
     if (_tsMounted) return; // TS view drives its own polling.
     try {
@@ -50,6 +59,13 @@ export function initRegistry() {
                     poll: (fn, intervalMs) => store.poll(fn, intervalMs, 'endpoints'),
                 }
             );
+            
+            // Expose the teardown callback on the DOM element so the router or test 
+            // runner can invoke it to prevent zombie fetch loops upon unmount.
+            const container = document.getElementById('view-endpoints');
+            if (container) {
+                container.__stopPoll = stopPoll;
+            }
         })
         .catch(() => {
             // No TS chunk available — legacy listeners already wired below.

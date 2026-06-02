@@ -12,6 +12,15 @@ import { toast } from '../services/toast.js';
 
 let _tsMounted = false;
 
+export function unmount() {
+    const container = document.getElementById('view-guards');
+    if (container && typeof container.__stopPoll === 'function') {
+        container.__stopPoll();
+        container.__stopPoll = null;
+    }
+    _tsMounted = false;
+}
+
 const GUARD_INFO = {
     injection_guard: {
         name: 'Injection Guard',
@@ -94,7 +103,7 @@ export function initGuards() {
     import('../src/views/guards/index')
         .then(({ mountGuardsView }) => {
             _tsMounted = true;
-            mountGuardsView(
+            const stopPoll = mountGuardsView(
                 {
                     master: document.getElementById('guards-master-host'),
                     priority: document.getElementById('guards-priority-host'),
@@ -117,6 +126,10 @@ export function initGuards() {
                     poll: (fn, intervalMs) => store.poll(fn, intervalMs, 'guards'),
                 }
             );
+            const container = document.getElementById('view-guards');
+            if (container) {
+                container.__stopPoll = stopPoll; 
+            }
         })
         .catch(() => {
             // No TS chunk available — legacy listeners already wired.

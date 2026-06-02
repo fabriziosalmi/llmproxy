@@ -153,28 +153,23 @@ async def process_proxy_request(
         if resolved_provider:
             ctx.metadata["_resolved_provider"] = resolved_provider
 
-        # Budget-aware model downgrade: if over hard limit, fall back to local
+        # FinOps Routing: Flag if budget is saturated (global or per-app quota)
         budget_cfg = orchestrator.config.get("budget", {})
-        if budget_cfg.get("fallback_to_local_on_limit"):
-            daily_limit = budget_cfg.get("daily_limit", 50.0)
-            async with orchestrator._budget_lock:
-                over_budget = orchestrator.total_cost_today >= daily_limit
-            if over_budget:
-                local_model = budget_cfg.get("local_model", "ollama/llama3.3")
-                original_before_downgrade = ctx.body.get("model", "")
-                ctx.metadata["_budget_downgrade"] = True
-                ctx.metadata["_original_model_pre_downgrade"] = (
-                    original_before_downgrade
-                )
-                ctx.body["model"] = local_model
-                ctx.metadata["_budget_downgrade_headers"] = {
-                    "X-LLMProxy-Model-Downgraded": "true",
-                    "X-LLMProxy-Original-Model": original_before_downgrade,
-                    "X-LLMProxy-Downgrade-Reason": "daily_budget_exceeded",
-                }
+        daily_limit = budget_cfg.get("daily_limit", 50.0)
+        async with orchestrator._budget_lock:
+            global_over_budget = orchestrator.total_cost_today >= daily_limit
+        app_over_budget = getattr(request.state, "quota_exceeded", False)
+        
+        if global_over_budget or app_over_budget:
+            ctx.metadata["_budget_saturated"] = True
+            if global_over_budget:
                 await orchestrator._add_log(
-                    f"BUDGET DOWNGRADE: {original_before_downgrade} → {local_model} "
-                    f"(${orchestrator.total_cost_today:.2f}/${daily_limit:.2f})",
+                    f"BUDGET SATURATED (Global): (${orchestrator.total_cost_today:.2f}/${daily_limit:.2f})",
+                    level="PROXY",
+                )
+            else:
+                await orchestrator._add_log(
+                    "BUDGET SATURATED (App Quota)",
                     level="PROXY",
                 )
 

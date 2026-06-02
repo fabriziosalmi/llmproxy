@@ -17,7 +17,7 @@ Security gateway for Large Language Models. Routes requests across 15 providers 
 
 - **One endpoint, 15 providers** -- Send OpenAI-compatible requests and let the proxy handle translation, failover, and cost optimization across 14 dedicated providers (OpenAI, Anthropic, Google, Azure, Ollama, Groq, Together, Mistral, DeepSeek, xAI, Perplexity, Fireworks, OpenRouter, and SambaNova) plus a generic OpenAI-compatible adapter.
 - **Security by default** -- Byte-level ASGI firewall, injection scoring, PII masking, cross-session threat intelligence, immutable audit ledger, HMAC response signing. Fail-closed auth middleware denies all admin paths unless explicitly whitelisted.
-- **Cost control** -- Per-model pricing for 30+ models, daily budget limits with automatic downgrade to local models, per-session spend tracking, cost-efficiency analytics.
+- **Cost control** -- Per-model pricing for 30+ models, daily budget limits with automatic downgrade across fallback chains (FinOps Routing), per-session spend tracking, cost-efficiency analytics.
 - **Extensible** -- 18 marketplace plugins (budget guard, A/B routing, schema enforcement, canary detection, ...) with a ring-based pipeline. Write your own in Python or WASM.
 
 ---
@@ -126,7 +126,7 @@ OpenAI, Anthropic, Google (Gemini), Azure OpenAI, Ollama, Groq, Together, Mistra
 
 ### Smart Routing
 
-Endpoints are scored using an EMA-weighted formula: `score = (success^2 / latency) * cost_factor^w`. The proxy automatically routes to the best-scoring endpoint, with configurable fallback chains (e.g., GPT-4o fails -> Claude Sonnet -> Gemini Pro). When daily budget is exhausted, requests are auto-downgraded to a local model (Ollama).
+Endpoints are scored using an EMA-weighted formula: `score = (success^2 / latency) * cost_factor^w`. The proxy automatically routes to the best-scoring endpoint, with configurable fallback chains (e.g., GPT-4o fails -> Claude Sonnet -> Gemini Pro). When the daily budget is exhausted, requests are automatically skipped over the primary endpoint and downgraded via these fallback chains (FinOps Routing).
 
 ---
 

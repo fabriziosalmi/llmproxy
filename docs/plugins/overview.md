@@ -74,13 +74,17 @@ Rust/Go/C plugins compiled to WebAssembly, running in memory-safe sandbox:
 
 [See WASM plugins →](/plugins/wasm)
 
-## Security
+## Security & Sandboxing
 
 All Python plugins are **AST-scanned** before loading:
 
 - **Blocked imports**: `os`, `subprocess`, `socket`, `ctypes`, `sys`
-- **Blocked calls**: `exec()`, `eval()`, `__import__()`, `.system()`, `.popen()`
+- **Blocked calls**: `exec()`, `eval()`, `__import__()`, `.system()`, `.popen()`, `time.sleep()`
 - Violations raise `PluginSecurityError` — the plugin is never loaded
+
+> [!WARNING]
+> **Removed: Legacy Sync Plugins**
+> Legacy synchronous plugins (function plugins without `async def`) have been permanently removed to eliminate the Thread Exhaustion Risk. All Python plugins must now be `async`. **For untrusted or external code, ALWAYS use WASM Plugins** which run in a deeply isolated, memory-bounded, and CPU-instruction-counted Extism sandbox.
 
 ## Timeout Enforcement
 
