@@ -12,6 +12,8 @@ export const store = {
         features: {},
         firewall: { enabled: true, disabled_reason: null },
         logSource: null,
+        densityMode: (typeof localStorage !== 'undefined' ? localStorage.getItem('density_mode') : '') || 'overview',
+        triage: { now: null, attention: [], doNext: [], recentChanges: [] },
         // Security metrics
         securityStats: {
             requests: 0,

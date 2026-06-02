@@ -190,6 +190,24 @@ store.subscribe((state) => {
         }
     }
 
+    if (state.densityMode !== _prevState.densityMode) {
+        const overviewBtn = document.getElementById('density-overview-btn');
+        const investigateBtn = document.getElementById('density-investigate-btn');
+        
+        document.body.classList.toggle('density-overview', state.densityMode === 'overview');
+        document.body.classList.toggle('density-investigate', state.densityMode === 'investigate');
+        
+        if (overviewBtn && investigateBtn) {
+            if (state.densityMode === 'overview') {
+                overviewBtn.className = 'px-2 py-1 rounded-md text-white bg-white/10 hover:text-white transition-all font-semibold';
+                investigateBtn.className = 'px-2 py-1 rounded-md text-slate-500 hover:text-white transition-all font-semibold';
+            } else {
+                overviewBtn.className = 'px-2 py-1 rounded-md text-slate-500 hover:text-white transition-all font-semibold';
+                investigateBtn.className = 'px-2 py-1 rounded-md text-white bg-white/10 hover:text-white transition-all font-semibold';
+            }
+        }
+    }
+
     _prevState = { ...state };
 });
 
@@ -421,6 +439,24 @@ async function init() {
 
     // Mount the global time-range selector in the header context bar.
     initTimerange();
+
+    // Init density mode toggles
+    const overviewBtn = document.getElementById('density-overview-btn');
+    const investigateBtn = document.getElementById('density-investigate-btn');
+    if (overviewBtn) {
+        overviewBtn.addEventListener('click', () => {
+            store.update({ densityMode: 'overview' });
+            localStorage.setItem('density_mode', 'overview');
+        });
+    }
+    if (investigateBtn) {
+        investigateBtn.addEventListener('click', () => {
+            store.update({ densityMode: 'investigate' });
+            localStorage.setItem('density_mode', 'investigate');
+        });
+    }
+    document.body.classList.toggle('density-overview', store.state.densityMode === 'overview');
+    document.body.classList.toggle('density-investigate', store.state.densityMode === 'investigate');
 
     // Init HUD global features (Cmd+K, Drawer, Cinema Mode)
     initHUD();

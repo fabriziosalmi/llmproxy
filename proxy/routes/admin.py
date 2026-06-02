@@ -793,4 +793,270 @@ def create_router(agent) -> APIRouter:
             logger.error(f"Webhook test dispatch failed: {e}", exc_info=True)
             raise HTTPException(status_code=502, detail="Webhook test dispatch failed")
 
+    @router.get("/api/v1/dashboard/summary")
+    async def get_dashboard_summary(request: Request):
+        _check_admin_auth(request)
+        try:
+            # 1. NOW: Health, throughput, degradation state, auth mode
+            uptime = time.time() - getattr(agent, "_start_time", time.time())
+            
+            pool = []
+            healthy_count = 0
+            circuits_open = 0
+            try:
+                pool = await agent.store.get_pool()
+                for e in pool:
+                    breaker = await agent.circuit_manager.get_breaker(e.id)
+                    if await breaker.can_execute():
+                        healthy_count += 1
+                
+                circuit_states = agent.circuit_manager.get_all_states()
+                circuits_open = sum(
+                    1 for s in circuit_states.values() if s.get("state") == "open"
+                )
+            except Exception as e:
+                logger.warning(f"Error querying pool status for summary: {e}")
+
+            auth_enabled = agent.config.get("server", {}).get("auth", {}).get("enabled", False)
+            
+            # Coalesce overall health and degradation state
+            degradation_state = "nominal"
+            if circuits_open > 0:
+                degradation_state = "degraded"
+            if pool and healthy_count == 0:
+                degradation_state = "critical"
+
+            # Compute throughput using REQUEST_COUNT counter
+            from core import metrics
+            from core.metrics_history import sum_prometheus_counter
+            total_requests = int(sum_prometheus_counter(metrics.REQUEST_COUNT))
+
+            now_data = {
+                "health": degradation_state,
+                "uptime_seconds": round(uptime),
+                "pool_size": len(pool),
+                "pool_healthy": healthy_count,
+                "auth_mode": "enabled" if auth_enabled else "disabled",
+                "degradation_state": degradation_state,
+                "throughput_today": total_requests,
+            }
+
+            # 2. ATTENTION: prioritized anomalies (TriageIssue list)
+            attention = []
+            
+            # 2a. Circuit Breakers open/half_open
+            try:
+                circuit_states = agent.circuit_manager.get_all_states()
+                for ep_id, state_info in circuit_states.items():
+                    st = state_info.get("state", "closed")
+                    if st in ("open", "half_open"):
+                        last_change = state_info.get("last_state_change", time.time())
+                        age = int(time.time() - last_change)
+                        attention.append({
+                            "id": f"cb:{ep_id}",
+                            "kind": f"circuit_breaker_{st}",
+                            "severity": "critical" if st == "open" else "warning",
+                            "confidence": 1.0,
+                            "blast_radius": f"endpoint:{ep_id}",
+                            "age_sec": max(0, age),
+                            "baseline_delta": "N/A",
+                            "owner": "circuit_breaker",
+                            "suggested_actions": ["reset_cb", "mute"],
+                            "state": "persistent" if age > 60 else "new"
+                        })
+            except Exception as e:
+                logger.warning(f"Error scanning circuit states for summary: {e}")
+
+            # 2b. Threat Ledger (suspicious IPs / keys)
+            try:
+                if getattr(agent.security, "threat_ledger", None):
+                    ledger = agent.security.threat_ledger
+                    # IPs
+                    for ip, entries in list(ledger._ip_ledger.items()):
+                        score_sum = sum(s for s, _ in entries)
+                        if score_sum >= 1.0:
+                            is_blocked = score_sum >= ledger.threshold
+                            severity = "critical" if is_blocked else "warning"
+                            kind = "actor_blocked" if is_blocked else "high_threat_score"
+                            last_ts = max(ts for _, ts in entries) if entries else time.time()
+                            age = int(time.time() - last_ts)
+                            attention.append({
+                                "id": f"threat:ip:{ip}",
+                                "kind": kind,
+                                "severity": severity,
+                                "confidence": round(min(1.0, score_sum / ledger.threshold), 2),
+                                "blast_radius": f"ip:{ip}",
+                                "age_sec": max(0, age),
+                                "baseline_delta": f"+{int(score_sum * 100)}% delta",
+                                "owner": "threat_ledger",
+                                "suggested_actions": ["mute_actor", "inspect_logs"],
+                                "state": "persistent" if age > 60 else "new"
+                            })
+                    # Keys
+                    for key_prefix, entries in list(ledger._key_ledger.items()):
+                        score_sum = sum(s for s, _ in entries)
+                        if score_sum >= 1.0:
+                            is_blocked = score_sum >= ledger.threshold
+                            severity = "critical" if is_blocked else "warning"
+                            kind = "actor_blocked" if is_blocked else "high_threat_score"
+                            last_ts = max(ts for _, ts in entries) if entries else time.time()
+                            age = int(time.time() - last_ts)
+                            attention.append({
+                                "id": f"threat:key:{key_prefix}",
+                                "kind": kind,
+                                "severity": severity,
+                                "confidence": round(min(1.0, score_sum / ledger.threshold), 2),
+                                "blast_radius": f"key:{key_prefix}",
+                                "age_sec": max(0, age),
+                                "baseline_delta": f"+{int(score_sum * 100)}% delta",
+                                "owner": "threat_ledger",
+                                "suggested_actions": ["mute_actor", "inspect_logs"],
+                                "state": "persistent" if age > 60 else "new"
+                            })
+            except Exception as e:
+                logger.warning(f"Error scanning threat ledger for summary: {e}")
+
+            # 2c. Empty Registry
+            if not pool:
+                attention.append({
+                    "id": "registry:empty",
+                    "kind": "empty_registry",
+                    "severity": "critical",
+                    "confidence": 1.0,
+                    "blast_radius": "gateway",
+                    "age_sec": int(uptime),
+                    "baseline_delta": "N/A",
+                    "owner": "registry",
+                    "suggested_actions": ["add_endpoint"],
+                    "state": "persistent"
+                })
+
+            # 2d. Budget alerts
+            try:
+                daily_limit = float(agent.config.get("budget", {}).get("daily_limit", 0.0))
+                soft_limit = float(agent.config.get("budget", {}).get("soft_limit", 0.0))
+                spent = float(getattr(agent, "total_cost_today", 0.0))
+                if daily_limit > 0 and spent >= daily_limit:
+                    attention.append({
+                        "id": "budget:limit_exceeded",
+                        "kind": "budget_exhausted",
+                        "severity": "critical",
+                        "confidence": 1.0,
+                        "blast_radius": "all",
+                        "age_sec": int(uptime),
+                        "baseline_delta": f"+{int((spent - daily_limit)/daily_limit * 100)}% delta" if daily_limit > 0 else "N/A",
+                        "owner": "budget",
+                        "suggested_actions": ["increase_limit"],
+                        "state": "persistent"
+                    })
+                elif soft_limit > 0 and spent >= soft_limit:
+                    attention.append({
+                        "id": "budget:soft_limit_exceeded",
+                        "kind": "budget_warning",
+                        "severity": "warning",
+                        "confidence": 1.0,
+                        "blast_radius": "all",
+                        "age_sec": int(uptime),
+                        "baseline_delta": f"+{int((spent - soft_limit)/soft_limit * 100)}% delta" if soft_limit > 0 else "N/A",
+                        "owner": "budget",
+                        "suggested_actions": ["increase_limit"],
+                        "state": "persistent"
+                    })
+            except Exception as e:
+                logger.warning(f"Error calculating budget alerts for summary: {e}")
+
+            # Sort attention by severity (critical first) and confidence DESC
+            severity_order = {"critical": 0, "warning": 1}
+            attention.sort(key=lambda x: (severity_order.get(x["severity"], 2), -x["confidence"]))
+
+            # 3. DO NEXT: Suggested actions and follow-up tasks
+            do_next = []
+            for item in attention:
+                if item["kind"] in ("circuit_breaker_open", "circuit_breaker_half_open"):
+                    ep = item["blast_radius"].replace("endpoint:", "")
+                    do_next.append({
+                        "id": f"task:reset_cb:{ep}",
+                        "title": f"Reset circuit breaker for {ep}",
+                        "description": f"Endpoint {ep} is offline or degraded. Reset it to CLOSED once the upstream is available.",
+                        "action": "reset_cb",
+                        "target": ep
+                    })
+                elif item["kind"] in ("high_threat_score", "actor_blocked"):
+                    target = item["blast_radius"]
+                    do_next.append({
+                        "id": f"task:inspect_logs:{target}",
+                        "title": f"Inspect logs for {target}",
+                        "description": f"Actor {target} has elevated threat score. Inspect live logs for prompt injection attempts.",
+                        "action": "inspect_logs",
+                        "target": target
+                    })
+                elif item["kind"] == "empty_registry":
+                    do_next.append({
+                        "id": "task:add_endpoint",
+                        "title": "Add a new endpoint",
+                        "description": "Gateway has no active endpoints configured. Register an OpenAI, Ollama, or Anthropic provider.",
+                        "action": "add_endpoint",
+                        "target": ""
+                    })
+                elif item["kind"] in ("budget_exhausted", "budget_warning"):
+                    do_next.append({
+                        "id": "task:increase_limit",
+                        "title": "Increase daily budget limit",
+                        "description": "Today's spend is near or exceeds the daily cap. Increase budget.daily_limit in config.yaml.",
+                        "action": "increase_limit",
+                        "target": ""
+                    })
+
+            # Add default items if list is short
+            if len(do_next) < 2:
+                do_next.append({
+                    "id": "task:review_budget",
+                    "title": "Review daily budget usage",
+                    "description": "System spend is within nominal limits. Review cost efficiency under the Analytics tab.",
+                    "action": "view_analytics",
+                    "target": ""
+                })
+                do_next.append({
+                    "id": "task:check_plugins",
+                    "title": "Inspect active plugins",
+                    "description": "Ensure guards (PII, injection) are active and running under their target hooks.",
+                    "action": "view_plugins",
+                    "target": ""
+                })
+
+            # 4. RECENT CHANGES: config/plugin/endpoint/guard mutations
+            recent_changes = []
+            try:
+                # Query last 5 entries from audit log
+                audit_data = await agent.store.query_audit(limit=5)
+                for item in audit_data.get("items", []):
+                    desc = f"Request {item['req_id']} processed on {item['provider']}/{item['model']} (HTTP {item['status']})"
+                    if item.get("blocked"):
+                        desc = f"Blocked request {item['req_id']} on {item['model']}: {item['block_reason']}"
+                    recent_changes.append({
+                        "timestamp": item["ts"],
+                        "type": "audit_block" if item.get("blocked") else "request",
+                        "description": desc
+                    })
+            except Exception as e:
+                logger.warning(f"Error querying recent audit logs for summary: {e}")
+
+            # If no recent changes, add a default placeholder
+            if not recent_changes:
+                recent_changes.append({
+                    "timestamp": int(time.time()),
+                    "type": "system_boot",
+                    "description": "System operational, waiting for incoming requests."
+                })
+
+            return {
+                "now": now_data,
+                "attention": attention,
+                "do_next": do_next,
+                "recent_changes": recent_changes
+            }
+        except Exception as e:
+            logger.error("Dashboard summary generation failed", exc_info=True)
+            raise HTTPException(status_code=500, detail="Internal server error")
+
     return router

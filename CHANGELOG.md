@@ -2,6 +2,18 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.72] — 2026-06-02
+
+### UI v2: Triage-First Dashboard & Density Modes
+
+Refactored the landing dashboard into an operator-centric Home view and introduced density mode customization:
+- **Operational Zones Layout**: Restructured the landing page layout (retaining Playwright E2E routing paths) into three distinct zones: `Now` (live system telemetry and traffic flow topology), `Needs Attention` (dynamic triage issue queue), and `Do Next` (actionable follow-up steps).
+- **Dynamic Triage Queue**: Implemented an automated `/api/v1/dashboard/summary` endpoint compiling circuit breaker anomalies, elevated threat actors, missing endpoint configurations, and budget status.
+- **Operator Controls**: Integrated inline interactive actions directly into issues: `Acknowledge` (fades out and persists to local state), `Mute` (silences categories for 15 minutes), and direct integration with `/api/v1/circuit-breaker/{id}/reset` quick actions.
+- **Overview vs. Investigate Density Modes**: Added a global context selector toggling between a clean high-level Overview (hiding performance charts, latency grids, and timelines to avoid cognitive overload) and an Investigate view (disclosing dense technical breakdowns and reducing margins/padding layout elements).
+
+---
+
 ## [1.21.71] — 2026-06-02
 
 ### Security Hardening (CodeQL Fixes)

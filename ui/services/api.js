@@ -175,6 +175,9 @@ export const api = {
     async fetchSpendForecast() {
         return _json(`${BASE_URL}/api/v1/analytics/forecast`);
     },
+    async fetchDashboardSummary() {
+        return _json(`${BASE_URL}/api/v1/dashboard/summary`);
+    },
     async fetchRoutingConfig() {
         return _json(`${BASE_URL}/api/v1/routing/config`);
     },
