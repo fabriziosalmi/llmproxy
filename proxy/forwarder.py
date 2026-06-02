@@ -246,6 +246,12 @@ class RequestForwarder:
         attempts = []
 
         is_budget_saturated = ctx.metadata.get("_budget_saturated", False)
+        
+        if is_budget_saturated:
+            raise HTTPException(
+                status_code=402, 
+                detail="FinOps: Budget Exceeded (HTTP 402). Silent downgrades are disabled to preserve strict downstream parsing logic."
+            )
 
         # Build attempt list: primary + fallback chain
         primary_provider = getattr(target, "provider", None) or getattr(
@@ -253,8 +259,7 @@ class RequestForwarder:
         )
         primary_adapter = get_adapter(primary_provider, original_model)
 
-        if not is_budget_saturated:
-            attempts.append(
+        attempts.append(
                 {
                     "target": target,
                     "adapter": primary_adapter,
@@ -281,8 +286,6 @@ class RequestForwarder:
                 )
 
         if not attempts:
-            if is_budget_saturated:
-                raise HTTPException(status_code=402, detail="Enterprise Quota Exceeded for this API Key (No Fallback Available)")
             raise HTTPException(status_code=503, detail="No routable endpoints available")
 
         last_error: Exception | None = None

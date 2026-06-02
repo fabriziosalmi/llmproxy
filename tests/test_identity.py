@@ -150,7 +150,7 @@ async def test_issuer_prefix_bypass_rejected(mock_secret):
     # Forge an unsigned JWT whose iss claim is a prefix-bypass attempt.
     forged = pyjwt.encode(
         {"iss": "https://accounts.google.com.attacker.com", "sub": "evil"},
-        "irrelevant-key",
+        "irrelevant-key-that-is-at-least-32-bytes-long",
         algorithm="HS256",
     )
 
@@ -179,7 +179,7 @@ async def test_issuer_trailing_slash_variant_rejected(mock_secret):
 
     forged = pyjwt.encode(
         {"iss": "https://accounts.google.com/evil", "sub": "evil"},
-        "irrelevant-key",
+        "irrelevant-key-that-is-at-least-32-bytes-long",
         algorithm="HS256",
     )
     result = await mgr.verify_token(forged)

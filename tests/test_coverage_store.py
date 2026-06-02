@@ -38,6 +38,7 @@ class TestSQLiteStore:
         await repo.init_db()
         # Should not raise
         assert os.path.exists(db_path)
+        await repo.close()
 
     @pytest.mark.asyncio
     async def test_state_set_and_get(self, tmp_path):
@@ -50,6 +51,7 @@ class TestSQLiteStore:
         await repo.set_state("test_key", "test_value")
         result = await repo.get_state("test_key")
         assert result == "test_value"
+        await repo.close()
 
     @pytest.mark.asyncio
     async def test_state_get_default(self, tmp_path):
@@ -61,6 +63,7 @@ class TestSQLiteStore:
 
         result = await repo.get_state("nonexistent", "default_val")
         assert result == "default_val"
+        await repo.close()
 
     @pytest.mark.asyncio
     async def test_state_overwrite(self, tmp_path):
@@ -74,6 +77,7 @@ class TestSQLiteStore:
         await repo.set_state("key", "val2")
         result = await repo.get_state("key")
         assert result == "val2"
+        await repo.close()
 
     @pytest.mark.asyncio
     async def test_state_complex_value(self, tmp_path):
@@ -86,6 +90,7 @@ class TestSQLiteStore:
         await repo.set_state("complex", {"nested": [1, 2, 3], "flag": True})
         result = await repo.get_state("complex")
         assert result == {"nested": [1, 2, 3], "flag": True}
+        await repo.close()
 
     @pytest.mark.asyncio
     async def test_endpoint_crud(self, tmp_path):
@@ -115,6 +120,7 @@ class TestSQLiteStore:
         await repo.remove_endpoint("test-ep")
         all_eps = await repo.get_all()
         assert len(all_eps) == 0
+        await repo.close()
 
     @pytest.mark.asyncio
     async def test_update_status(self, tmp_path):
@@ -138,6 +144,7 @@ class TestSQLiteStore:
         pool = await repo.get_pool()
         assert len(pool) == 1
         assert pool[0].status == EndpointStatus.VERIFIED
+        await repo.close()
 
     @pytest.mark.asyncio
     async def test_get_by_status(self, tmp_path):
@@ -165,3 +172,4 @@ class TestSQLiteStore:
 
         pending = await repo.get_by_status(EndpointStatus.FOUND)
         assert len(pending) == 1
+        await repo.close()

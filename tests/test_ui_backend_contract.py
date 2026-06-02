@@ -14,7 +14,7 @@ Targeted services → endpoints:
 """
 
 import time
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, AsyncMock
 
 import pytest
 from fastapi import FastAPI
@@ -60,7 +60,7 @@ def _mock_agent():
 
     breaker_state = {"state": "closed", "failure_count": 0, "failure_threshold": 5}
     agent.circuit_manager = MagicMock()
-    agent.circuit_manager.get_all_states.return_value = {"openai": breaker_state}
+    agent.circuit_manager.get_all_states = AsyncMock(return_value={"openai": breaker_state})
     return agent
 
 

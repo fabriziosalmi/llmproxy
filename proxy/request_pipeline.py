@@ -154,17 +154,28 @@ async def process_proxy_request(
             ctx.metadata["_resolved_provider"] = resolved_provider
 
         # FinOps Routing: Flag if budget is saturated (global or per-app quota)
+        # Uses predictive cost calculation based on request size
+        from core.pricing import estimate_cost_pre_flight
+        from core.tokenizer import count_messages_tokens
+        
         budget_cfg = orchestrator.config.get("budget", {})
         daily_limit = budget_cfg.get("daily_limit", 50.0)
+        
+        # Predictive Token Estimation
+        input_tokens = count_messages_tokens(body.get("messages", []), body.get("model", ""))
+        predictive_cost = estimate_cost_pre_flight(body.get("model", ""), input_tokens)
+        
         async with orchestrator._budget_lock:
-            global_over_budget = orchestrator.total_cost_today >= daily_limit
+            # Block if the expected cost of this request would push us over the limit
+            global_over_budget = (orchestrator.total_cost_today + predictive_cost) >= daily_limit
+            
         app_over_budget = getattr(request.state, "quota_exceeded", False)
 
         if global_over_budget or app_over_budget:
             ctx.metadata["_budget_saturated"] = True
             if global_over_budget:
                 await orchestrator._add_log(
-                    f"BUDGET SATURATED (Global): (${orchestrator.total_cost_today:.2f}/${daily_limit:.2f})",
+                    f"BUDGET SATURATED (Global): (${orchestrator.total_cost_today:.2f} + {predictive_cost:.4f} est >= ${daily_limit:.2f})",
                     level="PROXY",
                 )
             else:
