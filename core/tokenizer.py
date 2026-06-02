@@ -15,11 +15,14 @@ logger = logging.getLogger("llmproxy.tokenizer")
 
 try:
     import tiktoken
+
     _TIKTOKEN_AVAILABLE = True
     logger.info("tiktoken available — using accurate BPE token counting")
 except ImportError:
     _TIKTOKEN_AVAILABLE = False
-    logger.info("tiktoken not installed — using char-heuristic (pip install tiktoken for accuracy)")
+    logger.info(
+        "tiktoken not installed — using char-heuristic (pip install tiktoken for accuracy)"
+    )
 
 # Model → tiktoken encoding name
 _ENCODING_MAP = {

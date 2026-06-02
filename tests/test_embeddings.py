@@ -32,6 +32,7 @@ HEADERS = {
 # Provider Detection for Embedding Models
 # ══════════════════════════════════════════════════════
 
+
 class TestEmbeddingProviderDetection:
     def test_openai_embedding_models(self):
         assert _detect_embedding_provider("text-embedding-3-small") == "openai"
@@ -59,19 +60,24 @@ class TestEmbeddingProviderDetection:
 # OpenAI Embedding Translation
 # ══════════════════════════════════════════════════════
 
+
 class TestOpenAIEmbeddingAdapter:
     def setup_method(self):
         self.adapter = OpenAIAdapter()
 
     def test_url(self):
         url, _, _ = self.adapter.translate_embedding_request(
-            "https://api.openai.com/v1", OPENAI_EMBEDDING_REQUEST, dict(HEADERS),
+            "https://api.openai.com/v1",
+            OPENAI_EMBEDDING_REQUEST,
+            dict(HEADERS),
         )
         assert url == "https://api.openai.com/v1/embeddings"
 
     def test_body_passthrough(self):
         _, body, _ = self.adapter.translate_embedding_request(
-            "https://api.openai.com/v1", OPENAI_EMBEDDING_REQUEST, dict(HEADERS),
+            "https://api.openai.com/v1",
+            OPENAI_EMBEDDING_REQUEST,
+            dict(HEADERS),
         )
         assert body is OPENAI_EMBEDDING_REQUEST
 
@@ -83,6 +89,7 @@ class TestOpenAIEmbeddingAdapter:
 # Anthropic — No Embedding Support
 # ══════════════════════════════════════════════════════
 
+
 class TestAnthropicEmbeddingAdapter:
     def test_does_not_support_embeddings(self):
         adapter = AnthropicAdapter()
@@ -92,6 +99,7 @@ class TestAnthropicEmbeddingAdapter:
 # ══════════════════════════════════════════════════════
 # Google Gemini Embedding Translation
 # ══════════════════════════════════════════════════════
+
 
 class TestGoogleEmbeddingAdapter:
     def setup_method(self):
@@ -157,6 +165,7 @@ class TestGoogleEmbeddingAdapter:
 # Azure Embedding Translation
 # ══════════════════════════════════════════════════════
 
+
 class TestAzureEmbeddingAdapter:
     def setup_method(self):
         self.adapter = AzureAdapter()
@@ -184,6 +193,7 @@ class TestAzureEmbeddingAdapter:
 # Ollama Embedding Translation
 # ══════════════════════════════════════════════════════
 
+
 class TestOllamaEmbeddingAdapter:
     def setup_method(self):
         self.adapter = OllamaAdapter()
@@ -209,14 +219,17 @@ class TestOllamaEmbeddingAdapter:
 # Embedding Pricing
 # ══════════════════════════════════════════════════════
 
+
 class TestEmbeddingPricing:
     def test_openai_embedding_pricing(self):
         from core.pricing import estimate_cost
+
         # text-embedding-3-small: $0.02/MTok input, no output
         cost = estimate_cost("text-embedding-3-small", 1_000_000, 0)
         assert abs(cost - 0.02) < 0.001
 
     def test_local_embedding_free(self):
         from core.pricing import estimate_cost
+
         cost = estimate_cost("nomic-embed-text", 1_000_000, 0)
         assert cost == 0.0

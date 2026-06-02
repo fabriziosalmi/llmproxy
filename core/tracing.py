@@ -17,6 +17,7 @@ try:
     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
     from opentelemetry.sdk.resources import Resource
+
     _OTEL_AVAILABLE = True
 except ImportError:
     _OTEL_AVAILABLE = False
@@ -101,9 +102,9 @@ class TraceManager:
     def _sentry_before_send(event, hint):
         """Filter noisy events before sending to Sentry."""
         # Drop expected errors (rate limits, auth failures)
-        if 'exc_info' in hint:
-            exc_type = hint['exc_info'][0]
-            if exc_type and exc_type.__name__ in ('HTTPException',):
+        if "exc_info" in hint:
+            exc_type = hint["exc_info"][0]
+            if exc_type and exc_type.__name__ in ("HTTPException",):
                 return None
         return event
 
@@ -129,6 +130,7 @@ class TraceManager:
         if cls._sentry_initialized:
             try:
                 import sentry_sdk
+
                 sentry_sdk.capture_exception(exc)
             except Exception:
                 pass
@@ -139,5 +141,6 @@ def start_span(name: str):
     tracer = TraceManager.get_tracer()
     if tracer is None:
         import contextlib
+
         return contextlib.nullcontext()
     return tracer.start_as_current_span(name)

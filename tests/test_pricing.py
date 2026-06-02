@@ -108,10 +108,15 @@ class TestPricingCompleteness:
     def test_all_config_models_have_pricing(self):
         """Key models from config.yaml should have pricing entries."""
         critical_models = [
-            "gpt-4o", "gpt-4o-mini", "gpt-4.1",
-            "claude-sonnet-4-20250514", "claude-haiku-4-5-20251001",
-            "gemini-2.5-pro", "gemini-2.5-flash",
-            "deepseek-chat", "mistral-large-latest",
+            "gpt-4o",
+            "gpt-4o-mini",
+            "gpt-4.1",
+            "claude-sonnet-4-20250514",
+            "claude-haiku-4-5-20251001",
+            "gemini-2.5-pro",
+            "gemini-2.5-flash",
+            "deepseek-chat",
+            "mistral-large-latest",
         ]
         for model in critical_models:
             p = get_pricing(model)

@@ -16,8 +16,8 @@ from typing import Dict, Any
 
 logger = logging.getLogger("llmproxy.health_prober")
 
-PROBE_INTERVAL = 60   # seconds between probe rounds
-PROBE_TIMEOUT = 10    # max seconds per probe request
+PROBE_INTERVAL = 60  # seconds between probe rounds
+PROBE_TIMEOUT = 10  # max seconds per probe request
 
 # URL fragments that indicate the endpoint was never actually configured
 # (left as a template in config.yaml). Probing these only produces noise.
@@ -82,7 +82,8 @@ class EndpointHealthProber:
                     logger.info(
                         "Probe skip: %s — base_url still has a placeholder "
                         "('%s'). Fill in config.yaml to enable health probes.",
-                        ep_name, base_url,
+                        ep_name,
+                        base_url,
                     )
                     self._warned_unprobeable.add(ep_name)
                 continue
@@ -98,12 +99,16 @@ class EndpointHealthProber:
             if not probe_local and ("localhost" in base_url or "127.0.0.1" in base_url):
                 continue
 
-            tasks.append(self._probe_one_jittered(ep_name, provider, base_url, models[0]))
+            tasks.append(
+                self._probe_one_jittered(ep_name, provider, base_url, models[0])
+            )
 
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def _probe_one_jittered(self, ep_name: str, provider: str, base_url: str, model: str):
+    async def _probe_one_jittered(
+        self, ep_name: str, provider: str, base_url: str, model: str
+    ):
         """Add per-probe jitter (0-5s) to spread requests across time."""
         await asyncio.sleep(random.uniform(0, 5.0))
         await self._probe_one(ep_name, provider, base_url, model)
@@ -126,6 +131,7 @@ class EndpointHealthProber:
 
         # Build headers from env
         import os
+
         ep_config = self.config.get("endpoints", {}).get(ep_name, {})
         api_key_env = ep_config.get("api_key_env", "")
         api_key = os.environ.get(api_key_env, "") if api_key_env else ""
@@ -159,7 +165,10 @@ class EndpointHealthProber:
             else:
                 await cb.report_failure()
                 await update_endpoint_stats(ep_name, latency_ms, False)
-                _record(f"http:{response.status_code}", f"Probe FAIL: {ep_name} → {response.status_code}")
+                _record(
+                    f"http:{response.status_code}",
+                    f"Probe FAIL: {ep_name} → {response.status_code}",
+                )
 
         except asyncio.TimeoutError:
             await cb.report_failure()

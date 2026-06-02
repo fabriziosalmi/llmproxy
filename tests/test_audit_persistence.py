@@ -88,12 +88,17 @@ def agent(store):
     a.flush_budget_now = flush_budget_now
 
     async def fake_proxy_request(request, body=None, session_id="default"):
-        return JSONResponse(content=make_openai_response(model=body.get("model", "test")), status_code=200)
+        return JSONResponse(
+            content=make_openai_response(model=body.get("model", "test")),
+            status_code=200,
+        )
 
     a.proxy_request = fake_proxy_request
 
     app = FastAPI()
-    app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+    app.add_middleware(
+        CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
+    )
     app.include_router(chat_router(a))
     app.include_router(completions_router(a))
     a.app = app
@@ -124,7 +129,9 @@ async def test_chat_completions_writes_audit_entry(client, store):
     )
     assert resp.status_code == 200
     await _wait_for_audit(store)
-    assert len(store.audit_entries) == 1, f"Expected 1 audit entry, got {store.audit_entries}"
+    assert len(store.audit_entries) == 1, (
+        f"Expected 1 audit entry, got {store.audit_entries}"
+    )
     e = store.audit_entries[0]
     assert e["model"] == "gpt-4"
     assert e["prompt_tokens"] == 10
@@ -142,7 +149,9 @@ async def test_legacy_completions_writes_audit_entry(client, store):
     )
     assert resp.status_code == 200
     await _wait_for_audit(store)
-    assert len(store.audit_entries) == 1, f"Expected 1 audit entry, got {store.audit_entries}"
+    assert len(store.audit_entries) == 1, (
+        f"Expected 1 audit entry, got {store.audit_entries}"
+    )
     e = store.audit_entries[0]
     assert e["model"] == "qwen3-coder"
     assert e["prompt_tokens"] == 10
@@ -158,7 +167,9 @@ async def test_legacy_completions_writes_spend_entry(client, store):
     )
     assert resp.status_code == 200
     await _wait_for_audit(store)
-    assert len(store.spend_entries) == 1, f"Expected 1 spend entry, got {store.spend_entries}"
+    assert len(store.spend_entries) == 1, (
+        f"Expected 1 spend entry, got {store.spend_entries}"
+    )
     assert store.spend_entries[0]["model"] == "qwen3-coder"
 
 
@@ -188,4 +199,6 @@ async def test_audit_counter_increments(client, store):
     # Give the background task a beat to finish
     await asyncio.sleep(0.05)
     after = _val("chat", "ok") + _val("completions", "ok")
-    assert after - before >= 2, f"Counter did not increment as expected: before={before} after={after}"
+    assert after - before >= 2, (
+        f"Counter did not increment as expected: before={before} after={after}"
+    )

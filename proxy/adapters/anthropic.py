@@ -27,7 +27,10 @@ class AnthropicAdapter(BaseModelAdapter):
     API_VERSION = "2023-06-01"
 
     def translate_request(
-        self, base_url: str, body: Dict[str, Any], headers: Dict[str, str],
+        self,
+        base_url: str,
+        body: Dict[str, Any],
+        headers: Dict[str, str],
     ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
         url = f"{base_url.rstrip('/')}/messages"
 
@@ -47,7 +50,9 @@ class AnthropicAdapter(BaseModelAdapter):
         anthropic_body = {
             "model": body.get("model", "claude-sonnet-4-20250514"),
             "messages": filtered,
-            "max_tokens": body.get("max_tokens") or body.get("max_completion_tokens") or 4096,
+            "max_tokens": body.get("max_tokens")
+            or body.get("max_completion_tokens")
+            or 4096,
         }
 
         if system_text:
@@ -55,11 +60,13 @@ class AnthropicAdapter(BaseModelAdapter):
             # inject cache_control to enable Anthropic's 5-min ephemeral cache.
             # This saves up to 90% on input tokens for agentic/RAG use cases.
             if isinstance(system_text, str) and len(system_text) > 2048:
-                anthropic_body["system"] = [{
-                    "type": "text",
-                    "text": system_text,
-                    "cache_control": {"type": "ephemeral"},
-                }]
+                anthropic_body["system"] = [
+                    {
+                        "type": "text",
+                        "text": system_text,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ]
             else:
                 anthropic_body["system"] = system_text
 
@@ -69,7 +76,9 @@ class AnthropicAdapter(BaseModelAdapter):
         if body.get("top_p") is not None:
             anthropic_body["top_p"] = body["top_p"]
         if body.get("stop"):
-            anthropic_body["stop_sequences"] = body["stop"] if isinstance(body["stop"], list) else [body["stop"]]
+            anthropic_body["stop_sequences"] = (
+                body["stop"] if isinstance(body["stop"], list) else [body["stop"]]
+            )
         if body.get("stream"):
             anthropic_body["stream"] = True
 
@@ -103,14 +112,16 @@ class AnthropicAdapter(BaseModelAdapter):
             if block.get("type") == "text":
                 text_parts.append(block.get("text", ""))
             elif block.get("type") == "tool_use":
-                tool_calls.append({
-                    "id": block.get("id", f"call_{i}"),
-                    "type": "function",
-                    "function": {
-                        "name": block.get("name", ""),
-                        "arguments": json.dumps(block.get("input", {})),
-                    },
-                })
+                tool_calls.append(
+                    {
+                        "id": block.get("id", f"call_{i}"),
+                        "type": "function",
+                        "function": {
+                            "name": block.get("name", ""),
+                            "arguments": json.dumps(block.get("input", {})),
+                        },
+                    }
+                )
 
         message: Dict[str, Any] = {
             "role": "assistant",
@@ -135,15 +146,18 @@ class AnthropicAdapter(BaseModelAdapter):
             "object": "chat.completion",
             "created": int(time.time()),
             "model": response_data.get("model", ""),
-            "choices": [{
-                "index": 0,
-                "message": message,
-                "finish_reason": finish_reason_map.get(stop_reason, "stop"),
-            }],
+            "choices": [
+                {
+                    "index": 0,
+                    "message": message,
+                    "finish_reason": finish_reason_map.get(stop_reason, "stop"),
+                }
+            ],
             "usage": {
                 "prompt_tokens": usage.get("input_tokens", 0),
                 "completion_tokens": usage.get("output_tokens", 0),
-                "total_tokens": usage.get("input_tokens", 0) + usage.get("output_tokens", 0),
+                "total_tokens": usage.get("input_tokens", 0)
+                + usage.get("output_tokens", 0),
             },
         }
 
@@ -171,28 +185,38 @@ class AnthropicAdapter(BaseModelAdapter):
                                 "object": "chat.completion.chunk",
                                 "created": int(time.time()),
                                 "model": "",
-                                "choices": [{
-                                    "index": 0,
-                                    "delta": {"content": delta.get("text", "")},
-                                    "finish_reason": None,
-                                }],
+                                "choices": [
+                                    {
+                                        "index": 0,
+                                        "delta": {"content": delta.get("text", "")},
+                                        "finish_reason": None,
+                                    }
+                                ],
                             }
                             output_lines.append(f"data: {json.dumps(openai_chunk)}\n\n")
 
                     elif event_type == "message_delta":
                         stop_reason = data.get("delta", {}).get("stop_reason")
                         if stop_reason:
-                            finish_map = {"end_turn": "stop", "max_tokens": "length", "tool_use": "tool_calls"}
+                            finish_map = {
+                                "end_turn": "stop",
+                                "max_tokens": "length",
+                                "tool_use": "tool_calls",
+                            }
                             openai_chunk = {
                                 "id": "",
                                 "object": "chat.completion.chunk",
                                 "created": int(time.time()),
                                 "model": "",
-                                "choices": [{
-                                    "index": 0,
-                                    "delta": {},
-                                    "finish_reason": finish_map.get(stop_reason, "stop"),
-                                }],
+                                "choices": [
+                                    {
+                                        "index": 0,
+                                        "delta": {},
+                                        "finish_reason": finish_map.get(
+                                            stop_reason, "stop"
+                                        ),
+                                    }
+                                ],
                             }
                             output_lines.append(f"data: {json.dumps(openai_chunk)}\n\n")
 
@@ -216,7 +240,9 @@ class AnthropicAdapter(BaseModelAdapter):
         headers: Dict[str, str],
         session: aiohttp.ClientSession,
     ) -> Response:
-        async with session.post(url, json=body, headers=headers, timeout=self._REQUEST_TIMEOUT) as resp:
+        async with session.post(
+            url, json=body, headers=headers, timeout=self._REQUEST_TIMEOUT
+        ) as resp:
             content = await resp.read()
             status = resp.status
 
@@ -229,7 +255,9 @@ class AnthropicAdapter(BaseModelAdapter):
             except (json.JSONDecodeError, KeyError):
                 pass
 
-        return Response(content=content, status_code=status, media_type="application/json")
+        return Response(
+            content=content, status_code=status, media_type="application/json"
+        )
 
     async def stream(
         self,
@@ -238,7 +266,9 @@ class AnthropicAdapter(BaseModelAdapter):
         headers: Dict[str, str],
         session: aiohttp.ClientSession,
     ) -> AsyncGenerator[bytes, None]:
-        async with session.post(url, json=body, headers=headers, timeout=self._REQUEST_TIMEOUT) as resp:
+        async with session.post(
+            url, json=body, headers=headers, timeout=self._REQUEST_TIMEOUT
+        ) as resp:
             async for chunk in resp.content.iter_any():
                 translated = self.translate_stream_chunk(chunk)
                 if translated:
@@ -272,23 +302,27 @@ def _translate_content(content):
                 try:
                     header, data = url[5:].split(";base64,", 1)
                     media_type = header  # e.g. "image/png"
-                    blocks.append({
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": media_type,
-                            "data": data,
-                        },
-                    })
+                    blocks.append(
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": media_type,
+                                "data": data,
+                            },
+                        }
+                    )
                 except ValueError:
                     # Malformed data URI — pass as text fallback
                     blocks.append({"type": "text", "text": f"[image: {url[:100]}]"})
             else:
                 # URL reference
-                blocks.append({
-                    "type": "image",
-                    "source": {"type": "url", "url": url},
-                })
+                blocks.append(
+                    {
+                        "type": "image",
+                        "source": {"type": "url", "url": url},
+                    }
+                )
         else:
             # Unknown part type — pass as text
             blocks.append({"type": "text", "text": str(part)})
@@ -302,11 +336,15 @@ def _translate_tools(openai_tools: list) -> list:
     for tool in openai_tools:
         if tool.get("type") == "function":
             fn = tool["function"]
-            anthropic_tools.append({
-                "name": fn["name"],
-                "description": fn.get("description", ""),
-                "input_schema": fn.get("parameters", {"type": "object", "properties": {}}),
-            })
+            anthropic_tools.append(
+                {
+                    "name": fn["name"],
+                    "description": fn.get("description", ""),
+                    "input_schema": fn.get(
+                        "parameters", {"type": "object", "properties": {}}
+                    ),
+                }
+            )
     return anthropic_tools
 
 

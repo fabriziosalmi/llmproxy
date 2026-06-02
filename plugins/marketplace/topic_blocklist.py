@@ -79,7 +79,9 @@ class TopicBlocklist(BasePlugin):
     hook = PluginHook.PRE_FLIGHT
     version = "1.0.0"
     author = "llmproxy"
-    description = "Blocks requests containing forbidden topics via keyword/regex matching"
+    description = (
+        "Blocks requests containing forbidden topics via keyword/regex matching"
+    )
     timeout_ms = 5
 
     def __init__(self, config: Dict[str, Any] = None):
@@ -89,7 +91,9 @@ class TopicBlocklist(BasePlugin):
         self.match_mode: str = self.config.get("match_mode", "keyword")
         self.case_sensitive: bool = self.config.get("case_sensitive", False)
         self.scan_roles: List[str] = self.config.get("scan_roles", ["user"])
-        self._patterns = _compile_patterns(self.topics, self.match_mode, self.case_sensitive)
+        self._patterns = _compile_patterns(
+            self.topics, self.match_mode, self.case_sensitive
+        )
 
     def _find_match(self, text: str) -> Optional[str]:
         """Return the first matched topic string, or None."""

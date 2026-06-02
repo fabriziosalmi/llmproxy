@@ -52,7 +52,9 @@ class ShadowTraffic(BasePlugin):
             return PluginResponse.passthrough()
 
         # Get the original request and response
-        original_model = ctx.metadata.get("_model_alias") or ctx.body.get("model", "unknown")
+        original_model = ctx.metadata.get("_model_alias") or ctx.body.get(
+            "model", "unknown"
+        )
         messages = ctx.body.get("messages", [])
         if not messages:
             return PluginResponse.passthrough()
@@ -68,7 +70,9 @@ class ShadowTraffic(BasePlugin):
 
         return PluginResponse.passthrough()
 
-    async def _shadow_request(self, rotator: Any, messages: list, original_model: str, session_id: str):
+    async def _shadow_request(
+        self, rotator: Any, messages: list, original_model: str, session_id: str
+    ):
         """Send the shadow request and store results for comparison."""
         try:
             t0 = time.time()
@@ -85,7 +89,9 @@ class ShadowTraffic(BasePlugin):
                     break
 
             if not target:
-                self.logger.debug(f"Shadow model {self.shadow_model}: no matching endpoint found")
+                self.logger.debug(
+                    f"Shadow model {self.shadow_model}: no matching endpoint found"
+                )
                 return
 
             latency_ms = (time.time() - t0) * 1000

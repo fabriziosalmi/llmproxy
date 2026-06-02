@@ -15,7 +15,10 @@ class BaseModelAdapter(ABC):
     provider_name: str = "base"
 
     def translate_request(
-        self, base_url: str, body: Dict[str, Any], headers: Dict[str, str],
+        self,
+        base_url: str,
+        body: Dict[str, Any],
+        headers: Dict[str, str],
     ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
         """Transform OpenAI-format request to provider-native format.
 
@@ -35,7 +38,10 @@ class BaseModelAdapter(ABC):
     supports_embeddings: bool = True
 
     def translate_embedding_request(
-        self, base_url: str, body: Dict[str, Any], headers: Dict[str, str],
+        self,
+        base_url: str,
+        body: Dict[str, Any],
+        headers: Dict[str, str],
     ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
         """Transform OpenAI-format embedding request to provider-native format.
 
@@ -45,7 +51,9 @@ class BaseModelAdapter(ABC):
         url = f"{base_url.rstrip('/')}/embeddings"
         return url, body, headers
 
-    def translate_embedding_response(self, response_data: Dict[str, Any]) -> Dict[str, Any]:
+    def translate_embedding_response(
+        self, response_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Transform provider embedding response back to OpenAI format.
 
         Default: identity transform.
@@ -61,13 +69,21 @@ class BaseModelAdapter(ABC):
 
     @abstractmethod
     async def request(
-        self, url: str, body: Dict[str, Any], headers: Dict[str, str], session: Any,
+        self,
+        url: str,
+        body: Dict[str, Any],
+        headers: Dict[str, str],
+        session: Any,
     ) -> Any:
         """Sends a non-streaming request."""
 
     @abstractmethod
     async def stream(
-        self, url: str, body: Dict[str, Any], headers: Dict[str, str], session: Any,
+        self,
+        url: str,
+        body: Dict[str, Any],
+        headers: Dict[str, str],
+        session: Any,
     ) -> AsyncGenerator[bytes, None]:
         """Sends a streaming request."""
         yield b""  # pragma: no cover

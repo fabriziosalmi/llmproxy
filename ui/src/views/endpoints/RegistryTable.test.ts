@@ -38,12 +38,12 @@ const ROWS: Endpoint[] = [
 
 let host: HTMLElement;
 let deps: {
-    onResetCircuitBreaker: ReturnType<typeof vi.fn>;
-    onToggleEndpoint: ReturnType<typeof vi.fn>;
-    onDeleteEndpoint: ReturnType<typeof vi.fn>;
-    onUpdatePriority: ReturnType<typeof vi.fn>;
-    refresh: ReturnType<typeof vi.fn>;
-    toast: ReturnType<typeof vi.fn>;
+    onResetCircuitBreaker: any;
+    onToggleEndpoint: any;
+    onDeleteEndpoint: any;
+    onUpdatePriority: any;
+    refresh: any;
+    toast: any;
 };
 
 beforeEach(() => {

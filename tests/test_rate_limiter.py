@@ -9,6 +9,7 @@ from core.rate_limiter import TokenBucket, RateLimiter
 
 # ── TokenBucket ──
 
+
 @pytest.mark.asyncio
 async def test_bucket_allows_within_capacity():
     bucket = TokenBucket(capacity=5, rate=1.0)
@@ -75,6 +76,7 @@ async def test_bucket_retry_after_zero_rate_is_infinite():
 
 
 # ── RateLimiter ──
+
 
 @pytest.mark.asyncio
 async def test_limiter_creates_buckets():

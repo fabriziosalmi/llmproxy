@@ -124,7 +124,13 @@ class NegativeCache:
 class CacheBackend:
     """WAF-aware exact-match cache with SQLite/WAL storage."""
 
-    def __init__(self, db_path: str = "cache.db", ttl: int = 3600, enabled: bool = True):
+    def __init__(
+        self,
+        db_path: str = "cache.db",
+        ttl: int = 3600,
+        enabled: bool = True,
+        config: Optional[dict] = None,
+    ):
         self._db_path = db_path
         self._ttl = ttl
         self._enabled = enabled
@@ -132,6 +138,11 @@ class CacheBackend:
         # In-memory stats (not persisted — lightweight)
         self._hits = 0
         self._misses = 0
+
+        cfg = config or {}
+        sem_cfg = cfg.get("semantic_cache", {})
+        self._semantic_enabled = sem_cfg.get("enabled", False)
+        self._semantic_threshold = sem_cfg.get("threshold", 0.85)
 
     async def init(self):
         """Create table, enable WAL mode, set pragmas."""
@@ -156,9 +167,18 @@ class CacheBackend:
                 cache_key   TEXT PRIMARY KEY,
                 response    TEXT NOT NULL,
                 model       TEXT DEFAULT '',
-                created_at  REAL NOT NULL
+                created_at  REAL NOT NULL,
+                prompt      TEXT DEFAULT ''
             )
         """)
+        # Run schema migration dynamically to add prompt column if it does not exist
+        try:
+            await self._conn.execute(
+                "ALTER TABLE response_cache ADD COLUMN prompt TEXT DEFAULT ''"
+            )
+            await self._conn.commit()
+        except Exception:
+            pass
         await self._conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_cache_created ON response_cache(created_at)"
         )
@@ -189,7 +209,9 @@ class CacheBackend:
         model = body.get("model", "")
         temperature = str(body.get("temperature", 1.0))
         # Canonical JSON: sorted keys, no whitespace, deterministic
-        messages_raw = json.dumps(body.get("messages", []), sort_keys=True, separators=(",", ":"))
+        messages_raw = json.dumps(
+            body.get("messages", []), sort_keys=True, separators=(",", ":")
+        )
         # NFKC normalization: collapse Unicode variants to canonical form
         messages = unicodedata.normalize("NFKC", messages_raw)
 
@@ -198,7 +220,9 @@ class CacheBackend:
 
     # ── Lookup ──
 
-    async def get(self, body: Dict[str, Any], tenant_id: str = "") -> Optional[Dict[str, Any]]:
+    async def get(
+        self, body: Dict[str, Any], tenant_id: str = ""
+    ) -> Optional[Dict[str, Any]]:
         """Cache lookup. Returns parsed response dict or None.
 
         TTL check is done in SQL for efficiency.
@@ -225,6 +249,51 @@ class CacheBackend:
                 logger.warning(f"Cache corruption for key {key[:12]}, ignoring")
                 return None
 
+        # Semantic match fallback when exact match misses
+        if self._semantic_enabled:
+            model = body.get("model", "")
+            current_prompt = ""
+            messages = body.get("messages", [])
+            if messages:
+                current_prompt = messages[-1].get("content", "")
+
+            if current_prompt:
+                try:
+                    # Retrieve all active cache entries with prompts for the same model
+                    async with self._conn.execute(
+                        "SELECT response, prompt FROM response_cache WHERE model = ? AND created_at > ? AND prompt != ''",
+                        (model, cutoff),
+                    ) as cursor:
+                        cache_rows = await cursor.fetchall()
+
+                    if cache_rows:
+                        from core.semantic_analyzer import _to_trigrams, _jaccard
+
+                        current_trigrams = _to_trigrams(current_prompt)
+                        best_sim = 0.0
+                        best_res = None
+
+                        for res_str, cached_prompt in cache_rows:
+                            cached_trigrams = _to_trigrams(cached_prompt)
+                            sim = _jaccard(current_trigrams, cached_trigrams)
+                            if sim > best_sim:
+                                best_sim = sim
+                                best_res = res_str
+                                if best_sim >= 0.98:  # early exit for near-exact match
+                                    break
+
+                        if best_sim >= self._semantic_threshold and best_res:
+                            self._hits += 1
+                            logger.info(
+                                f"Cache SEMANTIC HIT: sim={best_sim:.4f} (threshold={self._semantic_threshold})"
+                            )
+                            try:
+                                return json.loads(best_res)
+                            except (json.JSONDecodeError, TypeError):
+                                pass
+                except Exception as e:
+                    logger.warning(f"Semantic cache lookup failure: {e}")
+
         self._misses += 1
         return None
 
@@ -248,9 +317,14 @@ class CacheBackend:
         key = self.make_key(body, tenant_id)
         response_json = json.dumps(response_data, separators=(",", ":"))
 
+        prompt_text = ""
+        messages = body.get("messages", [])
+        if messages:
+            prompt_text = messages[-1].get("content", "")
+
         await self._conn.execute(
-            "INSERT OR REPLACE INTO response_cache (cache_key, response, model, created_at) VALUES (?, ?, ?, ?)",
-            (key, response_json, model, time.time()),
+            "INSERT OR REPLACE INTO response_cache (cache_key, response, model, created_at, prompt) VALUES (?, ?, ?, ?, ?)",
+            (key, response_json, model, time.time(), prompt_text),
         )
         await self._conn.commit()
         logger.debug(f"Cache WRITE: {key[:12]}... (model={model})")

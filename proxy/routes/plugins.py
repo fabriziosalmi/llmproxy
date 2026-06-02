@@ -1,4 +1,5 @@
 """Plugin routes: list, toggle, install, uninstall, hot-swap, rollback."""
+
 import yaml  # type: ignore[import-untyped]
 
 from fastapi import APIRouter, Request, HTTPException
@@ -25,10 +26,11 @@ def create_router(agent) -> APIRouter:
     @router.get("/api/v1/plugins")
     async def get_plugins():
         import os
+
         plugins = agent.plugin_manager.list_plugins()
         if not plugins:
             if os.path.exists(agent.plugin_manager.manifest_path):
-                with open(agent.plugin_manager.manifest_path, 'r') as f:
+                with open(agent.plugin_manager.manifest_path, "r") as f:
                     manifest = yaml.safe_load(f) or {}
                 return manifest
             return {"plugins": []}
@@ -41,7 +43,7 @@ def create_router(agent) -> APIRouter:
         plugin_name = data.get("name")
         enabled = data.get("enabled")
 
-        with open(agent.plugin_manager.manifest_path, 'r') as f:
+        with open(agent.plugin_manager.manifest_path, "r") as f:
             manifest = yaml.safe_load(f) or {}
 
         for p in manifest.get("plugins", []):
@@ -49,7 +51,7 @@ def create_router(agent) -> APIRouter:
                 p["enabled"] = enabled
                 break
 
-        with open(agent.plugin_manager.manifest_path, 'w') as f:
+        with open(agent.plugin_manager.manifest_path, "w") as f:
             yaml.dump(manifest, f)
 
         await agent.plugin_manager.hot_swap()
@@ -61,10 +63,14 @@ def create_router(agent) -> APIRouter:
         data = await request.json()
         required = {"name", "hook", "entrypoint"}
         if not required.issubset(data.keys()):
-            raise HTTPException(status_code=400, detail=f"Missing fields: {required - data.keys()}")
+            raise HTTPException(
+                status_code=400, detail=f"Missing fields: {required - data.keys()}"
+            )
         try:
             await agent.plugin_manager.install_plugin(data)
-            await agent._add_log(f"PLUGIN: Installed '{data['name']}' on {data['hook']}")
+            await agent._add_log(
+                f"PLUGIN: Installed '{data['name']}' on {data['hook']}"
+            )
             return {"status": "installed", "name": data["name"]}
         except Exception as e:
             raise HTTPException(status_code=422, detail=str(e))
@@ -74,7 +80,9 @@ def create_router(agent) -> APIRouter:
         _check_admin_auth(request)
         removed = await agent.plugin_manager.uninstall_plugin(plugin_name)
         if not removed:
-            raise HTTPException(status_code=404, detail=f"Plugin '{plugin_name}' not found")
+            raise HTTPException(
+                status_code=404, detail=f"Plugin '{plugin_name}' not found"
+            )
         await agent._add_log(f"PLUGIN: Uninstalled '{plugin_name}'", level="WARNING")
         return {"status": "uninstalled", "name": plugin_name}
 

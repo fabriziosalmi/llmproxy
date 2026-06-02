@@ -28,7 +28,15 @@ def _get_available_providers(config: Dict[str, Any]) -> set[str]:
     if _available_providers is not None:
         return _available_providers
 
-    _PLACEHOLDERS = {"sk-proj-...", "sk-ant-...", "AIza...", "gsk_...", "your-api-key", "CHANGE-ME", ""}
+    _PLACEHOLDERS = {
+        "sk-proj-...",
+        "sk-ant-...",
+        "AIza...",
+        "gsk_...",
+        "your-api-key",
+        "CHANGE-ME",
+        "",
+    }
     available = set()
     endpoints = config.get("endpoints", {})
     for name, ep_cfg in endpoints.items():
@@ -45,7 +53,9 @@ def _get_available_providers(config: Dict[str, Any]) -> set[str]:
     return available
 
 
-def resolve_model(config: Dict[str, Any], requested_model: str) -> tuple[str, str | None]:
+def resolve_model(
+    config: Dict[str, Any], requested_model: str
+) -> tuple[str, str | None]:
     """Resolve a model alias or group to a real model name + provider.
 
     Returns (model_name, provider_name_or_None).
@@ -86,12 +96,16 @@ def _filter_available(models: List[Dict], available: set[str]) -> List[Dict]:
         return models  # No info — return all (best effort)
     filtered = [m for m in models if m.get("provider", "") in available]
     if not filtered:
-        logger.warning(f"No available providers for group models. Available: {available}")
+        logger.warning(
+            f"No available providers for group models. Available: {available}"
+        )
         return models  # Fallback to all — let the forwarder handle errors
     return filtered
 
 
-def _pick_from_group(group: Dict[str, Any], available: set[str]) -> Optional[tuple[str, str]]:
+def _pick_from_group(
+    group: Dict[str, Any], available: set[str]
+) -> Optional[tuple[str, str]]:
     """Pick a model from a group based on strategy.
 
     Returns (model_name, provider_name) or None.
@@ -105,18 +119,22 @@ def _pick_from_group(group: Dict[str, Any], available: set[str]) -> Optional[tup
 
     if strategy == "cheapest":
         from core.pricing import get_pricing
+
         chosen = min(models, key=lambda m: get_pricing(m["model"])["input"])
     elif strategy == "fastest":
         try:
             from plugins.default.neural_router import get_endpoint_stats
         except ImportError:
-            logger.debug("neural_router not available for 'fastest' strategy, falling back to random")
+            logger.debug(
+                "neural_router not available for 'fastest' strategy, falling back to random"
+            )
             chosen = random.choice(models)
             return str(chosen["model"]), str(chosen.get("provider", ""))
 
         def _latency(m):
             stats = get_endpoint_stats(m.get("provider", ""))
             return stats.get("latency_ms", 999.0)
+
         chosen = min(models, key=_latency)
     elif strategy == "weighted":
         weights = [m.get("weight", 1.0) for m in models]

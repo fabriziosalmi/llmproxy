@@ -8,6 +8,7 @@ from models import LLMEndpoint, EndpointStatus
 
 logger = logging.getLogger(__name__)
 
+
 class SQLiteStore:
     """Robust Asynchronous SQLite-based storage for LLM endpoints and metadata.
 
@@ -83,8 +84,12 @@ class SQLiteStore:
                 status INTEGER DEFAULT 200
             )
         """)
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_spend_date ON spend_log(date)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_spend_model ON spend_log(model, date)")
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_spend_date ON spend_log(date)"
+        )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_spend_model ON spend_log(model, date)"
+        )
         # Persistent audit log (R2.10)
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS audit_log (
@@ -108,11 +113,21 @@ class SQLiteStore:
             )
         """)
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_model ON audit_log(model)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_key ON audit_log(key_prefix, ts)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_session ON audit_log(session_id, ts)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_spend_key ON spend_log(key_prefix, date)")
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_endpoints_status ON endpoints(status)")
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_audit_model ON audit_log(model)"
+        )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_audit_key ON audit_log(key_prefix, ts)"
+        )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_audit_session ON audit_log(session_id, ts)"
+        )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_spend_key ON spend_log(key_prefix, date)"
+        )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_endpoints_status ON endpoints(status)"
+        )
         # RBAC / GDPR: user_roles table (referenced by delete_subject_data / export_subject_data)
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS user_roles (
@@ -123,7 +138,9 @@ class SQLiteStore:
                 granted_at INTEGER DEFAULT 0
             )
         """)
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_user_roles_subject ON user_roles(subject)")
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_user_roles_subject ON user_roles(subject)"
+        )
         # Schema migration tracking
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS _migrations (
@@ -134,11 +151,15 @@ class SQLiteStore:
         """)
         # Run migrations (idempotent — skips already-applied)
         import time as _time
+
         _migrations = [
-            ("001_audit_hash_columns", [
-                "ALTER TABLE audit_log ADD COLUMN entry_hash TEXT DEFAULT ''",
-                "ALTER TABLE audit_log ADD COLUMN prev_hash TEXT DEFAULT ''",
-            ]),
+            (
+                "001_audit_hash_columns",
+                [
+                    "ALTER TABLE audit_log ADD COLUMN entry_hash TEXT DEFAULT ''",
+                    "ALTER TABLE audit_log ADD COLUMN prev_hash TEXT DEFAULT ''",
+                ],
+            ),
         ]
         for mig_name, stmts in _migrations:
             async with conn.execute(
@@ -161,11 +182,20 @@ class SQLiteStore:
         conn = await self._get_conn()
         await conn.execute(
             "INSERT OR REPLACE INTO endpoints (id, url, status, metadata, latency_ms, success_rate) VALUES (?, ?, ?, ?, ?, ?)",
-            (endpoint.id, str(endpoint.url), endpoint.status.value, json.dumps(endpoint.metadata), endpoint.latency_ms, endpoint.success_rate)
+            (
+                endpoint.id,
+                str(endpoint.url),
+                endpoint.status.value,
+                json.dumps(endpoint.metadata),
+                endpoint.latency_ms,
+                endpoint.success_rate,
+            ),
         )
         await conn.commit()
 
-    async def update_status(self, endpoint_id: str, status: EndpointStatus, metadata: Optional[Dict] = None):
+    async def update_status(
+        self, endpoint_id: str, status: EndpointStatus, metadata: Optional[Dict] = None
+    ):
         conn = await self._get_conn()
         # Extract latency_ms from metadata if present
         latency_ms = metadata.get("latency_ms") if metadata else None
@@ -174,12 +204,18 @@ class SQLiteStore:
         if metadata:
             await conn.execute(
                 "UPDATE endpoints SET status = ?, metadata = ?, latency_ms = COALESCE(?, latency_ms), success_rate = COALESCE(?, success_rate), last_verified = CURRENT_TIMESTAMP WHERE id = ?",
-                (status.value, json.dumps(metadata), latency_ms, success_rate, endpoint_id)
+                (
+                    status.value,
+                    json.dumps(metadata),
+                    latency_ms,
+                    success_rate,
+                    endpoint_id,
+                ),
             )
         else:
             await conn.execute(
                 "UPDATE endpoints SET status = ?, last_verified = CURRENT_TIMESTAMP WHERE id = ?",
-                (status.value, endpoint_id)
+                (status.value, endpoint_id),
             )
         await conn.commit()
 
@@ -190,12 +226,19 @@ class SQLiteStore:
     async def get_by_status(self, status: EndpointStatus) -> List[LLMEndpoint]:
         """Returns all endpoints with a specific status."""
         conn = await self._get_conn()
-        async with conn.execute("SELECT id, url, status, metadata, latency_ms, success_rate FROM endpoints WHERE status = ?", (status.value,)) as cursor:
+        async with conn.execute(
+            "SELECT id, url, status, metadata, latency_ms, success_rate FROM endpoints WHERE status = ?",
+            (status.value,),
+        ) as cursor:
             rows = await cursor.fetchall()
             return [
                 LLMEndpoint(
-                    id=r[0], url=r[1], status=EndpointStatus(int(r[2])),
-                    metadata=json.loads(r[3]), latency_ms=r[4], success_rate=r[5]
+                    id=r[0],
+                    url=r[1],
+                    status=EndpointStatus(int(r[2])),
+                    metadata=json.loads(r[3]),
+                    latency_ms=r[4],
+                    success_rate=r[5],
                 )
                 for r in rows
             ]
@@ -203,12 +246,18 @@ class SQLiteStore:
     async def get_all(self) -> List[LLMEndpoint]:
         """Returns all endpoints in the database."""
         conn = await self._get_conn()
-        async with conn.execute("SELECT id, url, status, metadata, latency_ms, success_rate FROM endpoints") as cursor:
+        async with conn.execute(
+            "SELECT id, url, status, metadata, latency_ms, success_rate FROM endpoints"
+        ) as cursor:
             rows = await cursor.fetchall()
             return [
                 LLMEndpoint(
-                    id=r[0], url=r[1], status=EndpointStatus(int(r[2])),
-                    metadata=json.loads(r[3]), latency_ms=r[4], success_rate=r[5]
+                    id=r[0],
+                    url=r[1],
+                    status=EndpointStatus(int(r[2])),
+                    metadata=json.loads(r[3]),
+                    latency_ms=r[4],
+                    success_rate=r[5],
                 )
                 for r in rows
             ]
@@ -223,40 +272,70 @@ class SQLiteStore:
         conn = await self._get_conn()
         await conn.execute(
             "INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)",
-            (key, json.dumps(value))
+            (key, json.dumps(value)),
         )
         await conn.commit()
 
     async def get_state(self, key: str, default: Any = None) -> Any:
         conn = await self._get_conn()
-        async with conn.execute("SELECT value FROM app_state WHERE key = ?", (key,)) as cursor:
+        async with conn.execute(
+            "SELECT value FROM app_state WHERE key = ?", (key,)
+        ) as cursor:
             row = await cursor.fetchone()
             return json.loads(row[0]) if row else default
 
-    async def update_metrics(self, endpoint_id: str, latency_ms: float, success_rate: float):
+    async def update_metrics(
+        self, endpoint_id: str, latency_ms: float, success_rate: float
+    ):
         """Updates latency and success rate for an endpoint."""
         conn = await self._get_conn()
         await conn.execute(
             "UPDATE endpoints SET latency_ms = ?, success_rate = ? WHERE id = ?",
-            (latency_ms, success_rate, endpoint_id)
+            (latency_ms, success_rate, endpoint_id),
         )
         await conn.commit()
 
     # ── Spend Log (R2.3) ──
 
-    async def log_spend(self, ts: int, date: str, key_prefix: str, model: str,
-                        provider: str, prompt_tokens: int, completion_tokens: int,
-                        cost_usd: float, latency_ms: float, status: int):
+    async def log_spend(
+        self,
+        ts: int,
+        date: str,
+        key_prefix: str,
+        model: str,
+        provider: str,
+        prompt_tokens: int,
+        completion_tokens: int,
+        cost_usd: float,
+        latency_ms: float,
+        status: int,
+    ):
         """Record a spend entry for analytics."""
         conn = await self._get_conn()
         await conn.execute(
             "INSERT INTO spend_log (ts, date, key_prefix, model, provider, prompt_tokens, completion_tokens, cost_usd, latency_ms, status) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (ts, date, key_prefix, model, provider, prompt_tokens, completion_tokens, cost_usd, latency_ms, status),
+            (
+                ts,
+                date,
+                key_prefix,
+                model,
+                provider,
+                prompt_tokens,
+                completion_tokens,
+                cost_usd,
+                latency_ms,
+                status,
+            ),
         )
         await conn.commit()
 
-    async def query_spend(self, date_from: str = "", date_to: str = "",
-                          group_by: str = "model", limit: int = 50) -> list:
+    async def query_spend(
+        self,
+        date_from: str = "",
+        date_to: str = "",
+        group_by: str = "model",
+        limit: int = 50,
+    ) -> list:
         """Aggregate spend data grouped by model, provider, key, or date."""
         valid_groups = {"model", "provider", "key_prefix", "date"}
         col = group_by if group_by in valid_groups else "model"
@@ -324,12 +403,23 @@ class SQLiteStore:
 
     # ── Audit Log (R2.10) ──
 
-    async def log_audit(self, ts: int, req_id: str, session_id: str, key_prefix: str,
-                        model: str, provider: str, status: int,
-                        prompt_tokens: int, completion_tokens: int,
-                        cost_usd: float, latency_ms: float,
-                        blocked: bool = False, block_reason: str = "",
-                        metadata: str = "{}"):
+    async def log_audit(
+        self,
+        ts: int,
+        req_id: str,
+        session_id: str,
+        key_prefix: str,
+        model: str,
+        provider: str,
+        status: int,
+        prompt_tokens: int,
+        completion_tokens: int,
+        cost_usd: float,
+        latency_ms: float,
+        blocked: bool = False,
+        block_reason: str = "",
+        metadata: str = "{}",
+    ):
         """Record an audit entry with hash chain for tamper detection.
 
         Each entry's hash includes the previous entry's hash, forming an
@@ -337,6 +427,7 @@ class SQLiteStore:
         breaks and verify_audit_chain() will detect it.
         """
         import hashlib
+
         blocked_int = 1 if blocked else 0
 
         async with self._audit_lock:
@@ -361,27 +452,55 @@ class SQLiteStore:
                 "status, prompt_tokens, completion_tokens, cost_usd, latency_ms, blocked, "
                 "block_reason, metadata, entry_hash, prev_hash) "
                 "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (ts, req_id, session_id, key_prefix, model, provider, status,
-                 prompt_tokens, completion_tokens, cost_usd, latency_ms,
-                 blocked_int, block_reason, metadata, entry_hash, prev_hash),
+                (
+                    ts,
+                    req_id,
+                    session_id,
+                    key_prefix,
+                    model,
+                    provider,
+                    status,
+                    prompt_tokens,
+                    completion_tokens,
+                    cost_usd,
+                    latency_ms,
+                    blocked_int,
+                    block_reason,
+                    metadata,
+                    entry_hash,
+                    prev_hash,
+                ),
             )
             await conn.commit()
 
-    async def query_audit(self, date_from: str = "", date_to: str = "",
-                          model: str = "", key_prefix: str = "",
-                          status: int = 0, blocked: int = -1,
-                          limit: int = 100, offset: int = 0) -> dict:
+    async def query_audit(
+        self,
+        date_from: str = "",
+        date_to: str = "",
+        model: str = "",
+        key_prefix: str = "",
+        status: int = 0,
+        blocked: int = -1,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> dict:
         """Query audit log with filters."""
         where = "WHERE 1=1"
         params: list = []
         if date_from:
             from datetime import datetime
-            ts_from = int(datetime.fromisoformat(date_from.replace("Z", "+00:00")).timestamp())
+
+            ts_from = int(
+                datetime.fromisoformat(date_from.replace("Z", "+00:00")).timestamp()
+            )
             where += " AND ts >= ?"
             params.append(ts_from)
         if date_to:
             from datetime import datetime
-            ts_to = int(datetime.fromisoformat(date_to.replace("Z", "+00:00")).timestamp())
+
+            ts_to = int(
+                datetime.fromisoformat(date_to.replace("Z", "+00:00")).timestamp()
+            )
             where += " AND ts <= ?"
             params.append(ts_to)
         if model:
@@ -422,17 +541,14 @@ class SQLiteStore:
     async def purge_expired(self, retention_days: int = 90) -> dict:
         """Delete audit/spend records older than retention_days."""
         import time
+
         cutoff_ts = int(time.time()) - (retention_days * 86400)
 
         conn = await self._get_conn()
-        cursor = await conn.execute(
-            "DELETE FROM audit_log WHERE ts < ?", (cutoff_ts,)
-        )
+        cursor = await conn.execute("DELETE FROM audit_log WHERE ts < ?", (cutoff_ts,))
         audit_deleted = cursor.rowcount
 
-        cursor = await conn.execute(
-            "DELETE FROM spend_log WHERE ts < ?", (cutoff_ts,)
-        )
+        cursor = await conn.execute("DELETE FROM spend_log WHERE ts < ?", (cutoff_ts,))
         spend_deleted = cursor.rowcount
 
         await conn.commit()
@@ -565,7 +681,12 @@ class SQLiteStore:
             expected_prev = stored_hash
             verified += 1
 
-        return {"valid": True, "total": len(rows), "verified": verified, "broken_at": None}
+        return {
+            "valid": True,
+            "total": len(rows),
+            "verified": verified,
+            "broken_at": None,
+        }
 
     async def health_check(self) -> bool:
         """Verify the database connection is alive via a lightweight PRAGMA."""

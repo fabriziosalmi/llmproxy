@@ -73,6 +73,7 @@ test.describe('models view', () => {
     });
 
     test('an unmatched query shows the empty-state surface', async ({ authedPage }) => {
+        await expect(authedPage.locator('[data-testid="model-inspect-gpt-4o-mini"]')).toBeVisible({ timeout: 10_000 });
         const search = authedPage.locator('input#models-search');
         await search.fill('zzz-no-such-model');
         await authedPage.waitForTimeout(250);

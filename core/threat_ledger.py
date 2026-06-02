@@ -20,11 +20,11 @@ from cachetools import TTLCache
 logger = logging.getLogger("llmproxy.threat_ledger")
 
 # ── Defaults ──
-_DEFAULT_MAX_ACTORS = 50_000    # Max tracked IPs/keys
-_DEFAULT_WINDOW_SECONDS = 600   # 10-minute scoring window
-_DEFAULT_TTL = 3600             # Evict actors idle > 1 hour
-_DEFAULT_THRESHOLD = 3.0        # Sum of scores in window to trigger block
-_DEFAULT_MIN_EVENTS = 3         # Minimum events before blocking (avoid false positives)
+_DEFAULT_MAX_ACTORS = 50_000  # Max tracked IPs/keys
+_DEFAULT_WINDOW_SECONDS = 600  # 10-minute scoring window
+_DEFAULT_TTL = 3600  # Evict actors idle > 1 hour
+_DEFAULT_THRESHOLD = 3.0  # Sum of scores in window to trigger block
+_DEFAULT_MIN_EVENTS = 3  # Minimum events before blocking (avoid false positives)
 
 
 class ThreatLedger:
@@ -74,8 +74,14 @@ class ThreatLedger:
         now = time.time()
 
         # Record in both ledgers (IP and key)
-        ip_reason = self._record_and_check(self._ip_ledger, ip, score, now) if ip else None
-        key_reason = self._record_and_check(self._key_ledger, key_prefix, score, now) if key_prefix else None
+        ip_reason = (
+            self._record_and_check(self._ip_ledger, ip, score, now) if ip else None
+        )
+        key_reason = (
+            self._record_and_check(self._key_ledger, key_prefix, score, now)
+            if key_prefix
+            else None
+        )
 
         return ip_reason or key_reason
 

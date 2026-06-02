@@ -112,6 +112,7 @@ class ForwardingContext:
     Instead of passing raw locks, callbacks, and object references,
     the orchestrator builds this context once and hands it over.
     """
+
     config: dict = field(default_factory=dict)
     config_provider: Callable[[], dict] | None = None
     circuit_manager: Any = None
@@ -176,7 +177,9 @@ class RequestForwarder:
             except Exception:
                 # Defensive: provider failure shouldn't 500 the request path.
                 # Fall back to the last-known static config.
-                logger.debug("Config provider read failed; using static config", exc_info=True)
+                logger.debug(
+                    "Config provider read failed; using static config", exc_info=True
+                )
         return self._static_config
 
     def resolve_endpoint_for_provider(self, provider: str) -> Any:
@@ -186,6 +189,7 @@ class RequestForwarder:
             if ep_config.get("provider") == provider or ep_name == provider:
                 base_url = ep_config.get("base_url", "")
                 from types import SimpleNamespace
+
                 return SimpleNamespace(
                     id=ep_name,
                     url=base_url,
@@ -194,10 +198,21 @@ class RequestForwarder:
                 )
         return None
 
-    async def forward_request(self, ctx, adapter, target_url, translated_body,
-                              translated_headers, session, cb, endpoint_id):
+    async def forward_request(
+        self,
+        ctx,
+        adapter,
+        target_url,
+        translated_body,
+        translated_headers,
+        session,
+        cb,
+        endpoint_id,
+    ):
         """Forward a single request (non-streaming) with circuit breaker tracking."""
-        response = await adapter.request(target_url, translated_body, translated_headers, session)
+        response = await adapter.request(
+            target_url, translated_body, translated_headers, session
+        )
         if response.status_code in (429, 500, 502, 503, 504):
             await cb.report_failure()
             # Provider hint surfaces an actionable next-step (key dashboard /
@@ -205,8 +220,9 @@ class RequestForwarder:
             # common operator-fixable upstream error. 4xx auth (401/403)
             # passes through to the SDK caller unchanged so existing client
             # error-handling paths still work.
-            provider = getattr(ctx.metadata.get("target_endpoint"), "provider", None) \
-                or getattr(ctx.metadata.get("target_endpoint"), "provider_type", None)
+            provider = getattr(
+                ctx.metadata.get("target_endpoint"), "provider", None
+            ) or getattr(ctx.metadata.get("target_endpoint"), "provider_type", None)
             hint = _actionable_hint(provider, response.status_code)
             raise HTTPException(
                 status_code=response.status_code,
@@ -215,8 +231,9 @@ class RequestForwarder:
         await cb.report_success()
         return response
 
-    async def forward_with_fallback(self, ctx, target, headers, session,
-                                    cost_ref: "dict[str, Any] | None" = None):
+    async def forward_with_fallback(
+        self, ctx, target, headers, session, cost_ref: "dict[str, Any] | None" = None
+    ):
         """Forward request with cross-provider fallback on failure.
 
         Tries the primary endpoint first. On failure (circuit open, HTTP error,
@@ -229,15 +246,19 @@ class RequestForwarder:
         attempts = []
 
         # Build attempt list: primary + fallback chain
-        primary_provider = getattr(target, 'provider', None) or getattr(target, 'provider_type', None)
+        primary_provider = getattr(target, "provider", None) or getattr(
+            target, "provider_type", None
+        )
         primary_adapter = get_adapter(primary_provider, original_model)
-        attempts.append({
-            "target": target,
-            "adapter": primary_adapter,
-            "model": original_model,
-            "provider": primary_adapter.provider_name,
-            "is_fallback": False,
-        })
+        attempts.append(
+            {
+                "target": target,
+                "adapter": primary_adapter,
+                "model": original_model,
+                "provider": primary_adapter.provider_name,
+                "is_fallback": False,
+            }
+        )
 
         # Add fallback chain entries (read live so config hot-reloads apply)
         chain = self._live_config().get("fallback_chains", {}).get(original_model, [])
@@ -245,20 +266,24 @@ class RequestForwarder:
             fb_target = self.resolve_endpoint_for_provider(fb["provider"])
             if fb_target:
                 fb_adapter = get_adapter(fb["provider"])
-                attempts.append({
-                    "target": fb_target,
-                    "adapter": fb_adapter,
-                    "model": fb["model"],
-                    "provider": fb["provider"],
-                    "is_fallback": True,
-                })
+                attempts.append(
+                    {
+                        "target": fb_target,
+                        "adapter": fb_adapter,
+                        "model": fb["model"],
+                        "provider": fb["provider"],
+                        "is_fallback": True,
+                    }
+                )
 
         last_error: Exception | None = None
         for i, attempt in enumerate(attempts):
             a_target = attempt["target"]
             a_adapter = attempt["adapter"]
             a_model = attempt["model"]
-            endpoint_id = getattr(a_target, 'id', str(a_target.url)) if a_target else 'unknown'
+            endpoint_id = (
+                getattr(a_target, "id", str(a_target.url)) if a_target else "unknown"
+            )
 
             # Circuit breaker check
             cb = await self.circuit_manager.get_breaker(endpoint_id)
@@ -286,30 +311,47 @@ class RequestForwarder:
 
             # Inject provider API key from endpoint config
             provider_headers = dict(headers)
-            ep_metadata = getattr(a_target, 'metadata', {}) or {}
+            ep_metadata = getattr(a_target, "metadata", {}) or {}
             api_key_env = ep_metadata.get("api_key_env", "")
             if api_key_env:
                 import os
+
                 api_key = os.environ.get(api_key_env, "")
                 if api_key:
                     provider_headers["Authorization"] = f"Bearer {api_key}"
 
             # Translate request for this provider
-            target_url, translated_body, translated_headers = a_adapter.translate_request(
-                str(a_target.url), ctx.body, provider_headers,
+            target_url, translated_body, translated_headers = (
+                a_adapter.translate_request(
+                    str(a_target.url),
+                    ctx.body,
+                    provider_headers,
+                )
             )
 
             try:
                 if ctx.body.get("stream") or original_body.get("stream"):
                     return await self._handle_streaming(
-                        ctx, a_adapter, target_url, translated_body,
-                        translated_headers, session, cb, endpoint_id,
+                        ctx,
+                        a_adapter,
+                        target_url,
+                        translated_body,
+                        translated_headers,
+                        session,
+                        cb,
+                        endpoint_id,
                         cost_ref=cost_ref,
                     )
                 else:
                     ctx.response = await self.forward_request(
-                        ctx, a_adapter, target_url, translated_body,
-                        translated_headers, session, cb, endpoint_id,
+                        ctx,
+                        a_adapter,
+                        target_url,
+                        translated_body,
+                        translated_headers,
+                        session,
+                        cb,
+                        endpoint_id,
                     )
                     return ctx.response
 
@@ -341,9 +383,18 @@ class RequestForwarder:
             raise last_error
         raise HTTPException(status_code=503, detail="All providers failed")
 
-    async def _handle_streaming(self, ctx, adapter, target_url, translated_body,
-                                translated_headers, session, cb, endpoint_id,
-                                cost_ref: "dict[str, Any] | None" = None):
+    async def _handle_streaming(
+        self,
+        ctx,
+        adapter,
+        target_url,
+        translated_body,
+        translated_headers,
+        session,
+        cb,
+        endpoint_id,
+        cost_ref: "dict[str, Any] | None" = None,
+    ):
         """Handle streaming response with TTFT tracking and post-stream budget charging."""
         ttft_start = time.perf_counter()
         first_chunk_seen = False
@@ -369,7 +420,9 @@ class RequestForwarder:
             if messages:
                 prompt = str(messages[-1].get("content", ""))
             speculative_task = asyncio.create_task(
-                self._security.analyze_speculative(prompt, stream_text_chunks, kill_event)
+                self._security.analyze_speculative(
+                    prompt, stream_text_chunks, kill_event
+                )
             )
         sec_cfg = self._live_config().get("security", {}) or {}
         gate_cfg = sec_cfg.get("streaming_buffered_gate", {}) or {}
@@ -391,7 +444,9 @@ class RequestForwarder:
             nonlocal first_chunk_seen, circuit_success_reported, held_bytes
             stream_usage = {}
             try:
-                async for chunk in adapter.stream(target_url, translated_body, translated_headers, session):
+                async for chunk in adapter.stream(
+                    target_url, translated_body, translated_headers, session
+                ):
                     # Abort stream if speculative guardrail fired
                     if kill_event.is_set():
                         logger.warning(
@@ -413,14 +468,21 @@ class RequestForwarder:
                     # Extract usage from final SSE chunks (OpenAI/Anthropic/Google)
                     if b'"usage"' in chunk or b'"usageMetadata"' in chunk:
                         try:
-                            for line in chunk.decode("utf-8", errors="replace").split("\n"):
-                                if line.startswith("data: ") and line[6:].strip() != "[DONE]":
+                            for line in chunk.decode("utf-8", errors="replace").split(
+                                "\n"
+                            ):
+                                if (
+                                    line.startswith("data: ")
+                                    and line[6:].strip() != "[DONE]"
+                                ):
                                     d = json.loads(line[6:])
                                     u = d.get("usage") or d.get("usageMetadata", {})
                                     if u:
                                         stream_usage = u
                         except (json.JSONDecodeError, KeyError, UnicodeDecodeError):
-                            logger.debug("Stream usage chunk parse skipped", exc_info=True)
+                            logger.debug(
+                                "Stream usage chunk parse skipped", exc_info=True
+                            )
                     # Feed decoded text to the speculative analyzer via the
                     # bounded rolling-window buffer.
                     if speculative_task is not None:
@@ -435,7 +497,9 @@ class RequestForwarder:
                             logger.warning(
                                 "Buffered gate overflow (%s bytes > %s) for tenant=%s; "
                                 "failing closed",
-                                held_bytes, hold_limit, tenant_id,
+                                held_bytes,
+                                hold_limit,
+                                tenant_id,
                             )
                             yield (
                                 b'data: {"error":"stream_buffer_overflow",'
@@ -468,10 +532,15 @@ class RequestForwarder:
                 # In finally block to charge even on client disconnect
                 from core.pricing import estimate_cost
                 from core.tokenizer import count_tokens
+
                 model_name = ctx.body.get("model", "")
                 if stream_usage:
-                    p_tok = stream_usage.get("prompt_tokens") or stream_usage.get("promptTokenCount", 0)
-                    c_tok = stream_usage.get("completion_tokens") or stream_usage.get("candidatesTokenCount", 0)
+                    p_tok = stream_usage.get("prompt_tokens") or stream_usage.get(
+                        "promptTokenCount", 0
+                    )
+                    c_tok = stream_usage.get("completion_tokens") or stream_usage.get(
+                        "candidatesTokenCount", 0
+                    )
                 else:
                     # Fallback: estimate tokens from accumulated text when
                     # provider omits usage chunk (prevents budget bypass).
@@ -500,7 +569,10 @@ class RequestForwarder:
                     # adds it atomically under budget_lock. No lock needed here
                     # because cost_ref is per-request and not shared.
                     cost_ref["delta"] = cost_ref.get("delta", 0.0) + real_cost
-                    ctx.metadata["_stream_usage"] = {"prompt_tokens": p_tok, "completion_tokens": c_tok}
+                    ctx.metadata["_stream_usage"] = {
+                        "prompt_tokens": p_tok,
+                        "completion_tokens": c_tok,
+                    }
                     ctx.metadata["_stream_cost_usd"] = round(real_cost, 6)
 
                     # Charge budget atomically + persist. The rotator cannot
@@ -512,6 +584,7 @@ class RequestForwarder:
                     _rotator = cost_ref.get("_rotator")
                     if _budget_lock and _rotator:
                         from .budget import charge_and_persist
+
                         await charge_and_persist(_rotator, _budget_lock, real_cost)
 
                     # Log spend + audit for streaming requests directly here.
@@ -522,6 +595,7 @@ class RequestForwarder:
                     import datetime as _dt
                     import time as _time
                     from core.metrics import MetricsTracker as _MT
+
                     store = ctx.state.extra.get("store") if ctx.state else None
                     if store and hasattr(store, "log_spend"):
                         _now = int(_time.time())
@@ -533,9 +607,13 @@ class RequestForwarder:
                         _latency_ms = round(ctx.metadata.get("duration", 0) * 1000, 1)
                         try:
                             await store.log_spend(
-                                ts=_now, date=_date, key_prefix=_key,
-                                model=model_name, provider=_provider,
-                                prompt_tokens=p_tok, completion_tokens=c_tok,
+                                ts=_now,
+                                date=_date,
+                                key_prefix=_key,
+                                model=model_name,
+                                provider=_provider,
+                                prompt_tokens=p_tok,
+                                completion_tokens=c_tok,
                                 cost_usd=real_cost,
                                 latency_ms=_latency_ms,
                                 status=200,
@@ -545,10 +623,17 @@ class RequestForwarder:
                         if hasattr(store, "log_audit"):
                             try:
                                 await store.log_audit(
-                                    ts=_now, req_id=_req_id, session_id=_session,
-                                    key_prefix=_key, model=model_name, provider=_provider,
-                                    status=200, prompt_tokens=p_tok, completion_tokens=c_tok,
-                                    cost_usd=real_cost, latency_ms=_latency_ms,
+                                    ts=_now,
+                                    req_id=_req_id,
+                                    session_id=_session,
+                                    key_prefix=_key,
+                                    model=model_name,
+                                    provider=_provider,
+                                    status=200,
+                                    prompt_tokens=p_tok,
+                                    completion_tokens=c_tok,
+                                    cost_usd=real_cost,
+                                    latency_ms=_latency_ms,
                                     metadata="{}",
                                 )
                                 _MT.track_audit_persistence("forwarder_stream", "ok")
@@ -556,5 +641,7 @@ class RequestForwarder:
                                 _MT.track_audit_persistence("forwarder_stream", "fail")
                                 logger.warning(f"Stream audit log failed: {e}")
 
-        ctx.response = StreamingResponse(stream_generator(), media_type="text/event-stream")
+        ctx.response = StreamingResponse(
+            stream_generator(), media_type="text/event-stream"
+        )
         return ctx.response

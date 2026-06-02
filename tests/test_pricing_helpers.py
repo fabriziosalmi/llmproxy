@@ -38,7 +38,6 @@ def _reset_warned_set():
 
 
 class TestDefaultPricingFallbackWarning:
-
     def test_known_model_no_warning(self, caplog):
         """Models in MODEL_PRICING resolve cleanly with no log noise."""
         with caplog.at_level(logging.WARNING, logger="llmproxy.pricing"):
@@ -102,7 +101,6 @@ class TestDefaultPricingFallbackWarning:
 
 
 class TestBaselinePremiumPricing:
-
     def test_returns_max_paid_rates(self):
         """Excludes free models — they'd give a misleading $0 baseline."""
         baseline = baseline_premium_pricing()
@@ -118,7 +116,6 @@ class TestBaselinePremiumPricing:
 
 
 class TestEstimateBaselineSavings:
-
     def test_empty_rows_returns_zeros(self):
         savings = estimate_baseline_savings([])
         assert savings["baseline_usd"] == 0.0
@@ -143,7 +140,9 @@ class TestEstimateBaselineSavings:
         assert savings["actual_usd"] == pytest.approx(0.09)
         # Baseline is computed from premium pricing.
         baseline = baseline_premium_pricing()
-        expected_baseline = (200_000 / 1e6) * baseline["input"] + (100_000 / 1e6) * baseline["output"]
+        expected_baseline = (200_000 / 1e6) * baseline["input"] + (
+            100_000 / 1e6
+        ) * baseline["output"]
         assert savings["baseline_usd"] == pytest.approx(round(expected_baseline, 4))
         # Saved is positive and sensible.
         assert savings["saved_usd"] > 0
@@ -186,10 +185,18 @@ class TestEstimateBaselineSavings:
     def test_aggregates_across_multiple_models(self):
         """Per-model rows roll up into a single summary."""
         rows = [
-            {"model": "gpt-4o-mini", "total_prompt_tokens": 100_000,
-             "total_completion_tokens": 50_000, "total_cost_usd": 0.045},
-            {"model": "ollama/llama3.3", "total_prompt_tokens": 500_000,
-             "total_completion_tokens": 500_000, "total_cost_usd": 0.0},
+            {
+                "model": "gpt-4o-mini",
+                "total_prompt_tokens": 100_000,
+                "total_completion_tokens": 50_000,
+                "total_cost_usd": 0.045,
+            },
+            {
+                "model": "ollama/llama3.3",
+                "total_prompt_tokens": 500_000,
+                "total_completion_tokens": 500_000,
+                "total_cost_usd": 0.0,
+            },
         ]
         savings = estimate_baseline_savings(rows)
         assert savings["actual_usd"] == pytest.approx(0.045)
@@ -202,8 +209,14 @@ class TestEstimateBaselineSavings:
     def test_baseline_rates_are_returned(self):
         """The response includes the baseline rates so the UI can show
         'baseline = $X/MTok in / $Y/MTok out'."""
-        rows = [{"model": "x", "total_prompt_tokens": 1000,
-                 "total_completion_tokens": 1000, "total_cost_usd": 0.0}]
+        rows = [
+            {
+                "model": "x",
+                "total_prompt_tokens": 1000,
+                "total_completion_tokens": 1000,
+                "total_cost_usd": 0.0,
+            }
+        ]
         savings = estimate_baseline_savings(rows)
         assert "baseline_input_per_mtok" in savings
         assert "baseline_output_per_mtok" in savings

@@ -15,6 +15,7 @@ TAILSCALE_SOCKET_MACOS = "/Library/Tailscale/tailscaled.sock"
 
 logger = logging.getLogger(__name__)
 
+
 class ZeroTrustManager:
     """Manages mTLS and Identity headers for Zero-Trust upstream communication."""
 
@@ -26,7 +27,11 @@ class ZeroTrustManager:
         self.key_path = self.config.get("client_key")
 
         # Tailscale Socket Configuration
-        self.ts_socket = TAILSCALE_SOCKET_MACOS if os.path.exists(TAILSCALE_SOCKET_MACOS) else TAILSCALE_SOCKET_LINUX
+        self.ts_socket = (
+            TAILSCALE_SOCKET_MACOS
+            if os.path.exists(TAILSCALE_SOCKET_MACOS)
+            else TAILSCALE_SOCKET_LINUX
+        )
         self._ts_session: Optional[aiohttp.ClientSession] = None
 
     def get_ssl_context(self) -> Optional[ssl.SSLContext]:
@@ -51,19 +56,18 @@ class ZeroTrustManager:
         payload = {
             "iss": "llmproxy",
             "iat": int(time.time()),
-            "exp": int(time.time()) + 60, # 1 minute expiry
-            "role": "trusted-aggregator"
+            "exp": int(time.time()) + 60,  # 1 minute expiry
+            "role": "trusted-aggregator",
         }
 
         if self.secret is None:
             raise ValueError("Zero-trust secret not configured")
         token = jwt.encode(payload, self.secret, algorithm="HS256")
-        return {
-            "X-Proxy-Identity": token,
-            "X-Zero-Trust": "true"
-        }
+        return {"X-Proxy-Identity": token, "X-Zero-Trust": "true"}
 
-    async def verify_tailscale_identity(self, remote_ip: str) -> Optional[Dict[str, Any]]:
+    async def verify_tailscale_identity(
+        self, remote_ip: str
+    ) -> Optional[Dict[str, Any]]:
         """
         11.5: Queries Tailscale LocalAPI via Unix Socket to verify the machine/user associated with the IP.
         This provides a zero-latency, spoof-proof identity check for the Federated Swarm.
@@ -78,18 +82,22 @@ class ZeroTrustManager:
 
             # Query the LocalAPI for who is at this remote IP
             # Validate IP format before interpolating into URL
-            safe_ip = quote(remote_ip, safe='.:[]')
-            async with self._ts_session.get(f"http://local-tailscale/localapi/v0/whois?addr={safe_ip}") as resp:
+            safe_ip = quote(remote_ip, safe=".:[]")
+            async with self._ts_session.get(
+                f"http://local-tailscale/localapi/v0/whois?addr={safe_ip}"
+            ) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     user = data.get("UserProfile", {}).get("LoginName", "unknown")
                     node = data.get("Node", {}).get("Name", "unknown")
-                    logger.info(f"ZeroTrust: Verified Tailscale User {user} at Node {node}")
+                    logger.info(
+                        f"ZeroTrust: Verified Tailscale User {user} at Node {node}"
+                    )
                     return {
                         "status": "verified",
                         "user": user,
                         "node": node,
-                        "caps": data.get("CapMap", {})
+                        "caps": data.get("CapMap", {}),
                     }
         except Exception as e:
             logger.error(f"ZeroTrust: Tailscale Socket Error: {e}")

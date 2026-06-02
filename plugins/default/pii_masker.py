@@ -1,5 +1,6 @@
 from core.plugin_engine import PluginContext
 
+
 async def mask(ctx: PluginContext):
     """Ring 2: Pre-Flight PII Neural Masking.
 
@@ -26,4 +27,6 @@ async def mask(ctx: PluginContext):
 
     if any_masked:
         ctx.metadata["pii_masked"] = True
-        await rotator._add_log("SHIELD: Neural PII Masking applied to messages", level="SYSTEM")
+        await rotator._add_log(
+            "SHIELD: Neural PII Masking applied to messages", level="SYSTEM"
+        )

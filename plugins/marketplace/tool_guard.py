@@ -51,7 +51,11 @@ class ToolGuard(BasePlugin):
         restricted_found = []
 
         for tool in tools:
-            name = tool.get("function", {}).get("name", "") if "function" in tool else tool.get("name", "")
+            name = (
+                tool.get("function", {}).get("name", "")
+                if "function" in tool
+                else tool.get("name", "")
+            )
             if name in self.restricted_tools:
                 restricted_found.append(name)
 
@@ -62,13 +66,17 @@ class ToolGuard(BasePlugin):
             return PluginResponse.block(
                 status_code=403,
                 error_type="restricted_tools",
-                message=f"Request blocked: restricted tools [{', '.join(restricted_found)}] not allowed for your role"
+                message=f"Request blocked: restricted tools [{', '.join(restricted_found)}] not allowed for your role",
             )
 
         # Strip restricted tools from the request
         filtered = []
         for tool in tools:
-            name = tool.get("function", {}).get("name", "") if "function" in tool else tool.get("name", "")
+            name = (
+                tool.get("function", {}).get("name", "")
+                if "function" in tool
+                else tool.get("name", "")
+            )
             if name not in self.restricted_tools:
                 filtered.append(tool)
 
@@ -80,7 +88,11 @@ class ToolGuard(BasePlugin):
             f"({original_count} -> {len(filtered)})"
         )
 
-        return PluginResponse.modify(body=ctx.body, message=f"Stripped {len(restricted_found)} restricted tools")
+        return PluginResponse.modify(
+            body=ctx.body, message=f"Stripped {len(restricted_found)} restricted tools"
+        )
 
     async def on_load(self):
-        self.logger.info(f"ToolGuard loaded: {len(self.restricted_tools)} restricted tools, action={self.action}")
+        self.logger.info(
+            f"ToolGuard loaded: {len(self.restricted_tools)} restricted tools, action={self.action}"
+        )

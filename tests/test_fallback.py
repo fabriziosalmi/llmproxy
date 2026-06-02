@@ -19,6 +19,7 @@ from proxy.forwarder import RequestForwarder
 
 # ── Helpers ──
 
+
 def _make_forwarder(config=None):
     """Create a RequestForwarder with test defaults."""
     config = config or {}
@@ -32,12 +33,18 @@ def _make_forwarder(config=None):
 
 
 def _make_target(provider="openai", url="https://api.openai.com/v1"):
-    return SimpleNamespace(id=f"{provider}-ep", url=url, provider=provider, provider_type=provider)
+    return SimpleNamespace(
+        id=f"{provider}-ep", url=url, provider=provider, provider_type=provider
+    )
 
 
 def _make_ctx(model="gpt-4o", stream=False):
     return SimpleNamespace(
-        body={"model": model, "messages": [{"role": "user", "content": "Hi"}], "stream": stream},
+        body={
+            "model": model,
+            "messages": [{"role": "user", "content": "Hi"}],
+            "stream": stream,
+        },
         metadata={},
         response=None,
         session_id="test",
@@ -45,7 +52,9 @@ def _make_ctx(model="gpt-4o", stream=False):
 
 
 def _ok_response(status=200):
-    return Response(content=b'{"choices":[{"message":{"content":"ok"}}]}', status_code=status)
+    return Response(
+        content=b'{"choices":[{"message":{"content":"ok"}}]}', status_code=status
+    )
 
 
 def _error_response(status=503):
@@ -70,15 +79,26 @@ def _make_mock_adapter(name="openai", response=None, error=None):
 # Basic Fallback
 # ══════════════════════════════════════════════════════
 
-class TestFallbackBasic:
 
+class TestFallbackBasic:
     @pytest.mark.asyncio
     async def test_primary_success_no_fallback(self):
         """When primary succeeds, no fallback is attempted."""
-        fwd = _make_forwarder(config={
-            "endpoints": {"openai": {"provider": "openai", "base_url": "https://api.openai.com/v1"}},
-            "fallback_chains": {"gpt-4o": [{"provider": "anthropic", "model": "claude-sonnet-4-20250514"}]},
-        })
+        fwd = _make_forwarder(
+            config={
+                "endpoints": {
+                    "openai": {
+                        "provider": "openai",
+                        "base_url": "https://api.openai.com/v1",
+                    }
+                },
+                "fallback_chains": {
+                    "gpt-4o": [
+                        {"provider": "anthropic", "model": "claude-sonnet-4-20250514"}
+                    ]
+                },
+            }
+        )
         ctx = _make_ctx("gpt-4o")
         target = _make_target("openai")
         mock_adapter = _make_mock_adapter("openai", _ok_response())
@@ -92,13 +112,25 @@ class TestFallbackBasic:
     @pytest.mark.asyncio
     async def test_primary_fails_fallback_succeeds(self):
         """When primary returns 503, fallback provider is used."""
-        fwd = _make_forwarder(config={
-            "endpoints": {
-                "openai": {"provider": "openai", "base_url": "https://api.openai.com/v1"},
-                "anthropic": {"provider": "anthropic", "base_url": "https://api.anthropic.com/v1"},
-            },
-            "fallback_chains": {"gpt-4o": [{"provider": "anthropic", "model": "claude-sonnet-4-20250514"}]},
-        })
+        fwd = _make_forwarder(
+            config={
+                "endpoints": {
+                    "openai": {
+                        "provider": "openai",
+                        "base_url": "https://api.openai.com/v1",
+                    },
+                    "anthropic": {
+                        "provider": "anthropic",
+                        "base_url": "https://api.anthropic.com/v1",
+                    },
+                },
+                "fallback_chains": {
+                    "gpt-4o": [
+                        {"provider": "anthropic", "model": "claude-sonnet-4-20250514"}
+                    ]
+                },
+            }
+        )
         ctx = _make_ctx("gpt-4o")
         target = _make_target("openai")
 
@@ -113,7 +145,9 @@ class TestFallbackBasic:
                 return primary
             return fallback
 
-        with patch("proxy.adapters.registry.get_adapter", side_effect=get_adapter_side_effect):
+        with patch(
+            "proxy.adapters.registry.get_adapter", side_effect=get_adapter_side_effect
+        ):
             await fwd.forward_with_fallback(ctx, target, {}, MagicMock())
 
         assert ctx.response.status_code == 200
@@ -124,13 +158,25 @@ class TestFallbackBasic:
     @pytest.mark.asyncio
     async def test_all_providers_fail_raises(self):
         """When all providers fail, raise the last error."""
-        fwd = _make_forwarder(config={
-            "endpoints": {
-                "openai": {"provider": "openai", "base_url": "https://api.openai.com/v1"},
-                "anthropic": {"provider": "anthropic", "base_url": "https://api.anthropic.com/v1"},
-            },
-            "fallback_chains": {"gpt-4o": [{"provider": "anthropic", "model": "claude-sonnet-4-20250514"}]},
-        })
+        fwd = _make_forwarder(
+            config={
+                "endpoints": {
+                    "openai": {
+                        "provider": "openai",
+                        "base_url": "https://api.openai.com/v1",
+                    },
+                    "anthropic": {
+                        "provider": "anthropic",
+                        "base_url": "https://api.anthropic.com/v1",
+                    },
+                },
+                "fallback_chains": {
+                    "gpt-4o": [
+                        {"provider": "anthropic", "model": "claude-sonnet-4-20250514"}
+                    ]
+                },
+            }
+        )
         ctx = _make_ctx("gpt-4o")
         target = _make_target("openai")
         mock = _make_mock_adapter("openai", _error_response(503))
@@ -143,9 +189,16 @@ class TestFallbackBasic:
     @pytest.mark.asyncio
     async def test_no_fallback_chain_raises_directly(self):
         """Without a fallback chain, primary failure raises immediately."""
-        fwd = _make_forwarder(config={
-            "endpoints": {"openai": {"provider": "openai", "base_url": "https://api.openai.com/v1"}},
-        })
+        fwd = _make_forwarder(
+            config={
+                "endpoints": {
+                    "openai": {
+                        "provider": "openai",
+                        "base_url": "https://api.openai.com/v1",
+                    }
+                },
+            }
+        )
         ctx = _make_ctx("gpt-4o")
         target = _make_target("openai")
         mock = _make_mock_adapter("openai", _error_response(500))
@@ -160,18 +213,30 @@ class TestFallbackBasic:
 # Circuit Breaker Integration
 # ══════════════════════════════════════════════════════
 
-class TestFallbackCircuitBreaker:
 
+class TestFallbackCircuitBreaker:
     @pytest.mark.asyncio
     async def test_circuit_open_triggers_fallback(self):
         """When primary circuit is open, skip to fallback."""
-        fwd = _make_forwarder(config={
-            "endpoints": {
-                "openai": {"provider": "openai", "base_url": "https://api.openai.com/v1"},
-                "anthropic": {"provider": "anthropic", "base_url": "https://api.anthropic.com/v1"},
-            },
-            "fallback_chains": {"gpt-4o": [{"provider": "anthropic", "model": "claude-sonnet-4-20250514"}]},
-        })
+        fwd = _make_forwarder(
+            config={
+                "endpoints": {
+                    "openai": {
+                        "provider": "openai",
+                        "base_url": "https://api.openai.com/v1",
+                    },
+                    "anthropic": {
+                        "provider": "anthropic",
+                        "base_url": "https://api.anthropic.com/v1",
+                    },
+                },
+                "fallback_chains": {
+                    "gpt-4o": [
+                        {"provider": "anthropic", "model": "claude-sonnet-4-20250514"}
+                    ]
+                },
+            }
+        )
         ctx = _make_ctx("gpt-4o")
         target = _make_target("openai")
 
@@ -192,7 +257,9 @@ class TestFallbackCircuitBreaker:
                 return primary
             return fallback
 
-        with patch("proxy.adapters.registry.get_adapter", side_effect=get_adapter_side_effect):
+        with patch(
+            "proxy.adapters.registry.get_adapter", side_effect=get_adapter_side_effect
+        ):
             await fwd.forward_with_fallback(ctx, target, {}, MagicMock())
 
         assert ctx.response.status_code == 200
@@ -203,13 +270,25 @@ class TestFallbackCircuitBreaker:
     @pytest.mark.asyncio
     async def test_all_circuits_open_raises_503(self):
         """When all circuits are open, raise 503."""
-        fwd = _make_forwarder(config={
-            "endpoints": {
-                "openai": {"provider": "openai", "base_url": "https://api.openai.com/v1"},
-                "anthropic": {"provider": "anthropic", "base_url": "https://api.anthropic.com/v1"},
-            },
-            "fallback_chains": {"gpt-4o": [{"provider": "anthropic", "model": "claude-sonnet-4-20250514"}]},
-        })
+        fwd = _make_forwarder(
+            config={
+                "endpoints": {
+                    "openai": {
+                        "provider": "openai",
+                        "base_url": "https://api.openai.com/v1",
+                    },
+                    "anthropic": {
+                        "provider": "anthropic",
+                        "base_url": "https://api.anthropic.com/v1",
+                    },
+                },
+                "fallback_chains": {
+                    "gpt-4o": [
+                        {"provider": "anthropic", "model": "claude-sonnet-4-20250514"}
+                    ]
+                },
+            }
+        )
         ctx = _make_ctx("gpt-4o")
         target = _make_target("openai")
 
@@ -231,24 +310,36 @@ class TestFallbackCircuitBreaker:
 # Connection Errors
 # ══════════════════════════════════════════════════════
 
-class TestFallbackConnectionErrors:
 
+class TestFallbackConnectionErrors:
     @pytest.mark.asyncio
     async def test_connection_error_triggers_fallback(self):
         """aiohttp connection error on primary triggers fallback."""
         import aiohttp
 
-        fwd = _make_forwarder(config={
-            "endpoints": {
-                "openai": {"provider": "openai", "base_url": "https://api.openai.com/v1"},
-                "google": {"provider": "google", "base_url": "https://generativelanguage.googleapis.com/v1beta"},
-            },
-            "fallback_chains": {"gpt-4o": [{"provider": "google", "model": "gemini-2.5-pro"}]},
-        })
+        fwd = _make_forwarder(
+            config={
+                "endpoints": {
+                    "openai": {
+                        "provider": "openai",
+                        "base_url": "https://api.openai.com/v1",
+                    },
+                    "google": {
+                        "provider": "google",
+                        "base_url": "https://generativelanguage.googleapis.com/v1beta",
+                    },
+                },
+                "fallback_chains": {
+                    "gpt-4o": [{"provider": "google", "model": "gemini-2.5-pro"}]
+                },
+            }
+        )
         ctx = _make_ctx("gpt-4o")
         target = _make_target("openai")
 
-        primary = _make_mock_adapter("openai", error=aiohttp.ClientError("Connection refused"))
+        primary = _make_mock_adapter(
+            "openai", error=aiohttp.ClientError("Connection refused")
+        )
         fallback = _make_mock_adapter("google", _ok_response())
         call_count = 0
 
@@ -259,7 +350,9 @@ class TestFallbackConnectionErrors:
                 return primary
             return fallback
 
-        with patch("proxy.adapters.registry.get_adapter", side_effect=get_adapter_side_effect):
+        with patch(
+            "proxy.adapters.registry.get_adapter", side_effect=get_adapter_side_effect
+        ):
             await fwd.forward_with_fallback(ctx, target, {}, MagicMock())
 
         assert ctx.response.status_code == 200
@@ -270,18 +363,30 @@ class TestFallbackConnectionErrors:
 # Model Restoration
 # ══════════════════════════════════════════════════════
 
-class TestFallbackModelHandling:
 
+class TestFallbackModelHandling:
     @pytest.mark.asyncio
     async def test_model_swapped_on_fallback(self):
         """Body model field is updated to fallback model on success."""
-        fwd = _make_forwarder(config={
-            "endpoints": {
-                "openai": {"provider": "openai", "base_url": "https://api.openai.com/v1"},
-                "anthropic": {"provider": "anthropic", "base_url": "https://api.anthropic.com/v1"},
-            },
-            "fallback_chains": {"gpt-4o": [{"provider": "anthropic", "model": "claude-sonnet-4-20250514"}]},
-        })
+        fwd = _make_forwarder(
+            config={
+                "endpoints": {
+                    "openai": {
+                        "provider": "openai",
+                        "base_url": "https://api.openai.com/v1",
+                    },
+                    "anthropic": {
+                        "provider": "anthropic",
+                        "base_url": "https://api.anthropic.com/v1",
+                    },
+                },
+                "fallback_chains": {
+                    "gpt-4o": [
+                        {"provider": "anthropic", "model": "claude-sonnet-4-20250514"}
+                    ]
+                },
+            }
+        )
         ctx = _make_ctx("gpt-4o")
         target = _make_target("openai")
 
@@ -294,7 +399,9 @@ class TestFallbackModelHandling:
             call_count += 1
             return primary if call_count == 1 else fallback
 
-        with patch("proxy.adapters.registry.get_adapter", side_effect=get_adapter_side_effect):
+        with patch(
+            "proxy.adapters.registry.get_adapter", side_effect=get_adapter_side_effect
+        ):
             await fwd.forward_with_fallback(ctx, target, {}, MagicMock())
 
         assert ctx.body["model"] == "claude-sonnet-4-20250514"
@@ -302,13 +409,25 @@ class TestFallbackModelHandling:
     @pytest.mark.asyncio
     async def test_model_restored_on_total_failure(self):
         """If all providers fail, original model is restored in body."""
-        fwd = _make_forwarder(config={
-            "endpoints": {
-                "openai": {"provider": "openai", "base_url": "https://api.openai.com/v1"},
-                "anthropic": {"provider": "anthropic", "base_url": "https://api.anthropic.com/v1"},
-            },
-            "fallback_chains": {"gpt-4o": [{"provider": "anthropic", "model": "claude-sonnet-4-20250514"}]},
-        })
+        fwd = _make_forwarder(
+            config={
+                "endpoints": {
+                    "openai": {
+                        "provider": "openai",
+                        "base_url": "https://api.openai.com/v1",
+                    },
+                    "anthropic": {
+                        "provider": "anthropic",
+                        "base_url": "https://api.anthropic.com/v1",
+                    },
+                },
+                "fallback_chains": {
+                    "gpt-4o": [
+                        {"provider": "anthropic", "model": "claude-sonnet-4-20250514"}
+                    ]
+                },
+            }
+        )
         ctx = _make_ctx("gpt-4o")
         target = _make_target("openai")
         mock = _make_mock_adapter("openai", _error_response(503))
@@ -324,12 +443,19 @@ class TestFallbackModelHandling:
 # Endpoint Resolution
 # ══════════════════════════════════════════════════════
 
-class TestResolveEndpoint:
 
+class TestResolveEndpoint:
     def test_resolve_existing_provider(self):
-        fwd = _make_forwarder(config={
-            "endpoints": {"anthropic": {"provider": "anthropic", "base_url": "https://api.anthropic.com/v1"}},
-        })
+        fwd = _make_forwarder(
+            config={
+                "endpoints": {
+                    "anthropic": {
+                        "provider": "anthropic",
+                        "base_url": "https://api.anthropic.com/v1",
+                    }
+                },
+            }
+        )
         ep = fwd.resolve_endpoint_for_provider("anthropic")
         assert ep is not None
         assert ep.provider == "anthropic"
@@ -341,9 +467,16 @@ class TestResolveEndpoint:
         assert ep is None
 
     def test_resolve_by_name(self):
-        fwd = _make_forwarder(config={
-            "endpoints": {"my-openai": {"provider": "openai", "base_url": "https://api.openai.com/v1"}},
-        })
+        fwd = _make_forwarder(
+            config={
+                "endpoints": {
+                    "my-openai": {
+                        "provider": "openai",
+                        "base_url": "https://api.openai.com/v1",
+                    }
+                },
+            }
+        )
         ep = fwd.resolve_endpoint_for_provider("openai")
         assert ep is not None
 
@@ -352,23 +485,26 @@ class TestResolveEndpoint:
 # HTTP status codes that trigger fallback
 # ══════════════════════════════════════════════════════
 
-class TestFallbackStatusCodes:
 
+class TestFallbackStatusCodes:
     # N.1 — provider hint helper attached to upstream-failure detail.
 
     def test_actionable_hint_429_openai_includes_billing_link(self):
         from proxy.forwarder import _actionable_hint
+
         h = _actionable_hint("openai", 429)
         assert "platform.openai.com" in h
         assert "billing" in h.lower()
 
     def test_actionable_hint_429_anthropic_includes_link(self):
         from proxy.forwarder import _actionable_hint
+
         h = _actionable_hint("anthropic", 429)
         assert "anthropic.com" in h.lower()
 
     def test_actionable_hint_unknown_provider_returns_empty(self):
         from proxy.forwarder import _actionable_hint
+
         assert _actionable_hint("custom-llm-corp", 429) == ""
         # None / empty also fine.
         assert _actionable_hint(None, 429) == ""
@@ -379,6 +515,7 @@ class TestFallbackStatusCodes:
         500 from upstream is the provider's problem, not the operator's
         billing config."""
         from proxy.forwarder import _actionable_hint
+
         assert _actionable_hint("openai", 200) == ""
         assert _actionable_hint("openai", 500) == ""
         assert _actionable_hint("openai", 502) == ""
@@ -387,13 +524,25 @@ class TestFallbackStatusCodes:
     @pytest.mark.parametrize("status", [429, 500, 502, 503, 504])
     async def test_error_status_triggers_fallback(self, status):
         """HTTP 429, 500, 502, 503, 504 all trigger fallback."""
-        fwd = _make_forwarder(config={
-            "endpoints": {
-                "openai": {"provider": "openai", "base_url": "https://api.openai.com/v1"},
-                "anthropic": {"provider": "anthropic", "base_url": "https://api.anthropic.com/v1"},
-            },
-            "fallback_chains": {"gpt-4o": [{"provider": "anthropic", "model": "claude-sonnet-4-20250514"}]},
-        })
+        fwd = _make_forwarder(
+            config={
+                "endpoints": {
+                    "openai": {
+                        "provider": "openai",
+                        "base_url": "https://api.openai.com/v1",
+                    },
+                    "anthropic": {
+                        "provider": "anthropic",
+                        "base_url": "https://api.anthropic.com/v1",
+                    },
+                },
+                "fallback_chains": {
+                    "gpt-4o": [
+                        {"provider": "anthropic", "model": "claude-sonnet-4-20250514"}
+                    ]
+                },
+            }
+        )
         ctx = _make_ctx("gpt-4o")
         target = _make_target("openai")
 
@@ -406,7 +555,9 @@ class TestFallbackStatusCodes:
             call_count += 1
             return primary if call_count == 1 else fallback
 
-        with patch("proxy.adapters.registry.get_adapter", side_effect=get_adapter_side_effect):
+        with patch(
+            "proxy.adapters.registry.get_adapter", side_effect=get_adapter_side_effect
+        ):
             await fwd.forward_with_fallback(ctx, target, {}, MagicMock())
 
         assert ctx.response.status_code == 200

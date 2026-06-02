@@ -5,6 +5,7 @@ from core.plugin_engine import PluginContext
 
 logger = logging.getLogger("llmproxy.plugins.json_healer")
 
+
 async def repair(ctx: PluginContext):
     """Ring 4: Post-Flight JSON Auto-Healer.
 
@@ -12,24 +13,24 @@ async def repair(ctx: PluginContext):
     and attempts heuristic repair by closing unclosed brackets/braces.
     """
     rotator = ctx.metadata.get("rotator")
-    if not ctx.response or not hasattr(ctx.response, 'body'):
+    if not ctx.response or not hasattr(ctx.response, "body"):
         return
 
     try:
         body_str = ctx.response.body.decode()
         # Does it look like truncated JSON?
-        if body_str.strip().startswith('{') and not body_str.strip().endswith('}'):
-            open_braces = body_str.count('{')
-            close_braces = body_str.count('}')
-            open_brackets = body_str.count('[')
-            close_brackets = body_str.count(']')
+        if body_str.strip().startswith("{") and not body_str.strip().endswith("}"):
+            open_braces = body_str.count("{")
+            close_braces = body_str.count("}")
+            open_brackets = body_str.count("[")
+            close_brackets = body_str.count("]")
 
             repaired = body_str.strip()
             if repaired.count('"') % 2 != 0:
                 repaired += '"'
 
-            repaired += ']' * (open_brackets - close_brackets)
-            repaired += '}' * (open_braces - close_braces)
+            repaired += "]" * (open_brackets - close_brackets)
+            repaired += "}" * (open_braces - close_braces)
 
             try:
                 json.loads(repaired)
@@ -39,8 +40,12 @@ async def repair(ctx: PluginContext):
                     status_code=ctx.response.status_code,
                     media_type="application/json",
                 )
-                await rotator._add_log("JSON-HEALER: Repaired truncated response stream.", level="WARNING")
+                await rotator._add_log(
+                    "JSON-HEALER: Repaired truncated response stream.", level="WARNING"
+                )
             except Exception:
-                logger.debug("JSON healer produced invalid repaired payload", exc_info=True)
+                logger.debug(
+                    "JSON healer produced invalid repaired payload", exc_info=True
+                )
     except Exception:
         logger.debug("JSON healer skipped due to unexpected error", exc_info=True)

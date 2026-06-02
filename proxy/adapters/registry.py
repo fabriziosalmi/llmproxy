@@ -87,7 +87,9 @@ def detect_provider(model: str) -> str:
     return "openai"  # sensible default
 
 
-def get_adapter(provider_type: Optional[str] = None, model: str = "") -> BaseModelAdapter:
+def get_adapter(
+    provider_type: Optional[str] = None, model: str = ""
+) -> BaseModelAdapter:
     """Resolve adapter by provider type or model name.
 
     Priority:
@@ -111,19 +113,71 @@ def get_adapter(provider_type: Optional[str] = None, model: str = "") -> BaseMod
 # ── Provider metadata (for UI/API) ──
 
 SUPPORTED_PROVIDERS = {
-    "openai": {"name": "OpenAI", "auth": "bearer", "base_url": "https://api.openai.com/v1"},
-    "anthropic": {"name": "Anthropic", "auth": "x-api-key", "base_url": "https://api.anthropic.com/v1"},
-    "google": {"name": "Google Gemini", "auth": "bearer/api-key", "base_url": "https://generativelanguage.googleapis.com/v1beta"},
-    "azure": {"name": "Azure OpenAI", "auth": "api-key", "base_url": "https://{resource}.openai.azure.com/openai/deployments/{deployment}"},
+    "openai": {
+        "name": "OpenAI",
+        "auth": "bearer",
+        "base_url": "https://api.openai.com/v1",
+    },
+    "anthropic": {
+        "name": "Anthropic",
+        "auth": "x-api-key",
+        "base_url": "https://api.anthropic.com/v1",
+    },
+    "google": {
+        "name": "Google Gemini",
+        "auth": "bearer/api-key",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta",
+    },
+    "azure": {
+        "name": "Azure OpenAI",
+        "auth": "api-key",
+        "base_url": "https://{resource}.openai.azure.com/openai/deployments/{deployment}",
+    },
     "ollama": {"name": "Ollama", "auth": "none", "base_url": "http://localhost:11434"},
-    "groq": {"name": "Groq", "auth": "bearer", "base_url": "https://api.groq.com/openai/v1"},
-    "together": {"name": "Together AI", "auth": "bearer", "base_url": "https://api.together.xyz/v1"},
-    "mistral": {"name": "Mistral AI", "auth": "bearer", "base_url": "https://api.mistral.ai/v1"},
-    "perplexity": {"name": "Perplexity", "auth": "bearer", "base_url": "https://api.perplexity.ai"},
+    "groq": {
+        "name": "Groq",
+        "auth": "bearer",
+        "base_url": "https://api.groq.com/openai/v1",
+    },
+    "together": {
+        "name": "Together AI",
+        "auth": "bearer",
+        "base_url": "https://api.together.xyz/v1",
+    },
+    "mistral": {
+        "name": "Mistral AI",
+        "auth": "bearer",
+        "base_url": "https://api.mistral.ai/v1",
+    },
+    "perplexity": {
+        "name": "Perplexity",
+        "auth": "bearer",
+        "base_url": "https://api.perplexity.ai",
+    },
     "xai": {"name": "xAI", "auth": "bearer", "base_url": "https://api.x.ai/v1"},
-    "deepseek": {"name": "DeepSeek", "auth": "bearer", "base_url": "https://api.deepseek.com/v1"},
-    "fireworks": {"name": "Fireworks AI", "auth": "bearer", "base_url": "https://api.fireworks.ai/inference/v1"},
-    "openrouter": {"name": "OpenRouter", "auth": "bearer", "base_url": "https://openrouter.ai/api/v1"},
-    "sambanova": {"name": "SambaNova", "auth": "bearer", "base_url": "https://api.sambanova.ai/v1"},
-    "openai-compatible": {"name": "OpenAI-Compatible", "auth": "bearer", "base_url": ""},
+    "deepseek": {
+        "name": "DeepSeek",
+        "auth": "bearer",
+        "base_url": "https://api.deepseek.com/v1",
+    },
+    "fireworks": {
+        "name": "Fireworks AI",
+        "auth": "bearer",
+        "base_url": "https://api.fireworks.ai/inference/v1",
+    },
+    "openrouter": {
+        "name": "OpenRouter",
+        "auth": "bearer",
+        "base_url": "https://openrouter.ai/api/v1",
+    },
+    "sambanova": {
+        "name": "SambaNova",
+        "auth": "bearer",
+        "base_url": "https://api.sambanova.ai/v1",
+    },
+    "openai-compatible": {
+        "name": "OpenAI-Compatible",
+        "auth": "bearer",
+        "base_url": "",
+    },
 }

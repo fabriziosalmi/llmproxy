@@ -3,11 +3,13 @@ from enum import IntEnum
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
+
 class EndpointStatus(IntEnum):
-    FOUND = 0      # Found but not yet analyzed
-    IGNORED = 1    # Scanned and found useless or unreachable
-    DISCOVERED = 2 # Reachable but needs configuration/interface
-    VERIFIED = 3   # Verified and usable in the pool
+    FOUND = 0  # Found but not yet analyzed
+    IGNORED = 1  # Scanned and found useless or unreachable
+    DISCOVERED = 2  # Reachable but needs configuration/interface
+    VERIFIED = 3  # Verified and usable in the pool
+
 
 class LLMEndpoint(BaseModel):
     id: str
@@ -20,6 +22,7 @@ class LLMEndpoint(BaseModel):
     latency_ms: Optional[float] = 0.0
     success_rate: Optional[float] = 0.0
     tags: List[str] = []
+
 
 class AgentState(BaseModel):
     agent_name: str

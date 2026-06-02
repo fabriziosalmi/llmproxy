@@ -21,6 +21,7 @@ from proxy.routes.gdpr import create_router as gdpr_router
 
 # ── In-memory store with GDPR methods ──
 
+
 class GDPRTestStore:
     """In-memory store implementing GDPR methods for testing."""
 
@@ -48,7 +49,8 @@ class GDPRTestStore:
     async def delete_subject_data(self, subject):
         audit_before = len(self.audit_log)
         self.audit_log = [
-            r for r in self.audit_log
+            r
+            for r in self.audit_log
             if r.get("session_id") != subject and r.get("key_prefix") != subject
         ]
         audit_deleted = audit_before - len(self.audit_log)
@@ -59,7 +61,8 @@ class GDPRTestStore:
 
         roles_before = len(self.user_roles)
         self.user_roles = [
-            r for r in self.user_roles
+            r
+            for r in self.user_roles
             if r.get("subject") != subject and r.get("email") != subject
         ]
         roles_deleted = roles_before - len(self.user_roles)
@@ -72,12 +75,14 @@ class GDPRTestStore:
 
     async def export_subject_data(self, subject):
         audit = [
-            r for r in self.audit_log
+            r
+            for r in self.audit_log
             if r.get("session_id") == subject or r.get("key_prefix") == subject
         ]
         spend = [r for r in self.spend_log if r.get("key_prefix") == subject]
         roles = [
-            r for r in self.user_roles
+            r
+            for r in self.user_roles
             if r.get("subject") == subject or r.get("email") == subject
         ]
         return {"audit": audit, "spend": spend, "roles": roles}
@@ -96,31 +101,67 @@ class GDPRTestStore:
 
 # ── Test agent ──
 
+
 class GDPRTestAgent:
     def __init__(self, store):
         self.store = store
         self.config = {"gdpr": {"retention_days": 90, "auto_purge": True}}
         self.app = FastAPI(title="GDPR-TEST")
         self.app.add_middleware(
-            CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_methods=["*"],
+            allow_headers=["*"],
         )
         self.app.include_router(gdpr_router(self))
 
 
 # ── Fixtures ──
 
+
 @pytest.fixture
 def gdpr_store():
     store = GDPRTestStore()
     # Seed data for user "alice"
     store.audit_log = [
-        {"ts": int(time.time()), "session_id": "alice", "key_prefix": "sk-alice", "model": "gpt-4o", "req_id": "r1", "status": 200},
-        {"ts": int(time.time()), "session_id": "alice", "key_prefix": "sk-alice", "model": "gpt-4o", "req_id": "r2", "status": 200},
-        {"ts": int(time.time()), "session_id": "bob", "key_prefix": "sk-bob", "model": "gpt-4o", "req_id": "r3", "status": 200},
+        {
+            "ts": int(time.time()),
+            "session_id": "alice",
+            "key_prefix": "sk-alice",
+            "model": "gpt-4o",
+            "req_id": "r1",
+            "status": 200,
+        },
+        {
+            "ts": int(time.time()),
+            "session_id": "alice",
+            "key_prefix": "sk-alice",
+            "model": "gpt-4o",
+            "req_id": "r2",
+            "status": 200,
+        },
+        {
+            "ts": int(time.time()),
+            "session_id": "bob",
+            "key_prefix": "sk-bob",
+            "model": "gpt-4o",
+            "req_id": "r3",
+            "status": 200,
+        },
     ]
     store.spend_log = [
-        {"ts": int(time.time()), "key_prefix": "sk-alice", "model": "gpt-4o", "cost_usd": 0.01},
-        {"ts": int(time.time()), "key_prefix": "sk-bob", "model": "gpt-4o", "cost_usd": 0.02},
+        {
+            "ts": int(time.time()),
+            "key_prefix": "sk-alice",
+            "model": "gpt-4o",
+            "cost_usd": 0.01,
+        },
+        {
+            "ts": int(time.time()),
+            "key_prefix": "sk-bob",
+            "model": "gpt-4o",
+            "cost_usd": 0.02,
+        },
     ]
     store.user_roles = [
         {"subject": "alice-sub", "email": "alice@example.com", "roles": "user"},
@@ -147,8 +188,8 @@ async def gdpr_client(gdpr_agent):
 # Right to Erasure (Article 17)
 # ══════════════════════════════════════════════════════════
 
-class TestRightToErasure:
 
+class TestRightToErasure:
     @pytest.mark.asyncio
     async def test_erase_deletes_user_data(self, gdpr_client, gdpr_store):
         """Erasing a subject removes their audit, spend, and role records."""
@@ -160,8 +201,11 @@ class TestRightToErasure:
         assert data["spend_deleted"] == 1
 
         # Verify alice's data is gone
-        assert all(r.get("key_prefix") != "sk-alice" for r in gdpr_store.audit_log
-                    if r.get("session_id") != "GDPR_SYSTEM")
+        assert all(
+            r.get("key_prefix") != "sk-alice"
+            for r in gdpr_store.audit_log
+            if r.get("session_id") != "GDPR_SYSTEM"
+        )
         assert all(r.get("key_prefix") != "sk-alice" for r in gdpr_store.spend_log)
 
     @pytest.mark.asyncio
@@ -204,8 +248,8 @@ class TestRightToErasure:
 # Data Subject Access Request (Article 15)
 # ══════════════════════════════════════════════════════════
 
-class TestDSAR:
 
+class TestDSAR:
     @pytest.mark.asyncio
     async def test_export_returns_user_data(self, gdpr_client):
         """Export returns all audit, spend, and identity data for a subject."""
@@ -243,7 +287,9 @@ class TestDSAR:
         assert resp.status_code == 200
         # New audit row appended for the export action.
         new_rows = gdpr_store.audit_log[audit_before:]
-        export_rows = [r for r in new_rows if r.get("req_id", "").startswith("gdpr-export-")]
+        export_rows = [
+            r for r in new_rows if r.get("req_id", "").startswith("gdpr-export-")
+        ]
         assert len(export_rows) == 1
         row = export_rows[0]
         assert row["session_id"] == "GDPR_SYSTEM"
@@ -256,8 +302,8 @@ class TestDSAR:
 # Retention Policy
 # ══════════════════════════════════════════════════════════
 
-class TestRetentionPolicy:
 
+class TestRetentionPolicy:
     @pytest.mark.asyncio
     async def test_retention_endpoint_returns_config(self, gdpr_client):
         """Retention endpoint returns the configured retention policy."""
@@ -273,10 +319,16 @@ class TestRetentionPolicy:
         """Manual purge deletes records older than retention period."""
         # Add an old record (200 days ago)
         old_ts = int(time.time()) - (200 * 86400)
-        gdpr_store.audit_log.append({
-            "ts": old_ts, "session_id": "old-user", "key_prefix": "sk-old",
-            "model": "gpt-4o", "req_id": "r-old", "status": 200,
-        })
+        gdpr_store.audit_log.append(
+            {
+                "ts": old_ts,
+                "session_id": "old-user",
+                "key_prefix": "sk-old",
+                "model": "gpt-4o",
+                "req_id": "r-old",
+                "status": 200,
+            }
+        )
 
         resp = await gdpr_client.post("/api/v1/gdpr/purge")
         assert resp.status_code == 200

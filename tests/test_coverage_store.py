@@ -10,26 +10,29 @@ import pytest
 
 # ── StorageFactory ────────────────────────────────────────────
 
-class TestStorageFactory:
 
+class TestStorageFactory:
     def test_factory_returns_repository(self):
         from store.factory import StorageFactory
+
         repo = StorageFactory.get_repository("config.yaml")
         assert repo is not None
 
     def test_factory_accepts_custom_path(self):
         from store.factory import StorageFactory
+
         repo = StorageFactory.get_repository("config.minimal.yaml")
         assert repo is not None
 
 
 # ── SQLiteStore ──────────────────────────────────────────
 
-class TestSQLiteStore:
 
+class TestSQLiteStore:
     @pytest.mark.asyncio
     async def test_init_creates_tables(self, tmp_path):
         from store.sql_store import SQLiteStore
+
         db_path = str(tmp_path / "test.db")
         repo = SQLiteStore(db_path=db_path)
         await repo.init_db()
@@ -39,6 +42,7 @@ class TestSQLiteStore:
     @pytest.mark.asyncio
     async def test_state_set_and_get(self, tmp_path):
         from store.sql_store import SQLiteStore
+
         db_path = str(tmp_path / "test.db")
         repo = SQLiteStore(db_path=db_path)
         await repo.init_db()
@@ -50,6 +54,7 @@ class TestSQLiteStore:
     @pytest.mark.asyncio
     async def test_state_get_default(self, tmp_path):
         from store.sql_store import SQLiteStore
+
         db_path = str(tmp_path / "test.db")
         repo = SQLiteStore(db_path=db_path)
         await repo.init_db()
@@ -60,6 +65,7 @@ class TestSQLiteStore:
     @pytest.mark.asyncio
     async def test_state_overwrite(self, tmp_path):
         from store.sql_store import SQLiteStore
+
         db_path = str(tmp_path / "test.db")
         repo = SQLiteStore(db_path=db_path)
         await repo.init_db()
@@ -72,6 +78,7 @@ class TestSQLiteStore:
     @pytest.mark.asyncio
     async def test_state_complex_value(self, tmp_path):
         from store.sql_store import SQLiteStore
+
         db_path = str(tmp_path / "test.db")
         repo = SQLiteStore(db_path=db_path)
         await repo.init_db()
@@ -84,6 +91,7 @@ class TestSQLiteStore:
     async def test_endpoint_crud(self, tmp_path):
         from store.sql_store import SQLiteStore
         from models import LLMEndpoint, EndpointStatus
+
         db_path = str(tmp_path / "test.db")
         repo = SQLiteStore(db_path=db_path)
         await repo.init_db()
@@ -112,13 +120,16 @@ class TestSQLiteStore:
     async def test_update_status(self, tmp_path):
         from store.sql_store import SQLiteStore
         from models import LLMEndpoint, EndpointStatus
+
         db_path = str(tmp_path / "test.db")
         repo = SQLiteStore(db_path=db_path)
         await repo.init_db()
 
         ep = LLMEndpoint(
-            id="ep1", url="https://api.test.com",
-            provider="openai", model="gpt-4o",
+            id="ep1",
+            url="https://api.test.com",
+            provider="openai",
+            model="gpt-4o",
             status=EndpointStatus.FOUND,
         )
         await repo.add_endpoint(ep)
@@ -132,14 +143,20 @@ class TestSQLiteStore:
     async def test_get_by_status(self, tmp_path):
         from store.sql_store import SQLiteStore
         from models import LLMEndpoint, EndpointStatus
+
         db_path = str(tmp_path / "test.db")
         repo = SQLiteStore(db_path=db_path)
         await repo.init_db()
 
-        for i, status in enumerate([EndpointStatus.VERIFIED, EndpointStatus.FOUND, EndpointStatus.VERIFIED]):
+        for i, status in enumerate(
+            [EndpointStatus.VERIFIED, EndpointStatus.FOUND, EndpointStatus.VERIFIED]
+        ):
             ep = LLMEndpoint(
-                id=f"ep{i}", url=f"https://api{i}.test.com",
-                provider="openai", model="gpt-4o", status=status,
+                id=f"ep{i}",
+                url=f"https://api{i}.test.com",
+                provider="openai",
+                model="gpt-4o",
+                status=status,
             )
             await repo.add_endpoint(ep)
 

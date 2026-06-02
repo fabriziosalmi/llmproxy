@@ -25,13 +25,19 @@ def _make_admin_app():
     agent.store.set_state = AsyncMock()
     agent.store.query_spend = AsyncMock(return_value=[])
     agent.store.get_spend_total = AsyncMock(return_value=0.0)
-    agent.store.verify_audit_chain = AsyncMock(return_value={"valid": True, "total": 0, "verified": 0})
+    agent.store.verify_audit_chain = AsyncMock(
+        return_value={"valid": True, "total": 0, "verified": 0}
+    )
     agent.store.query_audit = AsyncMock(return_value=[])
 
     agent.proxy_enabled = True
     agent.priority_mode = False
     agent.routing_cost_weight = 0.3
-    agent.features = {"language_guard": True, "injection_guard": True, "link_sanitizer": True}
+    agent.features = {
+        "language_guard": True,
+        "injection_guard": True,
+        "link_sanitizer": True,
+    }
     agent.total_cost_today = 5.67
     agent._budget_date = "2026-03-25"
     agent._add_log = AsyncMock()
@@ -52,7 +58,9 @@ def _make_admin_app():
     agent.negative_cache.stats.return_value = {"size": 0, "hits": 0}
 
     agent.cache_backend = AsyncMock()
-    agent.cache_backend.stats = AsyncMock(return_value={"size": 0, "hits": 0, "misses": 0})
+    agent.cache_backend.stats = AsyncMock(
+        return_value={"size": 0, "hits": 0, "misses": 0}
+    )
 
     agent.rbac = MagicMock()
     agent.rbac.permissions = {"admin": {"*"}, "user": {"chat"}}
@@ -69,11 +77,12 @@ def _make_admin_app():
 
 
 class TestAdminRoutes:
-
     @pytest.mark.asyncio
     async def test_get_proxy_status(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.get("/api/v1/proxy/status")
         assert resp.status_code == 200
         assert resp.json()["enabled"] is True
@@ -81,7 +90,9 @@ class TestAdminRoutes:
     @pytest.mark.asyncio
     async def test_toggle_proxy(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.post("/api/v1/proxy/toggle", json={"enabled": False})
         assert resp.status_code == 200
         assert resp.json()["enabled"] is False
@@ -90,7 +101,9 @@ class TestAdminRoutes:
     @pytest.mark.asyncio
     async def test_get_version(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.get("/api/v1/version")
         assert resp.status_code == 200
         assert "version" in resp.json()
@@ -98,7 +111,9 @@ class TestAdminRoutes:
     @pytest.mark.asyncio
     async def test_get_service_info(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.get("/api/v1/service-info")
         assert resp.status_code == 200
         data = resp.json()
@@ -108,7 +123,9 @@ class TestAdminRoutes:
     @pytest.mark.asyncio
     async def test_get_features(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.get("/api/v1/features")
         assert resp.status_code == 200
         data = resp.json()
@@ -118,22 +135,31 @@ class TestAdminRoutes:
     @pytest.mark.asyncio
     async def test_toggle_feature(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-            resp = await c.post("/api/v1/features/toggle", json={"name": "language_guard", "enabled": False})
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            resp = await c.post(
+                "/api/v1/features/toggle",
+                json={"name": "language_guard", "enabled": False},
+            )
         assert resp.status_code == 200
         assert resp.json()["enabled"] is False
 
     @pytest.mark.asyncio
     async def test_toggle_unknown_feature(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.post("/api/v1/features/toggle", json={"name": "nonexistent"})
         assert resp.status_code == 400
 
     @pytest.mark.asyncio
     async def test_toggle_priority_mode(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.post("/api/v1/proxy/priority/toggle", json={"enabled": True})
         assert resp.status_code == 200
         assert resp.json()["enabled"] is True
@@ -141,7 +167,9 @@ class TestAdminRoutes:
     @pytest.mark.asyncio
     async def test_get_network_info(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.get("/api/v1/network/info")
         assert resp.status_code == 200
         assert "tailscale_active" in resp.json()
@@ -149,7 +177,9 @@ class TestAdminRoutes:
     @pytest.mark.asyncio
     async def test_guards_status(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.get("/api/v1/guards/status")
         assert resp.status_code == 200
         data = resp.json()
@@ -160,7 +190,9 @@ class TestAdminRoutes:
     @pytest.mark.asyncio
     async def test_export_status_disabled(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.get("/api/v1/export/status")
         assert resp.status_code == 200
         assert resp.json()["enabled"] is False
@@ -168,7 +200,9 @@ class TestAdminRoutes:
     @pytest.mark.asyncio
     async def test_rbac_roles(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.get("/api/v1/rbac/roles")
         assert resp.status_code == 200
         data = resp.json()
@@ -177,7 +211,9 @@ class TestAdminRoutes:
     @pytest.mark.asyncio
     async def test_latency_metrics(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.get("/api/v1/metrics/latency")
         assert resp.status_code == 200
         data = resp.json()
@@ -188,7 +224,9 @@ class TestAdminRoutes:
     @pytest.mark.asyncio
     async def test_ring_timeline(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.get("/api/v1/metrics/ring-timeline")
         assert resp.status_code == 200
         assert "traces" in resp.json()
@@ -196,7 +234,9 @@ class TestAdminRoutes:
     @pytest.mark.asyncio
     async def test_cache_stats(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.get("/api/v1/cache/stats")
         assert resp.status_code == 200
         data = resp.json()
@@ -206,7 +246,9 @@ class TestAdminRoutes:
     @pytest.mark.asyncio
     async def test_panic_endpoint(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.post("/api/v1/panic")
         assert resp.status_code == 200
         assert resp.json()["status"] == "HALTED"
@@ -215,7 +257,9 @@ class TestAdminRoutes:
     @pytest.mark.asyncio
     async def test_analytics_spend(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.get("/api/v1/analytics/spend")
         assert resp.status_code == 200
         data = resp.json()
@@ -232,7 +276,9 @@ class TestAdminRoutes:
     @pytest.mark.asyncio
     async def test_get_routing_config(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.get("/api/v1/routing/config")
         assert resp.status_code == 200
         assert resp.json() == {
@@ -245,7 +291,9 @@ class TestAdminRoutes:
     async def test_get_routing_config_strategy_priority(self):
         app, agent = _make_admin_app()
         agent.priority_mode = True
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.get("/api/v1/routing/config")
         assert resp.json()["strategy"] == "priority"
 
@@ -253,15 +301,21 @@ class TestAdminRoutes:
     async def test_get_routing_config_strategy_performance(self):
         app, agent = _make_admin_app()
         agent.routing_cost_weight = 0.0
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.get("/api/v1/routing/config")
         assert resp.json()["strategy"] == "performance"
 
     @pytest.mark.asyncio
     async def test_set_routing_cost_weight_valid(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-            resp = await c.post("/api/v1/routing/cost-weight", json={"cost_weight": 0.7})
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            resp = await c.post(
+                "/api/v1/routing/cost-weight", json={"cost_weight": 0.7}
+            )
         assert resp.status_code == 200
         assert resp.json()["cost_weight"] == 0.7
         assert agent.routing_cost_weight == 0.7
@@ -270,8 +324,12 @@ class TestAdminRoutes:
     @pytest.mark.asyncio
     async def test_set_routing_cost_weight_zero(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-            resp = await c.post("/api/v1/routing/cost-weight", json={"cost_weight": 0.0})
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            resp = await c.post(
+                "/api/v1/routing/cost-weight", json={"cost_weight": 0.0}
+            )
         assert resp.status_code == 200
         # 0.0 must round-trip — the smart_router fallback uses `is None`
         # specifically so 0.0 (ignore cost) is honored.
@@ -281,17 +339,27 @@ class TestAdminRoutes:
     @pytest.mark.asyncio
     async def test_set_routing_cost_weight_out_of_range(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-            resp_high = await c.post("/api/v1/routing/cost-weight", json={"cost_weight": 1.5})
-            resp_low = await c.post("/api/v1/routing/cost-weight", json={"cost_weight": -0.1})
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            resp_high = await c.post(
+                "/api/v1/routing/cost-weight", json={"cost_weight": 1.5}
+            )
+            resp_low = await c.post(
+                "/api/v1/routing/cost-weight", json={"cost_weight": -0.1}
+            )
         assert resp_high.status_code == 400
         assert resp_low.status_code == 400
 
     @pytest.mark.asyncio
     async def test_set_routing_cost_weight_invalid_type(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-            resp = await c.post("/api/v1/routing/cost-weight", json={"cost_weight": "fast"})
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            resp = await c.post(
+                "/api/v1/routing/cost-weight", json={"cost_weight": "fast"}
+            )
         assert resp.status_code == 400
 
     # ── N.6 Rate-limit presets ───────────────────────────────────────
@@ -301,10 +369,17 @@ class TestAdminRoutes:
         """With the middleware not constructed (test app), fall back to
         config + still expose the presets so the UI can render them."""
         from core.rate_limiter import RateLimitMiddleware
+
         RateLimitMiddleware.instance = None  # ensure clean state
         app, agent = _make_admin_app()
-        agent.config["rate_limiting"] = {"enabled": True, "requests_per_minute": 90, "burst": 12}
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        agent.config["rate_limiting"] = {
+            "enabled": True,
+            "requests_per_minute": 90,
+            "burst": 12,
+        }
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.get("/api/v1/rate-limit/config")
         assert resp.status_code == 200
         body = resp.json()
@@ -319,17 +394,24 @@ class TestAdminRoutes:
     @pytest.mark.asyncio
     async def test_set_rate_limit_preset_503_when_middleware_missing(self):
         from core.rate_limiter import RateLimitMiddleware
+
         RateLimitMiddleware.instance = None
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.post("/api/v1/rate-limit/preset", json={"preset": "strict"})
         assert resp.status_code == 503
 
     @pytest.mark.asyncio
     async def test_set_rate_limit_preset_invalid_name(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-            resp = await c.post("/api/v1/rate-limit/preset", json={"preset": "paranoid"})
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            resp = await c.post(
+                "/api/v1/rate-limit/preset", json={"preset": "paranoid"}
+            )
         assert resp.status_code == 400
         assert "Unknown preset" in resp.json()["detail"]
 
@@ -338,13 +420,21 @@ class TestAdminRoutes:
         """Happy path: middleware exists, preset is valid, limiter mutates,
         store records the preset name."""
         from core.rate_limiter import RateLimitMiddleware
+
         # Spin up a real middleware so .instance is set + apply_preset works.
         from starlette.applications import Starlette
-        mw = RateLimitMiddleware(app=Starlette(), config={"rate_limiting": {"enabled": True}})
+
+        mw = RateLimitMiddleware(
+            app=Starlette(), config={"rate_limiting": {"enabled": True}}
+        )
         try:
             app, agent = _make_admin_app()
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-                resp = await c.post("/api/v1/rate-limit/preset", json={"preset": "strict"})
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as c:
+                resp = await c.post(
+                    "/api/v1/rate-limit/preset", json={"preset": "strict"}
+                )
             assert resp.status_code == 200
             body = resp.json()
             assert body["preset"] == "strict"
@@ -365,7 +455,9 @@ class TestAdminRoutes:
         app, agent = _make_admin_app()
         # Add a non-trivial config shape so we can assert it round-trips.
         agent.config["routing"] = {"cost_weight": 0.4, "strategy": "smart_weighted"}
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.get("/api/v1/config/yaml")
         assert resp.status_code == 200
         body = resp.json()
@@ -384,7 +476,9 @@ class TestAdminRoutes:
         need a special-case for 'before first hour'."""
         app, agent = _make_admin_app()
         agent.metrics_history = None
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.get("/api/v1/metrics/hourly-buckets")
         assert resp.status_code == 200
         body = resp.json()
@@ -396,6 +490,7 @@ class TestAdminRoutes:
     async def test_hourly_buckets_serialises_history_snapshot(self):
         """With a real MetricsHistory wired, every series surfaces."""
         from core.metrics_history import MetricsHistory
+
         app, agent = _make_admin_app()
         h = MetricsHistory(slots=12)
         # Seed three series with deterministic values.
@@ -404,7 +499,9 @@ class TestAdminRoutes:
         h.record_gauge("cost_usd", 5.67)
         agent.metrics_history = h
 
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.get("/api/v1/metrics/hourly-buckets")
         body = resp.json()
         assert body["hours"] == 12
@@ -422,7 +519,9 @@ class TestAdminRoutes:
         this endpoint is the way an authenticated operator gets at the
         schema for Swagger / Postman / openapi-generator."""
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.get("/api/v1/openapi.json")
         assert resp.status_code == 200
         body = resp.json()
@@ -444,7 +543,9 @@ class TestAdminRoutes:
             "authorization": "Bearer leaked-token",
             "password": "p@ssw0rd",
         }
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.get("/api/v1/config/yaml")
         body = resp.json()
         rendered = body["yaml"]
@@ -460,16 +561,26 @@ class TestAdminRoutes:
         spraying during the cutover keeps their old (relaxed) cap."""
         from core.rate_limiter import RateLimitMiddleware
         from starlette.applications import Starlette
-        mw = RateLimitMiddleware(app=Starlette(), config={
-            "rate_limiting": {"enabled": True, "requests_per_minute": 240, "burst": 60}
-        })
+
+        mw = RateLimitMiddleware(
+            app=Starlette(),
+            config={
+                "rate_limiting": {
+                    "enabled": True,
+                    "requests_per_minute": 240,
+                    "burst": 60,
+                }
+            },
+        )
         try:
             # Seed a bucket at the relaxed defaults.
             await mw.limiter.check("1.2.3.4")
             assert "1.2.3.4" in mw.limiter._buckets
 
             app, agent = _make_admin_app()
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as c:
                 await c.post("/api/v1/rate-limit/preset", json={"preset": "strict"})
 
             assert "1.2.3.4" not in mw.limiter._buckets
@@ -482,7 +593,9 @@ class TestAdminRoutes:
     async def test_forecast_endpoint_returns_block(self):
         app, agent = _make_admin_app()
         # Fixture has total_cost_today=5.67, daily_limit=50.0
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.get("/api/v1/analytics/forecast")
         assert resp.status_code == 200
         body = resp.json()
@@ -502,7 +615,9 @@ class TestAdminRoutes:
     @pytest.mark.asyncio
     async def test_spend_endpoint_embeds_forecast_block(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.get("/api/v1/analytics/spend")
         assert resp.status_code == 200
         body = resp.json()
@@ -518,6 +633,7 @@ class TestForecastMath:
 
     def _import(self):
         from proxy.routes.admin import _compute_forecast
+
         return _compute_forecast
 
     def test_typical_midday_burn(self):
@@ -566,14 +682,18 @@ class TestForecastMath:
     @pytest.mark.asyncio
     async def test_analytics_top_models(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.get("/api/v1/analytics/spend/topmodels")
         assert resp.status_code == 200
 
     @pytest.mark.asyncio
     async def test_analytics_cost_efficiency(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.get("/api/v1/analytics/cost-efficiency")
         assert resp.status_code == 200
         data = resp.json()
@@ -582,7 +702,9 @@ class TestForecastMath:
     @pytest.mark.asyncio
     async def test_audit_verify(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.get("/api/v1/audit/verify")
         assert resp.status_code == 200
         assert resp.json()["valid"] is True
@@ -590,14 +712,18 @@ class TestForecastMath:
     @pytest.mark.asyncio
     async def test_audit_query(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.get("/api/v1/audit")
         assert resp.status_code == 200
 
     @pytest.mark.asyncio
     async def test_webhooks_list(self):
         app, agent = _make_admin_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.get("/api/v1/webhooks")
         assert resp.status_code == 200
         data = resp.json()

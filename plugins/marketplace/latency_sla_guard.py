@@ -68,9 +68,16 @@ class LatencySlaGuard(BasePlugin):
 
         # TTFT: from request start to first byte received
         ttft_time = ctx.metadata.get("_ttft_time")
-        ttft_ms = (ttft_time - request_start) * 1000 if (ttft_time and request_start) else None
+        ttft_ms = (
+            (ttft_time - request_start) * 1000
+            if (ttft_time and request_start)
+            else None
+        )
 
-        return {"total_ms": round(total_ms, 2), "ttft_ms": round(ttft_ms, 2) if ttft_ms else None}
+        return {
+            "total_ms": round(total_ms, 2),
+            "ttft_ms": round(ttft_ms, 2) if ttft_ms else None,
+        }
 
     def _evaluate_sla(self, total_ms: float, ttft_ms: float | None) -> tuple:
         """Evaluate latency against SLA targets. Returns (status, violations)."""
@@ -111,9 +118,7 @@ class LatencySlaGuard(BasePlugin):
             "total_requests": self._total_requests,
             "sla_warnings": self._sla_warnings,
             "sla_breaches": self._sla_breaches,
-            "breach_rate": round(
-                self._sla_breaches / max(self._total_requests, 1), 4
-            ),
+            "breach_rate": round(self._sla_breaches / max(self._total_requests, 1), 4),
             "ttft_percentiles": self._percentiles(self._ttft_samples),
             "total_percentiles": self._percentiles(self._total_samples),
             "targets": {

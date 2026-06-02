@@ -14,6 +14,16 @@ test.describe('add endpoint', () => {
     test.beforeEach(async ({ authedPage }) => {
         await authedPage.goto('/ui/#/endpoints');
         await expect(authedPage.locator('#login-overlay')).not.toBeVisible();
+
+        // Wait for the TS view to be fully mounted/hydrated.
+        await expect(authedPage.locator('[data-testid="add-endpoint-form"]')).toBeAttached({ timeout: 10_000 });
+
+        // Ensure form is closed at the start of each test to prevent SPA state bleed.
+        const form = authedPage.locator('[data-testid="add-endpoint-form"]');
+        if (await form.isVisible()) {
+            await authedPage.locator('[data-testid="ep-cancel-btn"]').click();
+            await expect(form).toBeHidden();
+        }
     });
 
     test('refuses an invalid id with an inline error and keeps the form open', async ({ authedPage }) => {

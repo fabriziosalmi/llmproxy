@@ -8,7 +8,6 @@ in RAM. This tests that:
 - token estimation scales correctly when chunks have been evicted
 """
 
-
 from proxy.forwarder import _BoundedStreamBuffer, _MAX_STREAM_BUFFER_CHARS
 
 

@@ -17,6 +17,7 @@ from hypothesis import strategies as st
 
 # ── D1-D2: Adapter Translation Determinism ────────────────────
 
+
 class TestAdapterDeterminism:
     """Adapter translate_request/translate_response are pure functions."""
 
@@ -24,9 +25,13 @@ class TestAdapterDeterminism:
     @given(
         model=st.sampled_from(["gpt-4o", "gpt-4o-mini", "o3-mini"]),
         content=st.text(min_size=1, max_size=200),
-        temperature=st.floats(min_value=0.0, max_value=2.0, allow_nan=False, allow_infinity=False),
+        temperature=st.floats(
+            min_value=0.0, max_value=2.0, allow_nan=False, allow_infinity=False
+        ),
     )
-    @settings(max_examples=50, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    @settings(
+        max_examples=50, deadline=None, suppress_health_check=[HealthCheck.too_slow]
+    )
     def test_openai_translate_request_deterministic(self, model, content, temperature):
         """D1: OpenAI translate_request(same input) → same output."""
         from proxy.adapters.openai import OpenAIAdapter
@@ -39,8 +44,12 @@ class TestAdapterDeterminism:
         }
         headers = {"Authorization": "Bearer sk-test"}
 
-        url1, body1, h1 = adapter.translate_request("https://api.openai.com/v1", body, headers)
-        url2, body2, h2 = adapter.translate_request("https://api.openai.com/v1", body, headers)
+        url1, body1, h1 = adapter.translate_request(
+            "https://api.openai.com/v1", body, headers
+        )
+        url2, body2, h2 = adapter.translate_request(
+            "https://api.openai.com/v1", body, headers
+        )
 
         assert url1 == url2
         assert json.dumps(body1, sort_keys=True) == json.dumps(body2, sort_keys=True)
@@ -48,7 +57,9 @@ class TestAdapterDeterminism:
 
     @pytest.mark.determinism
     @given(content=st.text(min_size=1, max_size=200))
-    @settings(max_examples=50, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    @settings(
+        max_examples=50, deadline=None, suppress_health_check=[HealthCheck.too_slow]
+    )
     def test_google_translate_request_deterministic(self, content):
         """D1b: Google translate_request is deterministic."""
         from proxy.adapters.google import GoogleAdapter
@@ -61,10 +72,14 @@ class TestAdapterDeterminism:
         headers = {"Authorization": "Bearer test-key"}
 
         url1, body1, h1 = adapter.translate_request(
-            "https://generativelanguage.googleapis.com/v1beta", body, headers,
+            "https://generativelanguage.googleapis.com/v1beta",
+            body,
+            headers,
         )
         url2, body2, h2 = adapter.translate_request(
-            "https://generativelanguage.googleapis.com/v1beta", body, headers,
+            "https://generativelanguage.googleapis.com/v1beta",
+            body,
+            headers,
         )
 
         assert url1 == url2
@@ -77,18 +92,27 @@ class TestAdapterDeterminism:
 
         adapter = GoogleAdapter()
         gemini_response = {
-            "candidates": [{
-                "content": {"parts": [{"text": "Hello!"}]},
-                "finishReason": "STOP",
-            }],
-            "usageMetadata": {"promptTokenCount": 10, "candidatesTokenCount": 5, "totalTokenCount": 15},
+            "candidates": [
+                {
+                    "content": {"parts": [{"text": "Hello!"}]},
+                    "finishReason": "STOP",
+                }
+            ],
+            "usageMetadata": {
+                "promptTokenCount": 10,
+                "candidatesTokenCount": 5,
+                "totalTokenCount": 15,
+            },
         }
 
         r1 = adapter.translate_response(gemini_response)
         r2 = adapter.translate_response(gemini_response)
 
         # Content and structure must match (timestamps may differ)
-        assert r1["choices"][0]["message"]["content"] == r2["choices"][0]["message"]["content"]
+        assert (
+            r1["choices"][0]["message"]["content"]
+            == r2["choices"][0]["message"]["content"]
+        )
         assert r1["usage"] == r2["usage"]
 
     @pytest.mark.determinism
@@ -116,13 +140,16 @@ class TestAdapterDeterminism:
 
 # ── D3: Security Shield Determinism ───────────────────────────
 
+
 class TestSecurityDeterminism:
     """Security scan results must be deterministic for identical inputs."""
 
     @pytest.mark.determinism
     @pytest.mark.security
     @given(prompt=st.text(min_size=1, max_size=300))
-    @settings(max_examples=100, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    @settings(
+        max_examples=100, deadline=None, suppress_health_check=[HealthCheck.too_slow]
+    )
     def test_semantic_scan_deterministic(self, prompt):
         """D3: semantic_scan(x) == semantic_scan(x) for all x."""
         from core.semantic_analyzer import semantic_scan
@@ -135,7 +162,9 @@ class TestSecurityDeterminism:
     @pytest.mark.determinism
     @pytest.mark.security
     @given(prompt=st.text(min_size=1, max_size=300))
-    @settings(max_examples=100, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    @settings(
+        max_examples=100, deadline=None, suppress_health_check=[HealthCheck.too_slow]
+    )
     def test_semantic_scan_threshold_monotonic(self, prompt):
         """D3b: Lowering threshold can only increase detections (never decrease)."""
         from core.semantic_analyzer import semantic_scan
@@ -152,6 +181,7 @@ class TestSecurityDeterminism:
 
 
 # ── D4: Model Alias Resolution Determinism ────────────────────
+
 
 class TestModelResolutionDeterminism:
     """Model alias → real model resolution is deterministic."""
@@ -179,6 +209,7 @@ class TestModelResolutionDeterminism:
 
 # ── D5: Cost Calculation Determinism ──────────────────────────
 
+
 class TestCostDeterminism:
     """Cost computation must not drift due to floating point accumulation."""
 
@@ -193,10 +224,12 @@ class TestCostDeterminism:
         from core.pricing import MODEL_PRICING
 
         pricing = MODEL_PRICING.get("gpt-4o", {"input": 2.50, "output": 10.0})
-        cost1 = (input_tokens / 1_000_000) * pricing["input"] + \
-                (output_tokens / 1_000_000) * pricing["output"]
-        cost2 = (input_tokens / 1_000_000) * pricing["input"] + \
-                (output_tokens / 1_000_000) * pricing["output"]
+        cost1 = (input_tokens / 1_000_000) * pricing["input"] + (
+            output_tokens / 1_000_000
+        ) * pricing["output"]
+        cost2 = (input_tokens / 1_000_000) * pricing["input"] + (
+            output_tokens / 1_000_000
+        ) * pricing["output"]
 
         assert cost1 == cost2, f"Floating point non-determinism: {cost1} != {cost2}"
         assert cost1 >= 0.0, f"Negative cost: {cost1}"

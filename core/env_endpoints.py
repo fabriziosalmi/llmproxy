@@ -37,10 +37,10 @@ def _iter_endpoint_names() -> list[str]:
     for key in os.environ:
         if not key.startswith(_PREFIX):
             continue
-        tail = key[len(_PREFIX):]
+        tail = key[len(_PREFIX) :]
         for suffix in _VALID_SUFFIXES:
             if tail.endswith(suffix):
-                name = tail[:-len(suffix)]
+                name = tail[: -len(suffix)]
                 if name:
                     names.add(name)
                 break
@@ -77,9 +77,16 @@ def inject_env_endpoints(config: dict[str, Any]) -> list[str]:
         has_key = bool(os.environ.get(key_env, "").strip())
 
         models_raw = os.environ.get(f"{_PREFIX}{raw_name}_MODELS", "").strip()
-        models = [m.strip() for m in models_raw.split(",") if m.strip()] if models_raw else []
+        models = (
+            [m.strip() for m in models_raw.split(",") if m.strip()]
+            if models_raw
+            else []
+        )
 
-        provider = os.environ.get(f"{_PREFIX}{raw_name}_PROVIDER", "").strip() or "openai-compatible"
+        provider = (
+            os.environ.get(f"{_PREFIX}{raw_name}_PROVIDER", "").strip()
+            or "openai-compatible"
+        )
 
         endpoints[ep_id] = {
             "provider": provider,
@@ -87,13 +94,20 @@ def inject_env_endpoints(config: dict[str, Any]) -> list[str]:
             "models": models,
             # Record where this endpoint came from so the UI can surface it.
             "_source": "env",
-            **({"api_key_env": key_env, "auth_type": "bearer"}
-               if has_key else {"auth_type": "none"}),
+            **(
+                {"api_key_env": key_env, "auth_type": "bearer"}
+                if has_key
+                else {"auth_type": "none"}
+            ),
         }
         injected.append(ep_id)
         logger.info(
             "Registered env endpoint '%s' -> %s (provider=%s, models=%d, auth=%s)",
-            ep_id, url, provider, len(models), "bearer" if has_key else "none",
+            ep_id,
+            url,
+            provider,
+            len(models),
+            "bearer" if has_key else "none",
         )
 
     return injected

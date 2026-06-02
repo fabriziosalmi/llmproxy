@@ -30,16 +30,24 @@ from core.metrics import MetricsTracker
 
 # ── Test helpers ──
 
+
 def _openai_response(content="Hello!"):
     return {
         "id": "chatcmpl-test",
         "object": "chat.completion",
-        "choices": [{"index": 0, "message": {"role": "assistant", "content": content}, "finish_reason": "stop"}],
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": content},
+                "finish_reason": "stop",
+            }
+        ],
         "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
     }
 
 
 # ── Pipeline Test Agent ──
+
 
 class PipelineAgent:
     """
@@ -59,10 +67,14 @@ class PipelineAgent:
 
     def __init__(self, config=None, security_config=None):
         import logging
+
         self.logger = logging.getLogger("test.pipeline")
         self.config = config or {
             "server": {"auth": {"enabled": False}},
-            "caching": {"enabled": False, "negative_cache": {"maxsize": 1000, "ttl": 60}},
+            "caching": {
+                "enabled": False,
+                "negative_cache": {"maxsize": 1000, "ttl": 60},
+            },
             "plugins": {},
         }
 
@@ -80,7 +92,9 @@ class PipelineAgent:
 
         # Real plugin manager (no plugins loaded = rings are no-ops)
         self.plugin_manager = PluginManager()
-        self.plugin_state = PluginState(cache=None, metrics=MetricsTracker, config={}, extra={})
+        self.plugin_state = PluginState(
+            cache=None, metrics=MetricsTracker, config={}, extra={}
+        )
 
         # Mocked subsystems
         self.webhooks = MagicMock()
@@ -99,11 +113,14 @@ class PipelineAgent:
 
         # Request deduplication
         from core.deduplicator import RequestDeduplicator
+
         self.deduplicator = RequestDeduplicator()
 
         # Forwarder mock — returns canned response
         self.forwarder = MagicMock()
-        self._canned_response = JSONResponse(content=_openai_response(), status_code=200)
+        self._canned_response = JSONResponse(
+            content=_openai_response(), status_code=200
+        )
         self.forwarder.forward_with_fallback = AsyncMock(side_effect=self._mock_forward)
         self.forwarder._cost_ref = {"total": 0.0}
 
@@ -127,10 +144,14 @@ class PipelineAgent:
         # Build app
         self.app = FastAPI(title="LLMPROXY-PIPELINE-TEST")
         self.app.add_middleware(
-            CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_methods=["*"],
+            allow_headers=["*"],
         )
 
         from proxy.routes import chat_router
+
         self.app.include_router(chat_router(self))
 
     async def _mock_forward(self, ctx, target, headers, session):
@@ -175,7 +196,9 @@ class PipelineAgent:
             metadata={
                 "rotator": self,
                 "req_id": uuid.uuid4().hex[:8],
-                "_cache_control": request.headers.get("cache-control", "") if request else "",
+                "_cache_control": request.headers.get("cache-control", "")
+                if request
+                else "",
             },
             state=self.plugin_state,
         )
@@ -198,7 +221,9 @@ class PipelineAgent:
             self.rings_executed.append("INGRESS")
             await self.plugin_manager.execute_ring(PluginHook.INGRESS, ctx)
             if ctx.stop_chain:
-                raise HTTPException(status_code=403, detail=ctx.error or "Ingress Blocked")
+                raise HTTPException(
+                    status_code=403, detail=ctx.error or "Ingress Blocked"
+                )
 
             # RING 2: PRE-FLIGHT
             self.rings_executed.append("PRE_FLIGHT")
@@ -219,7 +244,9 @@ class PipelineAgent:
             self.rings_executed.append("ROUTING")
             await self.plugin_manager.execute_ring(PluginHook.ROUTING, ctx)
             if ctx.stop_chain:
-                raise HTTPException(status_code=503, detail=ctx.error or "No Routing Target")
+                raise HTTPException(
+                    status_code=503, detail=ctx.error or "No Routing Target"
+                )
 
             target = ctx.metadata.get("target_endpoint")
             headers = ctx.body.get("headers", {})
@@ -228,7 +255,9 @@ class PipelineAgent:
             session = await self._get_session()
             self.forwarder._cost_ref = {"total": self.total_cost_today}
             await self.forwarder.forward_with_fallback(ctx, target, headers, session)
-            self.total_cost_today = self.forwarder._cost_ref.get("total", self.total_cost_today)
+            self.total_cost_today = self.forwarder._cost_ref.get(
+                "total", self.total_cost_today
+            )
             ctx.metadata["duration"] = time.time() - start_total
 
             # RING 4: POST-FLIGHT
@@ -243,8 +272,12 @@ class PipelineAgent:
 
             # Inject proxy metadata headers (mirrors RotatorAgent)
             if ctx.response and hasattr(ctx.response, "headers"):
-                ctx.response.headers["X-LLMProxy-Provider"] = ctx.metadata.get("_provider", "")
-                ctx.response.headers["X-LLMProxy-Request-Id"] = ctx.metadata.get("req_id", "")
+                ctx.response.headers["X-LLMProxy-Provider"] = ctx.metadata.get(
+                    "_provider", ""
+                )
+                ctx.response.headers["X-LLMProxy-Request-Id"] = ctx.metadata.get(
+                    "req_id", ""
+                )
 
             return ctx.response
 
@@ -255,6 +288,7 @@ class PipelineAgent:
 
 
 # ── Fixtures ──
+
 
 @pytest.fixture
 def pipeline_agent():
@@ -276,34 +310,54 @@ async def pipeline_client(pipeline_agent):
 # 1. RING PIPELINE EXECUTION ORDER
 # ══════════════════════════════════════════════════════════
 
-class TestRingPipelineExecution:
 
+class TestRingPipelineExecution:
     @pytest.mark.asyncio
-    async def test_all_five_rings_execute_in_order(self, pipeline_client, pipeline_agent):
+    async def test_all_five_rings_execute_in_order(
+        self, pipeline_client, pipeline_agent
+    ):
         """All 5 rings fire in the correct order for a normal request."""
-        resp = await pipeline_client.post("/v1/chat/completions", json={
-            "model": "gpt-4", "messages": [{"role": "user", "content": "Hi"}],
-        })
+        resp = await pipeline_client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "gpt-4",
+                "messages": [{"role": "user", "content": "Hi"}],
+            },
+        )
         assert resp.status_code == 200
         assert pipeline_agent.rings_executed == [
-            "INGRESS", "PRE_FLIGHT", "ROUTING", "POST_FLIGHT", "BACKGROUND",
+            "INGRESS",
+            "PRE_FLIGHT",
+            "ROUTING",
+            "POST_FLIGHT",
+            "BACKGROUND",
         ]
 
     @pytest.mark.asyncio
-    async def test_forwarder_called_after_routing(self, pipeline_client, pipeline_agent):
+    async def test_forwarder_called_after_routing(
+        self, pipeline_client, pipeline_agent
+    ):
         """The forwarder is invoked between ROUTING and POST_FLIGHT."""
-        await pipeline_client.post("/v1/chat/completions", json={
-            "model": "gpt-4", "messages": [{"role": "user", "content": "Hi"}],
-        })
+        await pipeline_client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "gpt-4",
+                "messages": [{"role": "user", "content": "Hi"}],
+            },
+        )
         pipeline_agent.forwarder.forward_with_fallback.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_proxy_disabled_returns_503(self, pipeline_client, pipeline_agent):
         """When proxy is disabled, 503 is returned before any ring."""
         pipeline_agent.proxy_enabled = False
-        resp = await pipeline_client.post("/v1/chat/completions", json={
-            "model": "gpt-4", "messages": [{"role": "user", "content": "Hi"}],
-        })
+        resp = await pipeline_client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "gpt-4",
+                "messages": [{"role": "user", "content": "Hi"}],
+            },
+        )
         assert resp.status_code == 503
         assert pipeline_agent.rings_executed == []
 
@@ -312,29 +366,42 @@ class TestRingPipelineExecution:
 # 2. SECURITY SHIELD + NEGATIVE CACHE
 # ══════════════════════════════════════════════════════════
 
-class TestSecurityShieldE2E:
 
+class TestSecurityShieldE2E:
     @pytest.mark.asyncio
     async def test_injection_blocked_by_shield(self, pipeline_client, pipeline_agent):
         """SecurityShield blocks injection attempts before any ring fires."""
         # Force security to detect injection
-        pipeline_agent.security.inspect = AsyncMock(return_value="Injection detected: SQL")
+        pipeline_agent.security.inspect = AsyncMock(
+            return_value="Injection detected: SQL"
+        )
 
-        resp = await pipeline_client.post("/v1/chat/completions", json={
-            "model": "gpt-4", "messages": [{"role": "user", "content": "'; DROP TABLE users;--"}],
-        })
+        resp = await pipeline_client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "gpt-4",
+                "messages": [{"role": "user", "content": "'; DROP TABLE users;--"}],
+            },
+        )
         assert resp.status_code == 403
         assert "injection" in resp.json()["detail"].lower()
         # No rings should have fired
         assert pipeline_agent.rings_executed == []
 
     @pytest.mark.asyncio
-    async def test_negative_cache_blocks_repeated_attack(self, pipeline_client, pipeline_agent):
+    async def test_negative_cache_blocks_repeated_attack(
+        self, pipeline_client, pipeline_agent
+    ):
         """After SecurityShield blocks, negative cache blocks identical repeat instantly."""
         # First request: SecurityShield blocks and populates negative cache
-        pipeline_agent.security.inspect = AsyncMock(return_value="Injection: XSS attempt")
+        pipeline_agent.security.inspect = AsyncMock(
+            return_value="Injection: XSS attempt"
+        )
 
-        body = {"model": "gpt-4", "messages": [{"role": "user", "content": "<script>alert(1)</script>"}]}
+        body = {
+            "model": "gpt-4",
+            "messages": [{"role": "user", "content": "<script>alert(1)</script>"}],
+        }
         resp1 = await pipeline_client.post("/v1/chat/completions", json=body)
         assert resp1.status_code == 403
 
@@ -349,9 +416,13 @@ class TestSecurityShieldE2E:
     @pytest.mark.asyncio
     async def test_safe_request_passes_shield(self, pipeline_client, pipeline_agent):
         """Normal requests pass SecurityShield and reach all rings."""
-        resp = await pipeline_client.post("/v1/chat/completions", json={
-            "model": "gpt-4", "messages": [{"role": "user", "content": "What is 2+2?"}],
-        })
+        resp = await pipeline_client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "gpt-4",
+                "messages": [{"role": "user", "content": "What is 2+2?"}],
+            },
+        )
         assert resp.status_code == 200
         assert len(pipeline_agent.rings_executed) == 5
 
@@ -360,11 +431,14 @@ class TestSecurityShieldE2E:
 # 3. PLUGIN STOP_CHAIN
 # ══════════════════════════════════════════════════════════
 
-class TestPluginStopChain:
 
+class TestPluginStopChain:
     @pytest.mark.asyncio
-    async def test_ingress_stop_chain_blocks_pipeline(self, pipeline_client, pipeline_agent):
+    async def test_ingress_stop_chain_blocks_pipeline(
+        self, pipeline_client, pipeline_agent
+    ):
         """A plugin setting stop_chain in INGRESS halts the entire pipeline."""
+
         async def blocking_ingress(hook, ctx):
             if hook == PluginHook.INGRESS:
                 ctx.stop_chain = True
@@ -372,9 +446,13 @@ class TestPluginStopChain:
 
         pipeline_agent.plugin_manager.execute_ring = blocking_ingress
 
-        resp = await pipeline_client.post("/v1/chat/completions", json={
-            "model": "gpt-4", "messages": [{"role": "user", "content": "Hi"}],
-        })
+        resp = await pipeline_client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "gpt-4",
+                "messages": [{"role": "user", "content": "Hi"}],
+            },
+        )
         assert resp.status_code == 403
         assert "rate limited" in resp.json()["detail"].lower()
         # Only INGRESS was tracked before execute_ring was replaced
@@ -382,7 +460,9 @@ class TestPluginStopChain:
         pipeline_agent.forwarder.forward_with_fallback.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_pre_flight_stop_chain_returns_early(self, pipeline_client, pipeline_agent):
+    async def test_pre_flight_stop_chain_returns_early(
+        self, pipeline_client, pipeline_agent
+    ):
         """stop_chain in PRE_FLIGHT returns cached response, skips ROUTING+."""
         cached = JSONResponse(content=_openai_response("Cached!"), status_code=200)
 
@@ -397,15 +477,21 @@ class TestPluginStopChain:
         pipeline_agent.plugin_manager.execute_ring = pre_flight_cache_hit
         pipeline_agent.rings_executed.clear()
 
-        resp = await pipeline_client.post("/v1/chat/completions", json={
-            "model": "gpt-4", "messages": [{"role": "user", "content": "cached question"}],
-        })
+        resp = await pipeline_client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "gpt-4",
+                "messages": [{"role": "user", "content": "cached question"}],
+            },
+        )
         assert resp.status_code == 200
         # Forwarder should NOT have been called (cache hit)
         pipeline_agent.forwarder.forward_with_fallback.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_post_flight_stop_chain_returns_403(self, pipeline_client, pipeline_agent):
+    async def test_post_flight_stop_chain_returns_403(
+        self, pipeline_client, pipeline_agent
+    ):
         """stop_chain in POST_FLIGHT returns error, blocks response delivery."""
         original_execute = pipeline_agent.plugin_manager.execute_ring
 
@@ -418,9 +504,13 @@ class TestPluginStopChain:
         pipeline_agent.plugin_manager.execute_ring = post_flight_block
         pipeline_agent.rings_executed.clear()
 
-        resp = await pipeline_client.post("/v1/chat/completions", json={
-            "model": "gpt-4", "messages": [{"role": "user", "content": "show me SSN"}],
-        })
+        resp = await pipeline_client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "gpt-4",
+                "messages": [{"role": "user", "content": "show me SSN"}],
+            },
+        )
         assert resp.status_code == 403
         assert "SEC_ERR" in resp.json()["error"]
         # Forwarder WAS called (POST_FLIGHT is after forwarding)
@@ -431,22 +521,28 @@ class TestPluginStopChain:
 # 4. BUDGET ENFORCEMENT
 # ══════════════════════════════════════════════════════════
 
-class TestBudgetEnforcement:
 
+class TestBudgetEnforcement:
     @pytest.mark.asyncio
     async def test_request_increments_budget(self, pipeline_client, pipeline_agent):
         """Successful request adds cost to total_cost_today."""
         assert pipeline_agent.total_cost_today == 0.0
-        resp = await pipeline_client.post("/v1/chat/completions", json={
-            "model": "gpt-4", "messages": [{"role": "user", "content": "Hi"}],
-        })
+        resp = await pipeline_client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "gpt-4",
+                "messages": [{"role": "user", "content": "Hi"}],
+            },
+        )
         assert resp.status_code == 200
         # Budget may or may not have been charged depending on pricing availability.
         # The important thing is the pipeline completed.
         await asyncio.sleep(0.05)  # Let background tasks complete
 
     @pytest.mark.asyncio
-    async def test_budget_guard_plugin_blocks_expensive_request(self, pipeline_client, pipeline_agent):
+    async def test_budget_guard_plugin_blocks_expensive_request(
+        self, pipeline_client, pipeline_agent
+    ):
         """When a PRE_FLIGHT plugin enforces budget, the pipeline stops."""
         original_execute = pipeline_agent.plugin_manager.execute_ring
 
@@ -456,15 +552,20 @@ class TestBudgetEnforcement:
                 ctx.stop_chain = True
                 ctx.error = "Budget exceeded: $50.00/$50.00 daily limit"
                 ctx.response = JSONResponse(
-                    content={"error": ctx.error}, status_code=429,
+                    content={"error": ctx.error},
+                    status_code=429,
                 )
 
         pipeline_agent.plugin_manager.execute_ring = budget_block
         pipeline_agent.rings_executed.clear()
 
-        resp = await pipeline_client.post("/v1/chat/completions", json={
-            "model": "gpt-4", "messages": [{"role": "user", "content": "expensive request"}],
-        })
+        resp = await pipeline_client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "gpt-4",
+                "messages": [{"role": "user", "content": "expensive request"}],
+            },
+        )
         assert resp.status_code == 429
         assert "budget" in resp.json()["error"].lower()
         pipeline_agent.forwarder.forward_with_fallback.assert_not_awaited()
@@ -474,8 +575,8 @@ class TestBudgetEnforcement:
 # 5. RESPONSE METADATA HEADERS
 # ══════════════════════════════════════════════════════════
 
-class TestResponseMetadata:
 
+class TestResponseMetadata:
     @pytest.mark.asyncio
     async def test_response_has_proxy_headers(self, pipeline_client, pipeline_agent):
         """Successful responses include X-LLMProxy-* metadata headers."""
@@ -491,11 +592,17 @@ class TestResponseMetadata:
             ctx.metadata["_provider"] = "openai"
             ctx.metadata["req_id"] = "test-req-123"
 
-        pipeline_agent.forwarder.forward_with_fallback = AsyncMock(side_effect=forward_with_headers)
+        pipeline_agent.forwarder.forward_with_fallback = AsyncMock(
+            side_effect=forward_with_headers
+        )
 
-        resp = await pipeline_client.post("/v1/chat/completions", json={
-            "model": "gpt-4", "messages": [{"role": "user", "content": "Hi"}],
-        })
+        resp = await pipeline_client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "gpt-4",
+                "messages": [{"role": "user", "content": "Hi"}],
+            },
+        )
         assert resp.status_code == 200
         assert resp.headers.get("x-llmproxy-provider") == "openai"
         assert resp.headers.get("x-llmproxy-request-id") is not None
@@ -505,39 +612,59 @@ class TestResponseMetadata:
 # 6. EDGE CASES
 # ══════════════════════════════════════════════════════════
 
-class TestPipelineEdgeCases:
 
+class TestPipelineEdgeCases:
     @pytest.mark.asyncio
     async def test_empty_messages_passes_through(self, pipeline_client, pipeline_agent):
         """Request with empty messages array still passes through pipeline."""
-        resp = await pipeline_client.post("/v1/chat/completions", json={
-            "model": "gpt-4", "messages": [],
-        })
+        resp = await pipeline_client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "gpt-4",
+                "messages": [],
+            },
+        )
         assert resp.status_code == 200
         assert len(pipeline_agent.rings_executed) == 5
 
     @pytest.mark.asyncio
-    async def test_forwarder_exception_returns_502(self, pipeline_client, pipeline_agent):
+    async def test_forwarder_exception_returns_502(
+        self, pipeline_client, pipeline_agent
+    ):
         """When the forwarder raises an unexpected exception, return 502."""
         pipeline_agent.forwarder.forward_with_fallback = AsyncMock(
             side_effect=ConnectionError("upstream down")
         )
 
-        resp = await pipeline_client.post("/v1/chat/completions", json={
-            "model": "gpt-4", "messages": [{"role": "user", "content": "Hi"}],
-        })
+        resp = await pipeline_client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "gpt-4",
+                "messages": [{"role": "user", "content": "Hi"}],
+            },
+        )
         assert resp.status_code == 502
 
     @pytest.mark.asyncio
-    async def test_concurrent_requests_independent_contexts(self, pipeline_client, pipeline_agent):
+    async def test_concurrent_requests_independent_contexts(
+        self, pipeline_client, pipeline_agent
+    ):
         """Multiple concurrent requests get independent PluginContexts."""
         results = await asyncio.gather(
-            pipeline_client.post("/v1/chat/completions", json={
-                "model": "gpt-4", "messages": [{"role": "user", "content": "request 1"}],
-            }),
-            pipeline_client.post("/v1/chat/completions", json={
-                "model": "gpt-4", "messages": [{"role": "user", "content": "request 2"}],
-            }),
+            pipeline_client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "gpt-4",
+                    "messages": [{"role": "user", "content": "request 1"}],
+                },
+            ),
+            pipeline_client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "gpt-4",
+                    "messages": [{"role": "user", "content": "request 2"}],
+                },
+            ),
         )
         assert all(r.status_code == 200 for r in results)
         # Both requests should have gone through all 5 rings (10 total)

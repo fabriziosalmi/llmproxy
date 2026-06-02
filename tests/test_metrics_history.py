@@ -8,7 +8,6 @@ from core.metrics_history import MetricsHistory, sum_prometheus_counter
 
 
 class TestMetricsHistoryRingBuffer:
-
     def test_first_record_delta_emits_zero(self):
         """No prior reference — store 0 instead of "all of history collapsed
         into the first slot". Phantom-spike guard."""
@@ -87,7 +86,6 @@ class TestMetricsHistoryRingBuffer:
 
 
 class TestSumPrometheusCounter:
-
     def test_returns_zero_on_non_counter(self):
         """Defensive: pass anything weird, get 0.0 back, never raise."""
         assert sum_prometheus_counter(None) == 0.0
@@ -97,6 +95,7 @@ class TestSumPrometheusCounter:
     def test_sums_real_counter_across_labels(self):
         """End-to-end against a fresh prometheus_client.Counter."""
         from prometheus_client import Counter, CollectorRegistry
+
         registry = CollectorRegistry()
         c = Counter(
             "test_counter_total",

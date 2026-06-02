@@ -17,6 +17,7 @@ from core.security import SecurityShield
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_shield() -> SecurityShield:
     """Create a SecurityShield with default config and enabled."""
     return SecurityShield({"security": {"enabled": True}})
@@ -28,13 +29,9 @@ email_strategy = st.from_regex(
     r"[a-z][a-z0-9]{2,8}@[a-z]{3,8}\.(com|org|net)", fullmatch=True
 )
 
-phone_strategy = st.from_regex(
-    r"[2-9]\d{2}-[2-9]\d{2}-\d{4}", fullmatch=True
-)
+phone_strategy = st.from_regex(r"[2-9]\d{2}-[2-9]\d{2}-\d{4}", fullmatch=True)
 
-ssn_strategy = st.from_regex(
-    r"[1-8]\d{2}-\d{2}-\d{4}", fullmatch=True
-)
+ssn_strategy = st.from_regex(r"[1-8]\d{2}-\d{2}-\d{4}", fullmatch=True)
 
 # Known Luhn-valid test card numbers (required after Luhn validation was added to PII masking)
 _LUHN_VALID_CARDS = [
@@ -45,9 +42,7 @@ _LUHN_VALID_CARDS = [
 ]
 credit_card_strategy = st.sampled_from(_LUHN_VALID_CARDS)
 
-iban_strategy = st.from_regex(
-    r"DE\d{2} \d{4} \d{4} \d{4} \d{4} \d{2}", fullmatch=True
-)
+iban_strategy = st.from_regex(r"DE\d{2} \d{4} \d{4} \d{4} \d{4} \d{2}", fullmatch=True)
 
 
 # Strategy for alphanumeric strings that should NOT match PII patterns.
@@ -58,6 +53,7 @@ safe_alphanum_strategy = st.from_regex(r"[A-Za-z]{5,20}", fullmatch=True)
 # ---------------------------------------------------------------------------
 # Tests: Detection
 # ---------------------------------------------------------------------------
+
 
 class TestPIIDetection:
     """Verify that _check_pii_leak and _REGEX_PII_PATTERNS detect known PII."""
@@ -108,6 +104,7 @@ class TestPIIDetection:
 # ---------------------------------------------------------------------------
 # Tests: Masking
 # ---------------------------------------------------------------------------
+
 
 class TestPIIMasking:
     """Verify mask_pii replaces PII with vault tokens."""
@@ -184,6 +181,7 @@ class TestPIIMasking:
 # Tests: Roundtrip (mask -> demask)
 # ---------------------------------------------------------------------------
 
+
 class TestPIIRoundtrip:
     """Verify that demask_pii(mask_pii(text)) restores the original text."""
 
@@ -194,7 +192,9 @@ class TestPIIRoundtrip:
         original = f"Contact {email} for info."
         masked = shield.mask_pii(original)
         restored = shield.demask_pii(masked)
-        assert restored == original, f"Roundtrip failed: {original!r} -> {masked!r} -> {restored!r}"
+        assert restored == original, (
+            f"Roundtrip failed: {original!r} -> {masked!r} -> {restored!r}"
+        )
 
     @given(phone=phone_strategy)
     @settings(max_examples=50, deadline=None)
@@ -203,7 +203,9 @@ class TestPIIRoundtrip:
         original = f"Call {phone} now."
         masked = shield.mask_pii(original)
         restored = shield.demask_pii(masked)
-        assert restored == original, f"Roundtrip failed: {original!r} -> {masked!r} -> {restored!r}"
+        assert restored == original, (
+            f"Roundtrip failed: {original!r} -> {masked!r} -> {restored!r}"
+        )
 
     @given(ssn=ssn_strategy)
     @settings(max_examples=50, deadline=None)
@@ -212,7 +214,9 @@ class TestPIIRoundtrip:
         original = f"SSN is {ssn}."
         masked = shield.mask_pii(original)
         restored = shield.demask_pii(masked)
-        assert restored == original, f"Roundtrip failed: {original!r} -> {masked!r} -> {restored!r}"
+        assert restored == original, (
+            f"Roundtrip failed: {original!r} -> {masked!r} -> {restored!r}"
+        )
 
     @given(cc=credit_card_strategy)
     @settings(max_examples=50, deadline=None)
@@ -221,7 +225,9 @@ class TestPIIRoundtrip:
         original = f"Card: {cc}."
         masked = shield.mask_pii(original)
         restored = shield.demask_pii(masked)
-        assert restored == original, f"Roundtrip failed: {original!r} -> {masked!r} -> {restored!r}"
+        assert restored == original, (
+            f"Roundtrip failed: {original!r} -> {masked!r} -> {restored!r}"
+        )
 
     def test_roundtrip_no_pii(self):
         """Text without PII should pass through mask/demask unchanged."""

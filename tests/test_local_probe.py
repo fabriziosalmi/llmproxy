@@ -103,17 +103,23 @@ def test_unique_id_repeated_collisions_numbered():
 
 def test_url_already_configured_exact_match():
     endpoints = {"a": {"base_url": "http://host:11434/v1"}}
-    assert local_probe._url_already_configured(endpoints, "http://host:11434/v1") is True
+    assert (
+        local_probe._url_already_configured(endpoints, "http://host:11434/v1") is True
+    )
 
 
 def test_url_already_configured_trailing_slash_tolerant():
     endpoints = {"a": {"base_url": "http://host:11434/v1/"}}
-    assert local_probe._url_already_configured(endpoints, "http://host:11434/v1") is True
+    assert (
+        local_probe._url_already_configured(endpoints, "http://host:11434/v1") is True
+    )
 
 
 def test_url_already_configured_miss():
     endpoints = {"a": {"base_url": "http://host:11434/v1"}}
-    assert local_probe._url_already_configured(endpoints, "http://other:11434/v1") is False
+    assert (
+        local_probe._url_already_configured(endpoints, "http://other:11434/v1") is False
+    )
 
 
 # ── discover_local_endpoints (integration, disabled path) ──────────────────
@@ -149,11 +155,15 @@ def test_discover_injects_probed_service_into_config(monkeypatch):
             return fake_hit
         return None
 
-    with patch.object(local_probe, "_host_resolves", return_value=True), \
-         patch.object(local_probe, "_probe_one", side_effect=fake_probe_one):
+    with (
+        patch.object(local_probe, "_host_resolves", return_value=True),
+        patch.object(local_probe, "_probe_one", side_effect=fake_probe_one),
+    ):
         cfg: dict = {"endpoints": {}}
         # Force just two hosts to keep the fan-out predictable.
-        monkeypatch.setattr(local_probe, "_LOCAL_PROBE_HOSTS", ("host.docker.internal",))
+        monkeypatch.setattr(
+            local_probe, "_LOCAL_PROBE_HOSTS", ("host.docker.internal",)
+        )
         injected = asyncio.run(local_probe.discover_local_endpoints(cfg, timeout=0.1))
 
     assert injected == ["ollama"]

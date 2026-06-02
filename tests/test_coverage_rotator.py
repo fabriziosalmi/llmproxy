@@ -17,18 +17,21 @@ from tests.conftest import InMemoryRepository
 def _make_rotator():
     """Create a RotatorAgent with minimal config and in-memory store."""
     # Patch out heavy deps that try to connect at __init__ time
-    with patch.dict(os.environ, {
-        "LLM_PROXY_API_KEYS": "sk-proxy-test1,sk-proxy-test2",
-        "LLM_PROXY_IDENTITY_SECRET": "test-secret-32-chars-minimum-xxx",
-    }):
+    with patch.dict(
+        os.environ,
+        {
+            "LLM_PROXY_API_KEYS": "sk-proxy-test1,sk-proxy-test2",
+            "LLM_PROXY_IDENTITY_SECRET": "test-secret-32-chars-minimum-xxx",
+        },
+    ):
         from proxy.rotator import RotatorAgent
+
         store = InMemoryRepository()
         agent = RotatorAgent(store=store, config_path="config.minimal.yaml")
         return agent
 
 
 class TestRotatorConfig:
-
     def test_load_config_returns_dict(self):
         agent = _make_rotator()
         assert isinstance(agent.config, dict)
@@ -46,11 +49,13 @@ class TestRotatorConfig:
 
 
 class TestRotatorApiKeys:
-
     def test_get_api_keys(self):
-        with patch.dict(os.environ, {
-            "LLM_PROXY_API_KEYS": "sk-proxy-test1,sk-proxy-test2",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "LLM_PROXY_API_KEYS": "sk-proxy-test1,sk-proxy-test2",
+            },
+        ):
             agent = _make_rotator()
             keys = agent._get_api_keys()
             assert "sk-proxy-test1" in keys
@@ -58,17 +63,23 @@ class TestRotatorApiKeys:
             assert len(keys) == 2
 
     def test_verify_api_key_constant_time_match(self):
-        with patch.dict(os.environ, {
-            "LLM_PROXY_API_KEYS": "sk-proxy-test1,sk-proxy-test2",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "LLM_PROXY_API_KEYS": "sk-proxy-test1,sk-proxy-test2",
+            },
+        ):
             agent = _make_rotator()
             assert agent._verify_api_key("sk-proxy-test1") is True
             assert agent._verify_api_key("sk-proxy-test2") is True
 
     def test_verify_api_key_rejects_invalid(self):
-        with patch.dict(os.environ, {
-            "LLM_PROXY_API_KEYS": "sk-proxy-test1,sk-proxy-test2",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "LLM_PROXY_API_KEYS": "sk-proxy-test1,sk-proxy-test2",
+            },
+        ):
             agent = _make_rotator()
             assert agent._verify_api_key("") is False
             assert agent._verify_api_key("sk-proxy-wrong") is False
@@ -86,7 +97,6 @@ class TestRotatorApiKeys:
 
 
 class TestRotatorBudget:
-
     def test_initial_budget_zero(self):
         agent = _make_rotator()
         assert agent.total_cost_today == 0.0
@@ -122,7 +132,6 @@ class TestRotatorBudget:
 
 
 class TestRotatorTaskManagement:
-
     def test_spawn_task_creates_task(self):
         agent = _make_rotator()
 
@@ -141,7 +150,6 @@ class TestRotatorTaskManagement:
 
 
 class TestRotatorSession:
-
     @pytest.mark.asyncio
     async def test_get_session_creates_session(self):
         agent = _make_rotator()
@@ -160,7 +168,6 @@ class TestRotatorSession:
 
 
 class TestRotatorCircuitBreaker:
-
     @pytest.mark.asyncio
     async def test_circuit_state_change_callback(self):
         agent = _make_rotator()
@@ -177,7 +184,6 @@ class TestRotatorCircuitBreaker:
 
 
 class TestRotatorState:
-
     def test_initial_state(self):
         agent = _make_rotator()
         assert agent.proxy_enabled is True

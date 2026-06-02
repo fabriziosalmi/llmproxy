@@ -53,8 +53,13 @@ async def update_endpoint_stats(endpoint_id: str, latency_ms: float, success: bo
             }
 
         stats = _endpoint_stats[endpoint_id]
-        stats["latency_ms"] = _EMA_ALPHA * latency_ms + (1 - _EMA_ALPHA) * stats["latency_ms"]
-        stats["success_rate"] = _EMA_ALPHA * (1.0 if success else 0.0) + (1 - _EMA_ALPHA) * stats["success_rate"]
+        stats["latency_ms"] = (
+            _EMA_ALPHA * latency_ms + (1 - _EMA_ALPHA) * stats["latency_ms"]
+        )
+        stats["success_rate"] = (
+            _EMA_ALPHA * (1.0 if success else 0.0)
+            + (1 - _EMA_ALPHA) * stats["success_rate"]
+        )
         stats["request_count"] += 1
 
 
@@ -63,16 +68,20 @@ def get_endpoint_stats(endpoint_id: str) -> dict[str, Any]:
 
     Note: snapshot read — may see slightly stale data without lock, acceptable for dashboards.
     """
-    result: dict[str, Any] = _endpoint_stats.get(endpoint_id, {
-        "latency_ms": 0.0,
-        "success_rate": 1.0,
-        "request_count": 0,
-    })
+    result: dict[str, Any] = _endpoint_stats.get(
+        endpoint_id,
+        {
+            "latency_ms": 0.0,
+            "success_rate": 1.0,
+            "request_count": 0,
+        },
+    )
     return result
 
 
-def _compute_score(endpoint: Any, stats: dict[str, Any],
-                    model: str = "", cost_weight: float = 0.3) -> float:
+def _compute_score(
+    endpoint: Any, stats: dict[str, Any], model: str = "", cost_weight: float = 0.3
+) -> float:
     """Compute routing score: higher = better endpoint.
 
     base_score = success_rate^2 / max(latency_ms, 1)
@@ -87,7 +96,7 @@ def _compute_score(endpoint: Any, stats: dict[str, Any],
     """
     success: float = stats.get("success_rate", 1.0)
     latency: float = max(stats.get("latency_ms", 500.0), 1.0)
-    base_score = (success ** 2) / latency
+    base_score = (success**2) / latency
 
     if cost_weight <= 0.0 or not model:
         return base_score
@@ -95,7 +104,7 @@ def _compute_score(endpoint: Any, stats: dict[str, Any],
     pricing = get_pricing(model)
     input_price: float = pricing.get("input", 1.0)
     cost_factor: float = 1.0 / (input_price + 0.01)
-    return float(base_score * (cost_factor ** cost_weight))
+    return float(base_score * (cost_factor**cost_weight))
 
 
 async def select_endpoint(ctx: PluginContext):
@@ -104,7 +113,9 @@ async def select_endpoint(ctx: PluginContext):
 
     rotator = ctx.metadata.get("rotator")
     if rotator is None:
-        raise RuntimeError("neural_router requires 'rotator' in plugin context metadata")
+        raise RuntimeError(
+            "neural_router requires 'rotator' in plugin context metadata"
+        )
 
     # Fetch verified pool from store
     pool = await rotator.store.get_pool()
@@ -127,8 +138,12 @@ async def select_endpoint(ctx: PluginContext):
     # filter to only that provider's endpoint to prevent model/endpoint mismatch.
     pinned_provider = ctx.metadata.get("_resolved_provider")
     if pinned_provider:
-        pinned = [e for e in healthy if e.id == pinned_provider
-                  or (e.metadata or {}).get("provider") == pinned_provider]
+        pinned = [
+            e
+            for e in healthy
+            if e.id == pinned_provider
+            or (e.metadata or {}).get("provider") == pinned_provider
+        ]
         if pinned:
             healthy = pinned
 
@@ -140,7 +155,11 @@ async def select_endpoint(ctx: PluginContext):
     # openai-compatible catch-all) stay eligible as wildcards of last resort.
     requested_model = (ctx.body.get("model") or "").strip()
     if requested_model:
-        exact = [e for e in healthy if requested_model in ((e.metadata or {}).get("models") or [])]
+        exact = [
+            e
+            for e in healthy
+            if requested_model in ((e.metadata or {}).get("models") or [])
+        ]
         wildcard = [e for e in healthy if not ((e.metadata or {}).get("models") or [])]
         if exact:
             healthy = exact
@@ -170,7 +189,8 @@ async def select_endpoint(ctx: PluginContext):
         # check rather than `or` so cost_weight=0.0 (ignore cost) is honored.
         runtime_weight = getattr(rotator, "routing_cost_weight", None)
         cost_weight = float(
-            runtime_weight if runtime_weight is not None
+            runtime_weight
+            if runtime_weight is not None
             else rotator.config.get("routing", {}).get("cost_weight", 0.3)
         )
 

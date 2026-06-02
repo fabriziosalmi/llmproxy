@@ -37,6 +37,7 @@ async def client(agent):
 
 # ── OpenAPI Schema Availability ──
 
+
 @pytest.mark.asyncio
 async def test_openapi_schema_available(client):
     """The OpenAPI JSON spec should be served at /openapi.json."""
@@ -84,6 +85,7 @@ async def test_openapi_has_all_routes(client):
 
 
 # ── Response Shape Contracts ──
+
 
 @pytest.mark.asyncio
 async def test_health_response_shape(client):
@@ -140,13 +142,16 @@ async def test_features_response_shape(client):
     assert isinstance(data, dict)
     for key, val in data.items():
         assert isinstance(key, str)
-        assert isinstance(val, bool), f"Feature '{key}' value should be bool, got {type(val)}"
+        assert isinstance(val, bool), (
+            f"Feature '{key}' value should be bool, got {type(val)}"
+        )
 
 
 @pytest.mark.asyncio
 async def test_registry_response_shape(client, store):
     """GET /api/v1/registry items must have {id, name, url, status, latency, priority, type}."""
     from models import LLMEndpoint, EndpointStatus
+
     ep = LLMEndpoint(
         id="shape-test",
         url="http://localhost:11434/v1",
@@ -162,7 +167,9 @@ async def test_registry_response_shape(client, store):
     assert len(data) == 1
     item = data[0]
     required_keys = {"id", "name", "url", "status", "latency", "priority", "type"}
-    assert required_keys.issubset(item.keys()), f"Missing keys: {required_keys - item.keys()}"
+    assert required_keys.issubset(item.keys()), (
+        f"Missing keys: {required_keys - item.keys()}"
+    )
 
 
 @pytest.mark.asyncio
@@ -211,6 +218,7 @@ async def test_network_info_response_shape(client):
 
 # ── Error Contract Tests ──
 
+
 @pytest.mark.asyncio
 async def test_feature_toggle_unknown_returns_400(client):
     """Toggling unknown feature must return 400, not 500."""
@@ -229,20 +237,31 @@ async def test_registry_toggle_nonexistent_returns_404(client):
 async def test_chat_proxy_disabled_returns_503(client, agent):
     """Chat with proxy disabled must return 503."""
     agent.proxy_enabled = False
-    resp = await client.post("/v1/chat/completions", json={
-        "model": "gpt-4", "messages": [{"role": "user", "content": "hi"}],
-    })
+    resp = await client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "gpt-4",
+            "messages": [{"role": "user", "content": "hi"}],
+        },
+    )
     assert resp.status_code == 503
     agent.proxy_enabled = True
 
 
 # ── Content-Type Contracts ──
 
+
 @pytest.mark.asyncio
 async def test_json_content_type(client):
     """All JSON endpoints must return application/json."""
-    endpoints = ["/health", "/api/v1/version", "/api/v1/proxy/status", "/api/v1/features"]
+    endpoints = [
+        "/health",
+        "/api/v1/version",
+        "/api/v1/proxy/status",
+        "/api/v1/features",
+    ]
     for path in endpoints:
         resp = await client.get(path)
-        assert "application/json" in resp.headers.get("content-type", ""), \
+        assert "application/json" in resp.headers.get("content-type", ""), (
             f"{path} did not return JSON content-type"
+        )

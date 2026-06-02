@@ -32,28 +32,36 @@ _PROBES: list[dict[str, Any]] = [
         "port": 11434,
         "path": "/api/tags",
         "provider": "ollama",
-        "extract": lambda j: [m.get("name") for m in (j.get("models") or []) if m.get("name")],
+        "extract": lambda j: [
+            m.get("name") for m in (j.get("models") or []) if m.get("name")
+        ],
     },
     {
         "name": "lmstudio",
         "port": 1234,
         "path": "/v1/models",
         "provider": "openai-compatible",
-        "extract": lambda j: [m.get("id") for m in (j.get("data") or []) if m.get("id")],
+        "extract": lambda j: [
+            m.get("id") for m in (j.get("data") or []) if m.get("id")
+        ],
     },
     {
         "name": "vllm",
         "port": 8000,
         "path": "/v1/models",
         "provider": "openai-compatible",
-        "extract": lambda j: [m.get("id") for m in (j.get("data") or []) if m.get("id")],
+        "extract": lambda j: [
+            m.get("id") for m in (j.get("data") or []) if m.get("id")
+        ],
     },
     {
         "name": "litellm",
         "port": 4000,
         "path": "/v1/models",
         "provider": "openai-compatible",
-        "extract": lambda j: [m.get("id") for m in (j.get("data") or []) if m.get("id")],
+        "extract": lambda j: [
+            m.get("id") for m in (j.get("data") or []) if m.get("id")
+        ],
     },
 ]
 
@@ -94,7 +102,9 @@ async def _probe_one(
     port = port_override if port_override is not None else probe["port"]
     url = f"http://{host}:{port}{probe['path']}"
     try:
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout)) as resp:
+        async with session.get(
+            url, timeout=aiohttp.ClientTimeout(total=timeout)
+        ) as resp:
             if resp.status != 200:
                 return None
             data = await resp.json(content_type=None)
@@ -257,7 +267,10 @@ async def discover_local_endpoints(
         injected.append(ep_id)
         logger.info(
             "Auto-discovered %s @ %s as '%s' (%d models): %s",
-            hit["name"], hit["base_url"], ep_id, len(hit["models"]),
+            hit["name"],
+            hit["base_url"],
+            ep_id,
+            len(hit["models"]),
             ", ".join(hit["models"][:3]) + ("..." if len(hit["models"]) > 3 else ""),
         )
     return injected

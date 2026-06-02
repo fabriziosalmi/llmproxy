@@ -64,6 +64,7 @@ class ContextWindowGuard(BasePlugin):
     def _estimate_tokens(self, body: Dict[str, Any]) -> int:
         """Estimate total prompt tokens using tiktoken or heuristic."""
         from core.tokenizer import count_messages_tokens
+
         model = body.get("model", "")
         return count_messages_tokens(body.get("messages", []), model)
 
@@ -76,9 +77,7 @@ class ContextWindowGuard(BasePlugin):
         return {
             "total_checked": self._total_checked,
             "total_blocked": self._total_blocked,
-            "block_rate": round(
-                self._total_blocked / max(self._total_checked, 1), 4
-            ),
+            "block_rate": round(self._total_blocked / max(self._total_checked, 1), 4),
         }
 
     async def execute(self, ctx: PluginContext) -> PluginResponse:

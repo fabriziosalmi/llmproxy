@@ -24,17 +24,17 @@ UI_ROOT = Path(__file__).parent.parent / "ui"
 
 EXPECTED_EXPORTS = {
     # Legacy JS services that still front the data layer (api/store/toast/timerange/auth).
-    "services/toast.js":     {"toast"},
-    "services/store.js":     {"store"},
-    "services/api.js":       {"api"},
-    "services/auth.js":      {"auth"},
+    "services/toast.js": {"toast"},
+    "services/store.js": {"store"},
+    "services/api.js": {"api"},
+    "services/auth.js": {"auth"},
     "services/timerange.js": {"initTimerange", "timerange"},
     # J.2: explain + drilldown migrated to TS. Modal/dialog and Drawer
     # primitives moved to src/ui/ in Phase E. The four legacy files
     # (services/dialog.js, services/drawer.js, services/explain.js,
     # services/drilldown.js) were retired — assertions removed so this
     # tripwire stays accurate, not stale.
-    "src/services/explain.ts":   {"initExplain", "explain", "markExplainable"},
+    "src/services/explain.ts": {"initExplain", "explain", "markExplainable"},
     "src/services/drilldown.ts": {"initDrilldown", "drilldown"},
 }
 
@@ -77,8 +77,7 @@ def test_service_exports(rel, expected):
     exports = _collect_exports(path)
     missing = expected - exports
     assert not missing, (
-        f"{rel} is missing expected exports: {missing}. "
-        f"Found: {sorted(exports)}"
+        f"{rel} is missing expected exports: {missing}. Found: {sorted(exports)}"
     )
 
 
@@ -152,7 +151,9 @@ def test_all_ui_imports_resolve():
                 unresolved.append(
                     f"{rel} imports '{symbol}' from {source}, but service only exports {sorted(exports)}"
                 )
-    assert not unresolved, "Cross-file export/import mismatch:\n  " + "\n  ".join(unresolved)
+    assert not unresolved, "Cross-file export/import mismatch:\n  " + "\n  ".join(
+        unresolved
+    )
 
 
 # ── Wiring spot-check: data-explain / data-drilldown attributes are present ─
@@ -164,13 +165,18 @@ def test_data_explain_is_wired():
     guards = (UI_ROOT / "components/guards.js").read_text()
     registry = (UI_ROOT / "components/registry.js").read_text()
 
-    assert 'data-explain="firewall"' in guards or "data-explain='firewall'" in guards \
-        or "'firewall'" in guards and "data-explain" in guards, \
-        "ASGI firewall card must carry data-explain='firewall'"
-    assert "data-explain" in guards and "guard:" in guards, \
+    assert (
+        'data-explain="firewall"' in guards
+        or "data-explain='firewall'" in guards
+        or "'firewall'" in guards
+        and "data-explain" in guards
+    ), "ASGI firewall card must carry data-explain='firewall'"
+    assert "data-explain" in guards and "guard:" in guards, (
         "Per-guard cards must carry data-explain='guard:<name>'"
-    assert "data-explain" in registry and "circuit:" in registry, \
+    )
+    assert "data-explain" in registry and "circuit:" in registry, (
         "Registry circuit column must carry data-explain='circuit:<id>'"
+    )
 
 
 def test_data_drilldown_is_wired():
@@ -183,11 +189,17 @@ def test_data_drilldown_is_wired():
     models = (UI_ROOT / "components/models.js").read_text()
     plugins = (UI_ROOT / "components/plugins.js").read_text()
 
-    assert "data-drilldown" in registry and "endpoint:" in registry, \
+    assert "data-drilldown" in registry and "endpoint:" in registry, (
         "Registry must expose data-drilldown='endpoint:<id>'"
-    assert ("data-drilldown" in security or "dataset.drilldown" in security) and "request:" in security, \
+    )
+    assert (
+        "data-drilldown" in security or "dataset.drilldown" in security
+    ) and "request:" in security, (
         "Audit table rows must carry data-drilldown/dataset.drilldown='request:<req_id>'"
-    assert "data-drilldown" in models and "model:" in models, \
+    )
+    assert "data-drilldown" in models and "model:" in models, (
         "Models table rows must carry data-drilldown='model:<id>'"
-    assert "data-drilldown" in plugins and "plugin:" in plugins, \
+    )
+    assert "data-drilldown" in plugins and "plugin:" in plugins, (
         "Plugin cards must expose data-drilldown='plugin:<name>'"
+    )

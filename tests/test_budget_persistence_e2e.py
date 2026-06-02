@@ -168,7 +168,9 @@ async def test_yesterday_state_resets_to_zero_on_boot():
     assert agent.total_cost_today == 0.0
     assert agent._budget_date == datetime.date.today().isoformat()
     # And the store should be reset too — next process to boot sees today.
-    assert await store.get_state("budget:daily_date") == datetime.date.today().isoformat()
+    assert (
+        await store.get_state("budget:daily_date") == datetime.date.today().isoformat()
+    )
     assert await store.get_state("budget:daily_total") == 0.0
 
 
@@ -200,9 +202,9 @@ async def test_concurrent_charges_persist_correct_total():
 
     N = 100
     AMOUNT = 0.10
-    await asyncio.gather(*[
-        charge_and_persist(agent1, agent1._budget_lock, AMOUNT) for _ in range(N)
-    ])
+    await asyncio.gather(
+        *[charge_and_persist(agent1, agent1._budget_lock, AMOUNT) for _ in range(N)]
+    )
     await drain_pending_writes(agent1)
 
     agent2 = _StubAgent(store)

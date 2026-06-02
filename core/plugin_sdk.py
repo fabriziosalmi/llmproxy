@@ -35,11 +35,12 @@ logger = logging.getLogger("plugin_sdk")
 
 class PluginHook(Enum):
     """The 5 rings of the LLMPROXY plugin pipeline."""
-    INGRESS = "ingress"         # Ring 1: Auth, ZT, Rate Limit
-    PRE_FLIGHT = "pre_flight"   # Ring 2: PII, Mutation, Cache
-    ROUTING = "routing"         # Ring 3: Model Selection
-    POST_FLIGHT = "post_flight" # Ring 4: Sanitization, Healing
-    BACKGROUND = "background"   # Ring 5: FinOps, Logs, Telemetry
+
+    INGRESS = "ingress"  # Ring 1: Auth, ZT, Rate Limit
+    PRE_FLIGHT = "pre_flight"  # Ring 2: PII, Mutation, Cache
+    ROUTING = "routing"  # Ring 3: Model Selection
+    POST_FLIGHT = "post_flight"  # Ring 4: Sanitization, Healing
+    BACKGROUND = "background"  # Ring 5: FinOps, Logs, Telemetry
 
 
 class PluginAction(str, Enum):
@@ -47,6 +48,7 @@ class PluginAction(str, Enum):
     Typed action enum for PluginResponse.
     Prevents silent failures from typos like action="banana".
     """
+
     PASSTHROUGH = "passthrough"
     MODIFY = "modify"
     BLOCK = "block"
@@ -55,6 +57,7 @@ class PluginAction(str, Enum):
 
 class PluginResponseError(ValueError):
     """Raised when a PluginResponse has invalid fields."""
+
     pass
 
 
@@ -75,12 +78,13 @@ class PluginResponse:
       - MODIFY requires body to be set
       - CACHE_HIT requires response to be set
     """
-    action: str = "passthrough"     # passthrough | modify | block | cache_hit
+
+    action: str = "passthrough"  # passthrough | modify | block | cache_hit
     status_code: int = 200
     error_type: Optional[str] = None
     message: Optional[str] = None
     body: Optional[Dict[str, Any]] = None  # Modified body (for MODIFY action)
-    response: Any = None                    # Direct response (for CACHE_HIT)
+    response: Any = None  # Direct response (for CACHE_HIT)
 
     def __post_init__(self):
         """Validate response fields (Principle 3: strict contracts)."""
@@ -105,16 +109,26 @@ class PluginResponse:
         return cls(action="passthrough")
 
     @classmethod
-    def modify(cls, body: Dict[str, Any] | None = None, message: str | None = None) -> "PluginResponse":
+    def modify(
+        cls, body: Dict[str, Any] | None = None, message: str | None = None
+    ) -> "PluginResponse":
         """Request body was modified, continue pipeline."""
         return cls(action="modify", body=body, message=message)
 
     @classmethod
-    def block(cls, status_code: int = 403, error_type: str = "plugin_block",
-              message: str = "Blocked by plugin") -> "PluginResponse":
+    def block(
+        cls,
+        status_code: int = 403,
+        error_type: str = "plugin_block",
+        message: str = "Blocked by plugin",
+    ) -> "PluginResponse":
         """Block the request with an error."""
-        return cls(action="block", status_code=status_code,
-                   error_type=error_type, message=message)
+        return cls(
+            action="block",
+            status_code=status_code,
+            error_type=error_type,
+            message=message,
+        )
 
     @classmethod
     def cache_hit(cls, response: Any) -> "PluginResponse":
@@ -193,9 +207,9 @@ class BasePlugin:
             "invocations": invocations,
             "errors": self._stats["errors"],
             "blocks": self._stats["blocks"],
-            "avg_latency_ms": round(
-                self._stats["total_latency_ms"] / invocations, 2
-            ) if invocations > 0 else 0,
+            "avg_latency_ms": round(self._stats["total_latency_ms"] / invocations, 2)
+            if invocations > 0
+            else 0,
         }
 
     def __repr__(self):

@@ -97,9 +97,7 @@ async def test_charge_and_persist_serializes_under_lock():
 
     N = 200
     AMOUNT = 0.01
-    await asyncio.gather(*[
-        charge_and_persist(rotator, lock, AMOUNT) for _ in range(N)
-    ])
+    await asyncio.gather(*[charge_and_persist(rotator, lock, AMOUNT) for _ in range(N)])
 
     assert rotator.total_cost_today == pytest.approx(N * AMOUNT)
     assert rotator._pending_writes.qsize() == N

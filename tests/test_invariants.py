@@ -30,6 +30,7 @@ from hypothesis import strategies as st
 
 # ── I1: Injection Corpus Completeness ──────────────────────────
 
+
 class TestInjectionCorpusCompleteness:
     """Every pattern in the corpus MUST be detected at threshold=0.35.
     If this fails, a pattern was broken by the optimizer."""
@@ -80,7 +81,9 @@ class TestInjectionCorpusCompleteness:
 
         low_scores = []
         for pattern, category in INJECTION_CORPUS:
-            result = semantic_scan(pattern, threshold=0.01)  # Very low threshold to get score
+            result = semantic_scan(
+                pattern, threshold=0.01
+            )  # Very low threshold to get score
             if result is None:
                 low_scores.append(f"  NONE: '{pattern}'")
             elif result[0] < 0.90:
@@ -94,16 +97,22 @@ class TestInjectionCorpusCompleteness:
 
 # ── I2: Injection Scan Monotonicity ───────────────────────────
 
+
 class TestInjectionScanMonotonicity:
     """Adding attack text to truly clean text must produce a detection."""
 
     @pytest.mark.invariant
     @pytest.mark.security
-    @given(clean_text=st.text(
-        alphabet=st.characters(categories=("L", "N", "Z")),
-        min_size=20, max_size=300,
-    ))
-    @settings(max_examples=50, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    @given(
+        clean_text=st.text(
+            alphabet=st.characters(categories=("L", "N", "Z")),
+            min_size=20,
+            max_size=300,
+        )
+    )
+    @settings(
+        max_examples=50, deadline=None, suppress_health_check=[HealthCheck.too_slow]
+    )
     def test_appending_attack_to_clean_text_detects(self, clean_text):
         """I2: If clean text is truly clean (score=0), appending attack MUST detect.
 
@@ -129,6 +138,7 @@ class TestInjectionScanMonotonicity:
 
 # ── I3-I5: Jaccard Similarity Axioms ──────────────────────────
 
+
 class TestJaccardAxioms:
     """Mathematical properties of Jaccard similarity coefficient."""
 
@@ -141,6 +151,7 @@ class TestJaccardAxioms:
     def test_jaccard_symmetry(self, a, b):
         """I3: J(A,B) == J(B,A) — similarity is symmetric."""
         from core.semantic_analyzer import _jaccard
+
         assert _jaccard(a, b) == _jaccard(b, a)
 
     @pytest.mark.invariant
@@ -152,6 +163,7 @@ class TestJaccardAxioms:
     def test_jaccard_bounded(self, a, b):
         """I4: 0.0 ≤ J(A,B) ≤ 1.0 — similarity is a probability measure."""
         from core.semantic_analyzer import _jaccard
+
         score = _jaccard(a, b)
         assert 0.0 <= score <= 1.0, f"Jaccard out of bounds: {score}"
 
@@ -161,10 +173,12 @@ class TestJaccardAxioms:
     def test_jaccard_identity(self, a):
         """I5: J(A,A) == 1.0 — every set is identical to itself."""
         from core.semantic_analyzer import _jaccard
+
         assert _jaccard(a, a) == 1.0
 
 
 # ── I6: Normalize Idempotence ─────────────────────────────────
+
 
 class TestNormalizeIdempotence:
     """Normalization applied twice must produce the same result as once."""
@@ -175,12 +189,14 @@ class TestNormalizeIdempotence:
     def test_normalize_idempotent(self, text):
         """I6: normalize(normalize(x)) == normalize(x)."""
         from core.semantic_analyzer import _normalize
+
         once = _normalize(text)
         twice = _normalize(once)
         assert once == twice, f"Idempotence violated: '{once}' != '{twice}'"
 
 
 # ── I7: Trigram Determinism ───────────────────────────────────
+
 
 class TestTrigramDeterminism:
     """Trigram computation must be deterministic (same input → same output)."""
@@ -192,6 +208,7 @@ class TestTrigramDeterminism:
     def test_trigrams_deterministic(self, text):
         """I7: trigrams(x) == trigrams(x) for all x."""
         from core.semantic_analyzer import _to_trigrams
+
         a = _to_trigrams(text)
         b = _to_trigrams(text)
         assert a == b
@@ -199,13 +216,16 @@ class TestTrigramDeterminism:
 
 # ── I8: Cache Key Determinism ─────────────────────────────────
 
+
 class TestCacheKeyDeterminism:
     """Cache keys MUST be deterministic — same request → same key, always."""
 
     @pytest.mark.invariant
     @pytest.mark.determinism
     @given(
-        model=st.sampled_from(["gpt-4o", "claude-sonnet-4-20250514", "gemini-2.5-flash"]),
+        model=st.sampled_from(
+            ["gpt-4o", "claude-sonnet-4-20250514", "gemini-2.5-flash"]
+        ),
         content=st.text(min_size=1, max_size=200),
         temperature=st.floats(min_value=0.0, max_value=2.0, allow_nan=False),
     )
@@ -241,6 +261,7 @@ class TestCacheKeyDeterminism:
 
 # ── I9: Pricing Non-Negative ──────────────────────────────────
 
+
 class TestPricingInvariants:
     """All model pricing MUST be non-negative."""
 
@@ -258,9 +279,7 @@ class TestPricingInvariants:
             if output_price < 0:
                 violations.append(f"  {model}: output={output_price}")
 
-        assert not violations, (
-            "Negative pricing detected:\n" + "\n".join(violations)
-        )
+        assert not violations, "Negative pricing detected:\n" + "\n".join(violations)
 
     @pytest.mark.invariant
     def test_output_price_geq_input_price(self):
@@ -291,6 +310,7 @@ class TestPricingInvariants:
 
 
 # ── I10: Rate Limiter Token Conservation ──────────────────────
+
 
 class TestRateLimiterConservation:
     """Token bucket cannot dispense more tokens than its capacity."""
@@ -333,6 +353,7 @@ class TestRateLimiterConservation:
 
 # ── I11: Budget Guard Accounting ──────────────────────────────
 
+
 class TestBudgetGuardAccounting:
     """After a budget block, accumulated spend must not exceed the budget."""
 
@@ -343,15 +364,20 @@ class TestBudgetGuardAccounting:
         from plugins.marketplace.smart_budget_guard import SmartBudgetGuard
         from core.plugin_engine import PluginContext
 
-        guard = SmartBudgetGuard(config={
-            "session_budget_usd": 0.01,  # Very low budget
-            "team_budget_usd": 100.0,
-        })
+        guard = SmartBudgetGuard(
+            config={
+                "session_budget_usd": 0.01,  # Very low budget
+                "team_budget_usd": 100.0,
+            }
+        )
 
         blocked = False
         for i in range(100):
             ctx = PluginContext(
-                body={"messages": [{"role": "user", "content": f"Message {i} " * 50}], "model": "gpt-4o"},
+                body={
+                    "messages": [{"role": "user", "content": f"Message {i} " * 50}],
+                    "model": "gpt-4o",
+                },
                 session_id="test_session",
             )
             result = await guard.execute(ctx)

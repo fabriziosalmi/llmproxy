@@ -24,7 +24,9 @@ class TestCountTokens:
     def test_code_denser(self):
         """Code typically has more tokens per character than prose."""
         prose = count_tokens("The quick brown fox jumps over the lazy dog")
-        code = count_tokens("def f(x): return x * 2 + 1\nfor i in range(10): print(f(i))")
+        code = count_tokens(
+            "def f(x): return x * 2 + 1\nfor i in range(10): print(f(i))"
+        )
         # Both should be positive
         assert prose > 0
         assert code > 0
@@ -48,13 +50,18 @@ class TestCountMessagesTokens:
         assert result >= 14
 
     def test_multimodal_image_tokens(self):
-        msgs = [{
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "What is this?"},
-                {"type": "image_url", "image_url": {"url": "https://example.com/img.jpg"}},
-            ],
-        }]
+        msgs = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What is this?"},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "https://example.com/img.jpg"},
+                    },
+                ],
+            }
+        ]
         result = count_messages_tokens(msgs)
         # Should include ~85 tokens for the image
         assert result >= 85

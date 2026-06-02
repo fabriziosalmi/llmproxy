@@ -48,12 +48,16 @@ class TestCostWeightZero:
     def test_fast_wins_over_slow_regardless_of_price(self):
         # Fast expensive vs slow free — fast should win when ignoring cost.
         fast_expensive = _compute_score(
-            _ep("gpt-4o"), _STATS_FAST_RELIABLE,
-            model="gpt-4o", cost_weight=0.0,
+            _ep("gpt-4o"),
+            _STATS_FAST_RELIABLE,
+            model="gpt-4o",
+            cost_weight=0.0,
         )
         slow_free = _compute_score(
-            _ep("ollama"), _STATS_SLOW_RELIABLE,
-            model="ollama/llama3.3", cost_weight=0.0,
+            _ep("ollama"),
+            _STATS_SLOW_RELIABLE,
+            model="ollama/llama3.3",
+            cost_weight=0.0,
         )
         assert fast_expensive > slow_free
 
@@ -61,10 +65,16 @@ class TestCostWeightZero:
         """Passing a model name shouldn't change the score at cw=0 — pricing
         is short-circuited. Catches accidental pricing leakage."""
         with_model = _compute_score(
-            _ep("e1"), _STATS_DEFAULT, model="gpt-4o", cost_weight=0.0,
+            _ep("e1"),
+            _STATS_DEFAULT,
+            model="gpt-4o",
+            cost_weight=0.0,
         )
         without_model = _compute_score(
-            _ep("e1"), _STATS_DEFAULT, model="", cost_weight=0.0,
+            _ep("e1"),
+            _STATS_DEFAULT,
+            model="",
+            cost_weight=0.0,
         )
         assert with_model == without_model
 
@@ -78,12 +88,16 @@ class TestCostWeightModerate:
 
     def test_cheaper_wins_when_perf_equal(self):
         cheap = _compute_score(
-            _ep("haiku"), _STATS_FAST_RELIABLE,
-            model="claude-haiku-4-5-20251001", cost_weight=0.3,
+            _ep("haiku"),
+            _STATS_FAST_RELIABLE,
+            model="claude-haiku-4-5-20251001",
+            cost_weight=0.3,
         )  # input=0.80
         expensive = _compute_score(
-            _ep("opus"), _STATS_FAST_RELIABLE,
-            model="claude-opus-4-6", cost_weight=0.3,
+            _ep("opus"),
+            _STATS_FAST_RELIABLE,
+            model="claude-opus-4-6",
+            cost_weight=0.3,
         )  # input=5.00
         assert cheap > expensive
 
@@ -91,12 +105,16 @@ class TestCostWeightModerate:
         """A free local model (input_price=0) gets cost_factor=100 → big
         boost. With equal performance it should crush a paid model."""
         free = _compute_score(
-            _ep("local"), _STATS_FAST_RELIABLE,
-            model="ollama/llama3.3", cost_weight=0.3,
+            _ep("local"),
+            _STATS_FAST_RELIABLE,
+            model="ollama/llama3.3",
+            cost_weight=0.3,
         )
         paid = _compute_score(
-            _ep("openai"), _STATS_FAST_RELIABLE,
-            model="gpt-4o", cost_weight=0.3,
+            _ep("openai"),
+            _STATS_FAST_RELIABLE,
+            model="gpt-4o",
+            cost_weight=0.3,
         )
         assert free > paid
         # Sanity: it's a meaningful boost, not just a tiebreaker.
@@ -109,12 +127,14 @@ class TestCostWeightModerate:
         slow_cheap = _compute_score(
             _ep("haiku"),
             {"latency_ms": 1500.0, "success_rate": 1.0},
-            model="claude-haiku-4-5-20251001", cost_weight=0.3,
+            model="claude-haiku-4-5-20251001",
+            cost_weight=0.3,
         )
         fast_expensive = _compute_score(
             _ep("opus"),
             {"latency_ms": 200.0, "success_rate": 1.0},
-            model="claude-opus-4-6", cost_weight=0.3,
+            model="claude-opus-4-6",
+            cost_weight=0.3,
         )
         assert fast_expensive > slow_cheap
 
@@ -128,12 +148,14 @@ class TestCostWeightFull:
         slow_free = _compute_score(
             _ep("local"),
             {"latency_ms": 1500.0, "success_rate": 1.0},
-            model="ollama/llama3.3", cost_weight=1.0,
+            model="ollama/llama3.3",
+            cost_weight=1.0,
         )
         fast_expensive = _compute_score(
             _ep("openai"),
             {"latency_ms": 200.0, "success_rate": 1.0},
-            model="gpt-4o", cost_weight=1.0,
+            model="gpt-4o",
+            cost_weight=1.0,
         )
         assert slow_free > fast_expensive
 
@@ -147,12 +169,16 @@ class TestSuccessRatePenalty:
 
     def test_flaky_endpoint_scored_below_reliable(self):
         reliable = _compute_score(
-            _ep("a"), _STATS_FAST_RELIABLE,
-            model="gpt-4o-mini", cost_weight=0.3,
+            _ep("a"),
+            _STATS_FAST_RELIABLE,
+            model="gpt-4o-mini",
+            cost_weight=0.3,
         )
         flaky = _compute_score(
-            _ep("b"), _STATS_FAST_FLAKY,
-            model="gpt-4o-mini", cost_weight=0.3,
+            _ep("b"),
+            _STATS_FAST_FLAKY,
+            model="gpt-4o-mini",
+            cost_weight=0.3,
         )
         assert reliable > flaky
         # Quadratic penalty: 0.7² = 0.49 → flaky should lose by ~half,
@@ -173,7 +199,8 @@ class TestEdgeCases:
         score = _compute_score(
             _ep("cold"),
             {"latency_ms": 0.0, "success_rate": 1.0},
-            model="gpt-4o", cost_weight=0.3,
+            model="gpt-4o",
+            cost_weight=0.3,
         )
         assert score > 0
         assert score < float("inf")
@@ -182,8 +209,10 @@ class TestEdgeCases:
         """Unknown model name → core.pricing returns _DEFAULT_PRICING
         ($1/$3). Score must still compute (no KeyError, no NaN)."""
         score = _compute_score(
-            _ep("unknown"), _STATS_DEFAULT,
-            model="not-a-real-model-12345", cost_weight=0.3,
+            _ep("unknown"),
+            _STATS_DEFAULT,
+            model="not-a-real-model-12345",
+            cost_weight=0.3,
         )
         assert score > 0
         assert score == score  # not NaN
@@ -192,10 +221,16 @@ class TestEdgeCases:
         """Code path: `if not model: return base_score`. Should not look
         up pricing or apply the cost factor."""
         with_empty = _compute_score(
-            _ep("e1"), _STATS_DEFAULT, model="", cost_weight=0.3,
+            _ep("e1"),
+            _STATS_DEFAULT,
+            model="",
+            cost_weight=0.3,
         )
         without_pricing = _compute_score(
-            _ep("e1"), _STATS_DEFAULT, model="", cost_weight=0.0,
+            _ep("e1"),
+            _STATS_DEFAULT,
+            model="",
+            cost_weight=0.0,
         )
         # Both paths should yield identical scores: pure base_score.
         assert with_empty == without_pricing
@@ -207,7 +242,10 @@ class TestEdgeCases:
         for model in ["gpt-4o", "ollama/llama3.3", "claude-opus-4-6", ""]:
             for cw in [0.0, 0.3, 0.7, 1.0]:
                 score = _compute_score(
-                    _ep("e"), _STATS_DEFAULT, model=model, cost_weight=cw,
+                    _ep("e"),
+                    _STATS_DEFAULT,
+                    model=model,
+                    cost_weight=cw,
                 )
                 assert score > 0, f"score≤0 for model={model} cw={cw}"
 
@@ -221,11 +259,15 @@ class TestRankingOnPool:
     drift that individual-pair tests miss."""
 
     POOL = [
-        ("free-fast",      {"latency_ms": 200.0, "success_rate": 1.0},  "ollama/llama3.3"),
-        ("cheap-fast",     {"latency_ms": 250.0, "success_rate": 1.0},  "gpt-4o-mini"),
-        ("expensive-fast", {"latency_ms": 200.0, "success_rate": 1.0},  "gpt-4o"),
-        ("flaky-cheap",    {"latency_ms": 250.0, "success_rate": 0.6},  "gpt-4o-mini"),
-        ("expensive-slow", {"latency_ms": 1500.0, "success_rate": 1.0}, "claude-opus-4-6"),
+        ("free-fast", {"latency_ms": 200.0, "success_rate": 1.0}, "ollama/llama3.3"),
+        ("cheap-fast", {"latency_ms": 250.0, "success_rate": 1.0}, "gpt-4o-mini"),
+        ("expensive-fast", {"latency_ms": 200.0, "success_rate": 1.0}, "gpt-4o"),
+        ("flaky-cheap", {"latency_ms": 250.0, "success_rate": 0.6}, "gpt-4o-mini"),
+        (
+            "expensive-slow",
+            {"latency_ms": 1500.0, "success_rate": 1.0},
+            "claude-opus-4-6",
+        ),
     ]
 
     def _rank(self, cost_weight: float) -> list[str]:

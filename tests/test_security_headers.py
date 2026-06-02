@@ -42,6 +42,7 @@ async def client():
 
 # ── Banner ──
 
+
 @pytest.mark.asyncio
 async def test_server_header_is_rebranded(client):
     """`Server: uvicorn` must not leak — middleware overrides to `llmproxy`."""
@@ -51,6 +52,7 @@ async def test_server_header_is_rebranded(client):
 
 
 # ── Always-on hardening ──
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("path", ["/api/v1/ping", "/ui/"])
@@ -67,13 +69,20 @@ async def test_global_hardening_headers(client, path):
 async def test_permissions_policy_disables_sensitive_features(client):
     resp = await client.get("/api/v1/ping")
     pp = resp.headers["permissions-policy"]
-    for sensitive in ("camera=()", "microphone=()", "geolocation=()", "payment=()", "usb=()"):
+    for sensitive in (
+        "camera=()",
+        "microphone=()",
+        "geolocation=()",
+        "payment=()",
+        "usb=()",
+    ):
         assert sensitive in pp, f"{sensitive} not denied in Permissions-Policy"
     # clipboard-write must remain available to /ui/chat.html copy buttons
     assert "clipboard-write=(self)" in pp
 
 
 # ── CSP differentiation ──
+
 
 @pytest.mark.asyncio
 async def test_api_csp_is_locked_down(client):
@@ -111,10 +120,13 @@ async def test_coep_require_corp_on_ui(client, path):
 async def test_coep_not_on_api_responses(client):
     """API responses don't need COEP — keep the header surface minimal there."""
     resp = await client.get("/api/v1/ping")
-    assert "cross-origin-embedder-policy" not in {k.lower() for k in resp.headers.keys()}
+    assert "cross-origin-embedder-policy" not in {
+        k.lower() for k in resp.headers.keys()
+    }
 
 
 # ── Trace propagation safety ──
+
 
 @pytest.mark.asyncio
 async def test_trace_id_propagated_when_valid(client):
@@ -123,13 +135,16 @@ async def test_trace_id_propagated_when_valid(client):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("malicious", [
-    "'; DROP TABLE logs;--",
-    "<script>alert(1)</script>",
-    "../../etc/passwd",
-    "trace\r\nSet-Cookie: pwn=1",
-    "A" * 200,
-])
+@pytest.mark.parametrize(
+    "malicious",
+    [
+        "'; DROP TABLE logs;--",
+        "<script>alert(1)</script>",
+        "../../etc/passwd",
+        "trace\r\nSet-Cookie: pwn=1",
+        "A" * 200,
+    ],
+)
 async def test_malicious_trace_id_is_dropped(client, malicious):
     resp = await client.get("/api/v1/ping", headers={"x-trace-id": malicious})
     assert "x-trace-id" not in {k.lower() for k in resp.headers.keys()}

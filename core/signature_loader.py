@@ -24,23 +24,30 @@ _MAX_TOTAL_PATTERNS = 10_000
 
 
 class SignatureStore:
-    """Loads and hot-reloads firewall signatures from YAML files."""
+    """Loads and hot-reloads firewall signatures and pricing from YAML files."""
 
-    def __init__(self, signatures_path: str = "data/signatures.yaml",
-                 corpus_path: str = "data/injection_corpus.yaml"):
+    def __init__(
+        self,
+        signatures_path: str = "data/signatures.yaml",
+        corpus_path: str = "data/injection_corpus.yaml",
+        pricing_path: str = "data/pricing.yaml",
+    ):
         self._sig_path = Path(signatures_path)
         self._corpus_path = Path(corpus_path)
+        self._pricing_path = Path(pricing_path)
         self._lock = threading.Lock()
 
         # Active state (read via properties — lock-free)
         self._banned: list[bytes] = []
         self._rot13: list[bytes] = []
         self._corpus: list[tuple[str, str]] = []
+        self._pricing: dict = {}
         self._loaded = False
 
         # File hashes for change detection
         self._sig_hash: str = ""
         self._corpus_hash: str = ""
+        self._pricing_hash: str = ""
 
     @property
     def banned_signatures(self) -> list[bytes]:
@@ -55,13 +62,18 @@ class SignatureStore:
         return self._corpus
 
     @property
+    def pricing(self) -> dict:
+        return self._pricing
+
+    @property
     def loaded(self) -> bool:
         return self._loaded
 
     def load(self) -> bool:
-        """Load signatures from YAML files. Returns True if loaded successfully."""
+        """Load signatures and pricing from YAML files. Returns True if loaded successfully."""
         new_banned, new_rot13 = self._load_signatures()
         new_corpus = self._load_corpus()
+        new_pricing = self._load_pricing()
 
         if not new_banned and not new_corpus:
             return False
@@ -76,22 +88,39 @@ class SignatureStore:
                 # Invalidate semantic analyzer cache
                 try:
                     from core.semantic_analyzer import set_corpus
+
                     set_corpus(new_corpus)
+                except ImportError:
+                    pass
+            if new_pricing:
+                self._pricing = new_pricing
+                try:
+                    from core.pricing import set_model_pricing
+
+                    set_model_pricing(new_pricing)
                 except ImportError:
                     pass
             self._loaded = bool(new_banned) or bool(new_corpus)
 
         count_sigs = len(self._banned)
         count_corpus = len(self._corpus)
-        logger.info(f"Signatures loaded: {count_sigs} firewall + {count_corpus} semantic patterns")
+        count_pricing = len(self._pricing)
+        logger.info(
+            f"Signatures loaded: {count_sigs} firewall + {count_corpus} semantic patterns + {count_pricing} pricing models"
+        )
         return True
 
     def reload_if_changed(self) -> bool:
         """Check file hashes and reload if changed. Returns True if reloaded."""
         sig_hash = self._file_hash(self._sig_path)
         corpus_hash = self._file_hash(self._corpus_path)
+        pricing_hash = self._file_hash(self._pricing_path)
 
-        if sig_hash == self._sig_hash and corpus_hash == self._corpus_hash:
+        if (
+            sig_hash == self._sig_hash
+            and corpus_hash == self._corpus_hash
+            and pricing_hash == self._pricing_hash
+        ):
             return False
 
         return self.load()
@@ -106,7 +135,9 @@ class SignatureStore:
             raw = self._sig_path.read_text(encoding="utf-8")
             data = yaml.safe_load(raw)
             if not isinstance(data, dict):
-                logger.warning(f"Invalid signatures YAML: expected dict, got {type(data)}")
+                logger.warning(
+                    f"Invalid signatures YAML: expected dict, got {type(data)}"
+                )
                 return [], []
 
             banned = []
@@ -115,7 +146,9 @@ class SignatureStore:
                     continue
                 sig = sig.strip()
                 if len(sig) < _MIN_SIG_LEN or len(sig) > _MAX_SIG_LEN:
-                    logger.warning(f"Skipping signature (length {len(sig)}): {sig[:50]}")
+                    logger.warning(
+                        f"Skipping signature (length {len(sig)}): {sig[:50]}"
+                    )
                     continue
                 banned.append(sig.encode("utf-8"))
 
@@ -128,7 +161,9 @@ class SignatureStore:
                     rot13.append(sig.encode("utf-8"))
 
             if len(banned) > _MAX_TOTAL_PATTERNS:
-                logger.warning(f"Too many signatures ({len(banned)}), truncating to {_MAX_TOTAL_PATTERNS}")
+                logger.warning(
+                    f"Too many signatures ({len(banned)}), truncating to {_MAX_TOTAL_PATTERNS}"
+                )
                 banned = banned[:_MAX_TOTAL_PATTERNS]
 
             self._sig_hash = self._file_hash(self._sig_path)
@@ -172,6 +207,44 @@ class SignatureStore:
         except Exception as e:
             logger.warning(f"Failed to load corpus from {self._corpus_path}: {e}")
             return []
+
+    def _load_pricing(self) -> dict:
+        """Load model pricing from YAML."""
+        if not self._pricing_path.exists():
+            logger.debug(f"Pricing file not found: {self._pricing_path}")
+            return {}
+
+        try:
+            raw = self._pricing_path.read_text(encoding="utf-8")
+            data = yaml.safe_load(raw)
+            if not isinstance(data, dict):
+                logger.warning(f"Invalid pricing YAML: expected dict, got {type(data)}")
+                return {}
+
+            pricing = {}
+            root_data = (
+                data.get("pricing", data)
+                if "pricing" in data and isinstance(data.get("pricing"), dict)
+                else data
+            )
+
+            for model_name, costs in root_data.items():
+                if not isinstance(model_name, str) or not isinstance(costs, dict):
+                    continue
+                input_cost = costs.get("input")
+                output_cost = costs.get("output")
+                if input_cost is not None and output_cost is not None:
+                    pricing[model_name] = {
+                        "input": float(input_cost),
+                        "output": float(output_cost),
+                    }
+
+            self._pricing_hash = self._file_hash(self._pricing_path)
+            return pricing
+
+        except Exception as e:
+            logger.warning(f"Failed to load pricing from {self._pricing_path}: {e}")
+            return {}
 
     @staticmethod
     def _file_hash(path: Path) -> str:

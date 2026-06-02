@@ -23,10 +23,10 @@ const STATS: PluginStats = {
 
 let host: HTMLElement;
 let deps: {
-    onToggle: ReturnType<typeof vi.fn>;
-    onUninstall: ReturnType<typeof vi.fn>;
-    refresh: ReturnType<typeof vi.fn>;
-    toast: ReturnType<typeof vi.fn>;
+    onToggle: any;
+    onUninstall: any;
+    refresh: any;
+    toast: any;
 };
 
 beforeEach(() => {

@@ -23,6 +23,7 @@ def _disable_color(monkeypatch):
 def _render(cfg, **kwargs):
     buf = io.StringIO()
     import sys
+
     orig = sys.stdout
     sys.stdout = buf
     try:
@@ -112,8 +113,13 @@ def test_active_providers_missing_key_filtered():
 
 def test_banner_onboarding_mode_mentions_no_providers():
     cfg = {"server": {}, "endpoints": {}}
-    out = _render(cfg, bind_host="0.0.0.0", bind_port=8090,
-                  firewall_enabled=True, firewall_reason=None)
+    out = _render(
+        cfg,
+        bind_host="0.0.0.0",
+        bind_port=8090,
+        firewall_enabled=True,
+        firewall_reason=None,
+    )
     assert "Onboarding mode" in out
     assert "no active providers" in out
     # Onboarding hint should surface all three escape hatches.
@@ -134,8 +140,13 @@ def test_banner_lists_active_providers():
             },
         },
     }
-    out = _render(cfg, bind_host="127.0.0.1", bind_port=8090,
-                  firewall_enabled=True, firewall_reason=None)
+    out = _render(
+        cfg,
+        bind_host="127.0.0.1",
+        bind_port=8090,
+        firewall_enabled=True,
+        firewall_reason=None,
+    )
     assert "Active providers (1)" in out
     assert "[auto-discovery]" in out
     assert "llama3.3" in out
@@ -143,17 +154,26 @@ def test_banner_lists_active_providers():
 
 def test_banner_waf_off_shows_reason():
     cfg = {"server": {}, "endpoints": {}}
-    out = _render(cfg, bind_host="0.0.0.0", bind_port=8090,
-                  firewall_enabled=False,
-                  firewall_reason="env:LLM_PROXY_FIREWALL_ENABLED")
+    out = _render(
+        cfg,
+        bind_host="0.0.0.0",
+        bind_port=8090,
+        firewall_enabled=False,
+        firewall_reason="env:LLM_PROXY_FIREWALL_ENABLED",
+    )
     assert "OFF" in out
     assert "env:LLM_PROXY_FIREWALL_ENABLED" in out
 
 
 def test_banner_auth_disabled_warning():
     cfg = {"server": {"auth": {"enabled": False}}, "endpoints": {}}
-    out = _render(cfg, bind_host="0.0.0.0", bind_port=8090,
-                  firewall_enabled=True, firewall_reason=None)
+    out = _render(
+        cfg,
+        bind_host="0.0.0.0",
+        bind_port=8090,
+        firewall_enabled=True,
+        firewall_reason=None,
+    )
     assert "disabled" in out
     assert "development mode" in out
 
@@ -164,8 +184,13 @@ def test_banner_auth_required_masks_key(monkeypatch):
         "server": {"auth": {"enabled": True, "api_keys_env": "LLM_PROXY_API_KEYS"}},
         "endpoints": {},
     }
-    out = _render(cfg, bind_host="0.0.0.0", bind_port=8090,
-                  firewall_enabled=True, firewall_reason=None)
+    out = _render(
+        cfg,
+        bind_host="0.0.0.0",
+        bind_port=8090,
+        firewall_enabled=True,
+        firewall_reason=None,
+    )
     # Ensure we never print the full key in cleartext.
     assert "sk-proxy-abcdef1234567890" not in out
     # The masked form must appear with the prefix + suffix.
@@ -184,15 +209,25 @@ def test_banner_smoke_curl_uses_first_model():
             },
         },
     }
-    out = _render(cfg, bind_host="127.0.0.1", bind_port=8090,
-                  firewall_enabled=True, firewall_reason=None)
+    out = _render(
+        cfg,
+        bind_host="127.0.0.1",
+        bind_port=8090,
+        firewall_enabled=True,
+        firewall_reason=None,
+    )
     assert '"model":"llama3.3"' in out
 
 
 def test_banner_loopback_display_for_any_bind():
     """bind_host='0.0.0.0' must render as 'localhost' in the URL shown to humans."""
     cfg = {"server": {}, "endpoints": {}}
-    out = _render(cfg, bind_host="0.0.0.0", bind_port=8090,
-                  firewall_enabled=True, firewall_reason=None)
+    out = _render(
+        cfg,
+        bind_host="0.0.0.0",
+        bind_port=8090,
+        firewall_enabled=True,
+        firewall_reason=None,
+    )
     assert "http://localhost:8090/v1" in out
     assert "http://0.0.0.0:8090" not in out

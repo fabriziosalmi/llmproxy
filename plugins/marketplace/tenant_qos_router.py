@@ -29,11 +29,14 @@ class TenantQoSRouter(BasePlugin):
 
     def __init__(self, config: Dict[str, Any] | None = None):
         super().__init__(config)
-        self.tier_mapping: Dict[str, str] = self.config.get("tier_mapping", {
-            "free": "gpt-4o-mini",
-            "basic": "gpt-4o-mini",
-            "premium": "",  # empty = use requested model as-is
-        })
+        self.tier_mapping: Dict[str, str] = self.config.get(
+            "tier_mapping",
+            {
+                "free": "gpt-4o-mini",
+                "basic": "gpt-4o-mini",
+                "premium": "",  # empty = use requested model as-is
+            },
+        )
         self.default_tier: str = self.config.get("default_tier", "free")
         self.force_downgrade: bool = self.config.get("force_downgrade", True)
 
@@ -73,12 +76,16 @@ class TenantQoSRouter(BasePlugin):
         ctx.metadata["_qos_tier"] = tier
         ctx.metadata["_routing_strategy"] = "tenant_qos"
 
-        self.logger.info(f"QoS downgrade: {original_model} -> {target_model} (tier={tier})")
+        self.logger.info(
+            f"QoS downgrade: {original_model} -> {target_model} (tier={tier})"
+        )
 
         return PluginResponse.modify(
             body=ctx.body,
-            message=f"Model downgraded from {original_model} to {target_model} (tier: {tier})"
+            message=f"Model downgraded from {original_model} to {target_model} (tier: {tier})",
         )
 
     async def on_load(self):
-        self.logger.info(f"TenantQoSRouter loaded: tiers={list(self.tier_mapping.keys())}")
+        self.logger.info(
+            f"TenantQoSRouter loaded: tiers={list(self.tier_mapping.keys())}"
+        )

@@ -20,7 +20,10 @@ class AzureAdapter(BaseModelAdapter):
     DEFAULT_API_VERSION = "2024-10-21"
 
     def translate_embedding_request(
-        self, base_url: str, body: Dict[str, Any], headers: Dict[str, str],
+        self,
+        base_url: str,
+        body: Dict[str, Any],
+        headers: Dict[str, str],
     ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
         base = base_url.rstrip("/")
         if "/embeddings" not in base:
@@ -35,7 +38,10 @@ class AzureAdapter(BaseModelAdapter):
         return url, body, azure_headers
 
     def translate_request(
-        self, base_url: str, body: Dict[str, Any], headers: Dict[str, str],
+        self,
+        base_url: str,
+        body: Dict[str, Any],
+        headers: Dict[str, str],
     ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
         # base_url expected format:
         #   https://{resource}.openai.azure.com/openai/deployments/{deployment}
@@ -72,7 +78,9 @@ class AzureAdapter(BaseModelAdapter):
         headers: Dict[str, str],
         session: aiohttp.ClientSession,
     ) -> Response:
-        async with session.post(url, json=body, headers=headers, timeout=self._REQUEST_TIMEOUT) as resp:
+        async with session.post(
+            url, json=body, headers=headers, timeout=self._REQUEST_TIMEOUT
+        ) as resp:
             content = await resp.read()
             status = resp.status
             content_type = resp.content_type or "application/json"
@@ -85,6 +93,8 @@ class AzureAdapter(BaseModelAdapter):
         headers: Dict[str, str],
         session: aiohttp.ClientSession,
     ) -> AsyncGenerator[bytes, None]:
-        async with session.post(url, json=body, headers=headers, timeout=self._REQUEST_TIMEOUT) as resp:
+        async with session.post(
+            url, json=body, headers=headers, timeout=self._REQUEST_TIMEOUT
+        ) as resp:
             async for chunk in resp.content.iter_any():
                 yield chunk

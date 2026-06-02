@@ -18,18 +18,20 @@ from typing import Optional
 @dataclass(frozen=True)
 class Signal:
     """A single detection signal from one analysis layer."""
-    source: str        # "regex_threat", "semantic", "trajectory"
-    score: float       # 0.0-1.0 (normalized)
-    weight: float      # Contribution weight to composite
-    detail: str = ""   # Human-readable detail (e.g., matched pattern)
-    category: str = "" # Attack category if detected
+
+    source: str  # "regex_threat", "semantic", "trajectory"
+    score: float  # 0.0-1.0 (normalized)
+    weight: float  # Contribution weight to composite
+    detail: str = ""  # Human-readable detail (e.g., matched pattern)
+    category: str = ""  # Attack category if detected
 
 
 @dataclass
 class ConfidenceResult:
     """Composite confidence assessment from all signals."""
-    score: float                       # 0.0-1.0 weighted composite
-    decision: str                      # "block", "pass", "escalate"
+
+    score: float  # 0.0-1.0 weighted composite
+    decision: str  # "block", "pass", "escalate"
     signals: list[Signal] = field(default_factory=list)
 
     @property
@@ -79,13 +81,15 @@ def calculate_confidence(
 
     # Normalize regex threat score: raw 0-2.5+ -> 0.0-1.0
     regex_norm = min(threat_score / 2.0, 1.0) if threat_score > 0 else 0.0
-    signals.append(Signal(
-        source="regex_threat",
-        score=regex_norm,
-        weight=w_regex,
-        detail=", ".join(threat_patterns or []),
-        category="injection" if regex_norm > 0 else "",
-    ))
+    signals.append(
+        Signal(
+            source="regex_threat",
+            score=regex_norm,
+            weight=w_regex,
+            detail=", ".join(threat_patterns or []),
+            category="injection" if regex_norm > 0 else "",
+        )
+    )
 
     # Semantic score: already 0.0-1.0
     sem_score = 0.0
@@ -95,29 +99,29 @@ def calculate_confidence(
         sem_score = semantic_result[0]
         sem_category = semantic_result[1]
         sem_detail = semantic_result[2]
-    signals.append(Signal(
-        source="semantic",
-        score=sem_score,
-        weight=w_semantic,
-        detail=sem_detail,
-        category=sem_category,
-    ))
+    signals.append(
+        Signal(
+            source="semantic",
+            score=sem_score,
+            weight=w_semantic,
+            detail=sem_detail,
+            category=sem_category,
+        )
+    )
 
     # Normalize trajectory: raw 0-3.0+ -> 0.0-1.0
     traj_norm = min(trajectory_score / 3.0, 1.0) if trajectory_score > 0 else 0.0
-    signals.append(Signal(
-        source="trajectory",
-        score=traj_norm,
-        weight=w_trajectory,
-        category="trajectory" if traj_norm > 0 else "",
-    ))
+    signals.append(
+        Signal(
+            source="trajectory",
+            score=traj_norm,
+            weight=w_trajectory,
+            category="trajectory" if traj_norm > 0 else "",
+        )
+    )
 
     # Weighted composite
-    composite = (
-        regex_norm * w_regex +
-        sem_score * w_semantic +
-        traj_norm * w_trajectory
-    )
+    composite = regex_norm * w_regex + sem_score * w_semantic + traj_norm * w_trajectory
     # Clamp to [0, 1]
     composite = max(0.0, min(1.0, composite))
 

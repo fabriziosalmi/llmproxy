@@ -70,15 +70,28 @@ def _active_providers(config: dict[str, Any]) -> list[tuple[str, str, list[str],
         if not key_env:
             continue
         val = os.environ.get(key_env, "")
-        _placeholders = {"sk-proj-...", "sk-ant-...", "AIza...", "gsk_...",
-                         "your-api-key", "CHANGE-ME", ""}
+        _placeholders = {
+            "sk-proj-...",
+            "sk-ant-...",
+            "AIza...",
+            "gsk_...",
+            "your-api-key",
+            "CHANGE-ME",
+            "",
+        }
         if val and val not in _placeholders:
             out.append((ep_id, provider, models, source))
     return out
 
 
-def print_ready_banner(config: dict[str, Any], *, bind_host: str, bind_port: int,
-                       firewall_enabled: bool, firewall_reason: str | None) -> None:
+def print_ready_banner(
+    config: dict[str, Any],
+    *,
+    bind_host: str,
+    bind_port: int,
+    firewall_enabled: bool,
+    firewall_reason: str | None,
+) -> None:
     # The auth env var lookup honours the configured name so custom deployments
     # still see the correct key location.
     auth_cfg = config.get("server", {}).get("auth", {})
@@ -98,8 +111,7 @@ def print_ready_banner(config: dict[str, Any], *, bind_host: str, bind_port: int
     out: list[str] = []
     out.append("")
     out.append(_wrap("━" * 70, _CYAN))
-    out.append(_wrap("  LLMProxy is ready", _BOLD) +
-               _wrap(f"   {api_base}/v1", _CYAN))
+    out.append(_wrap("  LLMProxy is ready", _BOLD) + _wrap(f"   {api_base}/v1", _CYAN))
     out.append(_wrap("━" * 70, _CYAN))
 
     # Providers table
@@ -109,8 +121,15 @@ def print_ready_banner(config: dict[str, Any], *, bind_host: str, bind_port: int
         out.append(_wrap("    Inference requests will return 503.", _GRAY))
         out.append(_wrap("    Fix by doing ONE of the following:", _GRAY))
         out.append(_wrap("      • Open " + api_base + "/ui and add an endpoint", _GRAY))
-        out.append(_wrap("      • Set a provider key in .env (OPENAI_API_KEY=…)", _GRAY))
-        out.append(_wrap("      • Start Ollama or LM Studio locally — auto-detected on restart", _GRAY))
+        out.append(
+            _wrap("      • Set a provider key in .env (OPENAI_API_KEY=…)", _GRAY)
+        )
+        out.append(
+            _wrap(
+                "      • Start Ollama or LM Studio locally — auto-detected on restart",
+                _GRAY,
+            )
+        )
     else:
         out.append("")
         out.append(_wrap(f"  Active providers ({len(providers)}):", _BOLD))
@@ -130,18 +149,30 @@ def print_ready_banner(config: dict[str, Any], *, bind_host: str, bind_port: int
     # Security state
     out.append("")
     if firewall_enabled:
-        out.append(_wrap("  WAF:    ", _BOLD) + _wrap("ON", _GREEN) +
-                   _wrap("   (byte-level ASGI injection firewall)", _GRAY))
+        out.append(
+            _wrap("  WAF:    ", _BOLD)
+            + _wrap("ON", _GREEN)
+            + _wrap("   (byte-level ASGI injection firewall)", _GRAY)
+        )
     else:
-        out.append(_wrap("  WAF:    ", _BOLD) + _wrap("OFF", _RED) +
-                   _wrap(f"  ({firewall_reason})", _GRAY))
+        out.append(
+            _wrap("  WAF:    ", _BOLD)
+            + _wrap("OFF", _RED)
+            + _wrap(f"  ({firewall_reason})", _GRAY)
+        )
     if auth_enabled:
-        out.append(_wrap("  Auth:   ", _BOLD) + _wrap("required", _GREEN) +
-                   _wrap(f"   Bearer key in ${key_env} → ", _GRAY) +
-                   _wrap(_mask_key(primary_key), _CYAN))
+        out.append(
+            _wrap("  Auth:   ", _BOLD)
+            + _wrap("required", _GREEN)
+            + _wrap(f"   Bearer key in ${key_env} → ", _GRAY)
+            + _wrap(_mask_key(primary_key), _CYAN)
+        )
     else:
-        out.append(_wrap("  Auth:   ", _BOLD) + _wrap("disabled", _YELLOW) +
-                   _wrap("  (development mode — anyone can call)", _GRAY))
+        out.append(
+            _wrap("  Auth:   ", _BOLD)
+            + _wrap("disabled", _YELLOW)
+            + _wrap("  (development mode — anyone can call)", _GRAY)
+        )
 
     # Copy-paste curl
     out.append("")
@@ -161,7 +192,7 @@ def print_ready_banner(config: dict[str, Any], *, bind_host: str, bind_port: int
     curl = (
         f"    curl {api_base}/v1/chat/completions \\\n"
         f"      {auth_hdr}-H 'Content-Type: application/json' \\\n"
-        f"      -d '{{\"model\":\"{default_model}\",\"messages\":[{{\"role\":\"user\",\"content\":\"hi\"}}]}}'"
+        f'      -d \'{{"model":"{default_model}","messages":[{{"role":"user","content":"hi"}}]}}\''
     )
     out.append(_wrap(curl, _GRAY))
     out.append("")

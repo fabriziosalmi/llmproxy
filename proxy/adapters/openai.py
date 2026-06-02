@@ -20,8 +20,10 @@ _O_SERIES_PREFIXES = ("o1", "o3", "o4")
 def _is_o_series(model: str) -> bool:
     """Check if model is an OpenAI reasoning model (o1/o3/o4 series)."""
     m = model.lower()
-    return any(m.startswith(p) and (len(m) == len(p) or m[len(p)] in "-_")
-               for p in _O_SERIES_PREFIXES)
+    return any(
+        m.startswith(p) and (len(m) == len(p) or m[len(p)] in "-_")
+        for p in _O_SERIES_PREFIXES
+    )
 
 
 class OpenAIAdapter(BaseModelAdapter):
@@ -30,7 +32,10 @@ class OpenAIAdapter(BaseModelAdapter):
     provider_name = "openai"
 
     def translate_request(
-        self, base_url: str, body: Dict[str, Any], headers: Dict[str, str],
+        self,
+        base_url: str,
+        body: Dict[str, Any],
+        headers: Dict[str, str],
     ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
         url = f"{base_url.rstrip('/')}/chat/completions"
         model = body.get("model", "")
@@ -52,8 +57,14 @@ class OpenAIAdapter(BaseModelAdapter):
                 body["max_completion_tokens"] = body.pop("max_tokens")
 
             # 3. Remove unsupported params (cause 400 errors)
-            for unsupported in ("temperature", "top_p", "frequency_penalty",
-                                "presence_penalty", "logprobs", "top_logprobs"):
+            for unsupported in (
+                "temperature",
+                "top_p",
+                "frequency_penalty",
+                "presence_penalty",
+                "logprobs",
+                "top_logprobs",
+            ):
                 body.pop(unsupported, None)
 
         # Request stream usage data for accurate cost tracking
@@ -68,7 +79,10 @@ class OpenAIAdapter(BaseModelAdapter):
         return response_data
 
     def translate_embedding_request(
-        self, base_url: str, body: Dict[str, Any], headers: Dict[str, str],
+        self,
+        base_url: str,
+        body: Dict[str, Any],
+        headers: Dict[str, str],
     ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
         url = f"{base_url.rstrip('/')}/embeddings"
         return url, body, headers
@@ -85,7 +99,9 @@ class OpenAIAdapter(BaseModelAdapter):
         headers: Dict[str, str],
         session: aiohttp.ClientSession,
     ) -> Response:
-        async with session.post(url, json=body, headers=headers, timeout=self._REQUEST_TIMEOUT) as resp:
+        async with session.post(
+            url, json=body, headers=headers, timeout=self._REQUEST_TIMEOUT
+        ) as resp:
             content = await resp.read()
             status = resp.status
             content_type = resp.content_type or "application/json"
@@ -98,6 +114,8 @@ class OpenAIAdapter(BaseModelAdapter):
         headers: Dict[str, str],
         session: aiohttp.ClientSession,
     ) -> AsyncGenerator[bytes, None]:
-        async with session.post(url, json=body, headers=headers, timeout=self._REQUEST_TIMEOUT) as resp:
+        async with session.post(
+            url, json=body, headers=headers, timeout=self._REQUEST_TIMEOUT
+        ) as resp:
             async for chunk in resp.content.iter_any():
                 yield chunk
