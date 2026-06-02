@@ -15,6 +15,40 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+try:
+    import redis.asyncio as redis
+except ImportError:
+    redis = None
+
+REDIS_LUA_SCRIPT = """
+local tokens_key = KEYS[1]
+local ts_key = KEYS[2]
+local capacity = tonumber(ARGV[1])
+local rate = tonumber(ARGV[2])
+local now = tonumber(ARGV[3])
+
+local tokens = tonumber(redis.call('get', tokens_key) or capacity)
+local last_refill = tonumber(redis.call('get', ts_key) or now)
+
+local elapsed = now - last_refill
+tokens = math.min(capacity, tokens + elapsed * rate)
+
+if tokens >= 1 then
+    tokens = tokens - 1
+    redis.call('set', tokens_key, tokens)
+    redis.call('set', ts_key, now)
+    local expire_ms = math.ceil((capacity/rate)*1000)
+    if expire_ms > 0 then
+        redis.call('pexpire', tokens_key, expire_ms)
+        redis.call('pexpire', ts_key, expire_ms)
+    end
+    return {1, 0}
+else
+    local retry_after = (1 - tokens) / rate
+    return {0, tostring(retry_after)}
+end
+"""
+
 logger = logging.getLogger(__name__)
 
 
@@ -82,6 +116,36 @@ class TokenBucket:
         return (1.0 - self._tokens) / self.rate
 
 
+class RedisTokenBucket:
+    """Redis-backed async token bucket using Lua for atomicity."""
+
+    __slots__ = ("redis_client", "key", "_script_sha")
+
+    def __init__(self, redis_client, key: str, script_sha: str):
+        self.redis_client = redis_client
+        self.key = key
+        self._script_sha = script_sha
+
+    async def acquire(self, capacity: float, rate: float) -> Tuple[bool, float]:
+        now = time.time()
+        try:
+            res = await self.redis_client.evalsha(
+                self._script_sha,
+                2,
+                f"rate:{self.key}:t",
+                f"rate:{self.key}:ts",
+                capacity,
+                rate,
+                now
+            )
+            allowed = bool(res[0])
+            retry_after = float(res[1])
+            return allowed, retry_after
+        except Exception as e:
+            logger.warning(f"Redis rate limiting failed for {self.key}: {e}. Falling back to local RAM.")
+            raise
+
+
 class RateLimiter:
     """Per-key rate limiter with automatic bucket creation and O(1) LRU eviction.
 
@@ -93,11 +157,28 @@ class RateLimiter:
 
     _MAX_BUCKETS = 50_000  # Prevent memory exhaustion from IP spray
 
-    def __init__(self, default_capacity: int = 60, default_rate: float = 1.0):
+    def __init__(self, default_capacity: int = 60, default_rate: float = 1.0, redis_url: Optional[str] = None):
         self.default_capacity = float(default_capacity)
         self.default_rate = float(default_rate)
         self._buckets: OrderedDict[str, TokenBucket] = OrderedDict()
         self._lock = asyncio.Lock()
+        
+        self.redis_url = redis_url
+        self.redis_client = None
+        self._redis_script_sha = None
+        
+        if redis_url and redis:
+            self.redis_client = redis.from_url(redis_url, decode_responses=True)
+            logger.info(f"RateLimiter configured with Redis backend: {redis_url}")
+        elif redis_url and not redis:
+            logger.warning("Redis URL provided for rate limiting but 'redis' package is not installed. Falling back to local RAM.")
+
+    async def _init_redis_script(self):
+        if self.redis_client and not self._redis_script_sha:
+            try:
+                self._redis_script_sha = await self.redis_client.script_load(REDIS_LUA_SCRIPT)
+            except Exception as e:
+                logger.error(f"Failed to load Redis Lua script: {e}")
 
     async def check(self, key: str, throttle_factor: float = 1.0) -> Tuple[bool, float]:
         """Returns (allowed, retry_after_seconds).
@@ -107,6 +188,20 @@ class RateLimiter:
         The bucket reference held by the caller is safe even if evicted —
         it just becomes orphaned (extra token for one request, acceptable).
         """
+        capacity = self.default_capacity * throttle_factor
+        rate = self.default_rate * throttle_factor
+
+        # Distributed Redis primary path with PACELC fallback
+        if self.redis_client:
+            if not self._redis_script_sha:
+                await self._init_redis_script()
+            if self._redis_script_sha:
+                try:
+                    bucket = RedisTokenBucket(self.redis_client, key, self._redis_script_sha)
+                    return await bucket.acquire(capacity, rate)
+                except Exception:
+                    pass  # Fallthrough to local RAM
+
         async with self._lock:
             if key not in self._buckets:
                 if len(self._buckets) >= self._MAX_BUCKETS:
@@ -161,7 +256,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         burst = cfg.get("burst", 10)
         capacity = rpm + burst
         rate = rpm / 60.0  # tokens per second
-        self.limiter = RateLimiter(default_capacity=capacity, default_rate=rate)
+        redis_url = cfg.get("redis_url")
+        self.limiter = RateLimiter(default_capacity=capacity, default_rate=rate, redis_url=redis_url)
         self.exempt_paths = set(cfg.get("exempt_paths", ["/health", "/metrics"]))
         # Active preset name — None means "raw config values, no preset applied".
         self.preset: Optional[str] = None
@@ -205,6 +301,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             "burst": burst,
             "default_capacity": cap,
             "default_rate_per_second": rate,
+            "redis_url": self.limiter.redis_url,
         }
 
     async def dispatch(self, request: Request, call_next):

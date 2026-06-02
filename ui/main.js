@@ -147,6 +147,20 @@ store.subscribe((state) => {
     // the visible tab content is HTML in index.html, so the user sees the
     // tab structure immediately and the JS hydrates as soon as it lands.
     if (state.currentTab !== _prevState.currentTab) {
+        const prevTab = _prevState.currentTab;
+        if (prevTab && typeof _lazy[prevTab]?.unmount === 'function') {
+            try {
+                _lazy[prevTab].unmount();
+            } catch (e) {
+                console.error(`[teardown ${prevTab}] unmount failed:`, e);
+            }
+        }
+        
+        // Remove from _loadedTabs so it re-mounts on next visit
+        if (prevTab) {
+            _loadedTabs.delete(prevTab);
+        }
+
         _ensureTabLoaded(state.currentTab);
     }
 

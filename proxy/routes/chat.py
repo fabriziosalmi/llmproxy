@@ -113,10 +113,7 @@ def create_router(agent) -> APIRouter:
                             },
                         )
                     )
-                    raise HTTPException(
-                        status_code=402,
-                        detail="Enterprise Quota Exceeded for this API Key.",
-                    )
+                    request.state.quota_exceeded = True
 
             client_host = request.client.host if request.client else "0.0.0.0"  # nosec B104
             ts_id = await agent.zt_manager.verify_tailscale_identity(client_host)

@@ -95,10 +95,7 @@ def create_router(agent) -> APIRouter:
                     )
 
                 if not await agent.rbac.check_quota(token):
-                    raise HTTPException(
-                        status_code=402,
-                        detail="Enterprise Quota Exceeded for this API Key.",
-                    )
+                    request.state.quota_exceeded = True
 
         body = await request.json()
         model = body.get("model", "text-embedding-3-small")
