@@ -241,7 +241,7 @@ def create_router(agent) -> APIRouter:
                 async for chunk in original_body_iterator:
                     if isinstance(chunk, str):
                         chunk = chunk.encode("utf-8")
-                    translated = _translate_chat_chunk_to_legacy(chunk)
+                    translated = _translate_chat_chunk_to_legacy(chunk)  # type: ignore
                     if translated:
                         yield translated
 

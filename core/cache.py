@@ -32,7 +32,7 @@ except ImportError:
 try:
     from cachetools import TTLCache
 except ImportError:
-    TTLCache = None
+    TTLCache = None  # type: ignore
 
 logger = logging.getLogger("llmproxy.cache")
 
@@ -62,7 +62,7 @@ class NegativeCache:
             self._store: TTLCache = TTLCache(maxsize=maxsize, ttl=ttl)
             logger.info(f"Negative cache initialized: maxsize={maxsize}, TTL={ttl}s")
         else:
-            self._store = None
+            self._store = None  # type: ignore
             if enabled and TTLCache is None:
                 logger.warning("cachetools not installed — negative cache disabled")
 
@@ -288,7 +288,7 @@ class CacheBackend:
                                 f"Cache SEMANTIC HIT: sim={best_sim:.4f} (threshold={self._semantic_threshold})"
                             )
                             try:
-                                return json.loads(best_res)
+                                return json.loads(best_res)  # type: ignore
                             except (json.JSONDecodeError, TypeError):
                                 pass
                 except Exception as e:

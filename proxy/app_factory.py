@@ -99,7 +99,7 @@ def _resolve_cors_origins(config: dict) -> list:
     server_cfg = config.get("server", {})
     explicit = server_cfg.get("cors_origins")
     if explicit is not None:
-        return explicit
+        return explicit  # type: ignore
     port = server_cfg.get("port", 8090)
     return [f"http://localhost:{port}", f"http://127.0.0.1:{port}"]
 

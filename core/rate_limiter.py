@@ -18,7 +18,7 @@ from starlette.responses import JSONResponse
 try:
     import redis.asyncio as redis
 except ImportError:
-    redis = None
+    redis = None  # type: ignore
 
 REDIS_LUA_SCRIPT = """
 local tokens_key = KEYS[1]
@@ -176,7 +176,7 @@ class RateLimiter:
     async def _init_redis_script(self):
         if self.redis_client and not self._redis_script_sha:
             try:
-                self._redis_script_sha = await self.redis_client.script_load(REDIS_LUA_SCRIPT)
+                self._redis_script_sha = await self.redis_client.script_load(REDIS_LUA_SCRIPT)  # type: ignore
             except Exception as e:
                 logger.error(f"Failed to load Redis Lua script: {e}")
 
