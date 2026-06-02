@@ -20,6 +20,7 @@ from core.deduplicator import RequestDeduplicator
 # R2.2: O-Series Reasoning Models
 # ══════════════════════════════════════════════════════
 
+
 class TestOSeriesDetection:
     def test_o1(self):
         assert _is_o_series("o1") is True
@@ -61,14 +62,22 @@ class TestOSeriesTranslation:
                 {"role": "user", "content": "Hi"},
             ],
         }
-        _, translated, _ = self.adapter.translate_request("https://api.openai.com/v1", body, {})
+        _, translated, _ = self.adapter.translate_request(
+            "https://api.openai.com/v1", body, {}
+        )
         roles = [m["role"] for m in translated["messages"]]
         assert "system" not in roles
         assert "developer" in roles
 
     def test_max_tokens_to_max_completion_tokens(self):
-        body = {"model": "o3-mini", "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 100}
-        _, translated, _ = self.adapter.translate_request("https://api.openai.com/v1", body, {})
+        body = {
+            "model": "o3-mini",
+            "messages": [{"role": "user", "content": "Hi"}],
+            "max_tokens": 100,
+        }
+        _, translated, _ = self.adapter.translate_request(
+            "https://api.openai.com/v1", body, {}
+        )
         assert "max_tokens" not in translated
         assert translated["max_completion_tokens"] == 100
 
@@ -80,7 +89,9 @@ class TestOSeriesTranslation:
             "top_p": 0.9,
             "frequency_penalty": 0.5,
         }
-        _, translated, _ = self.adapter.translate_request("https://api.openai.com/v1", body, {})
+        _, translated, _ = self.adapter.translate_request(
+            "https://api.openai.com/v1", body, {}
+        )
         assert "temperature" not in translated
         assert "top_p" not in translated
         assert "frequency_penalty" not in translated
@@ -91,7 +102,9 @@ class TestOSeriesTranslation:
             "messages": [{"role": "system", "content": "Be helpful"}],
             "temperature": 0.7,
         }
-        _, translated, _ = self.adapter.translate_request("https://api.openai.com/v1", body, {})
+        _, translated, _ = self.adapter.translate_request(
+            "https://api.openai.com/v1", body, {}
+        )
         assert translated["messages"][0]["role"] == "system"
         assert "temperature" in translated
 
@@ -99,6 +112,7 @@ class TestOSeriesTranslation:
 # ══════════════════════════════════════════════════════
 # R2.5: Model Aliases / Groups
 # ══════════════════════════════════════════════════════
+
 
 class TestModelAliases:
     def test_alias_resolution(self):
@@ -170,7 +184,12 @@ class TestModelGroups:
     def test_alias_takes_priority_over_group(self):
         config = {
             "model_aliases": {"auto": "gpt-4o"},
-            "model_groups": {"auto": {"strategy": "cheapest", "models": [{"model": "gemini-2.0-flash"}]}},
+            "model_groups": {
+                "auto": {
+                    "strategy": "cheapest",
+                    "models": [{"model": "gemini-2.0-flash"}],
+                }
+            },
         }
         assert resolve_model(config, "auto")[0] == "gpt-4o"
 
@@ -178,6 +197,7 @@ class TestModelGroups:
 # ══════════════════════════════════════════════════════
 # R2.9: Request Deduplication
 # ══════════════════════════════════════════════════════
+
 
 async def _async_value(val):
     return val
@@ -226,6 +246,7 @@ class TestRequestDeduplicator:
     def test_cleanup_expired(self):
         dedup = RequestDeduplicator(ttl_seconds=0)
         import time
+
         dedup._completed["old"] = ("response", time.time() - 1)
         dedup.cleanup_expired()
         assert "old" not in dedup._completed
@@ -235,6 +256,7 @@ class TestRequestDeduplicator:
 # R1.10 Fix: Streaming Completions Translation
 # ══════════════════════════════════════════════════════
 
+
 class TestCompletionsStreamingTranslation:
     def test_content_chunk(self):
         chunk_data = {
@@ -242,7 +264,9 @@ class TestCompletionsStreamingTranslation:
             "object": "chat.completion.chunk",
             "created": 1700000000,
             "model": "gpt-4o",
-            "choices": [{"delta": {"content": "Hello"}, "index": 0, "finish_reason": None}],
+            "choices": [
+                {"delta": {"content": "Hello"}, "index": 0, "finish_reason": None}
+            ],
         }
         raw = f"data: {json.dumps(chunk_data)}\n\n".encode()
         result = _translate_chat_chunk_to_legacy(raw)
@@ -278,6 +302,7 @@ class TestCompletionsStreamingTranslation:
 # ══════════════════════════════════════════════════════
 # Bug Fixes Verification
 # ══════════════════════════════════════════════════════
+
 
 class TestModelResolverResilience:
     def test_fastest_without_neural_router(self):

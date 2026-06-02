@@ -4,7 +4,7 @@ Security gateway for Large Language Models. Routes requests across 15 providers 
 
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-1198%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-1219%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-67%25-yellowgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 [![CI](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml/badge.svg)](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml)
@@ -15,7 +15,7 @@ Security gateway for Large Language Models. Routes requests across 15 providers 
 
 ## Why LLMProxy
 
-- **One endpoint, 15 providers** -- Send OpenAI-compatible requests and let the proxy handle translation, failover, and cost optimization across OpenAI, Anthropic, Google, Azure, Ollama, Groq, Together, Mistral, DeepSeek, xAI, Perplexity, Fireworks, OpenRouter, and SambaNova.
+- **One endpoint, 15 providers** -- Send OpenAI-compatible requests and let the proxy handle translation, failover, and cost optimization across 14 dedicated providers (OpenAI, Anthropic, Google, Azure, Ollama, Groq, Together, Mistral, DeepSeek, xAI, Perplexity, Fireworks, OpenRouter, and SambaNova) plus a generic OpenAI-compatible adapter.
 - **Security by default** -- Byte-level ASGI firewall, injection scoring, PII masking, cross-session threat intelligence, immutable audit ledger, HMAC response signing. Fail-closed auth middleware denies all admin paths unless explicitly whitelisted.
 - **Cost control** -- Per-model pricing for 30+ models, daily budget limits with automatic downgrade to local models, per-session spend tracking, cost-efficiency analytics.
 - **Extensible** -- 18 marketplace plugins (budget guard, A/B routing, schema enforcement, canary detection, ...) with a ring-based pipeline. Write your own in Python or WASM.
@@ -103,12 +103,12 @@ The admin UI reflects the live WAF state and the reason it's off. The switch is 
 Client Request
   |
   +-- RateLimitMiddleware         Token bucket per IP/key (O(1) LRU, 50k max)
-  +-- ByteLevelFirewall           178 signatures, 8 encoding layers, iterative chain decoding
+  +-- ByteLevelFirewall           180 signatures, 8 encoding layers, iterative chain decoding
   +-- CORSMiddleware
   +-- Global Auth (fail-closed)   Deny-all for /api/v1/*, /admin/*, /metrics
   +-- SecurityShield              Injection scoring, PII masking, trajectory analysis
   |     +-- ThreatLedger          Cross-session IP + key aggregation
-  |     +-- SemanticAnalyzer      157 patterns, 20+ languages, leetspeak normalization
+  |     +-- SemanticAnalyzer      156 patterns, 20+ languages, leetspeak normalization
   |
   +-- Ring 1: INGRESS             Auth, Zero-Trust, rate limiting
   +-- Ring 2: PRE-FLIGHT          PII masking, budget guard, cache, complexity scoring
@@ -134,10 +134,10 @@ Endpoints are scored using an EMA-weighted formula: `score = (success^2 / latenc
 
 | Layer | What it does |
 |-------|-------------|
-| **ASGI Firewall** | 178 injection signatures (162 banned + 16 ROT13) across 8 encoding layers (URL, Unicode, Base64, hex, ROT13) with iterative chain decoding. Loaded from `data/signatures.yaml` (hot-reloadable). |
-| **SecurityShield** | Threat scoring (8 regex patterns, threshold 0.7), multi-turn trajectory detection, cross-session ThreatLedger. |
-| **Semantic Analyzer** | 157-pattern trigram Jaccard corpus across 20+ languages. Leetspeak normalization, Cyrillic/Greek confusable mapping. Bounded executor with 5s timeout. |
-| **PII Detection** | Dual-mode: Presidio NLP (18 entity types) or regex fallback (email, phone, SSN, credit card, IBAN, IP, API keys). Vault-based mask/demask roundtrip. |
+| **ASGI Firewall** | 180 injection signatures (164 banned + 16 ROT13) across 8 encoding layers (URL, Unicode, Base64, hex, ROT13) with iterative chain decoding. Loaded from `data/signatures.yaml` (hot-reloadable). |
+| **SecurityShield** | Threat scoring (16 regex patterns, threshold 0.7), multi-turn trajectory detection, cross-session ThreatLedger. |
+| **Semantic Analyzer** | 156-pattern trigram Jaccard corpus across 20+ languages. Leetspeak normalization, Cyrillic/Greek confusable mapping. Bounded executor with 5s timeout. |
+| **PII Detection** | Dual-mode: Presidio NLP (11 entity types) or regex fallback (email, phone, SSN, credit card, IBAN, IP, API keys). Vault-based mask/demask roundtrip. |
 | **Response Sanitization** | Entropy guard, steganography detection (bidi overrides, zero-width chars, homoglyphs), prompt leak detection. |
 | **Audit Ledger** | SHA256 hash-chained audit log with tamper detection. GDPR compliance: right to erasure, DSAR export, configurable retention. |
 
@@ -223,7 +223,7 @@ Full API reference in the [docs](docs/).
 
 ## Plugins
 
-Ring-based pipeline with 18 marketplace plugins and 10 built-in defaults.
+Ring-based pipeline with 18 marketplace plugins and 9 built-in defaults (plus a backward-compatibility shim).
 
 | Plugin | Ring | Description |
 |--------|------|-------------|
@@ -329,13 +329,13 @@ Keyboard shortcuts: `Cmd+K` (command palette), `F` (cinema mode). URL hash routi
 ## Testing
 
 ```bash
-make test       # 1183 tests, ~22s
+make test       # 1221 tests, ~22s
 make bench      # 22 performance benchmarks
 make lint       # ruff
 make typecheck  # mypy
 ```
 
-1183 tests across 50+ modules: unit, HTTP integration, pipeline E2E, property-based fuzz (Hypothesis), 31 mathematical invariant proofs, concurrency stress tests, and performance benchmarks.
+1221 tests (1219 passing, 2 skipped) across 50+ modules: unit, HTTP integration, pipeline E2E, property-based fuzz (Hypothesis), 31 mathematical invariant proofs, concurrency stress tests, and performance benchmarks.
 
 The invariant suite proves correctness properties (Jaccard axioms, normalize idempotence, token conservation, budget accounting, adapter determinism) and blocks merge on violation.
 

@@ -33,12 +33,14 @@ def create_router(agent) -> APIRouter:
                 if model_id in seen:
                     continue
                 seen.add(model_id)
-                models.append({
-                    "id": model_id,
-                    "object": "model",
-                    "created": created,
-                    "owned_by": provider,
-                })
+                models.append(
+                    {
+                        "id": model_id,
+                        "object": "model",
+                        "created": created,
+                        "owned_by": provider,
+                    }
+                )
 
         # Sort alphabetically by provider then model id for stable output
         models.sort(key=lambda m: (m["owned_by"], m["id"]))
@@ -62,6 +64,7 @@ def create_router(agent) -> APIRouter:
 
         # Model not in config — still return it (proxy can forward unknown models)
         from proxy.adapters.registry import detect_provider
+
         return {
             "id": model_id,
             "object": "model",

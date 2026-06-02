@@ -33,21 +33,25 @@ try:
     from presidio_analyzer import AnalyzerEngine, RecognizerResult  # noqa: F401
     from presidio_anonymizer import AnonymizerEngine
     from presidio_anonymizer.entities import OperatorConfig  # noqa: F401
+
     _PRESIDIO_AVAILABLE = True
     _presidio_analyzer = AnalyzerEngine()
     _presidio_anonymizer = AnonymizerEngine()
     logger.info("Presidio NLP engine loaded — enhanced PII detection active")
 except ImportError:
     _PRESIDIO_AVAILABLE = False
-    logger.info("Presidio not installed — using regex PII detection (pip install presidio-analyzer presidio-anonymizer)")
+    logger.info(
+        "Presidio not installed — using regex PII detection (pip install presidio-analyzer presidio-anonymizer)"
+    )
+
 
 class SecurityShield:
     """Orchestrates security checks for incoming LLM requests (injection, PII, trajectory analysis)."""
 
     # Per-session trajectory state: {session_id: [(score, timestamp), ...]}
     # Kept separate from pii_vault to allow independent TTL policies.
-    _SESSION_TTL = 3600          # Evict sessions idle for 1 hour
-    _SESSION_SCORE_TTL = 300     # Only count scores from the last 5 minutes
+    _SESSION_TTL = 3600  # Evict sessions idle for 1 hour
+    _SESSION_SCORE_TTL = 300  # Only count scores from the last 5 minutes
 
     def __init__(self, config: Dict[str, Any], assistant: Optional[Any] = None):
         self.config = config.get("security", {})
@@ -75,15 +79,22 @@ class SecurityShield:
 
         # Cross-session threat intelligence (S1: ThreatLedger)
         from core.threat_ledger import ThreatLedger
-        ledger_cfg = self.config.get("threat_ledger", {})
-        self.threat_ledger: Optional[ThreatLedger] = ThreatLedger(
-            max_actors=ledger_cfg.get("max_actors", 50_000),
-            window_seconds=ledger_cfg.get("window_seconds", 600),
-            threshold=ledger_cfg.get("threshold", 3.0),
-            min_events=ledger_cfg.get("min_events", 3),
-        ) if self.config.get("threat_ledger", {}).get("enabled", True) else None
 
-    async def analyze_speculative(self, prompt: str, stream_chunks: List[str], kill_event: Any):
+        ledger_cfg = self.config.get("threat_ledger", {})
+        self.threat_ledger: Optional[ThreatLedger] = (
+            ThreatLedger(
+                max_actors=ledger_cfg.get("max_actors", 50_000),
+                window_seconds=ledger_cfg.get("window_seconds", 600),
+                threshold=ledger_cfg.get("threshold", 3.0),
+                min_events=ledger_cfg.get("min_events", 3),
+            )
+            if self.config.get("threat_ledger", {}).get("enabled", True)
+            else None
+        )
+
+    async def analyze_speculative(
+        self, prompt: str, stream_chunks: List[str], kill_event: Any
+    ):
         """Asynchronously monitors a response stream for security violations.
 
         IMPORTANT — DETECT-ONLY LIMITATION:
@@ -107,14 +118,16 @@ class SecurityShield:
             current_response = "".join(stream_chunks)
 
             # 1. Periodically check for injection patterns in the accumulated stream
-            if len(current_response) > last_length + 20: # Every 20 chars
+            if len(current_response) > last_length + 20:  # Every 20 chars
                 # NOTE: PII check on RESPONSES removed — it generates false positives
                 # on legitimate content (model names, version numbers, example data).
                 # PII masking is handled in Ring 2 (input) and Ring 4 (output).
                 # The speculative guardrail focuses on injection/prompt-leak only.
 
                 if self._check_response_injections(current_response):
-                    logger.warning("SPECULATIVE GUARDRAIL: THREAT PATTERN DETECTED MID-STREAM!")
+                    logger.warning(
+                        "SPECULATIVE GUARDRAIL: THREAT PATTERN DETECTED MID-STREAM!"
+                    )
                     kill_event.set()
                     return
 
@@ -123,7 +136,9 @@ class SecurityShield:
                     # Run AI guard on prefix
                     is_safe = await self.inspect_response_ai(prompt, current_response)
                     if not is_safe:
-                        logger.warning("SPECULATIVE GUARDRAIL: AI JUDGMENT - UNSAFE STREAM!")
+                        logger.warning(
+                            "SPECULATIVE GUARDRAIL: AI JUDGMENT - UNSAFE STREAM!"
+                        )
                         kill_event.set()
                         return
 
@@ -149,36 +164,53 @@ class SecurityShield:
     # required 5×4 digit groups (24-char Spanish style) and never matched
     # the 22-char German format that Hypothesis was actually generating.
     _REGEX_PII_PATTERNS = [
-        (r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', 'EMAIL'),
+        (r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "EMAIL"),
         # IBAN — match 2-letter country code + 2-digit check + 11-30 chars body.
-        (r'\b[A-Z]{2}\d{2}(?:[\s-]?[\dA-Z]{4}){3,7}(?:[\s-]?\d{1,2})?\b', 'IBAN'),
-        (r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b', 'PHONE_US'),
-        (r'\b\d{3}-\d{2}-\d{4}\b', 'SSN'),
+        (r"\b[A-Z]{2}\d{2}(?:[\s-]?[\dA-Z]{4}){3,7}(?:[\s-]?\d{1,2})?\b", "IBAN"),
+        (r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b", "PHONE_US"),
+        (r"\b\d{3}-\d{2}-\d{4}\b", "SSN"),
         # W7: Amex credit cards (15 digits starting with 34/37) — must come
         # before the 16-digit pattern even though they don't overlap
         # numerically, because the labels need to be specific.
-        (r'\b3[47]\d{2}[\s-]?\d{6}[\s-]?\d{5}\b', 'CREDIT_CARD'),
-        (r'\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b', 'CREDIT_CARD'),
+        (r"\b3[47]\d{2}[\s-]?\d{6}[\s-]?\d{5}\b", "CREDIT_CARD"),
+        (r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b", "CREDIT_CARD"),
         # W7: International phone formats (+CC with 7-15 digits)
-        (r'\+\d{1,3}[\s.-]?\(?\d{1,4}\)?[\s.-]?\d{2,4}[\s.-]?\d{2,4}[\s.-]?\d{0,4}\b', 'PHONE_INTL'),
+        (
+            r"\+\d{1,3}[\s.-]?\(?\d{1,4}\)?[\s.-]?\d{2,4}[\s.-]?\d{2,4}[\s.-]?\d{0,4}\b",
+            "PHONE_INTL",
+        ),
         # W7: IPv4 addresses (avoid matching version numbers like 1.2.3)
-        (r'\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b', 'IP_ADDRESS'),
+        (
+            r"\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b",
+            "IP_ADDRESS",
+        ),
         # W7: API keys / tokens (common patterns: sk-, key-, token-, Bearer)
-        (r'\b(?:sk|key|token|bearer|api[_-]?key)[_-][A-Za-z0-9_-]{20,}\b', 'API_KEY'),
+        (r"\b(?:sk|key|token|bearer|api[_-]?key)[_-][A-Za-z0-9_-]{20,}\b", "API_KEY"),
     ]
 
     # Presidio entity types to detect
     _PRESIDIO_ENTITIES = [
-        "EMAIL_ADDRESS", "PHONE_NUMBER", "US_SSN", "CREDIT_CARD",
-        "PERSON", "LOCATION", "IBAN_CODE", "IP_ADDRESS",
-        "US_DRIVER_LICENSE", "US_PASSPORT", "DATE_TIME",
+        "EMAIL_ADDRESS",
+        "PHONE_NUMBER",
+        "US_SSN",
+        "CREDIT_CARD",
+        "PERSON",
+        "LOCATION",
+        "IBAN_CODE",
+        "IP_ADDRESS",
+        "US_DRIVER_LICENSE",
+        "US_PASSPORT",
+        "DATE_TIME",
     ]
 
     def _check_pii_leak(self, text: str) -> bool:
         """Checks for PII in text. Uses Presidio NLP when available, regex fallback otherwise."""
         if _PRESIDIO_AVAILABLE:
             results = _presidio_analyzer.analyze(
-                text=text, language="en", entities=self._PRESIDIO_ENTITIES, score_threshold=0.7
+                text=text,
+                language="en",
+                entities=self._PRESIDIO_ENTITIES,
+                score_threshold=0.7,
             )
             return len(results) > 0
 
@@ -199,7 +231,10 @@ class SecurityShield:
     def _mask_pii_presidio(self, text: str) -> str:
         """NLP-based PII masking via Presidio — detects names, addresses, IBANs, etc."""
         results = _presidio_analyzer.analyze(
-            text=text, language="en", entities=self._PRESIDIO_ENTITIES, score_threshold=0.7
+            text=text,
+            language="en",
+            entities=self._PRESIDIO_ENTITIES,
+            score_threshold=0.7,
         )
         if not results:
             return text
@@ -208,17 +243,18 @@ class SecurityShield:
         results.sort(key=lambda r: r.start, reverse=True)
         masked = text
         for result in results:
-            original = text[result.start:result.end]
+            original = text[result.start : result.end]
             label = result.entity_type.replace("_ADDRESS", "").replace("US_", "")
             token = f"[PII_{label}_{uuid.uuid4().hex[:8]}]"
             self.pii_vault[token] = original
-            masked = masked[:result.start] + token + masked[result.end:]
+            masked = masked[: result.start] + token + masked[result.end :]
         return masked
 
     def _mask_pii_regex(self, text: str) -> str:
         """Regex-based PII masking — fast fallback when Presidio is not installed."""
         masked = text
         for pattern, label in self._REGEX_PII_PATTERNS:
+
             def _replacer(match, _label=label):
                 original = match.group()
                 if _label == "CREDIT_CARD" and not _luhn_check(original):
@@ -226,6 +262,7 @@ class SecurityShield:
                 token = f"[PII_{_label}_{uuid.uuid4().hex[:8]}]"
                 self.pii_vault[token] = original
                 return token
+
             masked = re.sub(pattern, _replacer, masked)
         return masked
 
@@ -268,7 +305,9 @@ class SecurityShield:
     # eviction window (sessions already expire via _SESSION_TTL = 3600 s).
     _EVICTION_INTERVAL = 30.0
 
-    def check_session_trajectory(self, session_id: str, current_prompt: str) -> Optional[str]:
+    def check_session_trajectory(
+        self, session_id: str, current_prompt: str
+    ) -> Optional[str]:
         """Analyzes the 'threat trajectory' of a session to detect multi-turn jailbreaks.
 
         Uses time-windowed scoring: only threat scores from the last
@@ -289,8 +328,11 @@ class SecurityShield:
             #    scan on every single request (pathological at 10 000 sessions).
             if now - self._last_eviction >= self._EVICTION_INTERVAL:
                 self._last_eviction = now
-                stale = [sid for sid, data in self.session_memory.items()
-                         if now - data["last_seen"] > self._SESSION_TTL]
+                stale = [
+                    sid
+                    for sid, data in self.session_memory.items()
+                    if now - data["last_seen"] > self._SESSION_TTL
+                ]
                 for sid in stale:
                     del self.session_memory[sid]
 
@@ -311,12 +353,15 @@ class SecurityShield:
             # 4. Drop scores older than _SESSION_SCORE_TTL (sliding window)
             cutoff = now - self._SESSION_SCORE_TTL
             self.session_memory[session_id]["scores"] = [
-                (s, ts) for s, ts in self.session_memory[session_id]["scores"]
+                (s, ts)
+                for s, ts in self.session_memory[session_id]["scores"]
                 if ts >= cutoff
             ]
 
             # 5. Crescent Attack detection: sum of last 3 scores in the window
-            recent_scores = [s for s, _ in self.session_memory[session_id]["scores"][-3:]]
+            recent_scores = [
+                s for s, _ in self.session_memory[session_id]["scores"][-3:]
+            ]
 
         # Logging + return outside the lock — log handlers may do I/O.
         if len(recent_scores) >= 3:
@@ -339,21 +384,44 @@ class SecurityShield:
         # but accomplish the same jailbreak. "Ignore the user", "ignore your
         # safety guidelines", "ignore any rules" land in the same intent.
         (re.compile(r"ignore\s+(?:the\s+)?user"), 0.7),
-        (re.compile(r"ignore\s+(?:your\s+|all\s+|any\s+)?(?:safety|guideline|guard|rule|restriction|policy|filter)s?"), 0.85),
+        (
+            re.compile(
+                r"ignore\s+(?:your\s+|all\s+|any\s+)?(?:safety|guideline|guard|rule|restriction|policy|filter)s?"
+            ),
+            0.85,
+        ),
         (re.compile(r"(?:initial|original|base|prior)\s+instructions?"), 0.7),
         (re.compile(r"system\s*prompt"), 0.8),
         (re.compile(r"you\s+are\s+now\s+a"), 0.7),
         (re.compile(r"bypass\s+(?:all\s+)?(?:safety|security|filter)"), 0.85),
-        (re.compile(r"reveal\s+(?:your\s+)?(?:secret|hidden|base)\s+instructions?"), 0.9),
+        (
+            re.compile(r"reveal\s+(?:your\s+)?(?:secret|hidden|base)\s+instructions?"),
+            0.9,
+        ),
         # S.2 — operator queries asking the model to enumerate its own rules.
         # "What were the exact instructions you were given", "what rules were
         # you told to follow" — the model isn't supposed to dump them.
-        (re.compile(r"what\s+(?:were|are|was)\s+(?:the\s+|your\s+)?(?:exact\s+|original\s+)?instructions?"), 0.75),
+        (
+            re.compile(
+                r"what\s+(?:were|are|was)\s+(?:the\s+|your\s+)?(?:exact\s+|original\s+)?instructions?"
+            ),
+            0.75,
+        ),
         (re.compile(r"what\s+rules\s+(?:were\s+you\s+|are\s+you\s+|do\s+you)"), 0.7),
         # S.3 — extraction tricks that ask for verbatim continuation /
         # repetition of the system prompt content.
-        (re.compile(r"continue\s+this\s+(?:exact\s+)?(?:text|prompt|message|conversation)"), 0.7),
-        (re.compile(r"repeat\s+(?:the\s+)?(?:words?\s+|text\s+)?(?:above|verbatim|exactly)"), 0.8),
+        (
+            re.compile(
+                r"continue\s+this\s+(?:exact\s+)?(?:text|prompt|message|conversation)"
+            ),
+            0.7,
+        ),
+        (
+            re.compile(
+                r"repeat\s+(?:the\s+)?(?:words?\s+|text\s+)?(?:above|verbatim|exactly)"
+            ),
+            0.8,
+        ),
         (re.compile(r"starting\s+with\s+['\"]you\s+are"), 0.85),
         (re.compile(r"```\s*system"), 0.85),
         (re.compile(r"<\|im_start\|>"), 0.95),
@@ -371,6 +439,7 @@ class SecurityShield:
         leaving the static SecurityShield blind to obfuscation.
         """
         from core.semantic_analyzer import normalize_match_chars
+
         normalized = normalize_match_chars(prompt)
         score = 0.0
         matched = []
@@ -380,8 +449,13 @@ class SecurityShield:
                 matched.append(compiled.pattern)
         return score, matched
 
-    async def inspect(self, body: Dict[str, Any], session_id: str = "default",
-                      ip: str = "", key_prefix: str = "") -> Optional[str]:
+    async def inspect(
+        self,
+        body: Dict[str, Any],
+        session_id: str = "default",
+        ip: str = "",
+        key_prefix: str = "",
+    ) -> Optional[str]:
         """
         Inspects the request body and session context for security violations.
 
@@ -409,7 +483,9 @@ class SecurityShield:
                 score, _ = self._calculate_threat_score(prompt)
                 if score > 0.0:
                     ledger_error = self.threat_ledger.record(
-                        ip=ip, key_prefix=key_prefix, score=score,
+                        ip=ip,
+                        key_prefix=key_prefix,
+                        score=score,
                     )
                     if ledger_error:
                         return ledger_error
@@ -433,18 +509,28 @@ class SecurityShield:
             if self.config.get("semantic_analysis", {}).get("enabled", True):
                 from core.semantic_analyzer import semantic_scan
                 from concurrent.futures import ThreadPoolExecutor
-                threshold = self.config.get("semantic_analysis", {}).get("threshold", 0.35)
-                if not hasattr(self, '_semantic_executor'):
-                    self._semantic_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="semantic")
+
+                threshold = self.config.get("semantic_analysis", {}).get(
+                    "threshold", 0.35
+                )
+                if not hasattr(self, "_semantic_executor"):
+                    self._semantic_executor = ThreadPoolExecutor(
+                        max_workers=4, thread_name_prefix="semantic"
+                    )
                 try:
                     semantic_result = await asyncio.wait_for(
                         asyncio.get_running_loop().run_in_executor(
-                            self._semantic_executor, semantic_scan, prompt, threshold,
+                            self._semantic_executor,
+                            semantic_scan,
+                            prompt,
+                            threshold,
                         ),
                         timeout=5.0,
                     )
                 except asyncio.TimeoutError:
-                    logger.warning(f"Semantic scan timed out (prompt={len(prompt)} chars)")
+                    logger.warning(
+                        f"Semantic scan timed out (prompt={len(prompt)} chars)"
+                    )
 
             # 2c. Session trajectory score (from step 0)
             trajectory_score = 0.0
@@ -600,8 +686,13 @@ class SecurityShield:
 
         from urllib.parse import urlparse
 
-        links = re.findall(r"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+", prompt)
-        blocked_domains = self.config.get("link_sanitization", {}).get("blocked_domains", [])
+        links = re.findall(
+            r"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+",
+            prompt,
+        )
+        blocked_domains = self.config.get("link_sanitization", {}).get(
+            "blocked_domains", []
+        )
 
         for link in links:
             # H1: Extract actual domain via urlparse, then exact or suffix match.
@@ -626,26 +717,35 @@ class SecurityShield:
         # 1. Language/Charset Guard
         if self.config.get("language_guard", {}).get("enabled", True):
             if not self._check_language_purity(content):
-                logger.warning("Language Guard: Anomalous charset detected in response.")
+                logger.warning(
+                    "Language Guard: Anomalous charset detected in response."
+                )
                 return "[SEC_ERR: RESPONSE_MALFORMED]"
 
         # 2. Response Injection Guard
         if self.config.get("injection_guard", {}).get("enabled", True):
             if self._check_response_injections(content):
-                logger.warning("Injection Guard: Remote response contains potential malicious patterns.")
+                logger.warning(
+                    "Injection Guard: Remote response contains potential malicious patterns."
+                )
                 return "[SEC_ERR: THREAT_DETECTED]"
 
         sanitized = content
         # 3. Invisible character detection (zero-width, homoglyphs, Unicode tags)
         if self.detect_steganography(sanitized):
-            logger.warning("Invisible char detection: Payload dropped due to smuggled characters.")
+            logger.warning(
+                "Invisible char detection: Payload dropped due to smuggled characters."
+            )
             return "[SEC_ERR: INVISIBLE_CHAR_DETECTED]"
 
         # 4. Link Sanitizer — replace blocked URLs with [BLOCKED_LINK]
         # H1: Use urlparse for proper domain extraction instead of substring.
-        blocked_domains = self.config.get("link_sanitization", {}).get("blocked_domains", [])
+        blocked_domains = self.config.get("link_sanitization", {}).get(
+            "blocked_domains", []
+        )
         if blocked_domains:
             from urllib.parse import urlparse
+
             def _replace_blocked_urls(match):
                 try:
                     netloc = urlparse(match.group(0)).netloc.lower().split(":")[0]
@@ -656,6 +756,7 @@ class SecurityShield:
                 except Exception:
                     pass
                 return match.group(0)
+
             sanitized = re.sub(
                 r"https?://[^\s<>\"']+",
                 _replace_blocked_urls,
@@ -705,7 +806,7 @@ class SecurityShield:
             r"<\|im_end\|>",
             r"\[inst\]",
             r"^human:",
-            r"^assistant:"
+            r"^assistant:",
         ]
         if any(re.search(p, normalized) for p in threat_patterns):
             return True
@@ -716,12 +817,18 @@ class SecurityShield:
         # Normal English text has entropy 3.5-4.5; code/JSON 4.0-6.0.
         if len(text) > 100:
             import math
+
             counts: dict[str, int] = {}
             for c in text:
                 counts[c] = counts.get(c, 0) + 1
-            entropy = -sum((count / len(text)) * math.log2(count / len(text)) for count in counts.values())
+            entropy = -sum(
+                (count / len(text)) * math.log2(count / len(text))
+                for count in counts.values()
+            )
             if entropy < 1.5:
-                logger.warning(f"Entropy Shield: Suspiciously low entropy detected ({entropy:.2f}) — likely repetition attack.")
+                logger.warning(
+                    f"Entropy Shield: Suspiciously low entropy detected ({entropy:.2f}) — likely repetition attack."
+                )
                 return True
 
         return False
@@ -764,11 +871,11 @@ class SecurityShield:
     # U+2028-2029 (line/paragraph separators), U+180E (Mongolian vowel separator),
     # U+2000-200A (various Unicode spaces used for obfuscation).
     _INVISIBLE_RE = re.compile(
-        r'[\u200B-\u200F\uFEFF\u2060-\u2064\u2066-\u2069\u00AD'
-        r'\u202A-\u202E'   # bidi overrides (LRE, RLE, PDF, LRO, RLO)
-        r'\u2028-\u2029'   # line/paragraph separators
-        r'\u180E'          # Mongolian vowel separator
-        r'\U000E0001-\U000E007F]'
+        r"[\u200B-\u200F\uFEFF\u2060-\u2064\u2066-\u2069\u00AD"
+        r"\u202A-\u202E"  # bidi overrides (LRE, RLE, PDF, LRO, RLO)
+        r"\u2028-\u2029"  # line/paragraph separators
+        r"\u180E"  # Mongolian vowel separator
+        r"\U000E0001-\U000E007F]"
     )
 
     def detect_steganography(self, text: str) -> bool:
@@ -797,7 +904,7 @@ class SecurityShield:
                 invisible_count += 1
 
             # 2. Whitespace anomalies (consecutive spaces)
-            if ch == ' ':
+            if ch == " ":
                 if prev_was_space:
                     double_space_count += 1
                 prev_was_space = True
@@ -828,7 +935,9 @@ class SecurityShield:
             total_alpha = latin_count + cyrillic_count
             minority_ratio = min(cyrillic_count, latin_count) / total_alpha
             if minority_ratio < 0.10:
-                findings.append(f"homoglyph_mix=latin+cyrillic(minority={minority_ratio:.0%})")
+                findings.append(
+                    f"homoglyph_mix=latin+cyrillic(minority={minority_ratio:.0%})"
+                )
 
         if findings:
             logger.warning(f"INVISIBLE CHAR DETECTION: {', '.join(findings)}")

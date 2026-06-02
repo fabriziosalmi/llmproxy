@@ -31,11 +31,14 @@ async def config_watch_loop(agent, interval: int = 30):
                     try:
                         await old_webhooks.close()
                     except Exception as e:
-                        logger.warning("Config reload: previous webhook dispatcher close failed: %s", e)
-                prev_assistant = getattr(agent.security, 'assistant', None)
+                        logger.warning(
+                            "Config reload: previous webhook dispatcher close failed: %s",
+                            e,
+                        )
+                prev_assistant = getattr(agent.security, "assistant", None)
                 agent.security = SecurityShield(agent.config, assistant=prev_assistant)
                 # Reload circuit breaker thresholds on existing breakers
-                if hasattr(agent, 'circuit_manager'):
+                if hasattr(agent, "circuit_manager"):
                     cb_cfg = agent.config.get("circuit_breaker", {})
                     ft = cb_cfg.get("failure_threshold", 5)
                     rt = cb_cfg.get("recovery_timeout", 60)
@@ -43,28 +46,40 @@ async def config_watch_loop(agent, interval: int = 30):
                         cb.failure_threshold = ft
                         cb.recovery_timeout = rt
                 # Reload cache TTL from new config
-                if hasattr(agent, 'cache_backend'):
+                if hasattr(agent, "cache_backend"):
                     cache_cfg = agent.config.get("caching", {})
                     agent.cache_backend._ttl = cache_cfg.get("ttl", 3600)
+                    sem_cfg = cache_cfg.get("semantic_cache", {})
+                    agent.cache_backend._semantic_enabled = sem_cfg.get(
+                        "enabled", False
+                    )
+                    agent.cache_backend._semantic_threshold = sem_cfg.get(
+                        "threshold", 0.85
+                    )
                 # Trigger plugin hot-reload
-                if hasattr(agent, 'plugin_manager'):
+                if hasattr(agent, "plugin_manager"):
                     agent.plugin_manager.update_runtime_config(agent.config)
                     await agent.plugin_manager.load_plugins()
                 # Invalidate model resolver provider cache
                 try:
                     from core.model_resolver import invalidate_provider_cache
+
                     invalidate_provider_cache()
                 except ImportError:
                     pass
                 logger.info("Config hot-reloaded (security, circuits, cache, plugins)")
             # Signature hot-reload (independent of config hash)
-            if hasattr(agent, 'signature_store') and agent.signature_store:
+            if hasattr(agent, "signature_store") and agent.signature_store:
                 try:
-                    reloaded = await asyncio.to_thread(agent.signature_store.reload_if_changed)
+                    reloaded = await asyncio.to_thread(
+                        agent.signature_store.reload_if_changed
+                    )
                     if reloaded:
                         logger.info("Signatures hot-reloaded from YAML files")
                 except Exception as sig_e:
-                    logger.warning(f"Signature reload error (keeping old sigs): {sig_e}")
+                    logger.warning(
+                        f"Signature reload error (keeping old sigs): {sig_e}"
+                    )
         except Exception as e:
             logger.warning(f"Config watch error: {e}")
 
@@ -113,11 +128,21 @@ async def metrics_history_loop(agent, interval: int = 3600):
             if history is None:
                 # Agent didn't construct one — bail out, don't crash the loop.
                 continue
-            history.record_delta("requests", sum_prometheus_counter(metrics.REQUEST_COUNT))
-            history.record_delta("blocked", sum_prometheus_counter(metrics.INJECTION_BLOCKED))
-            history.record_delta("errors", sum_prometheus_counter(metrics.REQUEST_ERRORS))
-            history.record_delta("auth_failures", sum_prometheus_counter(metrics.AUTH_FAILURES))
-            history.record_gauge("cost_usd", float(getattr(agent, "total_cost_today", 0.0)))
+            history.record_delta(
+                "requests", sum_prometheus_counter(metrics.REQUEST_COUNT)
+            )
+            history.record_delta(
+                "blocked", sum_prometheus_counter(metrics.INJECTION_BLOCKED)
+            )
+            history.record_delta(
+                "errors", sum_prometheus_counter(metrics.REQUEST_ERRORS)
+            )
+            history.record_delta(
+                "auth_failures", sum_prometheus_counter(metrics.AUTH_FAILURES)
+            )
+            history.record_gauge(
+                "cost_usd", float(getattr(agent, "total_cost_today", 0.0))
+            )
         except Exception as e:  # noqa: BLE001 — keep ticking
             logger.warning(f"metrics_history snapshot error: {e}")
 
@@ -170,7 +195,8 @@ async def local_discovery_loop(agent, interval: int = 300):
                     await agent._seed_endpoints_from_config()
                     logger.info(
                         "Re-discovery added %d new endpoint(s): %s",
-                        len(new_ids), ", ".join(new_ids),
+                        len(new_ids),
+                        ", ".join(new_ids),
                     )
         except asyncio.CancelledError:
             raise
@@ -191,6 +217,8 @@ async def retention_purge_loop(store, retention_days: int = 90, interval: int = 
                 result = await result
             total = result.get("audit_deleted", 0) + result.get("spend_deleted", 0)
             if total > 0:
-                logger.info(f"GDPR retention purge: {result} (retention={retention_days}d)")
+                logger.info(
+                    f"GDPR retention purge: {result} (retention={retention_days}d)"
+                )
         except Exception as e:
             logger.warning(f"Retention purge error: {e}")

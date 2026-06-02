@@ -1,4 +1,5 @@
 """Registry routes: endpoint CRUD (toggle, delete, priority, list)."""
+
 import asyncio
 import ipaddress
 import logging
@@ -28,13 +29,19 @@ def create_router(agent) -> APIRouter:
     def _validate_base_url(raw: str) -> str:
         parsed = urlparse(raw.strip())
         if parsed.scheme not in ("http", "https"):
-            raise HTTPException(status_code=400, detail="url must start with http:// or https://")
+            raise HTTPException(
+                status_code=400, detail="url must start with http:// or https://"
+            )
         if not parsed.netloc:
             raise HTTPException(status_code=400, detail="url must include host")
         if parsed.username or parsed.password:
-            raise HTTPException(status_code=400, detail="url must not contain embedded credentials")
+            raise HTTPException(
+                status_code=400, detail="url must not contain embedded credentials"
+            )
         if parsed.query or parsed.fragment:
-            raise HTTPException(status_code=400, detail="url must not include query or fragment")
+            raise HTTPException(
+                status_code=400, detail="url must not include query or fragment"
+            )
         host = parsed.hostname or ""
         if not host:
             raise HTTPException(status_code=400, detail="url must include valid host")
@@ -42,7 +49,9 @@ def create_router(agent) -> APIRouter:
             ip = ipaddress.ip_address(host)
             # Always block clearly dangerous/non-routable classes.
             if ip.is_multicast or ip.is_unspecified or ip.is_reserved:
-                raise HTTPException(status_code=400, detail="url host IP range is not allowed")
+                raise HTTPException(
+                    status_code=400, detail="url host IP range is not allowed"
+                )
         except ValueError:
             # Hostname (non-IP literal): accepted.
             pass
@@ -104,12 +113,14 @@ def create_router(agent) -> APIRouter:
             entry = scratch["endpoints"][ep_id]
             if entry.get("base_url", "").rstrip("/").lower() in live_urls:
                 continue
-            candidates.append({
-                "id": ep_id,
-                "provider": entry.get("provider", "openai-compatible"),
-                "base_url": entry.get("base_url", ""),
-                "models": entry.get("models", []),
-            })
+            candidates.append(
+                {
+                    "id": ep_id,
+                    "provider": entry.get("provider", "openai-compatible"),
+                    "base_url": entry.get("base_url", ""),
+                    "models": entry.get("models", []),
+                }
+            )
         return {"candidates": candidates, "total": len(candidates)}
 
     @router.post("/api/v1/registry/{endpoint_id}/toggle")
@@ -119,7 +130,11 @@ def create_router(agent) -> APIRouter:
         target = next((e for e in all_endpoints if e.id == endpoint_id), None)
         if not target:
             raise HTTPException(status_code=404, detail="Endpoint not found")
-        new_status = EndpointStatus.VERIFIED if target.status != EndpointStatus.VERIFIED else EndpointStatus.IGNORED
+        new_status = (
+            EndpointStatus.VERIFIED
+            if target.status != EndpointStatus.VERIFIED
+            else EndpointStatus.IGNORED
+        )
         await agent.store.update_status(endpoint_id, new_status)
         await agent._add_log(f"ENDPOINT: {endpoint_id} set to {new_status.value}")
         return {"id": endpoint_id, "status": new_status.value}
@@ -200,7 +215,9 @@ def create_router(agent) -> APIRouter:
         # Mirror into live config so forwarder.resolve_endpoint_for_provider finds it
         endpoints_cfg = agent.config.setdefault("endpoints", {})
         if ep_id in endpoints_cfg:
-            raise HTTPException(status_code=409, detail=f"Endpoint '{ep_id}' already exists")
+            raise HTTPException(
+                status_code=409, detail=f"Endpoint '{ep_id}' already exists"
+            )
 
         entry: dict[str, Any] = {
             "provider": provider,
@@ -221,6 +238,7 @@ def create_router(agent) -> APIRouter:
         endpoints_cfg[ep_id] = entry
 
         from models import LLMEndpoint, EndpointStatus
+
         ep = LLMEndpoint(
             id=ep_id,
             url=url,
@@ -234,7 +252,9 @@ def create_router(agent) -> APIRouter:
             endpoints_cfg.pop(ep_id, None)
             if api_key:
                 os.environ.pop(key_env, None)
-            logger.error(f"Failed to persist new endpoint '{ep_id}': {e}", exc_info=True)
+            logger.error(
+                f"Failed to persist new endpoint '{ep_id}': {e}", exc_info=True
+            )
             raise HTTPException(status_code=500, detail="Failed to add endpoint")
         await agent._add_log(
             f"ENDPOINT: {ep_id} ADDED ({provider} @ {url}, {len(models)} models)",
@@ -271,18 +291,29 @@ def create_router(agent) -> APIRouter:
     @router.get("/api/v1/registry")
     async def get_registry():
         endpoints = await agent.store.get_all()
-        circuit_states = agent.circuit_manager.get_all_states() if hasattr(agent, 'circuit_manager') else {}
-        return [{
-            "id": e.id,
-            "name": e.url.host if e.url.host else str(e.url),
-            "url": str(e.url),
-            "status": "Live" if e.status == EndpointStatus.VERIFIED else e.status.name,
-            "latency": f"{e.latency_ms:.0f}ms" if e.latency_ms else "--",
-            "priority": e.metadata.get("priority", 0),
-            "type": e.metadata.get("provider_type", "Generic"),
-            "circuit_state": circuit_states.get(e.id, {}).get("state", "closed"),
-            "failure_count": circuit_states.get(e.id, {}).get("failure_count", 0),
-            "failure_threshold": circuit_states.get(e.id, {}).get("failure_threshold", 5),
-        } for e in endpoints]
+        circuit_states = (
+            agent.circuit_manager.get_all_states()
+            if hasattr(agent, "circuit_manager")
+            else {}
+        )
+        return [
+            {
+                "id": e.id,
+                "name": e.url.host if e.url.host else str(e.url),
+                "url": str(e.url),
+                "status": "Live"
+                if e.status == EndpointStatus.VERIFIED
+                else e.status.name,
+                "latency": f"{e.latency_ms:.0f}ms" if e.latency_ms else "--",
+                "priority": e.metadata.get("priority", 0),
+                "type": e.metadata.get("provider_type", "Generic"),
+                "circuit_state": circuit_states.get(e.id, {}).get("state", "closed"),
+                "failure_count": circuit_states.get(e.id, {}).get("failure_count", 0),
+                "failure_threshold": circuit_states.get(e.id, {}).get(
+                    "failure_threshold", 5
+                ),
+            }
+            for e in endpoints
+        ]
 
     return router

@@ -43,10 +43,18 @@ class ResponseQualityGate(BasePlugin):
 
     # Refusal patterns (compiled once at class level)
     _REFUSAL_PATTERNS = [
-        re.compile(r"\bI (?:cannot|can't|am unable to|won't|will not)\b", re.IGNORECASE),
+        re.compile(
+            r"\bI (?:cannot|can't|am unable to|won't|will not)\b", re.IGNORECASE
+        ),
         re.compile(r"\bAs an AI\b", re.IGNORECASE),
-        re.compile(r"\bI'?m (?:just |only )?(?:a |an )?(?:language model|AI|assistant)\b", re.IGNORECASE),
-        re.compile(r"\bI (?:don't|do not) (?:have )?(?:the ability|access|capability)\b", re.IGNORECASE),
+        re.compile(
+            r"\bI'?m (?:just |only )?(?:a |an )?(?:language model|AI|assistant)\b",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\bI (?:don't|do not) (?:have )?(?:the ability|access|capability)\b",
+            re.IGNORECASE,
+        ),
         re.compile(r"\bsorry,? (?:but )?I (?:cannot|can't)\b", re.IGNORECASE),
         re.compile(r"\bnot (?:able|allowed|permitted) to\b", re.IGNORECASE),
         re.compile(r"\boutside (?:of )?my (?:capabilities|scope)\b", re.IGNORECASE),
@@ -72,12 +80,18 @@ class ResponseQualityGate(BasePlugin):
             return ""
         try:
             import json
+
             data = json.loads(ctx.response.body.decode())
             choices = data.get("choices", [])
             if not choices:
                 return ""
             return choices[0].get("message", {}).get("content", "")
-        except (json.JSONDecodeError, AttributeError, UnicodeDecodeError, TypeError) as e:
+        except (
+            json.JSONDecodeError,
+            AttributeError,
+            UnicodeDecodeError,
+            TypeError,
+        ) as e:
             logger.debug("ResponseQualityGate response parse skipped: %s", e)
             return ""
 
@@ -139,7 +153,9 @@ class ResponseQualityGate(BasePlugin):
             issues.append("empty_response")
 
         # 2. Ultra-short response (only for non-trivial prompts)
-        elif not self._is_trivial_prompt(ctx) and len(content.strip()) < self.min_length:
+        elif (
+            not self._is_trivial_prompt(ctx) and len(content.strip()) < self.min_length
+        ):
             issues.append("too_short")
 
         # 3. Safety refusals

@@ -106,7 +106,15 @@ def validate_config(config: dict) -> list[str]:
         if api_key_env:
             val = os.environ.get(api_key_env, "")
             # Check if the value is a real key (not a placeholder like "sk-proj-...")
-            _PLACEHOLDERS = {"sk-proj-...", "sk-ant-...", "AIza...", "gsk_...", "your-api-key", "CHANGE-ME", ""}
+            _PLACEHOLDERS = {
+                "sk-proj-...",
+                "sk-ant-...",
+                "AIza...",
+                "gsk_...",
+                "your-api-key",
+                "CHANGE-ME",
+                "",
+            }
             if val and val not in _PLACEHOLDERS:
                 active_providers.append(name)
             elif not val:
@@ -133,7 +141,9 @@ def validate_config(config: dict) -> list[str]:
     security_cfg = config.get("security", {})
     max_payload = security_cfg.get("max_payload_size_kb", 512)
     if max_payload < 1:
-        warnings.append("security.max_payload_size_kb < 1 KB — most requests will be rejected")
+        warnings.append(
+            "security.max_payload_size_kb < 1 KB — most requests will be rejected"
+        )
 
     # 6. Caching config
     cache_cfg = config.get("caching", {})
@@ -157,5 +167,5 @@ def run_startup_checks(config: dict):
             logger.info("Startup checks passed")
     except StartupError as e:
         _LAST_WARNINGS = [str(e)]
-        logger.critical(f"\n{'='*60}\n  STARTUP FAILED\n{'='*60}\n\n{e}\n")
+        logger.critical(f"\n{'=' * 60}\n  STARTUP FAILED\n{'=' * 60}\n\n{e}\n")
         sys.exit(1)

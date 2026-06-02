@@ -46,7 +46,7 @@ class AgenticLoopBreaker(BasePlugin):
         if not messages:
             return ""
         # Take the last N messages for fingerprinting
-        tail = messages[-self.hash_messages:]
+        tail = messages[-self.hash_messages :]
         # Normalize: role + content only, strip whitespace
         normalized = ""
         for msg in tail:

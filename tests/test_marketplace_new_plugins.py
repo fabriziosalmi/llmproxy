@@ -18,6 +18,7 @@ from plugins.marketplace.latency_sla_guard import LatencySlaGuard
 
 # ── Helpers ──
 
+
 def _make_ctx(messages, metadata=None, response_content=None, state=None):
     """Build a PluginContext with optional response body."""
     ctx = PluginContext(
@@ -61,24 +62,30 @@ async def test_complexity_complex_prompt():
     plugin = PromptComplexityScorer()
     messages = [
         {"role": "system", "content": "You are a senior software architect."},
-        {"role": "user", "content": "Explain the differences between microservices and monoliths."},
+        {
+            "role": "user",
+            "content": "Explain the differences between microservices and monoliths.",
+        },
         {"role": "assistant", "content": "Microservices are distributed..."},
-        {"role": "user", "content": (
-            "Now implement a microservice in Python that handles user authentication. "
-            "First, create the database schema. Second, build the API endpoints. "
-            "Third, write unit tests. Finally, optimize the query performance. "
-            "Here's the current code:\n"
-            "```python\n"
-            "class UserService:\n"
-            "    def __init__(self, db):\n"
-            "        self.db = db\n"
-            "    async def create_user(self, name, email):\n"
-            "        return await self.db.execute('INSERT INTO users ...')\n"
-            "```\n"
-            "Make sure to implement proper error handling and analyze the security implications. "
-            "Compare this approach with JWT vs session-based auth. "
-            "Design the system to handle 10K concurrent users."
-        )},
+        {
+            "role": "user",
+            "content": (
+                "Now implement a microservice in Python that handles user authentication. "
+                "First, create the database schema. Second, build the API endpoints. "
+                "Third, write unit tests. Finally, optimize the query performance. "
+                "Here's the current code:\n"
+                "```python\n"
+                "class UserService:\n"
+                "    def __init__(self, db):\n"
+                "        self.db = db\n"
+                "    async def create_user(self, name, email):\n"
+                "        return await self.db.execute('INSERT INTO users ...')\n"
+                "```\n"
+                "Make sure to implement proper error handling and analyze the security implications. "
+                "Compare this approach with JWT vs session-based auth. "
+                "Design the system to handle 10K concurrent users."
+            ),
+        },
     ]
     ctx = _make_ctx(messages)
     result = await plugin.execute(ctx)
@@ -130,12 +137,14 @@ async def test_complexity_multi_turn():
 @pytest.mark.asyncio
 async def test_complexity_custom_weights():
     """Custom weights should change scoring."""
-    plugin = PromptComplexityScorer(config={
-        "depth_weight": 1.0,
-        "turns_weight": 0.0,
-        "code_weight": 0.0,
-        "instruction_weight": 0.0,
-    })
+    plugin = PromptComplexityScorer(
+        config={
+            "depth_weight": 1.0,
+            "turns_weight": 0.0,
+            "code_weight": 0.0,
+            "instruction_weight": 0.0,
+        }
+    )
     ctx = _make_ctx([{"role": "user", "content": "x" * 6000}])
     await plugin.execute(ctx)
 
@@ -147,13 +156,20 @@ async def test_complexity_custom_weights():
 async def test_complexity_multimodal_content():
     """Multimodal (list) content should be handled."""
     plugin = PromptComplexityScorer()
-    ctx = _make_ctx([{
-        "role": "user",
-        "content": [
-            {"type": "text", "text": "Describe this image in detail"},
-            {"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}}
+    ctx = _make_ctx(
+        [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Describe this image in detail"},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "data:image/png;base64,..."},
+                    },
+                ],
+            }
         ]
-    }])
+    )
     result = await plugin.execute(ctx)
     assert result.action == "passthrough"
     assert "_prompt_complexity" in ctx.metadata
@@ -386,11 +402,15 @@ async def test_sla_stats():
     now = time.time()
 
     # One fast request
-    ctx1 = _make_ctx([{"role": "user", "content": "a"}], metadata={"_request_start_time": now - 0.05})
+    ctx1 = _make_ctx(
+        [{"role": "user", "content": "a"}], metadata={"_request_start_time": now - 0.05}
+    )
     await plugin.execute(ctx1)
 
     # One slow request (breach)
-    ctx2 = _make_ctx([{"role": "user", "content": "b"}], metadata={"_request_start_time": now - 1.0})
+    ctx2 = _make_ctx(
+        [{"role": "user", "content": "b"}], metadata={"_request_start_time": now - 1.0}
+    )
     await plugin.execute(ctx2)
 
     stats = plugin.get_sla_stats()

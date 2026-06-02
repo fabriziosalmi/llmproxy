@@ -36,8 +36,8 @@ logger = logging.getLogger(__name__)
 # 16-digit credit cards do not match the 15-digit Amex shape.
 PII_PATTERNS = [
     # Communications / identifiers
-    (re.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'), '<EMAIL>'),
-    (re.compile(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b'), '<IP>'),
+    (re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"), "<EMAIL>"),
+    (re.compile(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b"), "<IP>"),
     # Government / financial identifiers (mirrored from core.security regex set).
     # Order matters: IBAN must run BEFORE the 16-digit credit-card pattern,
     # because IBANs embed a 4×4-digit body that would otherwise get masked
@@ -45,31 +45,55 @@ PII_PATTERNS = [
     # Pattern is intentionally looser than core.security's IBAN regex (which
     # over-fits a 24-char Spanish-style shape and misses 22-char German ones)
     # — for an export scrubber, false-positives are fine, false-negatives are not.
-    (re.compile(r'\b[A-Z]{2}\d{2}(?:[\s-]?[\dA-Z]{4}){3,7}(?:[\s-]?\d{1,2})?\b'), '<IBAN>'),
-    (re.compile(r'\b\d{3}-\d{2}-\d{4}\b'), '<SSN>'),
-    (re.compile(r'\b3[47]\d{2}[\s-]?\d{6}[\s-]?\d{5}\b'), '<CREDIT_CARD>'),
-    (re.compile(r'\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b'), '<CREDIT_CARD>'),
+    (
+        re.compile(r"\b[A-Z]{2}\d{2}(?:[\s-]?[\dA-Z]{4}){3,7}(?:[\s-]?\d{1,2})?\b"),
+        "<IBAN>",
+    ),
+    (re.compile(r"\b\d{3}-\d{2}-\d{4}\b"), "<SSN>"),
+    (re.compile(r"\b3[47]\d{2}[\s-]?\d{6}[\s-]?\d{5}\b"), "<CREDIT_CARD>"),
+    (re.compile(r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b"), "<CREDIT_CARD>"),
     # Phone numbers — international (E.164-ish) before US so a "+1 ..." form
     # is recognized as international, not as an unrelated US 7-digit run.
-    (re.compile(r'\+\d{1,3}[\s.-]?\(?\d{1,4}\)?[\s.-]?\d{2,4}[\s.-]?\d{2,4}[\s.-]?\d{0,4}\b'), '<PHONE>'),
-    (re.compile(r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b'), '<PHONE>'),
+    (
+        re.compile(
+            r"\+\d{1,3}[\s.-]?\(?\d{1,4}\)?[\s.-]?\d{2,4}[\s.-]?\d{2,4}[\s.-]?\d{0,4}\b"
+        ),
+        "<PHONE>",
+    ),
+    (re.compile(r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b"), "<PHONE>"),
     # Secrets — keep AFTER PII so a bearer-shaped string isn't shadowed by phone matches.
-    (re.compile(r'sk-ant-[a-zA-Z0-9_\-]{20,}'), '<API_KEY>'),
-    (re.compile(r'sk-[a-zA-Z0-9]{20,}'), '<API_KEY>'),
-    (re.compile(r'Bearer\s+[a-zA-Z0-9._\-]+'), 'Bearer <REDACTED>'),
-    (re.compile(r'eyJ[a-zA-Z0-9_\-]+\.eyJ[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+'), '<JWT>'),
+    (re.compile(r"sk-ant-[a-zA-Z0-9_\-]{20,}"), "<API_KEY>"),
+    (re.compile(r"sk-[a-zA-Z0-9]{20,}"), "<API_KEY>"),
+    (re.compile(r"Bearer\s+[a-zA-Z0-9._\-]+"), "Bearer <REDACTED>"),
+    (re.compile(r"eyJ[a-zA-Z0-9_\-]+\.eyJ[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+"), "<JWT>"),
 ]
 
 # Sensitive field names (matched case-insensitively in scrub_dict).
 # Covers common variations used by providers, frameworks, and reverse proxies.
-_SENSITIVE_FIELDS = frozenset({
-    'authorization', 'api_key', 'apikey', 'api-key',
-    'token', 'access_token', 'refresh_token', 'id_token',
-    'password', 'passwd',
-    'secret', 'client_secret', 'secret_key', 'signing_key', 'private_key',
-    'credentials', 'credential',
-    'x-api-key', 'x-auth-token', 'x-access-token',
-})
+_SENSITIVE_FIELDS = frozenset(
+    {
+        "authorization",
+        "api_key",
+        "apikey",
+        "api-key",
+        "token",
+        "access_token",
+        "refresh_token",
+        "id_token",
+        "password",
+        "passwd",
+        "secret",
+        "client_secret",
+        "secret_key",
+        "signing_key",
+        "private_key",
+        "credentials",
+        "credential",
+        "x-api-key",
+        "x-auth-token",
+        "x-access-token",
+    }
+)
 
 
 def scrub_pii(text: str) -> str:
@@ -85,13 +109,18 @@ def scrub_dict(d: Dict[str, Any]) -> Dict[str, Any]:
     for k, v in d.items():
         # Redact known sensitive fields regardless of value type
         if k.lower() in _SENSITIVE_FIELDS:
-            result[k] = '<REDACTED>'
+            result[k] = "<REDACTED>"
         elif isinstance(v, str):
             result[k] = scrub_pii(v)
         elif isinstance(v, dict):
             result[k] = scrub_dict(v)
         elif isinstance(v, list):
-            result[k] = [scrub_dict(i) if isinstance(i, dict) else (scrub_pii(i) if isinstance(i, str) else i) for i in v]
+            result[k] = [
+                scrub_dict(i)
+                if isinstance(i, dict)
+                else (scrub_pii(i) if isinstance(i, str) else i)
+                for i in v
+            ]
         else:
             result[k] = v
     return result
@@ -140,16 +169,17 @@ class DatasetExporter:
 
         self._current_date = today
         filepath = self._get_filepath(today)
-        self._file_handle = await aiofiles.open(filepath, mode='a', encoding='utf-8')
+        self._file_handle = await aiofiles.open(filepath, mode="a", encoding="utf-8")
         logger.info(f"Export: Writing to {filepath}")
 
     async def _compress(self, filepath: Path):
         """Compress a JSONL file with gzip (synchronous, run in executor)."""
-        gz_path = filepath.with_suffix('.jsonl.gz')
+        gz_path = filepath.with_suffix(".jsonl.gz")
+
         def _do_compress():
             try:
-                with open(filepath, 'rb') as f_in:
-                    with gzip.open(gz_path, 'wb', compresslevel=6) as f_out:
+                with open(filepath, "rb") as f_in:
+                    with gzip.open(gz_path, "wb", compresslevel=6) as f_out:
                         f_out.write(f_in.read())
                 filepath.unlink()
                 logger.info(f"Export: Compressed {filepath.name} → {gz_path.name}")
@@ -175,17 +205,17 @@ class DatasetExporter:
             await self._ensure_file()
 
             # Add timestamp if missing
-            if 'timestamp' not in entry:
-                entry['timestamp'] = datetime.utcnow().isoformat() + 'Z'
+            if "timestamp" not in entry:
+                entry["timestamp"] = datetime.utcnow().isoformat() + "Z"
 
             # Scrub PII
             if self.scrub:
                 entry = scrub_dict(entry)
 
-            line = json.dumps(entry, ensure_ascii=False, separators=(',', ':'))
+            line = json.dumps(entry, ensure_ascii=False, separators=(",", ":"))
             if self._file_handle is None:
                 raise RuntimeError("Export file not opened — call open() first")
-            await self._file_handle.write(line + '\n')
+            await self._file_handle.write(line + "\n")
             await self._file_handle.flush()
 
     async def export_parquet(self, jsonl_path: Optional[str] = None) -> Optional[str]:
@@ -208,7 +238,7 @@ class DatasetExporter:
             return None
 
         records: List[Dict] = []
-        with open(jsonl_path, 'r') as f:
+        with open(jsonl_path, "r") as f:
             for line in f:
                 line = line.strip()
                 if line:
@@ -219,8 +249,8 @@ class DatasetExporter:
 
         # Flatten to tabular structure
         table = pa.Table.from_pylist(records)
-        parquet_path = jsonl_path.replace('.jsonl', '.parquet')
-        pq.write_table(table, parquet_path, compression='zstd')
+        parquet_path = jsonl_path.replace(".jsonl", ".parquet")
+        pq.write_table(table, parquet_path, compression="zstd")
         logger.info(f"Export: Wrote {len(records)} records to {parquet_path}")
         return parquet_path
 

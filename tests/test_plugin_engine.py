@@ -78,6 +78,7 @@ def test_compute_plugin_sha256_changes_with_whitespace():
 def _write_plugin_file(plugins_dir, name, source):
     """Write a plugin source file under plugins_dir/<name>.py and return the path."""
     import os
+
     path = os.path.join(plugins_dir, f"{name}.py")
     with open(path, "w") as f:
         f.write(source)
@@ -95,10 +96,12 @@ async def execute(ctx):
 async def test_install_records_sha256_for_python_plugin(tmp_path):
     """install_plugin must hash the entrypoint file and stamp manifest_entry."""
     from core.plugin_engine import PluginManager
+
     plugins_dir = str(tmp_path)
     _write_plugin_file(plugins_dir, "trivial", _VALID_PLUGIN_SRC)
     # Bundled manifest is required for hot_swap → load_plugins() to succeed.
     import yaml as _yaml
+
     with open(tmp_path / "manifest.yaml", "w") as f:
         _yaml.safe_dump({"plugins": []}, f)
 
@@ -126,9 +129,11 @@ async def test_install_preserves_externally_supplied_sha256(tmp_path):
     """A caller (e.g. a marketplace publish step) can pre-pin the hash;
     install must not overwrite it."""
     from core.plugin_engine import PluginManager
+
     plugins_dir = str(tmp_path)
     _write_plugin_file(plugins_dir, "preset", _VALID_PLUGIN_SRC)
     import yaml as _yaml
+
     with open(tmp_path / "manifest.yaml", "w") as f:
         _yaml.safe_dump({"plugins": []}, f)
 
@@ -150,9 +155,11 @@ async def test_install_preserves_externally_supplied_sha256(tmp_path):
 async def test_load_rejects_tampered_file(tmp_path):
     """If sha256 is recorded but the file on disk has changed, load must fail."""
     from core.plugin_engine import PluginManager, PluginSecurityError
+
     plugins_dir = str(tmp_path)
     file_path = _write_plugin_file(plugins_dir, "tampered", _VALID_PLUGIN_SRC)
     import yaml as _yaml
+
     with open(tmp_path / "manifest.yaml", "w") as f:
         _yaml.safe_dump({"plugins": []}, f)
 
@@ -179,9 +186,11 @@ async def test_load_without_pin_warns_but_succeeds(tmp_path, caplog):
     """No recorded hash → log a warning, don't block. Bundled plugins from a
     vendor manifest that hasn't been re-pinned still work."""
     from core.plugin_engine import PluginManager
+
     plugins_dir = str(tmp_path)
     _write_plugin_file(plugins_dir, "unpinned", _VALID_PLUGIN_SRC)
     import yaml as _yaml
+
     with open(tmp_path / "manifest.yaml", "w") as f:
         _yaml.safe_dump({"plugins": []}, f)
 
@@ -194,6 +203,7 @@ async def test_load_without_pin_warns_but_succeeds(tmp_path, caplog):
     }
     # No sha256 in p_info — should still load.
     import logging
+
     with caplog.at_level(logging.WARNING, logger="plugin_engine"):
         await pm._load_plugin(p_info)
     warns = [r.message for r in caplog.records if "SHA-256 pin" in r.message]
@@ -213,10 +223,19 @@ async def test_hot_swap_build_failure_preserves_live_state(tmp_path):
     plugins_dir = str(tmp_path)
     _write_plugin_file(plugins_dir, "p1", _VALID_PLUGIN_SRC)
     with open(tmp_path / "manifest.yaml", "w") as f:
-        _yaml.safe_dump({"plugins": [
-            {"name": "p1", "hook": "pre_flight", "type": "python",
-             "entrypoint": "p1:execute"},
-        ]}, f)
+        _yaml.safe_dump(
+            {
+                "plugins": [
+                    {
+                        "name": "p1",
+                        "hook": "pre_flight",
+                        "type": "python",
+                        "entrypoint": "p1:execute",
+                    },
+                ]
+            },
+            f,
+        )
 
     pm = PluginManager(plugins_dir=plugins_dir)
     await pm.load_plugins()
@@ -230,6 +249,7 @@ async def test_hot_swap_build_failure_preserves_live_state(tmp_path):
     # Force the build path to blow up.
     async def boom():
         raise RuntimeError("synthetic build failure")
+
     pm._build_plugin_state = boom  # type: ignore[assignment]
 
     with pytest.raises(RuntimeError, match="synthetic build failure"):
@@ -257,10 +277,19 @@ async def test_hot_swap_no_partial_clear_window(tmp_path):
     plugins_dir = str(tmp_path)
     _write_plugin_file(plugins_dir, "p1", _VALID_PLUGIN_SRC)
     with open(tmp_path / "manifest.yaml", "w") as f:
-        _yaml.safe_dump({"plugins": [
-            {"name": "p1", "hook": "pre_flight", "type": "python",
-             "entrypoint": "p1:execute"},
-        ]}, f)
+        _yaml.safe_dump(
+            {
+                "plugins": [
+                    {
+                        "name": "p1",
+                        "hook": "pre_flight",
+                        "type": "python",
+                        "entrypoint": "p1:execute",
+                    },
+                ]
+            },
+            f,
+        )
     pm = PluginManager(plugins_dir=plugins_dir)
     await pm.load_plugins()
     assert len(pm.rings[PluginHook.PRE_FLIGHT]) == 1
@@ -297,10 +326,19 @@ async def test_hot_swap_health_check_failure_rolls_back_atomically(tmp_path):
     plugins_dir = str(tmp_path)
     _write_plugin_file(plugins_dir, "p1", _VALID_PLUGIN_SRC)
     with open(tmp_path / "manifest.yaml", "w") as f:
-        _yaml.safe_dump({"plugins": [
-            {"name": "p1", "hook": "pre_flight", "type": "python",
-             "entrypoint": "p1:execute"},
-        ]}, f)
+        _yaml.safe_dump(
+            {
+                "plugins": [
+                    {
+                        "name": "p1",
+                        "hook": "pre_flight",
+                        "type": "python",
+                        "entrypoint": "p1:execute",
+                    },
+                ]
+            },
+            f,
+        )
     pm = PluginManager(plugins_dir=plugins_dir)
     await pm.load_plugins()
     snap_rings = pm.rings
@@ -311,6 +349,7 @@ async def test_hot_swap_health_check_failure_rolls_back_atomically(tmp_path):
     # Force execute_ring to mark the test_ctx with an error after the swap.
     async def failing_execute(hook, context):
         context.error = "simulated post-swap failure"
+
     pm.execute_ring = failing_execute  # type: ignore[assignment]
 
     with pytest.raises(RuntimeError, match="Health check failed"):

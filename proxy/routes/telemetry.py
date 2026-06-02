@@ -1,4 +1,5 @@
 """Telemetry routes: health, metrics, logs SSE stream, client log ingest."""
+
 import re
 import json
 import asyncio
@@ -10,31 +11,35 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 # Strip ANSI escape sequences and control chars to prevent terminal injection via xterm.js
-_ANSI_RE = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?\x07')
-_CTRL_RE = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?\x07")
+_CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 # SSE connection limit — prevents resource exhaustion from stale consumers
 _MAX_SSE_CONNECTIONS = 20
 _active_log_streams = 0
 _sse_connections_lock = asyncio.Lock()
 
+
 def _sanitize_log(log: dict) -> dict:
     """Strip terminal escape sequences from log string values."""
     sanitized = {}
     for k, v in log.items():
         if isinstance(v, str):
-            v = _ANSI_RE.sub('', v)
-            v = _CTRL_RE.sub('', v)
+            v = _ANSI_RE.sub("", v)
+            v = _CTRL_RE.sub("", v)
         elif isinstance(v, dict):
             v = _sanitize_log(v)
         sanitized[k] = v
     return sanitized
 
+
 def create_router(agent) -> APIRouter:
     router = APIRouter()
 
     def _sse_token_secret() -> str:
-        cfg_secret = (agent.config.get("security", {}).get("sse", {}) or {}).get("signing_secret", "")
+        cfg_secret = (agent.config.get("security", {}).get("sse", {}) or {}).get(
+            "signing_secret", ""
+        )
         if cfg_secret:
             return str(cfg_secret)
         keys = agent._get_api_keys()
@@ -42,9 +47,13 @@ def create_router(agent) -> APIRouter:
 
     def _mint_sse_token(ttl_s: int = 120) -> str:
         exp = int(time.time()) + max(10, min(ttl_s, 600))
-        nonce = hashlib.sha256(f"{time.time()}:{id(agent)}".encode("utf-8")).hexdigest()[:16]
+        nonce = hashlib.sha256(
+            f"{time.time()}:{id(agent)}".encode("utf-8")
+        ).hexdigest()[:16]
         payload = f"{exp}.{nonce}"
-        sig = hmac.new(_sse_token_secret().encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+        sig = hmac.new(
+            _sse_token_secret().encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
+        ).hexdigest()
         return f"{payload}.{sig}"
 
     def _verify_sse_token(token: str) -> bool:
@@ -108,6 +117,7 @@ def create_router(agent) -> APIRouter:
           down     — critical subsystem is unreachable (store, session)
         """
         import time as _time
+
         components: dict = {}
 
         # Endpoints + circuit breakers — coalesce both into a single component
@@ -121,7 +131,9 @@ def create_router(agent) -> APIRouter:
                 if await (await agent.circuit_manager.get_breaker(e.id)).can_execute():
                     healthy_count += 1
             circuit_states = agent.circuit_manager.get_all_states()
-            circuits_open = sum(1 for s in circuit_states.values() if s.get("state") == "open")
+            circuits_open = sum(
+                1 for s in circuit_states.values() if s.get("state") == "open"
+            )
             ep_status = "ok"
             if pool and healthy_count == 0:
                 ep_status = "degraded"  # Pool exists but every endpoint is gated
@@ -148,10 +160,20 @@ def create_router(agent) -> APIRouter:
         # exception is "down".
         try:
             if not getattr(agent.cache_backend, "_enabled", False):
-                components["cache"] = {"status": "degraded", "detail": "cache disabled in config"}
+                components["cache"] = {
+                    "status": "degraded",
+                    "detail": "cache disabled in config",
+                }
             else:
-                stats = await agent.cache_backend.stats() if callable(getattr(agent.cache_backend, "stats", None)) else {}
-                components["cache"] = {"status": "ok", **(stats if isinstance(stats, dict) else {})}
+                stats = (
+                    await agent.cache_backend.stats()
+                    if callable(getattr(agent.cache_backend, "stats", None))
+                    else {}
+                )
+                components["cache"] = {
+                    "status": "ok",
+                    **(stats if isinstance(stats, dict) else {}),
+                }
         except Exception as exc:
             components["cache"] = {"status": "down", "detail": str(exc)[:120]}
 
@@ -159,8 +181,10 @@ def create_router(agent) -> APIRouter:
         # state, not a fault, so always "ok" unless the manager itself errors.
         try:
             rings = getattr(agent.plugin_manager, "rings", {})
-            ring_count = {hook.value if hasattr(hook, "value") else str(hook): len(plugins)
-                          for hook, plugins in rings.items()}
+            ring_count = {
+                hook.value if hasattr(hook, "value") else str(hook): len(plugins)
+                for hook, plugins in rings.items()
+            }
             instances = getattr(agent.plugin_manager, "_plugin_instances", {})
             components["plugins"] = {
                 "status": "ok",
@@ -191,7 +215,10 @@ def create_router(agent) -> APIRouter:
                     "saturation": round(saturation, 3),
                 }
             else:
-                components["log_queue"] = {"status": "ok", "detail": "no queue attached"}
+                components["log_queue"] = {
+                    "status": "ok",
+                    "detail": "no queue attached",
+                }
         except Exception as exc:
             components["log_queue"] = {"status": "down", "detail": str(exc)[:120]}
 
@@ -223,6 +250,7 @@ def create_router(agent) -> APIRouter:
     @router.get("/metrics")
     async def metrics():
         from core.metrics import get_metrics_response
+
         body, content_type = get_metrics_response()
         return Response(content=body, media_type=content_type)
 
@@ -262,12 +290,17 @@ def create_router(agent) -> APIRouter:
     async def issue_logs_token(request: Request):
         # Requires normal auth to mint a short-lived token for EventSource.
         _check_header_auth_only(request)
-        ttl_cfg = (agent.config.get("security", {}).get("sse", {}) or {}).get("token_ttl_seconds", 120)
+        ttl_cfg = (agent.config.get("security", {}).get("sse", {}) or {}).get(
+            "token_ttl_seconds", 120
+        )
         try:
             ttl_s = int(ttl_cfg)
         except Exception:
             ttl_s = 120
-        return {"sse_token": _mint_sse_token(ttl_s), "expires_in": max(10, min(ttl_s, 600))}
+        return {
+            "sse_token": _mint_sse_token(ttl_s),
+            "expires_in": max(10, min(ttl_s, 600)),
+        }
 
     # ── Client-log ingest ──────────────────────────────────────────────────
     # The browser logger (ui/src/services/logger.ts → backendSink) batches
@@ -324,7 +357,11 @@ def create_router(agent) -> APIRouter:
             if not message:
                 dropped += 1
                 continue
-            ctx_raw = rec.get("context") if isinstance(rec.get("context"), dict) else rec.get("ctx")
+            ctx_raw = (
+                rec.get("context")
+                if isinstance(rec.get("context"), dict)
+                else rec.get("ctx")
+            )
             ctx = ctx_raw if isinstance(ctx_raw, dict) else None
             metadata: dict = {"source": "client"}
             if session:

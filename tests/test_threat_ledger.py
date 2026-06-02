@@ -13,8 +13,8 @@ from core.response_signer import ResponseSigner
 # ThreatLedger
 # ══════════════════════════════════════════════════════════
 
-class TestThreatLedger:
 
+class TestThreatLedger:
     def test_single_low_score_no_block(self):
         """A single low-score event does not trigger a block."""
         ledger = ThreatLedger(threshold=3.0, min_events=3)
@@ -102,8 +102,8 @@ class TestThreatLedger:
 # ResponseSigner
 # ══════════════════════════════════════════════════════════
 
-class TestResponseSigner:
 
+class TestResponseSigner:
     def test_sign_returns_headers(self):
         """Signing produces the expected header set."""
         signer = ResponseSigner(secret="test-secret-key")
@@ -125,7 +125,10 @@ class TestResponseSigner:
         body = b'{"result": "test"}'
 
         headers = signer.sign_response(
-            response_body=body, model="gpt-4o", provider="openai", request_id="req1",
+            response_body=body,
+            model="gpt-4o",
+            provider="openai",
+            request_id="req1",
         )
 
         assert ResponseSigner.verify(
@@ -145,7 +148,10 @@ class TestResponseSigner:
         body = b'{"result": "original"}'
 
         headers = signer.sign_response(
-            response_body=body, model="gpt-4o", provider="openai", request_id="req1",
+            response_body=body,
+            model="gpt-4o",
+            provider="openai",
+            request_id="req1",
         )
 
         assert not ResponseSigner.verify(
@@ -161,10 +167,13 @@ class TestResponseSigner:
     def test_verify_wrong_secret_fails(self):
         """Wrong secret fails verification."""
         signer = ResponseSigner(secret="correct-secret")
-        body = b'test body'
+        body = b"test body"
 
         headers = signer.sign_response(
-            response_body=body, model="gpt-4o", provider="openai", request_id="req1",
+            response_body=body,
+            model="gpt-4o",
+            provider="openai",
+            request_id="req1",
         )
 
         assert not ResponseSigner.verify(
@@ -187,10 +196,17 @@ class TestResponseSigner:
     def test_different_models_different_signatures(self):
         """Same body but different model produces different signature."""
         signer = ResponseSigner(secret="key")
-        body = b'same body'
+        body = b"same body"
 
-        h1 = signer.sign_response(response_body=body, model="gpt-4o", provider="openai", request_id="r1")
-        h2 = signer.sign_response(response_body=body, model="claude-sonnet", provider="anthropic", request_id="r1")
+        h1 = signer.sign_response(
+            response_body=body, model="gpt-4o", provider="openai", request_id="r1"
+        )
+        h2 = signer.sign_response(
+            response_body=body,
+            model="claude-sonnet",
+            provider="anthropic",
+            request_id="r1",
+        )
 
         assert h1["X-LLMProxy-Signature"] != h2["X-LLMProxy-Signature"]
 
@@ -199,9 +215,15 @@ class TestResponseSigner:
         # Design assertion: verify() uses hmac.compare_digest internally
         # We test by checking that wrong signatures don't short-circuit
         signer = ResponseSigner(secret="key")
-        body = b'test'
-        headers = signer.sign_response(response_body=body, model="m", provider="p", request_id="r")
+        body = b"test"
+        headers = signer.sign_response(
+            response_body=body, model="m", provider="p", request_id="r"
+        )
 
         # Both should take roughly the same time (can't assert timing, but verify logic)
-        assert not ResponseSigner.verify("key", body, "m", "p", headers["X-LLMProxy-Signed-At"], "r", "0" * 64)
-        assert not ResponseSigner.verify("key", body, "m", "p", headers["X-LLMProxy-Signed-At"], "r", "f" * 64)
+        assert not ResponseSigner.verify(
+            "key", body, "m", "p", headers["X-LLMProxy-Signed-At"], "r", "0" * 64
+        )
+        assert not ResponseSigner.verify(
+            "key", body, "m", "p", headers["X-LLMProxy-Signed-At"], "r", "f" * 64
+        )

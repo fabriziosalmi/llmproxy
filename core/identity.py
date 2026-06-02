@@ -36,8 +36,9 @@ JWKS_CACHE_TTL = 3600
 @dataclass
 class IdentityContext:
     """Represents a verified user identity attached to a request."""
-    provider: str           # "google", "microsoft", "apple", "tailscale", "api_key"
-    subject: str            # Unique user ID (sub claim or API key hash)
+
+    provider: str  # "google", "microsoft", "apple", "tailscale", "api_key"
+    subject: str  # Unique user ID (sub claim or API key hash)
     email: Optional[str] = None
     name: Optional[str] = None
     roles: List[str] = field(default_factory=lambda: ["user"])
@@ -48,6 +49,7 @@ class IdentityContext:
 @dataclass
 class OIDCProvider:
     """Configuration for a single OIDC identity provider."""
+
     name: str
     issuer: str
     jwks_uri: str
@@ -104,7 +106,9 @@ class IdentityManager:
             name = pcfg.get("name", "").lower()
             # Resolve client_id from Infisical/env
             client_id_key = pcfg.get("client_id_env", f"OIDC_{name.upper()}_CLIENT_ID")
-            client_id = get_secret(client_id_key, required=False) or pcfg.get("client_id", "")
+            client_id = get_secret(client_id_key, required=False) or pcfg.get(
+                "client_id", ""
+            )
 
             # Use well-known defaults or explicit config
             well_known = WELL_KNOWN_PROVIDERS.get(name, {})
@@ -118,12 +122,16 @@ class IdentityManager:
                 if name == "google":
                     jwks_uri = "https://www.googleapis.com/oauth2/v3/certs"
                 elif name == "microsoft":
-                    jwks_uri = "https://login.microsoftonline.com/common/discovery/v2.0/keys"
+                    jwks_uri = (
+                        "https://login.microsoftonline.com/common/discovery/v2.0/keys"
+                    )
                 elif name == "apple":
                     jwks_uri = "https://appleid.apple.com/auth/keys"
 
             if not issuer or not client_id:
-                logger.warning(f"Identity: Provider '{name}' skipped — missing issuer or client_id")
+                logger.warning(
+                    f"Identity: Provider '{name}' skipped — missing issuer or client_id"
+                )
                 continue
 
             provider = OIDCProvider(
@@ -144,7 +152,10 @@ class IdentityManager:
         now = time.time()
         cached_ts = self._jwks_cache_ts.get(provider.name, 0)
 
-        if provider.name not in self._jwks_clients or (now - cached_ts) > JWKS_CACHE_TTL:
+        if (
+            provider.name not in self._jwks_clients
+            or (now - cached_ts) > JWKS_CACHE_TTL
+        ):
             self._jwks_clients[provider.name] = PyJWKClient(
                 provider.jwks_uri,
                 cache_keys=True,
@@ -229,7 +240,9 @@ class IdentityManager:
             verified=True,
         )
 
-        logger.info(f"Identity: Verified {provider.name} user={email or subject} roles={roles}")
+        logger.info(
+            f"Identity: Verified {provider.name} user={email or subject} roles={roles}"
+        )
         return identity
 
     def _resolve_roles(
@@ -253,6 +266,7 @@ class IdentityManager:
         jwt_roles = claims.get(provider.roles_claim)
         if isinstance(jwt_roles, list) and jwt_roles:
             from core.rbac import DEFAULT_PERMISSIONS
+
             valid_roles = set(DEFAULT_PERMISSIONS.keys())
             filtered = [r for r in jwt_roles if isinstance(r, str) and r in valid_roles]
             return filtered if filtered else [self.default_role]
@@ -289,7 +303,9 @@ class IdentityManager:
             return None
         try:
             claims = jwt.decode(
-                token, secret, algorithms=["HS256"],
+                token,
+                secret,
+                algorithms=["HS256"],
                 issuer="llmproxy",
                 options={"verify_exp": True},
             )

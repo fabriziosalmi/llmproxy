@@ -6,14 +6,17 @@ from core.plugin_engine import PluginContext, PluginState
 
 # ── ToolGuard ──
 
-class TestToolGuard:
 
+class TestToolGuard:
     def _make_ctx(self, tools=None, roles=None):
         body = {"model": "gpt-4o", "messages": [{"role": "user", "content": "hi"}]}
         if tools:
             body["tools"] = tools
         return PluginContext(
-            body=body, session_id="test", metadata={"_user_roles": roles or []}, state=PluginState()
+            body=body,
+            session_id="test",
+            metadata={"_user_roles": roles or []},
+            state=PluginState(),
         )
 
     def _tool(self, name):
@@ -22,6 +25,7 @@ class TestToolGuard:
     @pytest.mark.asyncio
     async def test_no_tools_passthrough(self):
         from plugins.marketplace.tool_guard import ToolGuard
+
         p = ToolGuard(config={"restricted_tools": ["dangerous"]})
         ctx = self._make_ctx()
         r = await p.execute(ctx)
@@ -30,7 +34,10 @@ class TestToolGuard:
     @pytest.mark.asyncio
     async def test_admin_bypasses(self):
         from plugins.marketplace.tool_guard import ToolGuard
-        p = ToolGuard(config={"restricted_tools": ["dangerous"], "admin_roles": ["admin"]})
+
+        p = ToolGuard(
+            config={"restricted_tools": ["dangerous"], "admin_roles": ["admin"]}
+        )
         ctx = self._make_ctx(tools=[self._tool("dangerous")], roles=["admin"])
         r = await p.execute(ctx)
         assert r.action == "passthrough"
@@ -38,8 +45,11 @@ class TestToolGuard:
     @pytest.mark.asyncio
     async def test_strip_restricted_tool(self):
         from plugins.marketplace.tool_guard import ToolGuard
+
         p = ToolGuard(config={"restricted_tools": ["dangerous"], "action": "strip"})
-        ctx = self._make_ctx(tools=[self._tool("safe"), self._tool("dangerous")], roles=["user"])
+        ctx = self._make_ctx(
+            tools=[self._tool("safe"), self._tool("dangerous")], roles=["user"]
+        )
         r = await p.execute(ctx)
         assert r.action == "modify"
         assert len(ctx.body["tools"]) == 1
@@ -48,6 +58,7 @@ class TestToolGuard:
     @pytest.mark.asyncio
     async def test_block_restricted_tool(self):
         from plugins.marketplace.tool_guard import ToolGuard
+
         p = ToolGuard(config={"restricted_tools": ["dangerous"], "action": "block"})
         ctx = self._make_ctx(tools=[self._tool("dangerous")], roles=["user"])
         r = await p.execute(ctx)
@@ -57,29 +68,37 @@ class TestToolGuard:
     @pytest.mark.asyncio
     async def test_unrestricted_tools_pass(self):
         from plugins.marketplace.tool_guard import ToolGuard
+
         p = ToolGuard(config={"restricted_tools": ["dangerous"]})
-        ctx = self._make_ctx(tools=[self._tool("safe"), self._tool("also_safe")], roles=["user"])
+        ctx = self._make_ctx(
+            tools=[self._tool("safe"), self._tool("also_safe")], roles=["user"]
+        )
         r = await p.execute(ctx)
         assert r.action == "passthrough"
 
 
 # ── TenantQoSRouter ──
 
-class TestTenantQoSRouter:
 
+class TestTenantQoSRouter:
     def _make_ctx(self, model="gpt-4o", roles=None, tier=None):
         meta = {"_user_roles": roles or []}
         if tier:
             meta["_tenant_tier"] = tier
         return PluginContext(
             body={"model": model, "messages": [{"role": "user", "content": "hi"}]},
-            session_id="test", metadata=meta, state=PluginState()
+            session_id="test",
+            metadata=meta,
+            state=PluginState(),
         )
 
     @pytest.mark.asyncio
     async def test_free_tier_downgrade(self):
         from plugins.marketplace.tenant_qos_router import TenantQoSRouter
-        p = TenantQoSRouter(config={"tier_mapping": {"free": "gpt-4o-mini"}, "default_tier": "free"})
+
+        p = TenantQoSRouter(
+            config={"tier_mapping": {"free": "gpt-4o-mini"}, "default_tier": "free"}
+        )
         ctx = self._make_ctx(roles=["viewer"])
         r = await p.execute(ctx)
         assert r.action == "modify"
@@ -88,7 +107,10 @@ class TestTenantQoSRouter:
     @pytest.mark.asyncio
     async def test_premium_passthrough(self):
         from plugins.marketplace.tenant_qos_router import TenantQoSRouter
-        p = TenantQoSRouter(config={"tier_mapping": {"premium": ""}, "default_tier": "free"})
+
+        p = TenantQoSRouter(
+            config={"tier_mapping": {"premium": ""}, "default_tier": "free"}
+        )
         ctx = self._make_ctx(roles=["admin"])
         r = await p.execute(ctx)
         assert r.action == "passthrough"
@@ -96,7 +118,10 @@ class TestTenantQoSRouter:
     @pytest.mark.asyncio
     async def test_explicit_tier_override(self):
         from plugins.marketplace.tenant_qos_router import TenantQoSRouter
-        p = TenantQoSRouter(config={"tier_mapping": {"gold": "gpt-4o"}, "default_tier": "free"})
+
+        p = TenantQoSRouter(
+            config={"tier_mapping": {"gold": "gpt-4o"}, "default_tier": "free"}
+        )
         ctx = self._make_ctx(tier="gold")
         r = await p.execute(ctx)
         assert r.action == "passthrough"  # gpt-4o -> gpt-4o, no change
@@ -104,6 +129,7 @@ class TestTenantQoSRouter:
     @pytest.mark.asyncio
     async def test_force_downgrade_off(self):
         from plugins.marketplace.tenant_qos_router import TenantQoSRouter
+
         p = TenantQoSRouter(config={"force_downgrade": False})
         ctx = self._make_ctx(roles=["viewer"])
         r = await p.execute(ctx)
@@ -112,19 +138,23 @@ class TestTenantQoSRouter:
 
 # ── SchemaEnforcer ──
 
-class TestSchemaEnforcer:
 
+class TestSchemaEnforcer:
     def _make_ctx(self, content="", schema=None):
         body = {"choices": [{"message": {"content": content}}]}
         meta = {}
         if schema:
             import json
+
             meta["_expected_schema"] = json.dumps(schema)
-        return PluginContext(body=body, session_id="test", metadata=meta, state=PluginState())
+        return PluginContext(
+            body=body, session_id="test", metadata=meta, state=PluginState()
+        )
 
     @pytest.mark.asyncio
     async def test_no_schema_passthrough(self):
         from plugins.marketplace.schema_enforcer import SchemaEnforcer
+
         p = SchemaEnforcer()
         ctx = self._make_ctx(content='{"name": "test"}')
         r = await p.execute(ctx)
@@ -133,8 +163,13 @@ class TestSchemaEnforcer:
     @pytest.mark.asyncio
     async def test_valid_schema_passes(self):
         from plugins.marketplace.schema_enforcer import SchemaEnforcer
+
         p = SchemaEnforcer()
-        schema = {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}}
+        schema = {
+            "type": "object",
+            "required": ["name"],
+            "properties": {"name": {"type": "string"}},
+        }
         ctx = self._make_ctx(content='{"name": "test"}', schema=schema)
         r = await p.execute(ctx)
         assert r.action == "passthrough"
@@ -142,6 +177,7 @@ class TestSchemaEnforcer:
     @pytest.mark.asyncio
     async def test_missing_required_field_warn(self):
         from plugins.marketplace.schema_enforcer import SchemaEnforcer
+
         p = SchemaEnforcer(config={"action": "warn"})
         schema = {"type": "object", "required": ["name", "age"]}
         ctx = self._make_ctx(content='{"name": "test"}', schema=schema)
@@ -152,6 +188,7 @@ class TestSchemaEnforcer:
     @pytest.mark.asyncio
     async def test_missing_required_field_block(self):
         from plugins.marketplace.schema_enforcer import SchemaEnforcer
+
         p = SchemaEnforcer(config={"action": "block"})
         schema = {"type": "object", "required": ["name", "age"]}
         ctx = self._make_ctx(content='{"name": "test"}', schema=schema)
@@ -162,6 +199,7 @@ class TestSchemaEnforcer:
     @pytest.mark.asyncio
     async def test_wrong_type_detected(self):
         from plugins.marketplace.schema_enforcer import SchemaEnforcer
+
         p = SchemaEnforcer(config={"action": "block"})
         schema = {"type": "object", "properties": {"age": {"type": "integer"}}}
         ctx = self._make_ctx(content='{"age": "not_a_number"}', schema=schema)
@@ -171,6 +209,7 @@ class TestSchemaEnforcer:
     @pytest.mark.asyncio
     async def test_non_json_response_passthrough(self):
         from plugins.marketplace.schema_enforcer import SchemaEnforcer
+
         p = SchemaEnforcer(config={"action": "block"})
         schema = {"type": "object"}
         ctx = self._make_ctx(content="Hello, this is plain text", schema=schema)
@@ -180,15 +219,18 @@ class TestSchemaEnforcer:
 
 # ── ShadowTraffic ──
 
-class TestShadowTraffic:
 
+class TestShadowTraffic:
     @pytest.mark.asyncio
     async def test_no_shadow_model_passthrough(self):
         from plugins.marketplace.shadow_traffic import ShadowTraffic
+
         p = ShadowTraffic(config={"shadow_model": ""})
         ctx = PluginContext(
             body={"model": "gpt-4o", "messages": [{"role": "user", "content": "hi"}]},
-            session_id="test", metadata={}, state=PluginState()
+            session_id="test",
+            metadata={},
+            state=PluginState(),
         )
         r = await p.execute(ctx)
         assert r.action == "passthrough"
@@ -196,10 +238,13 @@ class TestShadowTraffic:
     @pytest.mark.asyncio
     async def test_sample_rate_zero_skips(self):
         from plugins.marketplace.shadow_traffic import ShadowTraffic
+
         p = ShadowTraffic(config={"shadow_model": "claude-sonnet", "sample_rate": 0.0})
         ctx = PluginContext(
             body={"model": "gpt-4o", "messages": [{"role": "user", "content": "hi"}]},
-            session_id="test", metadata={}, state=PluginState()
+            session_id="test",
+            metadata={},
+            state=PluginState(),
         )
         # With sample_rate=0.0, random.random() > 0.0 is always true, so always skipped
         r = await p.execute(ctx)
@@ -208,10 +253,13 @@ class TestShadowTraffic:
     @pytest.mark.asyncio
     async def test_no_messages_passthrough(self):
         from plugins.marketplace.shadow_traffic import ShadowTraffic
+
         p = ShadowTraffic(config={"shadow_model": "claude-sonnet", "sample_rate": 1.0})
         ctx = PluginContext(
             body={"model": "gpt-4o", "messages": []},
-            session_id="test", metadata={}, state=PluginState()
+            session_id="test",
+            metadata={},
+            state=PluginState(),
         )
         r = await p.execute(ctx)
         assert r.action == "passthrough"

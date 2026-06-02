@@ -41,11 +41,13 @@ OPENAI_RESPONSE = {
     "object": "chat.completion",
     "created": 1700000000,
     "model": "gpt-4o",
-    "choices": [{
-        "index": 0,
-        "message": {"role": "assistant", "content": "I'm doing well!"},
-        "finish_reason": "stop",
-    }],
+    "choices": [
+        {
+            "index": 0,
+            "message": {"role": "assistant", "content": "I'm doing well!"},
+            "finish_reason": "stop",
+        }
+    ],
     "usage": {"prompt_tokens": 20, "completion_tokens": 5, "total_tokens": 25},
 }
 
@@ -53,6 +55,7 @@ OPENAI_RESPONSE = {
 # ══════════════════════════════════════════════════════
 # OpenAI Adapter (identity transform)
 # ══════════════════════════════════════════════════════
+
 
 class TestOpenAIAdapter:
     def setup_method(self):
@@ -63,7 +66,9 @@ class TestOpenAIAdapter:
 
     def test_translate_request_url(self):
         url, body, headers = self.adapter.translate_request(
-            "https://api.openai.com/v1", OPENAI_REQUEST, OPENAI_HEADERS,
+            "https://api.openai.com/v1",
+            OPENAI_REQUEST,
+            OPENAI_HEADERS,
         )
         assert url == "https://api.openai.com/v1/chat/completions"
         assert body is OPENAI_REQUEST  # identity — same object
@@ -71,7 +76,9 @@ class TestOpenAIAdapter:
 
     def test_translate_request_trailing_slash(self):
         url, _, _ = self.adapter.translate_request(
-            "https://api.openai.com/v1/", OPENAI_REQUEST, OPENAI_HEADERS,
+            "https://api.openai.com/v1/",
+            OPENAI_REQUEST,
+            OPENAI_HEADERS,
         )
         assert url == "https://api.openai.com/v1/chat/completions"
 
@@ -84,6 +91,7 @@ class TestOpenAIAdapter:
 # Anthropic Adapter
 # ══════════════════════════════════════════════════════
 
+
 class TestAnthropicAdapter:
     def setup_method(self):
         self.adapter = AnthropicAdapter()
@@ -93,13 +101,17 @@ class TestAnthropicAdapter:
 
     def test_translate_request_url(self):
         url, body, headers = self.adapter.translate_request(
-            "https://api.anthropic.com/v1", OPENAI_REQUEST, dict(OPENAI_HEADERS),
+            "https://api.anthropic.com/v1",
+            OPENAI_REQUEST,
+            dict(OPENAI_HEADERS),
         )
         assert url == "https://api.anthropic.com/v1/messages"
 
     def test_translate_request_system_extraction(self):
         _, body, _ = self.adapter.translate_request(
-            "https://api.anthropic.com/v1", OPENAI_REQUEST, dict(OPENAI_HEADERS),
+            "https://api.anthropic.com/v1",
+            OPENAI_REQUEST,
+            dict(OPENAI_HEADERS),
         )
         # System message extracted to top-level
         assert body["system"] == "You are helpful."
@@ -110,20 +122,29 @@ class TestAnthropicAdapter:
 
     def test_translate_request_max_tokens_required(self):
         _, body, _ = self.adapter.translate_request(
-            "https://api.anthropic.com/v1", OPENAI_REQUEST, dict(OPENAI_HEADERS),
+            "https://api.anthropic.com/v1",
+            OPENAI_REQUEST,
+            dict(OPENAI_HEADERS),
         )
         assert body["max_tokens"] == 1000
 
     def test_translate_request_max_tokens_default(self):
-        req = {"model": "claude-sonnet-4-20250514", "messages": [{"role": "user", "content": "Hi"}]}
+        req = {
+            "model": "claude-sonnet-4-20250514",
+            "messages": [{"role": "user", "content": "Hi"}],
+        }
         _, body, _ = self.adapter.translate_request(
-            "https://api.anthropic.com/v1", req, dict(OPENAI_HEADERS),
+            "https://api.anthropic.com/v1",
+            req,
+            dict(OPENAI_HEADERS),
         )
         assert body["max_tokens"] == 4096
 
     def test_translate_request_auth_header(self):
         _, _, headers = self.adapter.translate_request(
-            "https://api.anthropic.com/v1", OPENAI_REQUEST, dict(OPENAI_HEADERS),
+            "https://api.anthropic.com/v1",
+            OPENAI_REQUEST,
+            dict(OPENAI_HEADERS),
         )
         assert "Authorization" not in headers
         assert headers["x-api-key"] == "sk-test-key-123"
@@ -131,35 +152,48 @@ class TestAnthropicAdapter:
 
     def test_translate_request_temperature(self):
         _, body, _ = self.adapter.translate_request(
-            "https://api.anthropic.com/v1", OPENAI_REQUEST, dict(OPENAI_HEADERS),
+            "https://api.anthropic.com/v1",
+            OPENAI_REQUEST,
+            dict(OPENAI_HEADERS),
         )
         assert body["temperature"] == 0.7
 
     def test_translate_request_stop_sequences(self):
         req = dict(OPENAI_REQUEST, stop=["END", "STOP"])
         _, body, _ = self.adapter.translate_request(
-            "https://api.anthropic.com/v1", req, dict(OPENAI_HEADERS),
+            "https://api.anthropic.com/v1",
+            req,
+            dict(OPENAI_HEADERS),
         )
         assert body["stop_sequences"] == ["END", "STOP"]
 
     def test_translate_request_stop_string(self):
         req = dict(OPENAI_REQUEST, stop="END")
         _, body, _ = self.adapter.translate_request(
-            "https://api.anthropic.com/v1", req, dict(OPENAI_HEADERS),
+            "https://api.anthropic.com/v1",
+            req,
+            dict(OPENAI_HEADERS),
         )
         assert body["stop_sequences"] == ["END"]
 
     def test_translate_request_stream(self):
         req = dict(OPENAI_REQUEST, stream=True)
         _, body, _ = self.adapter.translate_request(
-            "https://api.anthropic.com/v1", req, dict(OPENAI_HEADERS),
+            "https://api.anthropic.com/v1",
+            req,
+            dict(OPENAI_HEADERS),
         )
         assert body["stream"] is True
 
     def test_translate_request_no_system(self):
-        req = {"model": "claude-sonnet-4-20250514", "messages": [{"role": "user", "content": "Hi"}]}
+        req = {
+            "model": "claude-sonnet-4-20250514",
+            "messages": [{"role": "user", "content": "Hi"}],
+        }
         _, body, _ = self.adapter.translate_request(
-            "https://api.anthropic.com/v1", req, dict(OPENAI_HEADERS),
+            "https://api.anthropic.com/v1",
+            req,
+            dict(OPENAI_HEADERS),
         )
         assert "system" not in body
 
@@ -189,7 +223,12 @@ class TestAnthropicAdapter:
             "model": "claude-sonnet-4-20250514",
             "content": [
                 {"type": "text", "text": "Let me check."},
-                {"type": "tool_use", "id": "call_1", "name": "get_weather", "input": {"city": "SF"}},
+                {
+                    "type": "tool_use",
+                    "id": "call_1",
+                    "name": "get_weather",
+                    "input": {"city": "SF"},
+                },
             ],
             "stop_reason": "tool_use",
             "usage": {"input_tokens": 20, "output_tokens": 10},
@@ -233,14 +272,20 @@ class TestAnthropicAdapter:
 
     def test_translate_tools_openai_to_anthropic(self):
         from proxy.adapters.anthropic import _translate_tools
-        openai_tools = [{
-            "type": "function",
-            "function": {
-                "name": "get_weather",
-                "description": "Get weather for a city",
-                "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
-            },
-        }]
+
+        openai_tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "description": "Get weather for a city",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"city": {"type": "string"}},
+                    },
+                },
+            }
+        ]
         result = _translate_tools(openai_tools)
         assert len(result) == 1
         assert result[0]["name"] == "get_weather"
@@ -249,16 +294,20 @@ class TestAnthropicAdapter:
 
     def test_translate_tool_choice(self):
         from proxy.adapters.anthropic import _translate_tool_choice
+
         assert _translate_tool_choice("auto") == {"type": "auto"}
         assert _translate_tool_choice("none") == {"type": "none"}
         assert _translate_tool_choice("required") == {"type": "any"}
-        result = _translate_tool_choice({"type": "function", "function": {"name": "foo"}})
+        result = _translate_tool_choice(
+            {"type": "function", "function": {"name": "foo"}}
+        )
         assert result == {"type": "tool", "name": "foo"}
 
 
 # ══════════════════════════════════════════════════════
 # Google Gemini Adapter
 # ══════════════════════════════════════════════════════
+
 
 class TestGoogleAdapter:
     def setup_method(self):
@@ -270,7 +319,10 @@ class TestGoogleAdapter:
     def test_translate_request_url(self):
         url, _, _ = self.adapter.translate_request(
             "https://generativelanguage.googleapis.com/v1beta",
-            {"model": "gemini-2.5-flash", "messages": [{"role": "user", "content": "Hi"}]},
+            {
+                "model": "gemini-2.5-flash",
+                "messages": [{"role": "user", "content": "Hi"}],
+            },
             dict(OPENAI_HEADERS),
         )
         assert "models/gemini-2.5-flash:generateContent" in url
@@ -278,7 +330,11 @@ class TestGoogleAdapter:
     def test_translate_request_streaming_url(self):
         url, _, _ = self.adapter.translate_request(
             "https://generativelanguage.googleapis.com/v1beta",
-            {"model": "gemini-2.5-flash", "messages": [{"role": "user", "content": "Hi"}], "stream": True},
+            {
+                "model": "gemini-2.5-flash",
+                "messages": [{"role": "user", "content": "Hi"}],
+                "stream": True,
+            },
             dict(OPENAI_HEADERS),
         )
         assert "streamGenerateContent" in url
@@ -288,7 +344,10 @@ class TestGoogleAdapter:
         """API key must be in x-goog-api-key header, NOT in URL query params."""
         url, _, headers = self.adapter.translate_request(
             "https://generativelanguage.googleapis.com/v1beta",
-            {"model": "gemini-2.5-flash", "messages": [{"role": "user", "content": "Hi"}]},
+            {
+                "model": "gemini-2.5-flash",
+                "messages": [{"role": "user", "content": "Hi"}],
+            },
             dict(OPENAI_HEADERS),
         )
         assert "key=" not in url  # Must NOT leak to URL
@@ -331,19 +390,30 @@ class TestGoogleAdapter:
         assert gen_config["maxOutputTokens"] == 1000
 
     def test_translate_request_no_system(self):
-        req = {"model": "gemini-2.5-flash", "messages": [{"role": "user", "content": "Hi"}]}
+        req = {
+            "model": "gemini-2.5-flash",
+            "messages": [{"role": "user", "content": "Hi"}],
+        }
         _, body, _ = self.adapter.translate_request(
-            "https://generativelanguage.googleapis.com/v1beta", req, {},
+            "https://generativelanguage.googleapis.com/v1beta",
+            req,
+            {},
         )
         assert "systemInstruction" not in body
 
     def test_translate_response(self):
         gemini_response = {
-            "candidates": [{
-                "content": {"parts": [{"text": "Hello!"}], "role": "model"},
-                "finishReason": "STOP",
-            }],
-            "usageMetadata": {"promptTokenCount": 10, "candidatesTokenCount": 5, "totalTokenCount": 15},
+            "candidates": [
+                {
+                    "content": {"parts": [{"text": "Hello!"}], "role": "model"},
+                    "finishReason": "STOP",
+                }
+            ],
+            "usageMetadata": {
+                "promptTokenCount": 10,
+                "candidatesTokenCount": 5,
+                "totalTokenCount": 15,
+            },
         }
         result = self.adapter.translate_response(gemini_response)
         assert result["object"] == "chat.completion"
@@ -353,14 +423,22 @@ class TestGoogleAdapter:
 
     def test_translate_response_tool_call(self):
         gemini_response = {
-            "candidates": [{
-                "content": {
-                    "parts": [{"functionCall": {"name": "search", "args": {"q": "test"}}}],
-                    "role": "model",
-                },
-                "finishReason": "STOP",
-            }],
-            "usageMetadata": {"promptTokenCount": 5, "candidatesTokenCount": 5, "totalTokenCount": 10},
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {"functionCall": {"name": "search", "args": {"q": "test"}}}
+                        ],
+                        "role": "model",
+                    },
+                    "finishReason": "STOP",
+                }
+            ],
+            "usageMetadata": {
+                "promptTokenCount": 5,
+                "candidatesTokenCount": 5,
+                "totalTokenCount": 10,
+            },
         }
         result = self.adapter.translate_response(gemini_response)
         tool_calls = result["choices"][0]["message"]["tool_calls"]
@@ -377,11 +455,17 @@ class TestGoogleAdapter:
 
     def test_translate_response_safety_block(self):
         gemini_response = {
-            "candidates": [{
-                "content": {"parts": [{"text": "..."}], "role": "model"},
-                "finishReason": "SAFETY",
-            }],
-            "usageMetadata": {"promptTokenCount": 5, "candidatesTokenCount": 0, "totalTokenCount": 5},
+            "candidates": [
+                {
+                    "content": {"parts": [{"text": "..."}], "role": "model"},
+                    "finishReason": "SAFETY",
+                }
+            ],
+            "usageMetadata": {
+                "promptTokenCount": 5,
+                "candidatesTokenCount": 0,
+                "totalTokenCount": 5,
+            },
         }
         result = self.adapter.translate_response(gemini_response)
         assert result["choices"][0]["finish_reason"] == "content_filter"
@@ -390,6 +474,7 @@ class TestGoogleAdapter:
 # ══════════════════════════════════════════════════════
 # Azure Adapter
 # ══════════════════════════════════════════════════════
+
 
 class TestAzureAdapter:
     def setup_method(self):
@@ -425,6 +510,7 @@ class TestAzureAdapter:
 # ══════════════════════════════════════════════════════
 # Ollama Adapter
 # ══════════════════════════════════════════════════════
+
 
 class TestOllamaAdapter:
     def setup_method(self):
@@ -462,6 +548,7 @@ class TestOllamaAdapter:
 # OpenAI-Compatible Adapter (catch-all)
 # ══════════════════════════════════════════════════════
 
+
 class TestOpenAICompatAdapter:
     def test_provider_name(self):
         adapter = OpenAICompatAdapter()
@@ -480,7 +567,9 @@ class TestOpenAICompatAdapter:
     def test_explicit_url_overrides_default(self):
         adapter = OpenAICompatAdapter("groq")
         url, _, _ = adapter.translate_request(
-            "https://custom.api.com/v1", OPENAI_REQUEST, dict(OPENAI_HEADERS),
+            "https://custom.api.com/v1",
+            OPENAI_REQUEST,
+            dict(OPENAI_HEADERS),
         )
         assert "custom.api.com" in url
 
@@ -488,6 +577,7 @@ class TestOpenAICompatAdapter:
 # ══════════════════════════════════════════════════════
 # Model Prefix Auto-Detection
 # ══════════════════════════════════════════════════════
+
 
 class TestDetectProvider:
     def test_openai_models(self):
@@ -538,6 +628,7 @@ class TestDetectProvider:
 # ══════════════════════════════════════════════════════
 # Provider Registry
 # ══════════════════════════════════════════════════════
+
 
 class TestProviderRegistry:
     def test_get_adapter_by_provider_type(self):
@@ -597,6 +688,7 @@ class TestProviderRegistry:
 # Edge Cases
 # ══════════════════════════════════════════════════════
 
+
 class TestEdgeCases:
     def test_anthropic_multipart_content(self):
         """Multiple text blocks in Anthropic response."""
@@ -619,16 +711,23 @@ class TestEdgeCases:
         adapter = GoogleAdapter()
         req = {
             "model": "gemini-2.5-flash",
-            "messages": [{
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "What's in this image?"},
-                    {"type": "image_url", "image_url": {"url": "https://example.com/cat.jpg"}},
-                ],
-            }],
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What's in this image?"},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "https://example.com/cat.jpg"},
+                        },
+                    ],
+                }
+            ],
         }
         _, body, _ = adapter.translate_request(
-            "https://generativelanguage.googleapis.com/v1beta", req, {},
+            "https://generativelanguage.googleapis.com/v1beta",
+            req,
+            {},
         )
         parts = body["contents"][0]["parts"]
         assert len(parts) == 2
@@ -648,9 +747,15 @@ class TestEdgeCases:
     def test_anthropic_max_completion_tokens_alias(self):
         """max_completion_tokens (OpenAI v2 name) → max_tokens."""
         adapter = AnthropicAdapter()
-        req = {"model": "claude-sonnet-4-20250514", "messages": [{"role": "user", "content": "Hi"}], "max_completion_tokens": 2048}
+        req = {
+            "model": "claude-sonnet-4-20250514",
+            "messages": [{"role": "user", "content": "Hi"}],
+            "max_completion_tokens": 2048,
+        }
         _, body, _ = adapter.translate_request(
-            "https://api.anthropic.com/v1", req, {},
+            "https://api.anthropic.com/v1",
+            req,
+            {},
         )
         assert body["max_tokens"] == 2048
 
@@ -659,7 +764,9 @@ class TestEdgeCases:
         adapter = AnthropicAdapter()
         req = {"model": "claude-sonnet-4-20250514", "messages": []}
         _, body, _ = adapter.translate_request(
-            "https://api.anthropic.com/v1", req, {},
+            "https://api.anthropic.com/v1",
+            req,
+            {},
         )
         assert body["messages"] == []
         assert "system" not in body

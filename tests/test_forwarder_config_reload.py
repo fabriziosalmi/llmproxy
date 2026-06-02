@@ -11,7 +11,6 @@ on each request. The orchestrator passes `lambda: self.config` so the
 provider always returns the live agent config.
 """
 
-
 from proxy.forwarder import RequestForwarder
 
 
@@ -70,7 +69,9 @@ def test_fallback_chain_observes_rebound_config():
     # Reload introduces a fallback chain.
     agent.config = {
         "endpoints": {},
-        "fallback_chains": {"gpt-4": [{"provider": "anthropic", "model": "claude-3-5"}]},
+        "fallback_chains": {
+            "gpt-4": [{"provider": "anthropic", "model": "claude-3-5"}]
+        },
     }
 
     config_seen = forwarder._live_config()
@@ -80,7 +81,11 @@ def test_fallback_chain_observes_rebound_config():
 def test_legacy_static_config_still_works():
     """Back-compat: existing callers that pass `config=dict` continue to
     function. They just don't get hot-reload (no provider was wired)."""
-    static = {"endpoints": {"local": {"provider": "ollama", "base_url": "http://localhost:11434"}}}
+    static = {
+        "endpoints": {
+            "local": {"provider": "ollama", "base_url": "http://localhost:11434"}
+        }
+    }
     forwarder = RequestForwarder(config=static)
     resolved = forwarder.resolve_endpoint_for_provider("ollama")
     assert resolved is not None

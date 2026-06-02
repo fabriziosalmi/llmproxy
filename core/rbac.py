@@ -8,19 +8,32 @@ logger = logging.getLogger(__name__)
 # Default role -> permission mapping
 DEFAULT_PERMISSIONS: Dict[str, Set[str]] = {
     "admin": {
-        "proxy:use", "proxy:toggle", "proxy:config",
-        "registry:read", "registry:write", "registry:delete",
-        "chat:use", "chat:compare",
-        "logs:read", "logs:clear",
-        "plugins:manage", "features:toggle",
-        "users:manage", "budget:manage",
+        "proxy:use",
+        "proxy:toggle",
+        "proxy:config",
+        "registry:read",
+        "registry:write",
+        "registry:delete",
+        "chat:use",
+        "chat:compare",
+        "logs:read",
+        "logs:clear",
+        "plugins:manage",
+        "features:toggle",
+        "users:manage",
+        "budget:manage",
     },
     "operator": {
-        "proxy:use", "proxy:toggle",
-        "registry:read", "registry:write",
-        "chat:use", "chat:compare",
-        "logs:read", "logs:clear",
-        "plugins:manage", "features:toggle",
+        "proxy:use",
+        "proxy:toggle",
+        "registry:read",
+        "registry:write",
+        "chat:use",
+        "chat:compare",
+        "logs:read",
+        "logs:clear",
+        "plugins:manage",
+        "features:toggle",
     },
     "user": {
         "proxy:use",
@@ -73,14 +86,16 @@ class RBACManager:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute(
                 "SELECT monthly_budget, consumed_budget, hard_limit FROM quotas WHERE api_key = ?",
-                (api_key,)
+                (api_key,),
             )
             row = cursor.fetchone()
             if not row:
                 return True
             budget, consumed, hard_limit = row
             if hard_limit and consumed >= budget:
-                logger.warning(f"RBAC: Key {api_key[:8]}... exceeded budget ({consumed}/{budget})")
+                logger.warning(
+                    f"RBAC: Key {api_key[:8]}... exceeded budget ({consumed}/{budget})"
+                )
                 return False
             return True
 
@@ -96,7 +111,7 @@ class RBACManager:
         with sqlite3.connect(self.db_path) as conn:
             conn.execute(
                 "UPDATE quotas SET consumed_budget = consumed_budget + ? WHERE api_key = ?",
-                (cost, api_key)
+                (cost, api_key),
             )
             conn.commit()
 
@@ -109,7 +124,7 @@ class RBACManager:
         with sqlite3.connect(self.db_path) as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO quotas (api_key, team_name, monthly_budget) VALUES (?, ?, ?)",
-                (api_key, team, budget)
+                (api_key, team, budget),
             )
             conn.commit()
 
@@ -130,15 +145,19 @@ class RBACManager:
             perms |= self.permissions.get(role, set())
         return perms
 
-    def _sync_set_user_roles(self, subject: str, email: Optional[str], roles: List[str]):
+    def _sync_set_user_roles(
+        self, subject: str, email: Optional[str], roles: List[str]
+    ):
         with sqlite3.connect(self.db_path) as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO user_roles (subject, email, roles) VALUES (?, ?, ?)",
-                (subject, email, ",".join(roles))
+                (subject, email, ",".join(roles)),
             )
             conn.commit()
 
-    async def set_user_roles(self, subject: str, email: Optional[str], roles: List[str]):
+    async def set_user_roles(
+        self, subject: str, email: Optional[str], roles: List[str]
+    ):
         """Persist user->role mapping (non-blocking).
 
         Runs the SQLite write in a thread-pool worker — calling sqlite3 directly

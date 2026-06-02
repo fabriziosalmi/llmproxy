@@ -36,6 +36,7 @@ def test_scrub_bearer():
 # These were missing from the export scrubber, so GDPR exports could
 # leak PII categories that the security shield masks at log time.
 
+
 def test_scrub_ssn():
     text = "Subject SSN is 123-45-6789 on file"
     result = scrub_pii(text)
@@ -119,7 +120,9 @@ def test_scrub_dict_nested():
 
 @pytest.mark.asyncio
 async def test_record_creates_file(tmp_path):
-    exporter = DatasetExporter(output_dir=str(tmp_path), scrub=False, compress_on_rotate=False)
+    exporter = DatasetExporter(
+        output_dir=str(tmp_path), scrub=False, compress_on_rotate=False
+    )
     entry = {"prompt": "Hello", "response": "World", "model": "gpt-4"}
     await exporter.record(entry)
     await exporter.close()
@@ -133,7 +136,9 @@ async def test_record_creates_file(tmp_path):
 
 @pytest.mark.asyncio
 async def test_record_scrubs_pii(tmp_path):
-    exporter = DatasetExporter(output_dir=str(tmp_path), scrub=True, compress_on_rotate=False)
+    exporter = DatasetExporter(
+        output_dir=str(tmp_path), scrub=True, compress_on_rotate=False
+    )
     entry = {
         "prompt": "My email is secret@corp.com",
         "response": "Noted",

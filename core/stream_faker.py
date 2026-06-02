@@ -50,7 +50,13 @@ async def fake_stream(cached_response: Dict[str, Any]) -> AsyncGenerator[bytes, 
         "id": response_id,
         "object": "chat.completion.chunk",
         "model": model,
-        "choices": [{"index": 0, "delta": {"role": "assistant", "content": ""}, "finish_reason": None}],
+        "choices": [
+            {
+                "index": 0,
+                "delta": {"role": "assistant", "content": ""},
+                "finish_reason": None,
+            }
+        ],
     }
     yield f"data: {json.dumps(first_chunk)}\n\n".encode()
     await asyncio.sleep(0)
@@ -63,7 +69,9 @@ async def fake_stream(cached_response: Dict[str, Any]) -> AsyncGenerator[bytes, 
             "id": response_id,
             "object": "chat.completion.chunk",
             "model": model,
-            "choices": [{"index": 0, "delta": {"content": token}, "finish_reason": None}],
+            "choices": [
+                {"index": 0, "delta": {"content": token}, "finish_reason": None}
+            ],
         }
         yield f"data: {json.dumps(chunk)}\n\n".encode()
         # Yield control to event loop every 16 chunks (~64 chars)

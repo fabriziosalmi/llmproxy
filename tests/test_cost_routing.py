@@ -11,8 +11,8 @@ from plugins.default.neural_router import _compute_score, _endpoint_stats
 # _compute_score with cost awareness
 # ══════════════════════════════════════════════════════════
 
-class TestCostAwareScoring:
 
+class TestCostAwareScoring:
     def setup_method(self):
         """Clear endpoint stats between tests."""
         _endpoint_stats.clear()
@@ -46,7 +46,9 @@ class TestCostAwareScoring:
         """Local/free models ($0) score highest on cost factor."""
         stats = {"success_rate": 1.0, "latency_ms": 100.0}
 
-        score_free = _compute_score(None, stats, model="ollama/llama3.3", cost_weight=0.5)
+        score_free = _compute_score(
+            None, stats, model="ollama/llama3.3", cost_weight=0.5
+        )
         score_cheap = _compute_score(None, stats, model="gpt-4o-mini", cost_weight=0.5)
 
         assert score_free > score_cheap
@@ -64,12 +66,20 @@ class TestCostAwareScoring:
         """cost_weight=1.0 creates a large gap between cheap and expensive."""
         stats = {"success_rate": 1.0, "latency_ms": 100.0}
 
-        score_cheap_low = _compute_score(None, stats, model="gpt-4o-mini", cost_weight=0.1)
-        score_cheap_high = _compute_score(None, stats, model="gpt-4o-mini", cost_weight=1.0)
-        score_expensive_high = _compute_score(None, stats, model="gpt-4o", cost_weight=1.0)
+        score_cheap_low = _compute_score(
+            None, stats, model="gpt-4o-mini", cost_weight=0.1
+        )
+        score_cheap_high = _compute_score(
+            None, stats, model="gpt-4o-mini", cost_weight=1.0
+        )
+        score_expensive_high = _compute_score(
+            None, stats, model="gpt-4o", cost_weight=1.0
+        )
 
         # Higher cost_weight → larger gap
-        ratio_low = score_cheap_low / _compute_score(None, stats, model="gpt-4o", cost_weight=0.1)
+        ratio_low = score_cheap_low / _compute_score(
+            None, stats, model="gpt-4o", cost_weight=0.1
+        )
         ratio_high = score_cheap_high / score_expensive_high
         assert ratio_high > ratio_low
 
@@ -78,8 +88,12 @@ class TestCostAwareScoring:
         reliable_stats = {"success_rate": 0.99, "latency_ms": 200.0}
         flaky_stats = {"success_rate": 0.30, "latency_ms": 100.0}
 
-        score_reliable = _compute_score(None, reliable_stats, model="gpt-4o", cost_weight=0.3)
-        score_flaky = _compute_score(None, flaky_stats, model="gpt-4o-mini", cost_weight=0.3)
+        score_reliable = _compute_score(
+            None, reliable_stats, model="gpt-4o", cost_weight=0.3
+        )
+        score_flaky = _compute_score(
+            None, flaky_stats, model="gpt-4o-mini", cost_weight=0.3
+        )
 
         # Reliable should still win despite being more expensive (success²=0.98 vs 0.09)
         assert score_reliable > score_flaky
@@ -89,8 +103,12 @@ class TestCostAwareScoring:
         slow_stats = {"success_rate": 1.0, "latency_ms": 5000.0}
         fast_stats = {"success_rate": 1.0, "latency_ms": 50.0}
 
-        score_slow_cheap = _compute_score(None, slow_stats, model="gpt-4o-mini", cost_weight=0.3)
-        score_fast_expensive = _compute_score(None, fast_stats, model="gpt-4o", cost_weight=0.3)
+        score_slow_cheap = _compute_score(
+            None, slow_stats, model="gpt-4o-mini", cost_weight=0.3
+        )
+        score_fast_expensive = _compute_score(
+            None, fast_stats, model="gpt-4o", cost_weight=0.3
+        )
 
         # 100x latency difference should outweigh ~17x price difference
         assert score_fast_expensive > score_slow_cheap
@@ -100,38 +118,49 @@ class TestCostAwareScoring:
 # Budget downgrade to local
 # ══════════════════════════════════════════════════════════
 
-class TestBudgetDowngrade:
 
+class TestBudgetDowngrade:
     @pytest.mark.asyncio
     async def test_no_downgrade_under_limit(self):
         """When under budget, model is NOT downgraded."""
         from tests.test_pipeline_e2e import PipelineAgent
         import httpx
 
-        agent = PipelineAgent(config={
-            "server": {"auth": {"enabled": False}},
-            "caching": {"enabled": False, "negative_cache": {"maxsize": 100, "ttl": 60}},
-            "plugins": {},
-            "budget": {
-                "daily_limit": 50.0,
-                "soft_limit": 40.0,
-                "fallback_to_local_on_limit": True,
-                "local_model": "ollama/llama3.3",
-            },
-        })
+        agent = PipelineAgent(
+            config={
+                "server": {"auth": {"enabled": False}},
+                "caching": {
+                    "enabled": False,
+                    "negative_cache": {"maxsize": 100, "ttl": 60},
+                },
+                "plugins": {},
+                "budget": {
+                    "daily_limit": 50.0,
+                    "soft_limit": 40.0,
+                    "fallback_to_local_on_limit": True,
+                    "local_model": "ollama/llama3.3",
+                },
+            }
+        )
         agent.total_cost_today = 10.0  # well under limit
 
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=agent.app),
             base_url="http://test",
         ) as client:
-            resp = await client.post("/v1/chat/completions", json={
-                "model": "gpt-4o", "messages": [{"role": "user", "content": "Hi"}],
-            })
+            resp = await client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "gpt-4o",
+                    "messages": [{"role": "user", "content": "Hi"}],
+                },
+            )
 
         assert resp.status_code == 200
         # Model should NOT have been downgraded
-        assert "_budget_downgrade" not in agent.forwarder.forward_with_fallback.call_args
+        assert (
+            "_budget_downgrade" not in agent.forwarder.forward_with_fallback.call_args
+        )
 
     @pytest.mark.asyncio
     async def test_downgrade_when_over_limit(self):
@@ -139,17 +168,22 @@ class TestBudgetDowngrade:
         from tests.test_pipeline_e2e import PipelineAgent
         import httpx
 
-        agent = PipelineAgent(config={
-            "server": {"auth": {"enabled": False}},
-            "caching": {"enabled": False, "negative_cache": {"maxsize": 100, "ttl": 60}},
-            "plugins": {},
-            "budget": {
-                "daily_limit": 50.0,
-                "soft_limit": 40.0,
-                "fallback_to_local_on_limit": True,
-                "local_model": "ollama/llama3.3",
-            },
-        })
+        agent = PipelineAgent(
+            config={
+                "server": {"auth": {"enabled": False}},
+                "caching": {
+                    "enabled": False,
+                    "negative_cache": {"maxsize": 100, "ttl": 60},
+                },
+                "plugins": {},
+                "budget": {
+                    "daily_limit": 50.0,
+                    "soft_limit": 40.0,
+                    "fallback_to_local_on_limit": True,
+                    "local_model": "ollama/llama3.3",
+                },
+            }
+        )
         agent.total_cost_today = 55.0  # over limit
 
         # Track what model was sent to forwarder
@@ -167,9 +201,13 @@ class TestBudgetDowngrade:
             transport=httpx.ASGITransport(app=agent.app),
             base_url="http://test",
         ) as client:
-            resp = await client.post("/v1/chat/completions", json={
-                "model": "gpt-4o", "messages": [{"role": "user", "content": "Hi"}],
-            })
+            resp = await client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "gpt-4o",
+                    "messages": [{"role": "user", "content": "Hi"}],
+                },
+            )
 
         assert resp.status_code == 200
         # Model should have been downgraded to local
@@ -181,15 +219,20 @@ class TestBudgetDowngrade:
         from tests.test_pipeline_e2e import PipelineAgent
         import httpx
 
-        agent = PipelineAgent(config={
-            "server": {"auth": {"enabled": False}},
-            "caching": {"enabled": False, "negative_cache": {"maxsize": 100, "ttl": 60}},
-            "plugins": {},
-            "budget": {
-                "daily_limit": 50.0,
-                # fallback_to_local_on_limit NOT set
-            },
-        })
+        agent = PipelineAgent(
+            config={
+                "server": {"auth": {"enabled": False}},
+                "caching": {
+                    "enabled": False,
+                    "negative_cache": {"maxsize": 100, "ttl": 60},
+                },
+                "plugins": {},
+                "budget": {
+                    "daily_limit": 50.0,
+                    # fallback_to_local_on_limit NOT set
+                },
+            }
+        )
         agent.total_cost_today = 55.0
 
         forwarded_model = None
@@ -206,9 +249,13 @@ class TestBudgetDowngrade:
             transport=httpx.ASGITransport(app=agent.app),
             base_url="http://test",
         ) as client:
-            resp = await client.post("/v1/chat/completions", json={
-                "model": "gpt-4o", "messages": [{"role": "user", "content": "Hi"}],
-            })
+            resp = await client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "gpt-4o",
+                    "messages": [{"role": "user", "content": "Hi"}],
+                },
+            )
 
         assert resp.status_code == 200
         assert forwarded_model == "gpt-4o"  # NOT downgraded

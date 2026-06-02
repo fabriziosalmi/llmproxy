@@ -1,4 +1,5 @@
 """Identity routes: SSO/OIDC config, current user, token exchange."""
+
 import logging
 
 from fastapi import APIRouter, Request, HTTPException, Depends
@@ -29,11 +30,13 @@ def create_router(agent) -> APIRouter:
             }
         providers = []
         for name, p in agent.identity.providers.items():
-            providers.append({
-                "name": p.name,
-                "client_id": p.client_id,
-                "issuer": p.issuer,
-            })
+            providers.append(
+                {
+                    "name": p.name,
+                    "client_id": p.client_id,
+                    "issuer": p.issuer,
+                }
+            )
         return {
             "enabled": True,
             "providers": providers,
@@ -64,7 +67,9 @@ def create_router(agent) -> APIRouter:
                     "email": identity.email,
                     "name": identity.name,
                     "roles": identity.roles,
-                    "permissions": list(agent.rbac.get_permissions_for_roles(identity.roles)),
+                    "permissions": list(
+                        agent.rbac.get_permissions_for_roles(identity.roles)
+                    ),
                 }
         if agent._verify_api_key(token):
             return {
@@ -96,7 +101,9 @@ def create_router(agent) -> APIRouter:
             raise HTTPException(status_code=401, detail="Invalid token")
         ttl = agent.config.get("identity", {}).get("session_ttl", 3600)
         proxy_token = agent.identity.generate_proxy_jwt(identity, ttl=ttl)
-        await agent.rbac.set_user_roles(identity.subject, identity.email, identity.roles)
+        await agent.rbac.set_user_roles(
+            identity.subject, identity.email, identity.roles
+        )
         return {
             "token": proxy_token,
             "expires_in": ttl,

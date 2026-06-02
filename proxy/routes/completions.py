@@ -56,12 +56,14 @@ def _translate_chat_chunk_to_legacy(chunk: bytes) -> bytes:
                 "object": "text_completion",
                 "created": data.get("created", 0),
                 "model": data.get("model", ""),
-                "choices": [{
-                    "text": content,
-                    "index": 0,
-                    "logprobs": None,
-                    "finish_reason": finish,
-                }],
+                "choices": [
+                    {
+                        "text": content,
+                        "index": 0,
+                        "logprobs": None,
+                        "finish_reason": finish,
+                    }
+                ],
             }
             output_lines.append(f"data: {json.dumps(legacy)}")
         except (json.JSONDecodeError, KeyError, IndexError):
@@ -77,12 +79,16 @@ def create_router(agent) -> APIRouter:
     router = APIRouter()
 
     @router.post("/v1/completions")
-    async def text_completions(request: Request, api_key: str = Depends(API_KEY_HEADER)):
+    async def text_completions(
+        request: Request, api_key: str = Depends(API_KEY_HEADER)
+    ):
         # Auth parity with /v1/chat/completions.
         token = ""
         if agent.config["server"]["auth"]["enabled"]:
             if not api_key:
-                raise HTTPException(status_code=401, detail="Unauthorized: Missing API key")
+                raise HTTPException(
+                    status_code=401, detail="Unauthorized: Missing API key"
+                )
             token = api_key.replace("Bearer ", "").strip()
             if not token:
                 raise HTTPException(status_code=401, detail="Unauthorized: Empty token")
@@ -94,21 +100,32 @@ def create_router(agent) -> APIRouter:
                     if not identity:
                         identity = await agent.identity.verify_token(token)
                 except ValueError:
-                    raise HTTPException(status_code=401, detail="Unauthorized: Invalid or expired token")
+                    raise HTTPException(
+                        status_code=401, detail="Unauthorized: Invalid or expired token"
+                    )
 
             if identity and identity.verified:
                 request.state.identity = identity
                 request.state.user = identity.email or identity.subject
                 request.state.roles = identity.roles
                 if not agent.rbac.check_permission(identity.roles, "proxy:use"):
-                    raise HTTPException(status_code=403, detail="Insufficient permissions")
-                await agent.rbac.set_user_roles(identity.subject, identity.email, identity.roles)
+                    raise HTTPException(
+                        status_code=403, detail="Insufficient permissions"
+                    )
+                await agent.rbac.set_user_roles(
+                    identity.subject, identity.email, identity.roles
+                )
             else:
                 if not agent._verify_api_key(token):
-                    raise HTTPException(status_code=401, detail="Unauthorized: Invalid API key or JWT")
+                    raise HTTPException(
+                        status_code=401, detail="Unauthorized: Invalid API key or JWT"
+                    )
 
                 if not await agent.rbac.check_quota(token):
-                    raise HTTPException(status_code=402, detail="Enterprise Quota Exceeded for this API Key.")
+                    raise HTTPException(
+                        status_code=402,
+                        detail="Enterprise Quota Exceeded for this API Key.",
+                    )
 
         body = await request.json()
 
@@ -129,11 +146,15 @@ def create_router(agent) -> APIRouter:
             ip = request.client.host if request.client else "anon"
             ua = request.headers.get("user-agent", "")
             lang = request.headers.get("accept-language", "")
-            session_id = hashlib.sha256(f"{ip}:{ua}:{lang}".encode("utf-8")).hexdigest()[:16]
+            session_id = hashlib.sha256(
+                f"{ip}:{ua}:{lang}".encode("utf-8")
+            ).hexdigest()[:16]
 
         # Run through full proxy pipeline
         _start = time.time()
-        response = await agent.proxy_request(request, body=chat_body, session_id=session_id)
+        response = await agent.proxy_request(
+            request, body=chat_body, session_id=session_id
+        )
         _duration = time.time() - _start
 
         # Audit + spend persistence for NON-streaming legacy completions.
@@ -141,7 +162,11 @@ def create_router(agent) -> APIRouter:
         # chokepoint). chat.py has its own block; this is parity for the legacy
         # path which otherwise leaves the audit ledger silent (live walkthrough
         # 2026-05-20: 12 completions, 0 audit entries — root cause was this gap).
-        if not isinstance(response, StreamingResponse) and response is not None and hasattr(response, "body"):
+        if (
+            not isinstance(response, StreamingResponse)
+            and response is not None
+            and hasattr(response, "body")
+        ):
             try:
                 _now = int(time.time())
                 _date = _dt.date.today().isoformat()
@@ -161,17 +186,29 @@ def create_router(agent) -> APIRouter:
                     _in_tok = int(_usage.get("prompt_tokens", 0) or 0)
                     _out_tok = int(_usage.get("completion_tokens", 0) or 0)
                     _cost_usd = estimate_cost(_model_name, _in_tok, _out_tok)
-                except (json.JSONDecodeError, AttributeError, TypeError, UnicodeDecodeError) as e:
+                except (
+                    json.JSONDecodeError,
+                    AttributeError,
+                    TypeError,
+                    UnicodeDecodeError,
+                ) as e:
                     logger.debug("Legacy completion usage parse skipped: %s", e)
-                _status = response.status_code if hasattr(response, "status_code") else 200
+                _status = (
+                    response.status_code if hasattr(response, "status_code") else 200
+                )
                 _latency_ms = round(_duration * 1000, 1)
                 if hasattr(agent.store, "log_spend"):
                     try:
                         await agent.store.log_spend(
-                            ts=_now, date=_date, key_prefix=_key,
-                            model=_model_name, provider=_provider,
-                            prompt_tokens=_in_tok, completion_tokens=_out_tok,
-                            cost_usd=_cost_usd, latency_ms=_latency_ms,
+                            ts=_now,
+                            date=_date,
+                            key_prefix=_key,
+                            model=_model_name,
+                            provider=_provider,
+                            prompt_tokens=_in_tok,
+                            completion_tokens=_out_tok,
+                            cost_usd=_cost_usd,
+                            latency_ms=_latency_ms,
                             status=_status,
                         )
                     except Exception as e:
@@ -179,10 +216,18 @@ def create_router(agent) -> APIRouter:
                 if hasattr(agent.store, "log_audit"):
                     try:
                         await agent.store.log_audit(
-                            ts=_now, req_id=_req_id, session_id=session_id[:16],
-                            key_prefix=_key, model=_model_name, provider=_provider,
-                            status=_status, prompt_tokens=_in_tok, completion_tokens=_out_tok,
-                            cost_usd=_cost_usd, latency_ms=_latency_ms, metadata="{}",
+                            ts=_now,
+                            req_id=_req_id,
+                            session_id=session_id[:16],
+                            key_prefix=_key,
+                            model=_model_name,
+                            provider=_provider,
+                            status=_status,
+                            prompt_tokens=_in_tok,
+                            completion_tokens=_out_tok,
+                            cost_usd=_cost_usd,
+                            latency_ms=_latency_ms,
+                            metadata="{}",
                         )
                         MetricsTracker.track_audit_persistence("completions", "ok")
                     except Exception as e:
@@ -213,12 +258,14 @@ def create_router(agent) -> APIRouter:
                 legacy_choices = []
                 for i, choice in enumerate(choices):
                     msg = choice.get("message", {})
-                    legacy_choices.append({
-                        "text": msg.get("content", ""),
-                        "index": i,
-                        "logprobs": None,
-                        "finish_reason": choice.get("finish_reason", "stop"),
-                    })
+                    legacy_choices.append(
+                        {
+                            "text": msg.get("content", ""),
+                            "index": i,
+                            "logprobs": None,
+                            "finish_reason": choice.get("finish_reason", "stop"),
+                        }
+                    )
 
                 legacy_data = {
                     "id": data.get("id", ""),
@@ -228,7 +275,9 @@ def create_router(agent) -> APIRouter:
                     "choices": legacy_choices,
                     "usage": data.get("usage", {}),
                 }
-                return JSONResponse(content=legacy_data, status_code=response.status_code)
+                return JSONResponse(
+                    content=legacy_data, status_code=response.status_code
+                )
             except (json.JSONDecodeError, KeyError, IndexError):
                 pass
 

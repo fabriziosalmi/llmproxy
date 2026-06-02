@@ -6,10 +6,12 @@ from typing import Dict, Optional, Callable
 
 logger = logging.getLogger(__name__)
 
+
 class CircuitState(Enum):
-    CLOSED = "closed"       # Normal operation
-    OPEN = "open"           # Blocked due to failures
-    HALF_OPEN = "half_open" # Testing for recovery
+    CLOSED = "closed"  # Normal operation
+    OPEN = "open"  # Blocked due to failures
+    HALF_OPEN = "half_open"  # Testing for recovery
+
 
 class CircuitBreaker:
     """Implements a stateful circuit breaker for an LLM endpoint.
@@ -20,8 +22,13 @@ class CircuitBreaker:
     callers are rejected until the probe reports success or failure.
     """
 
-    def __init__(self, name: str = "default", failure_threshold: int = 5, recovery_timeout: int = 60,
-                 on_state_change: Optional[Callable[[str, str, str], None]] = None):
+    def __init__(
+        self,
+        name: str = "default",
+        failure_threshold: int = 5,
+        recovery_timeout: int = 60,
+        on_state_change: Optional[Callable[[str, str, str], None]] = None,
+    ):
         self.name = name
         self.failure_threshold = failure_threshold
         self.recovery_timeout = recovery_timeout
@@ -42,7 +49,9 @@ class CircuitBreaker:
                 if time.time() - self.last_failure_time > self.recovery_timeout:
                     self.state = CircuitState.HALF_OPEN
                     self._half_open_probe_active = True
-                    logger.info(f"CircuitBreaker ({self.name}): OPEN → HALF_OPEN, admitting probe request.")
+                    logger.info(
+                        f"CircuitBreaker ({self.name}): OPEN → HALF_OPEN, admitting probe request."
+                    )
                     return True
                 return False
 
@@ -69,7 +78,9 @@ class CircuitBreaker:
             self._half_open_probe_active = False
             if self.state != CircuitState.CLOSED:
                 old = self.state.value
-                logger.info(f"CircuitBreaker ({self.name}): Success detected. Closing circuit.")
+                logger.info(
+                    f"CircuitBreaker ({self.name}): Success detected. Closing circuit."
+                )
                 self.state = CircuitState.CLOSED
                 self._notify_state_change(old, "closed")
 
@@ -80,10 +91,15 @@ class CircuitBreaker:
             self.last_failure_time = time.time()
             self._half_open_probe_active = False
 
-            if self.state == CircuitState.HALF_OPEN or self.failure_count >= self.failure_threshold:
+            if (
+                self.state == CircuitState.HALF_OPEN
+                or self.failure_count >= self.failure_threshold
+            ):
                 if self.state != CircuitState.OPEN:
                     old = self.state.value
-                    logger.warning(f"CircuitBreaker ({self.name}): Failure threshold ({self.failure_threshold}) reached. Opening circuit.")
+                    logger.warning(
+                        f"CircuitBreaker ({self.name}): Failure threshold ({self.failure_threshold}) reached. Opening circuit."
+                    )
                     self.state = CircuitState.OPEN
                     self._notify_state_change(old, "open")
 
@@ -101,10 +117,13 @@ class CircuitBreaker:
             logger.error(f"CircuitBreaker ({self.name}) caught error: {e}")
             raise e
 
+
 class CircuitManager:
     """Manages circuit breakers for all endpoints."""
 
-    def __init__(self, on_state_change: Optional[Callable[[str, str, str], None]] = None):
+    def __init__(
+        self, on_state_change: Optional[Callable[[str, str, str], None]] = None
+    ):
         self._circuits: Dict[str, CircuitBreaker] = {}
         self._on_state_change = on_state_change
         self._lock = asyncio.Lock()

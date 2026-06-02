@@ -2,6 +2,7 @@
 import sys
 import os
 
+
 def bump():
     version_file = "VERSION"
     if not os.path.exists(version_file):
@@ -9,7 +10,7 @@ def bump():
             f.write("0.1.0")
 
     with open(version_file, "r") as f:
-        v = f.read().strip().split('.')
+        v = f.read().strip().split(".")
 
     major, minor, patch = map(int, v)
 
@@ -28,6 +29,7 @@ def bump():
         f.write(new_version)
 
     print(f"LLMPROXY VERSION: {new_version}")
+
 
 if __name__ == "__main__":
     bump()

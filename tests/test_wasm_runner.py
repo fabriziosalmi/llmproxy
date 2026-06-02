@@ -47,12 +47,14 @@ async def test_wasm_passthrough(mock_runner):
 @pytest.mark.asyncio
 async def test_wasm_block(mock_runner):
     """WASM returning block action should create block response."""
-    output = json.dumps({
-        "action": "block",
-        "status_code": 403,
-        "error_type": "injection_detected",
-        "message": "Injection blocked",
-    }).encode()
+    output = json.dumps(
+        {
+            "action": "block",
+            "status_code": 403,
+            "error_type": "injection_detected",
+            "message": "Injection blocked",
+        }
+    ).encode()
     mock_runner._plugin.call = MagicMock(return_value=output)
 
     result = await mock_runner.execute(body={})
@@ -66,13 +68,17 @@ async def test_wasm_block(mock_runner):
 async def test_wasm_modify(mock_runner):
     """WASM returning modify action should include modified body."""
     modified_body = {"messages": [{"role": "user", "content": "[REDACTED]"}]}
-    output = json.dumps({
-        "action": "modify",
-        "body": modified_body,
-    }).encode()
+    output = json.dumps(
+        {
+            "action": "modify",
+            "body": modified_body,
+        }
+    ).encode()
     mock_runner._plugin.call = MagicMock(return_value=output)
 
-    result = await mock_runner.execute(body={"messages": [{"role": "user", "content": "secret"}]})
+    result = await mock_runner.execute(
+        body={"messages": [{"role": "user", "content": "secret"}]}
+    )
     assert result.action == "modify"
     assert result.body == modified_body
 
@@ -90,10 +96,12 @@ async def test_wasm_legacy_allow_mapped(mock_runner):
 @pytest.mark.asyncio
 async def test_wasm_legacy_modified_mapped(mock_runner):
     """Legacy WASM 'MODIFIED' action with clean_prompt should map to 'modify'."""
-    output = json.dumps({
-        "action": "MODIFIED",
-        "clean_prompt": "sanitized text",
-    }).encode()
+    output = json.dumps(
+        {
+            "action": "MODIFIED",
+            "clean_prompt": "sanitized text",
+        }
+    ).encode()
     mock_runner._plugin.call = MagicMock(return_value=output)
 
     result = await mock_runner.execute(body={})
@@ -104,10 +112,12 @@ async def test_wasm_legacy_modified_mapped(mock_runner):
 @pytest.mark.asyncio
 async def test_wasm_legacy_block_with_reason(mock_runner):
     """Legacy WASM BLOCK with 'reason' field should map to message."""
-    output = json.dumps({
-        "action": "BLOCK",
-        "reason": "System prompt injection detected",
-    }).encode()
+    output = json.dumps(
+        {
+            "action": "BLOCK",
+            "reason": "System prompt injection detected",
+        }
+    ).encode()
     mock_runner._plugin.call = MagicMock(return_value=output)
 
     result = await mock_runner.execute(body={})
@@ -193,19 +203,23 @@ async def test_engine_wasm_block_stops_chain():
     from core.plugin_engine import PluginHook as EngineHook
 
     mock_runner = MagicMock()
-    mock_runner.execute = AsyncMock(return_value=PluginResponse.block(
-        status_code=403, error_type="wasm_injection", message="Blocked by WASM"
-    ))
+    mock_runner.execute = AsyncMock(
+        return_value=PluginResponse.block(
+            status_code=403, error_type="wasm_injection", message="Blocked by WASM"
+        )
+    )
 
     manager = PluginManager(plugins_dir="plugins")
-    manager.rings[EngineHook.INGRESS] = [{
-        "type": "wasm",
-        "path": "fake.wasm",
-        "name": "wasm_test",
-        "timeout_ms": 100,
-        "fail_policy": "closed",
-        "_runner": mock_runner,
-    }]
+    manager.rings[EngineHook.INGRESS] = [
+        {
+            "type": "wasm",
+            "path": "fake.wasm",
+            "name": "wasm_test",
+            "timeout_ms": 100,
+            "fail_policy": "closed",
+            "_runner": mock_runner,
+        }
+    ]
     manager._init_stats("wasm_test")
 
     ctx = PluginContext(body={"messages": [{"role": "user", "content": "test"}]})
@@ -228,17 +242,21 @@ async def test_engine_wasm_modify_updates_body():
     mock_runner.execute = AsyncMock(return_value=PluginResponse.modify(body=new_body))
 
     manager = PluginManager(plugins_dir="plugins")
-    manager.rings[EngineHook.PRE_FLIGHT] = [{
-        "type": "wasm",
-        "path": "fake.wasm",
-        "name": "wasm_pii",
-        "timeout_ms": 100,
-        "fail_policy": "open",
-        "_runner": mock_runner,
-    }]
+    manager.rings[EngineHook.PRE_FLIGHT] = [
+        {
+            "type": "wasm",
+            "path": "fake.wasm",
+            "name": "wasm_pii",
+            "timeout_ms": 100,
+            "fail_policy": "open",
+            "_runner": mock_runner,
+        }
+    ]
     manager._init_stats("wasm_pii")
 
-    ctx = PluginContext(body={"messages": [{"role": "user", "content": "my email is test@test.com"}]})
+    ctx = PluginContext(
+        body={"messages": [{"role": "user", "content": "my email is test@test.com"}]}
+    )
     await manager.execute_ring(EngineHook.PRE_FLIGHT, ctx)
 
     assert ctx.body == new_body
@@ -251,14 +269,16 @@ async def test_engine_wasm_no_runner_noop():
     from core.plugin_engine import PluginHook as EngineHook
 
     manager = PluginManager(plugins_dir="plugins")
-    manager.rings[EngineHook.BACKGROUND] = [{
-        "type": "wasm",
-        "path": "fake.wasm",
-        "name": "wasm_missing",
-        "timeout_ms": 100,
-        "fail_policy": "open",
-        "_runner": None,  # Extism not installed
-    }]
+    manager.rings[EngineHook.BACKGROUND] = [
+        {
+            "type": "wasm",
+            "path": "fake.wasm",
+            "name": "wasm_missing",
+            "timeout_ms": 100,
+            "fail_policy": "open",
+            "_runner": None,  # Extism not installed
+        }
+    ]
     manager._init_stats("wasm_missing")
 
     ctx = PluginContext(body={"test": True})

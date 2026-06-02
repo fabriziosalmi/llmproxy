@@ -6,6 +6,7 @@ from .base import BaseRepository
 
 logger = logging.getLogger(__name__)
 
+
 class SQLiteRepository(BaseRepository):
     """SQLite implementation of the LLMProxy repository."""
 
@@ -33,10 +34,14 @@ class SQLiteRepository(BaseRepository):
     async def get_by_status(self, status: EndpointStatus) -> List[LLMEndpoint]:
         return await self.sql.get_by_status(status)
 
-    async def update_status(self, endpoint_id: str, status: EndpointStatus, metadata: Optional[Dict] = None):
+    async def update_status(
+        self, endpoint_id: str, status: EndpointStatus, metadata: Optional[Dict] = None
+    ):
         await self.sql.update_status(endpoint_id, status, metadata)
 
-    async def update_metrics(self, endpoint_id: str, latency_ms: float, success_rate: float):
+    async def update_metrics(
+        self, endpoint_id: str, latency_ms: float, success_rate: float
+    ):
         await self.sql.update_metrics(endpoint_id, latency_ms, success_rate)
 
     async def set_state(self, key: str, value: Any):

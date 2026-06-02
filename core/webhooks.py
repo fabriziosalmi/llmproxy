@@ -50,6 +50,7 @@ class EventType(Enum):
 @dataclass
 class WebhookConfig:
     """Configuration for a single webhook endpoint."""
+
     name: str
     url: str
     target: WebhookTarget = WebhookTarget.GENERIC
@@ -59,26 +60,26 @@ class WebhookConfig:
 
 # SSRF — private/reserved CIDR ranges that webhook URLs must not target
 _PRIVATE_NETWORKS = [
-    ipaddress.ip_network("0.0.0.0/8"),        # "this host"
-    ipaddress.ip_network("127.0.0.0/8"),      # loopback
-    ipaddress.ip_network("10.0.0.0/8"),        # RFC-1918
-    ipaddress.ip_network("172.16.0.0/12"),     # RFC-1918
-    ipaddress.ip_network("192.168.0.0/16"),    # RFC-1918
-    ipaddress.ip_network("100.64.0.0/10"),     # carrier-grade NAT
-    ipaddress.ip_network("192.0.0.0/24"),      # IETF protocol assignments
-    ipaddress.ip_network("192.0.2.0/24"),      # TEST-NET-1
-    ipaddress.ip_network("198.18.0.0/15"),     # benchmark tests
-    ipaddress.ip_network("198.51.100.0/24"),   # TEST-NET-2
-    ipaddress.ip_network("203.0.113.0/24"),    # TEST-NET-3
-    ipaddress.ip_network("224.0.0.0/4"),       # multicast
-    ipaddress.ip_network("240.0.0.0/4"),       # reserved/future
-    ipaddress.ip_network("169.254.0.0/16"),    # link-local / AWS IMDS
-    ipaddress.ip_network("::/128"),            # unspecified
-    ipaddress.ip_network("::1/128"),           # IPv6 loopback
-    ipaddress.ip_network("fc00::/7"),          # IPv6 ULA
-    ipaddress.ip_network("fe80::/10"),         # IPv6 link-local
-    ipaddress.ip_network("ff00::/8"),          # IPv6 multicast
-    ipaddress.ip_network("2001:db8::/32"),     # documentation range
+    ipaddress.ip_network("0.0.0.0/8"),  # "this host"
+    ipaddress.ip_network("127.0.0.0/8"),  # loopback
+    ipaddress.ip_network("10.0.0.0/8"),  # RFC-1918
+    ipaddress.ip_network("172.16.0.0/12"),  # RFC-1918
+    ipaddress.ip_network("192.168.0.0/16"),  # RFC-1918
+    ipaddress.ip_network("100.64.0.0/10"),  # carrier-grade NAT
+    ipaddress.ip_network("192.0.0.0/24"),  # IETF protocol assignments
+    ipaddress.ip_network("192.0.2.0/24"),  # TEST-NET-1
+    ipaddress.ip_network("198.18.0.0/15"),  # benchmark tests
+    ipaddress.ip_network("198.51.100.0/24"),  # TEST-NET-2
+    ipaddress.ip_network("203.0.113.0/24"),  # TEST-NET-3
+    ipaddress.ip_network("224.0.0.0/4"),  # multicast
+    ipaddress.ip_network("240.0.0.0/4"),  # reserved/future
+    ipaddress.ip_network("169.254.0.0/16"),  # link-local / AWS IMDS
+    ipaddress.ip_network("::/128"),  # unspecified
+    ipaddress.ip_network("::1/128"),  # IPv6 loopback
+    ipaddress.ip_network("fc00::/7"),  # IPv6 ULA
+    ipaddress.ip_network("fe80::/10"),  # IPv6 link-local
+    ipaddress.ip_network("ff00::/8"),  # IPv6 multicast
+    ipaddress.ip_network("2001:db8::/32"),  # documentation range
 ]
 
 
@@ -97,7 +98,9 @@ def _validate_webhook_url(url: str) -> None:
         raise ValueError(f"Malformed webhook URL: {exc}") from exc
 
     if parsed.scheme not in ("http", "https"):
-        raise ValueError(f"Webhook URL scheme '{parsed.scheme}' is not allowed (must be http/https)")
+        raise ValueError(
+            f"Webhook URL scheme '{parsed.scheme}' is not allowed (must be http/https)"
+        )
     if parsed.username or parsed.password:
         raise ValueError("Webhook URL with embedded credentials is not allowed")
     if parsed.query:
@@ -189,7 +192,9 @@ class WebhookDispatcher:
             name = ecfg.get("name", "webhook")
             # URL from config or Infisical
             url_env = ecfg.get("url_env")
-            url = get_secret(url_env, required=False) if url_env else ecfg.get("url", "")
+            url = (
+                get_secret(url_env, required=False) if url_env else ecfg.get("url", "")
+            )
             if not url:
                 logger.warning(f"Webhook '{name}': no URL configured, skipping")
                 continue
@@ -197,7 +202,9 @@ class WebhookDispatcher:
             try:
                 _validate_webhook_url(url)
             except ValueError as exc:
-                logger.error(f"Webhook '{name}': SSRF guard rejected URL — {exc}. Skipping.")
+                logger.error(
+                    f"Webhook '{name}': SSRF guard rejected URL — {exc}. Skipping."
+                )
                 continue
 
             target = WebhookTarget(ecfg.get("target", "generic"))
@@ -205,10 +212,18 @@ class WebhookDispatcher:
             secret_env = ecfg.get("secret_env")
             secret = get_secret(secret_env, required=False) if secret_env else None
 
-            self.endpoints.append(WebhookConfig(
-                name=name, url=url, target=target, events=events, secret=secret,
-            ))
-            logger.info(f"Webhook: Registered '{name}' ({target.value}) for events={events}")
+            self.endpoints.append(
+                WebhookConfig(
+                    name=name,
+                    url=url,
+                    target=target,
+                    events=events,
+                    secret=secret,
+                )
+            )
+            logger.info(
+                f"Webhook: Registered '{name}' ({target.value}) for events={events}"
+            )
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
@@ -251,7 +266,9 @@ class WebhookDispatcher:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def _send(self, endpoint: WebhookConfig, event: EventType, data: Dict[str, Any]):
+    async def _send(
+        self, endpoint: WebhookConfig, event: EventType, data: Dict[str, Any]
+    ):
         """Send a formatted payload to a single webhook endpoint."""
         try:
             session = await self._get_session()
@@ -266,14 +283,20 @@ class WebhookDispatcher:
                 ).hexdigest()
                 headers["X-Webhook-Signature"] = f"sha256={sig}"
 
-            async with session.post(endpoint.url, data=payload_bytes, headers=headers) as resp:
+            async with session.post(
+                endpoint.url, data=payload_bytes, headers=headers
+            ) as resp:
                 if resp.status >= 400:
                     body = await resp.text()
-                    logger.warning(f"Webhook '{endpoint.name}': HTTP {resp.status} — {body[:200]}")
+                    logger.warning(
+                        f"Webhook '{endpoint.name}': HTTP {resp.status} — {body[:200]}"
+                    )
                 else:
                     logger.info(f"Webhook '{endpoint.name}': Dispatched {event.value}")
         except Exception as e:
-            logger.error(f"Webhook '{endpoint.name}': Failed to dispatch {event.value}: {e}")
+            logger.error(
+                f"Webhook '{endpoint.name}': Failed to dispatch {event.value}: {e}"
+            )
 
     def _format_payload(
         self, target: WebhookTarget, event: EventType, data: Dict[str, Any]
@@ -285,17 +308,24 @@ class WebhookDispatcher:
         text = f"{title}\n{details}"
 
         if target == WebhookTarget.SLACK:
-            emoji = {"critical": "🔴", "warning": "🟡", "info": "🟢"}.get(severity, "⚪")
+            emoji = {"critical": "🔴", "warning": "🟡", "info": "🟢"}.get(
+                severity, "⚪"
+            )
             return {
                 "blocks": [
                     {
                         "type": "section",
-                        "text": {"type": "mrkdwn", "text": f"{emoji} *{title}*\n{details}"},
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f"{emoji} *{title}*\n{details}",
+                        },
                     }
                 ]
             }
         elif target == WebhookTarget.TEAMS:
-            color = {"critical": "FF0000", "warning": "FFA500", "info": "00FF00"}.get(severity, "808080")
+            color = {"critical": "FF0000", "warning": "FFA500", "info": "00FF00"}.get(
+                severity, "808080"
+            )
             return {
                 "@type": "MessageCard",
                 "themeColor": color,
@@ -303,21 +333,40 @@ class WebhookDispatcher:
                 "sections": [{"activityTitle": title, "text": details}],
             }
         elif target == WebhookTarget.DISCORD:
-            discord_color = {"critical": 0xFF0000, "warning": 0xFFA500, "info": 0x00FF00}.get(severity, 0x808080)
+            discord_color = {
+                "critical": 0xFF0000,
+                "warning": 0xFFA500,
+                "info": 0x00FF00,
+            }.get(severity, 0x808080)
             return {
-                "embeds": [{
-                    "title": title,
-                    "description": details,
-                    "color": discord_color,
-                }]
+                "embeds": [
+                    {
+                        "title": title,
+                        "description": details,
+                        "color": discord_color,
+                    }
+                ]
             }
         else:
-            return {"event": event.value, "severity": severity, "data": data, "text": text}
+            return {
+                "event": event.value,
+                "severity": severity,
+                "data": data,
+                "text": text,
+            }
 
     @staticmethod
     def _get_severity(event: EventType) -> str:
-        critical = {EventType.CIRCUIT_OPEN, EventType.PANIC_ACTIVATED, EventType.ENDPOINT_DOWN}
-        warning = {EventType.BUDGET_THRESHOLD, EventType.INJECTION_BLOCKED, EventType.AUTH_FAILURE}
+        critical = {
+            EventType.CIRCUIT_OPEN,
+            EventType.PANIC_ACTIVATED,
+            EventType.ENDPOINT_DOWN,
+        }
+        warning = {
+            EventType.BUDGET_THRESHOLD,
+            EventType.INJECTION_BLOCKED,
+            EventType.AUTH_FAILURE,
+        }
         if event in critical:
             return "critical"
         elif event in warning:

@@ -31,8 +31,9 @@ async def db_store():
     os.unlink(path)
 
 
-def _make_audit_entry(req_id="r1", session_id="sess", key_prefix="sk-test",
-                      model="gpt-4o", ts=None):
+def _make_audit_entry(
+    req_id="r1", session_id="sess", key_prefix="sk-test", model="gpt-4o", ts=None
+):
     return dict(
         ts=ts or int(time.time()),
         req_id=req_id,
@@ -52,8 +53,8 @@ def _make_audit_entry(req_id="r1", session_id="sess", key_prefix="sk-test",
 # Hash Chain Integrity
 # ══════════════════════════════════════════════════════════
 
-class TestAuditHashChain:
 
+class TestAuditHashChain:
     @pytest.mark.asyncio
     async def test_empty_log_verifies(self, db_store):
         """Empty audit log is valid."""
@@ -100,7 +101,9 @@ class TestAuditHashChain:
 
         async with aiosqlite.connect(db_store.db_path) as conn:
             conn.row_factory = aiosqlite.Row
-            async with conn.execute("SELECT * FROM audit_log ORDER BY id ASC") as cursor:
+            async with conn.execute(
+                "SELECT * FROM audit_log ORDER BY id ASC"
+            ) as cursor:
                 rows = [dict(r) for r in await cursor.fetchall()]
 
         assert rows[0]["prev_hash"] == "GENESIS"
@@ -145,7 +148,9 @@ class TestAuditHashChain:
             await db_store.log_audit(**_make_audit_entry(req_id=f"r{i}"))
 
         async with aiosqlite.connect(db_store.db_path) as conn:
-            await conn.execute("UPDATE audit_log SET entry_hash = 'fakehash' WHERE id = 1")
+            await conn.execute(
+                "UPDATE audit_log SET entry_hash = 'fakehash' WHERE id = 1"
+            )
             await conn.commit()
 
         result = await db_store.verify_audit_chain()

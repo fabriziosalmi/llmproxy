@@ -62,6 +62,8 @@ test.describe('plugins view', () => {
 
         await authedPage.goto('/ui/#/plugins');
         await expect(authedPage.locator('#login-overlay')).not.toBeVisible();
+        // Wait for the TS view to be fully mounted and loaded.
+        await expect(authedPage.locator('[data-testid="plugin-card-pii_masker"]')).toBeVisible({ timeout: 10_000 });
     });
 
     test('renders one card per plugin with ring badge', async ({ authedPage }) => {

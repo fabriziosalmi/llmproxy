@@ -21,6 +21,7 @@ DISABLED_CONFIG = {"identity": {"enabled": False}}
 @patch("core.identity.get_secret", return_value=None)
 async def test_disabled_returns_none(mock_secret):
     from core.identity import IdentityManager
+
     mgr = IdentityManager(DISABLED_CONFIG)
     result = await mgr.verify_token("some-token")
     assert result is None
@@ -30,6 +31,7 @@ async def test_disabled_returns_none(mock_secret):
 @patch("core.identity.get_secret", return_value=None)
 async def test_non_jwt_returns_none(mock_secret):
     from core.identity import IdentityManager
+
     mgr = IdentityManager(IDENTITY_CONFIG)
     result = await mgr.verify_token("not-a-jwt-token")
     assert result is None
@@ -39,14 +41,19 @@ async def test_non_jwt_returns_none(mock_secret):
 @patch("core.identity.get_secret", return_value=None)
 async def test_malformed_jwt_returns_none(mock_secret):
     from core.identity import IdentityManager
+
     mgr = IdentityManager(IDENTITY_CONFIG)
     result = await mgr.verify_token("aaa.bbb.ccc")
     assert result is None
 
 
-@patch("core.identity.get_secret", return_value="super-secret-key-that-is-at-least-32-bytes-long")
+@patch(
+    "core.identity.get_secret",
+    return_value="super-secret-key-that-is-at-least-32-bytes-long",
+)
 def test_generate_and_verify_proxy_jwt(mock_secret):
     from core.identity import IdentityManager, IdentityContext
+
     mgr = IdentityManager(IDENTITY_CONFIG)
     identity = IdentityContext(
         provider="google",
@@ -67,13 +74,20 @@ def test_generate_and_verify_proxy_jwt(mock_secret):
     assert "user" in ctx.roles
 
 
-@patch("core.identity.get_secret", return_value="super-secret-key-that-is-at-least-32-bytes-long")
+@patch(
+    "core.identity.get_secret",
+    return_value="super-secret-key-that-is-at-least-32-bytes-long",
+)
 def test_proxy_jwt_expired(mock_secret):
     from core.identity import IdentityManager, IdentityContext
+
     mgr = IdentityManager(IDENTITY_CONFIG)
     identity = IdentityContext(
-        provider="google", subject="user1", email="user1@test.com",
-        roles=["user"], verified=True,
+        provider="google",
+        subject="user1",
+        email="user1@test.com",
+        roles=["user"],
+        verified=True,
     )
     token = mgr.generate_proxy_jwt(identity, ttl=0)
     time.sleep(0.1)
@@ -84,11 +98,14 @@ def test_proxy_jwt_expired(mock_secret):
 @patch("core.identity.get_secret", return_value=None)
 def test_resolve_roles_from_mapping(mock_secret):
     from core.identity import IdentityManager, OIDCProvider
+
     mgr = IdentityManager(IDENTITY_CONFIG)
     # _resolve_roles(claims, provider, email)
     fake_provider = OIDCProvider(
-        name="google", issuer="https://accounts.google.com",
-        jwks_uri="", client_id="test",
+        name="google",
+        issuer="https://accounts.google.com",
+        jwks_uri="",
+        client_id="test",
     )
     roles = mgr._resolve_roles({}, fake_provider, "admin@test.com")
     assert "admin" in roles
@@ -98,10 +115,13 @@ def test_resolve_roles_from_mapping(mock_secret):
 @patch("core.identity.get_secret", return_value=None)
 def test_resolve_roles_default(mock_secret):
     from core.identity import IdentityManager, OIDCProvider
+
     mgr = IdentityManager(IDENTITY_CONFIG)
     fake_provider = OIDCProvider(
-        name="google", issuer="https://accounts.google.com",
-        jwks_uri="", client_id="test",
+        name="google",
+        issuer="https://accounts.google.com",
+        jwks_uri="",
+        client_id="test",
     )
     roles = mgr._resolve_roles({}, fake_provider, "nobody@test.com")
     assert roles == ["user"]

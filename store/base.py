@@ -50,12 +50,16 @@ class BaseRepository(ABC):
         pass
 
     @abstractmethod
-    async def update_status(self, endpoint_id: str, status: EndpointStatus, metadata: Optional[Dict] = None):
+    async def update_status(
+        self, endpoint_id: str, status: EndpointStatus, metadata: Optional[Dict] = None
+    ):
         """Updates the status and metadata of an endpoint."""
         pass
 
     @abstractmethod
-    async def update_metrics(self, endpoint_id: str, latency_ms: float, success_rate: float):
+    async def update_metrics(
+        self, endpoint_id: str, latency_ms: float, success_rate: float
+    ):
         """Updates performance metrics for an endpoint."""
         pass
 
@@ -86,7 +90,12 @@ class BaseRepository(ABC):
 
     async def get_spend_total(self, **kwargs) -> dict:
         """Get spend totals. Returns zeros without persistent storage."""
-        return {"requests": 0, "total_usd": 0.0, "total_prompt_tokens": 0, "total_completion_tokens": 0}
+        return {
+            "requests": 0,
+            "total_usd": 0.0,
+            "total_prompt_tokens": 0,
+            "total_completion_tokens": 0,
+        }
 
     async def query_audit(self, **kwargs) -> dict:
         """Query audit log. Returns empty without persistent storage."""

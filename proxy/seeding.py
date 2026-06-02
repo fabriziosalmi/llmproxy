@@ -23,15 +23,17 @@ logger = logging.getLogger("llmproxy.seeding")
 # api_key_env resolves to one of these means the operator hasn't filled it
 # in yet — skip seeding so the UI registry isn't littered with endpoints
 # that 401 on first call.
-_KEY_PLACEHOLDERS = frozenset({
-    "sk-proj-...",
-    "sk-ant-...",
-    "AIza...",
-    "gsk_...",
-    "your-api-key",
-    "CHANGE-ME",
-    "",
-})
+_KEY_PLACEHOLDERS = frozenset(
+    {
+        "sk-proj-...",
+        "sk-ant-...",
+        "AIza...",
+        "gsk_...",
+        "your-api-key",
+        "CHANGE-ME",
+        "",
+    }
+)
 
 
 async def seed_endpoints_from_config(config: Dict[str, Any], store: Any) -> int:

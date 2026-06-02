@@ -22,6 +22,14 @@ test.describe('shell actions', () => {
                 body: JSON.stringify({ enabled: true, providers: [] }),
             });
         });
+        // Stub /identity/me to prevent verification call to backend from invalidating the token.
+        await authedPage.route('**/api/v1/identity/me', async (route) => {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({ authenticated: true, provider: 'api_key' }),
+            });
+        });
         await authedPage.goto('/ui/');
         // Token is seeded by the fixture — overlay should NOT be visible at boot.
         await expect(authedPage.locator('#login-overlay')).not.toBeVisible({ timeout: 10_000 });

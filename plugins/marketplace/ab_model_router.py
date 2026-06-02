@@ -40,7 +40,9 @@ class ABModelRouter(BasePlugin):
     hook = PluginHook.ROUTING
     version = "1.0.0"
     author = "llmproxy"
-    description = "Routes a configurable % of traffic to a variant model for A/B experimentation"
+    description = (
+        "Routes a configurable % of traffic to a variant model for A/B experimentation"
+    )
     timeout_ms = 2
 
     def __init__(self, config: Dict[str, Any] = None):
@@ -55,7 +57,9 @@ class ABModelRouter(BasePlugin):
 
     def _prune_sessions(self):
         now = time.time()
-        expired = [k for k, (_, ts) in self._session_arms.items() if now - ts > _SESSION_TTL]
+        expired = [
+            k for k, (_, ts) in self._session_arms.items() if now - ts > _SESSION_TTL
+        ]
         for k in expired:
             del self._session_arms[k]
 
@@ -78,7 +82,10 @@ class ABModelRouter(BasePlugin):
         requested_model = ctx.body.get("model", "")
 
         # Only intercept if the request is for the control model (or no model set)
-        if requested_model and requested_model not in (self.control_model, self.variant_model):
+        if requested_model and requested_model not in (
+            self.control_model,
+            self.variant_model,
+        ):
             return PluginResponse.passthrough()
 
         session_id = ctx.session_id or ""
@@ -87,12 +94,14 @@ class ABModelRouter(BasePlugin):
 
         ctx.body["model"] = chosen_model
         # Inject experiment metadata for audit/telemetry
-        ctx.body.setdefault("_ab_meta", {}).update({
-            "experiment_id": self.experiment_id,
-            "arm": arm,
-            "control": self.control_model,
-            "variant": self.variant_model,
-        })
+        ctx.body.setdefault("_ab_meta", {}).update(
+            {
+                "experiment_id": self.experiment_id,
+                "arm": arm,
+                "control": self.control_model,
+                "variant": self.variant_model,
+            }
+        )
 
         self.logger.debug(
             f"ABModelRouter: experiment={self.experiment_id} arm={arm} "

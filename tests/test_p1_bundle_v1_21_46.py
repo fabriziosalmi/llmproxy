@@ -45,11 +45,14 @@ class _StubOrchestrator:
         self.webhooks = MagicMock()
         self.webhooks.dispatch = AsyncMock()
         self._budget_lock = asyncio.Lock()
-        self._spawn_task = lambda coro: asyncio.create_task(coro) if asyncio.iscoroutine(coro) else None
+        self._spawn_task = lambda coro: (
+            asyncio.create_task(coro) if asyncio.iscoroutine(coro) else None
+        )
 
     async def execute_pre_flight_block(self, hook, ctx):
         """Simulates a plugin in PRE_FLIGHT issuing action=block."""
         from core.plugin_engine import PluginHook
+
         if hook == PluginHook.PRE_FLIGHT:
             ctx.stop_chain = True
             ctx.error = "Daily budget exceeded"
@@ -80,7 +83,9 @@ async def test_pre_flight_block_raises_http_exception():
     request.headers = {"cache-control": ""}
 
     with pytest.raises(HTTPException) as exc_info:
-        await process_proxy_request(orch, request, body={"messages": []}, session_id="test")
+        await process_proxy_request(
+            orch, request, body={"messages": []}, session_id="test"
+        )
     assert exc_info.value.status_code == 402
     assert "budget" in exc_info.value.detail.lower()
 
@@ -107,7 +112,9 @@ async def test_pre_flight_block_uses_default_403_when_no_status_set():
     request.headers = {"cache-control": ""}
 
     with pytest.raises(HTTPException) as exc_info:
-        await process_proxy_request(orch, request, body={"messages": []}, session_id="test")
+        await process_proxy_request(
+            orch, request, body={"messages": []}, session_id="test"
+        )
     assert exc_info.value.status_code == 403
 
 
@@ -120,7 +127,9 @@ async def test_pre_flight_cache_hit_still_returns_response():
     from fastapi.responses import JSONResponse
 
     orch = _StubOrchestrator()
-    cached_response = JSONResponse(content={"choices": [{"message": {"content": "cached"}}]})
+    cached_response = JSONResponse(
+        content={"choices": [{"message": {"content": "cached"}}]}
+    )
 
     async def execute_ring(hook, ctx):
         if hook == PluginHook.PRE_FLIGHT:
@@ -135,7 +144,10 @@ async def test_pre_flight_cache_hit_still_returns_response():
     request.headers = {"cache-control": ""}
 
     response = await process_proxy_request(
-        orch, request, body={"messages": [], "stream": False}, session_id="test",
+        orch,
+        request,
+        body={"messages": [], "stream": False},
+        session_id="test",
     )
     assert response is cached_response
 
@@ -162,7 +174,9 @@ async def test_identity_exchange_returns_generic_error_on_invalid_token(caplog):
     app.include_router(create_router(agent))
 
     with caplog.at_level(logging.WARNING, logger="llmproxy.routes.identity"):
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
             resp = await c.post("/api/v1/identity/exchange", json={"token": "fake"})
 
     assert resp.status_code == 401
@@ -187,7 +201,9 @@ async def test_identity_exchange_unrecognized_provider_also_generic():
     app = FastAPI()
     app.include_router(create_router(agent))
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         resp = await c.post("/api/v1/identity/exchange", json={"token": "fake"})
 
     assert resp.status_code == 401
@@ -205,7 +221,11 @@ class _GDPRStubStore:
         self.delete_calls: list[str] = []
         self._fail_audit = False
         self._fail_delete = False
-        self._delete_returns = {"audit_deleted": 1, "spend_deleted": 1, "roles_deleted": 0}
+        self._delete_returns = {
+            "audit_deleted": 1,
+            "spend_deleted": 1,
+            "roles_deleted": 0,
+        }
 
     async def log_audit(self, **kwargs):
         if self._fail_audit:
@@ -227,7 +247,9 @@ def _gdpr_app(store):
     agent.config = {"server": {"auth": {"enabled": False}}}
     agent.store = store
     app = FastAPI()
-    app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+    app.add_middleware(
+        CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
+    )
     app.include_router(gdpr_router(agent))
     return app
 
@@ -254,7 +276,9 @@ async def test_gdpr_erase_writes_audit_before_delete():
     store.delete_subject_data = trace_delete
 
     app = _gdpr_app(store)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         resp = await c.post("/api/v1/gdpr/erase/longenough-user-id")
 
     assert resp.status_code == 200
@@ -270,7 +294,9 @@ async def test_gdpr_erase_refuses_when_audit_fails():
     store._fail_audit = True
 
     app = _gdpr_app(store)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         resp = await c.post("/api/v1/gdpr/erase/longenough-user-id")
 
     assert resp.status_code == 503
@@ -287,7 +313,9 @@ async def test_gdpr_erase_audit_persists_when_delete_fails():
     store._fail_delete = True
 
     app = _gdpr_app(store)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         resp = await c.post("/api/v1/gdpr/erase/longenough-user-id")
 
     assert resp.status_code == 500
@@ -304,7 +332,9 @@ async def test_gdpr_erase_audit_intent_includes_phase_field():
 
     store = _GDPRStubStore()
     app = _gdpr_app(store)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as c:
         resp = await c.post("/api/v1/gdpr/erase/longenough-user-id")
     assert resp.status_code == 200
 

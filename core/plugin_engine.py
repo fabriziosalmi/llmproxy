@@ -41,12 +41,14 @@ _PLUGIN_EXECUTOR = ThreadPoolExecutor(
     thread_name_prefix="plugin-sync",
 )
 
+
 class PluginHook(Enum):
-    INGRESS = "ingress"         # Ring 1: Auth, ZT, Rate Limit
-    PRE_FLIGHT = "pre_flight"   # Ring 2: PII, Mutation, AST
-    ROUTING = "routing"         # Ring 3: Model Selection, Cache
-    POST_FLIGHT = "post_flight" # Ring 4: Streaming, Sanitization, JSON Healing
-    BACKGROUND = "background"   # Ring 5: FinOps, Logs, Shadow Traffic
+    INGRESS = "ingress"  # Ring 1: Auth, ZT, Rate Limit
+    PRE_FLIGHT = "pre_flight"  # Ring 2: PII, Mutation, AST
+    ROUTING = "routing"  # Ring 3: Model Selection, Cache
+    POST_FLIGHT = "post_flight"  # Ring 4: Streaming, Sanitization, JSON Healing
+    BACKGROUND = "background"  # Ring 5: FinOps, Logs, Shadow Traffic
+
 
 @dataclass
 class PluginState:
@@ -62,10 +64,12 @@ class PluginState:
       - config: Global proxy config dict
       - Any future shared resources (Redis, DB pools, etc.)
     """
-    cache: Any = None          # SemanticCache instance
-    metrics: Any = None        # MetricsTracker instance
+
+    cache: Any = None  # SemanticCache instance
+    metrics: Any = None  # MetricsTracker instance
     config: Dict[str, Any] = field(default_factory=dict)  # Global proxy config
-    extra: Dict[str, Any] = field(default_factory=dict)    # Extensible slot
+    extra: Dict[str, Any] = field(default_factory=dict)  # Extensible slot
+
 
 @dataclass
 class PluginContext:
@@ -78,13 +82,16 @@ class PluginContext:
     stop_chain: bool = False
     state: Optional[PluginState] = None  # Principle 4: injected shared state
 
+
 # Default timeout for raw function plugins (ms)
 # 500ms is a reasonable compromise: strict enough to protect the event loop,
 # permissive enough to not break legacy plugins that do light I/O.
 DEFAULT_TIMEOUT_MS = 500
 
 # Fail policies for timeout/error handling
-FAIL_OPEN = "open"    # Plugin failure → request continues (default for Background/PostFlight)
+FAIL_OPEN = (
+    "open"  # Plugin failure → request continues (default for Background/PostFlight)
+)
 FAIL_CLOSED = "closed"  # Plugin failure → request blocked (default for Ingress/Routing)
 
 # Rings that default to fail-closed (errors stop the chain)
@@ -96,25 +103,48 @@ FAIL_CLOSED_RINGS = {PluginHook.INGRESS, PluginHook.PRE_FLIGHT, PluginHook.ROUTI
 # bypassable (getattr, importlib, ctypes, etc.). For true sandboxing of
 # untrusted third-party plugins, use the WASM runtime (core/wasm_runner.py).
 FORBIDDEN_AST_NODES = {
-    ast.Import, ast.ImportFrom,
+    ast.Import,
+    ast.ImportFrom,
 }
 FORBIDDEN_MODULES = {
-    "os", "subprocess", "shutil", "socket", "ctypes",
-    "multiprocessing", "signal", "sys", "builtins", "__builtins__",
+    "os",
+    "subprocess",
+    "shutil",
+    "socket",
+    "ctypes",
+    "multiprocessing",
+    "signal",
+    "sys",
+    "builtins",
+    "__builtins__",
     # Blocking I/O libraries — use async alternatives instead
-    "requests", "urllib",  # sync HTTP — use aiohttp/httpx
-    "sqlite3",             # sync DB — use aiosqlite
+    "requests",
+    "urllib",  # sync HTTP — use aiohttp/httpx
+    "sqlite3",  # sync DB — use aiosqlite
 }
 ALLOWED_MODULES = {
-    "json", "re", "math", "datetime", "hashlib", "base64",
-    "typing", "dataclasses", "enum", "logging", "asyncio",
-    "aiohttp", "yaml", "collections", "time",
+    "json",
+    "re",
+    "math",
+    "datetime",
+    "hashlib",
+    "base64",
+    "typing",
+    "dataclasses",
+    "enum",
+    "logging",
+    "asyncio",
+    "aiohttp",
+    "yaml",
+    "collections",
+    "time",
     "core",  # core.plugin_sdk, core.plugin_engine (for PluginContext import)
 }
 
 
 class PluginSecurityError(Exception):
     """Raised when a plugin fails AST lint scan or SHA-256 pin verification."""
+
     pass
 
 
@@ -129,6 +159,7 @@ def compute_plugin_sha256(source: str) -> str:
     "untrusted plugin author".
     """
     import hashlib
+
     return hashlib.sha256(source.encode("utf-8")).hexdigest()
 
 
@@ -172,17 +203,31 @@ def ast_scan(source: str, plugin_name: str) -> bool:
         # Check for exec/eval/__import__ calls
         if isinstance(node, ast.Call):
             func = node.func
-            if isinstance(func, ast.Name) and func.id in ("exec", "eval", "__import__", "compile"):
+            if isinstance(func, ast.Name) and func.id in (
+                "exec",
+                "eval",
+                "__import__",
+                "compile",
+            ):
                 raise PluginSecurityError(
                     f"Plugin '{plugin_name}': Forbidden call to '{func.id}()'"
                 )
-            if isinstance(func, ast.Attribute) and func.attr in ("exec", "eval", "system", "popen"):
+            if isinstance(func, ast.Attribute) and func.attr in (
+                "exec",
+                "eval",
+                "system",
+                "popen",
+            ):
                 raise PluginSecurityError(
                     f"Plugin '{plugin_name}': Forbidden method call '.{func.attr}()'"
                 )
             # Principle 2: Block time.sleep() — use asyncio.sleep() instead
-            if (isinstance(func, ast.Attribute) and func.attr == "sleep"
-                    and isinstance(func.value, ast.Name) and func.value.id == "time"):
+            if (
+                isinstance(func, ast.Attribute)
+                and func.attr == "sleep"
+                and isinstance(func.value, ast.Name)
+                and func.value.id == "time"
+            ):
                 raise PluginSecurityError(
                     f"Plugin '{plugin_name}': Blocking call 'time.sleep()' — use 'await asyncio.sleep()' instead"
                 )
@@ -191,25 +236,37 @@ def ast_scan(source: str, plugin_name: str) -> bool:
 
 
 class PluginManager:
-    def __init__(self, plugins_dir: str = "plugins", config: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self, plugins_dir: str = "plugins", config: Optional[Dict[str, Any]] = None
+    ):
         self.plugins_dir = plugins_dir
         self._config = config or {}
         # Writable dir for runtime-installed plugins (Docker: separate volume)
         self.installed_dir = os.path.join(plugins_dir, "installed")
-        self.rings: Dict[PluginHook, List[Dict[str, Any]]] = {hook: [] for hook in PluginHook}
+        self.rings: Dict[PluginHook, List[Dict[str, Any]]] = {
+            hook: [] for hook in PluginHook
+        }
         self._previous_rings: Optional[Dict[PluginHook, List[Dict[str, Any]]]] = None
         self.logger = logging.getLogger("plugin_engine")
         self.manifest_path = os.path.join(plugins_dir, "manifest.yaml")
-        self._plugin_meta: Dict[str, Dict[str, Any]] = {}  # name → metadata for marketplace
-        self._plugin_instances: Dict[str, BasePlugin] = {}  # name → BasePlugin instances
+        self._plugin_meta: Dict[
+            str, Dict[str, Any]
+        ] = {}  # name → metadata for marketplace
+        self._plugin_instances: Dict[
+            str, BasePlugin
+        ] = {}  # name → BasePlugin instances
         self._plugin_stats: Dict[str, Dict[str, Any]] = {}  # name → per-plugin metrics
         # Per-plugin latency histogram: deque(maxlen=N) gives O(1) append + auto-eviction
-        self._latency_window: Dict[str, deque] = {}  # name → rolling window of latency samples
+        self._latency_window: Dict[
+            str, deque
+        ] = {}  # name → rolling window of latency samples
         self._latency_window_size = 500
         # Per-ring timing: dict keyed by req_id for O(1) lookup during a request,
         # plus an ordered list for chronological iteration / capping at max size.
         self._ring_traces: deque = deque()  # ordered, O(1) popleft eviction
-        self._ring_traces_index: Dict[str, dict] = {}  # req_id → trace dict (O(1) lookup)
+        self._ring_traces_index: Dict[
+            str, dict
+        ] = {}  # req_id → trace dict (O(1) lookup)
         self._ring_traces_max = 100
 
     def update_runtime_config(self, config: Optional[Dict[str, Any]]) -> None:
@@ -235,11 +292,14 @@ class PluginManager:
 
         env_name = os.environ.get("LLM_PROXY_ENV", "").strip().lower()
         app_env = os.environ.get("ENV", "").strip().lower()
-        is_prod = env_name in ("prod", "production") or app_env in ("prod", "production")
+        is_prod = env_name in ("prod", "production") or app_env in (
+            "prod",
+            "production",
+        )
         return not is_prod
 
     # Plugin circuit breaker: auto-quarantine after consecutive failures
-    PLUGIN_CB_THRESHOLD = 10   # consecutive errors to trip
+    PLUGIN_CB_THRESHOLD = 10  # consecutive errors to trip
     PLUGIN_CB_COOLDOWN = 60.0  # seconds before retry
 
     def _init_stats(self, name: str):
@@ -310,8 +370,12 @@ class PluginManager:
             inv = stats.get("invocations", 0)
             return {
                 **stats,
-                "avg_latency_ms": round(stats["total_latency_ms"] / inv, 2) if inv > 0 else 0,
-                "latency_percentiles": self._percentiles(self._latency_window.get(name, [])),
+                "avg_latency_ms": round(stats["total_latency_ms"] / inv, 2)
+                if inv > 0
+                else 0,
+                "latency_percentiles": self._percentiles(
+                    self._latency_window.get(name, [])
+                ),
             }
         # All plugins
         result = {}
@@ -319,8 +383,12 @@ class PluginManager:
             inv = stats.get("invocations", 0)
             result[pname] = {
                 **stats,
-                "avg_latency_ms": round(stats["total_latency_ms"] / inv, 2) if inv > 0 else 0,
-                "latency_percentiles": self._percentiles(self._latency_window.get(pname, [])),
+                "avg_latency_ms": round(stats["total_latency_ms"] / inv, 2)
+                if inv > 0
+                else 0,
+                "latency_percentiles": self._percentiles(
+                    self._latency_window.get(pname, [])
+                ),
             }
         return result
 
@@ -351,12 +419,12 @@ class PluginManager:
             self.logger.warning(f"Plugin manifest not found at {self.manifest_path}")
             return None
 
-        with open(self.manifest_path, 'r') as f:
+        with open(self.manifest_path, "r") as f:
             manifest = yaml.safe_load(f) or {}
 
         installed_manifest = os.path.join(self.installed_dir, "manifest.yaml")
         if os.path.exists(installed_manifest):
-            with open(installed_manifest, 'r') as f:
+            with open(installed_manifest, "r") as f:
                 installed = yaml.safe_load(f) or {}
             installed_plugins = installed.get("plugins", [])
             if installed_plugins:
@@ -365,9 +433,12 @@ class PluginManager:
                     if ip.get("name") not in bundled_names:
                         manifest.setdefault("plugins", []).append(ip)
                     else:
-                        self.logger.info(f"Installed plugin '{ip.get('name')}' overrides bundled")
+                        self.logger.info(
+                            f"Installed plugin '{ip.get('name')}' overrides bundled"
+                        )
                         manifest["plugins"] = [
-                            p for p in manifest["plugins"]
+                            p
+                            for p in manifest["plugins"]
                             if p.get("name") != ip.get("name")
                         ]
                         manifest["plugins"].append(ip)
@@ -390,7 +461,9 @@ class PluginManager:
                 {},
             )
 
-        new_rings: Dict[PluginHook, List[Dict[str, Any]]] = {hook: [] for hook in PluginHook}
+        new_rings: Dict[PluginHook, List[Dict[str, Any]]] = {
+            hook: [] for hook in PluginHook
+        }
         new_meta: Dict[str, Dict[str, Any]] = {}
         new_instances: Dict[str, BasePlugin] = {}
         new_stats: Dict[str, Dict[str, Any]] = {}
@@ -409,7 +482,13 @@ class PluginManager:
                     instances=new_instances,
                     stats=new_stats,
                 )
-            except (FileNotFoundError, ImportError, SyntaxError, ValueError, RuntimeError) as e:
+            except (
+                FileNotFoundError,
+                ImportError,
+                SyntaxError,
+                ValueError,
+                RuntimeError,
+            ) as e:
                 self.logger.error(f"Failed to load plugin {p_info.get('name')}: {e}")
 
         return new_rings, new_meta, new_instances, new_stats
@@ -491,7 +570,9 @@ class PluginManager:
 
         if p_type == "python":
             module_path, target_name = entrypoint.split(":")
-            file_path = os.path.join(self.plugins_dir, f"{module_path.replace('.', '/')}.py")
+            file_path = os.path.join(
+                self.plugins_dir, f"{module_path.replace('.', '/')}.py"
+            )
 
             # Directory traversal guard: os.path.join silently discards the
             # base directory when the second argument is an absolute path
@@ -507,7 +588,7 @@ class PluginManager:
                 raise FileNotFoundError(f"Plugin file not found: {file_path}")
 
             # AST lint scan (catches accidental forbidden imports, not a sandbox)
-            with open(file_path, 'r') as f:
+            with open(file_path, "r") as f:
                 source = f.read()
             ast_scan(source, name)
 
@@ -548,32 +629,45 @@ class PluginManager:
                 instance = target(config=config)
                 await instance.on_load()
                 instances[name] = instance
-                rings[hook].append({
-                    "type": "class",
-                    "instance": instance,
-                    "name": name,
-                    "timeout_ms": instance.timeout_ms,
-                    "fail_policy": fail_policy,
-                })
-                self.logger.info(f"Plugin Loaded (class): {name} v{instance.version} → {hook.value} [fail={fail_policy}]")
+                rings[hook].append(
+                    {
+                        "type": "class",
+                        "instance": instance,
+                        "name": name,
+                        "timeout_ms": instance.timeout_ms,
+                        "fail_policy": fail_policy,
+                    }
+                )
+                self.logger.info(
+                    f"Plugin Loaded (class): {name} v{instance.version} → {hook.value} [fail={fail_policy}]"
+                )
             else:
                 # Legacy raw function
                 func = target
-                if not inspect.iscoroutinefunction(func) and not self._allow_legacy_sync_plugins():
+                if (
+                    not inspect.iscoroutinefunction(func)
+                    and not self._allow_legacy_sync_plugins()
+                ):
                     raise RuntimeError(
                         f"Plugin '{name}': legacy sync function plugins are disabled by runtime policy"
                     )
-                rings[hook].append({
-                    "type": "python",
-                    "func": func,
-                    "name": name,
-                    "timeout_ms": timeout_ms,
-                    "fail_policy": fail_policy,
-                })
-                self.logger.info(f"Plugin Loaded (function): {name} → {hook.value} [fail={fail_policy}]")
+                rings[hook].append(
+                    {
+                        "type": "python",
+                        "func": func,
+                        "name": name,
+                        "timeout_ms": timeout_ms,
+                        "fail_policy": fail_policy,
+                    }
+                )
+                self.logger.info(
+                    f"Plugin Loaded (function): {name} → {hook.value} [fail={fail_policy}]"
+                )
 
         elif p_type == "wasm":
-            file_path = os.path.join(self.plugins_dir, f"{entrypoint.replace('.', '/')}.wasm")
+            file_path = os.path.join(
+                self.plugins_dir, f"{entrypoint.replace('.', '/')}.wasm"
+            )
             safe_base = os.path.abspath(self.plugins_dir) + os.sep
             if not os.path.abspath(file_path).startswith(safe_base):
                 raise ValueError(
@@ -586,14 +680,16 @@ class PluginManager:
             runner = WasmRunner(wasm_path=file_path, config=config)
             loaded = await runner.load()
 
-            rings[hook].append({
-                "type": "wasm",
-                "path": file_path,
-                "name": name,
-                "timeout_ms": timeout_ms,
-                "fail_policy": fail_policy,
-                "_runner": runner if loaded else None,
-            })
+            rings[hook].append(
+                {
+                    "type": "wasm",
+                    "path": file_path,
+                    "name": name,
+                    "timeout_ms": timeout_ms,
+                    "fail_policy": fail_policy,
+                    "_runner": runner if loaded else None,
+                }
+            )
             status = "LIVE" if loaded else "STUB (extism not installed)"
             self.logger.info(f"Plugin Prepared (WASM): {name} [{status}]")
 
@@ -602,7 +698,9 @@ class PluginManager:
         Determine if a plugin failure should stop the chain.
         Uses per-plugin fail_policy, falling back to ring defaults.
         """
-        policy = plugin.get("fail_policy", FAIL_CLOSED if hook in FAIL_CLOSED_RINGS else FAIL_OPEN)
+        policy = plugin.get(
+            "fail_policy", FAIL_CLOSED if hook in FAIL_CLOSED_RINGS else FAIL_OPEN
+        )
         return bool(policy == FAIL_CLOSED)
 
     async def execute_ring(self, hook: PluginHook, context: PluginContext):
@@ -649,7 +747,9 @@ class PluginManager:
                             instance.execute(context), timeout=timeout_s
                         )
                     except asyncio.TimeoutError:
-                        self.logger.warning(f"Plugin {name} TIMEOUT ({timeout_ms}ms) in {hook.value}")
+                        self.logger.warning(
+                            f"Plugin {name} TIMEOUT ({timeout_ms}ms) in {hook.value}"
+                        )
                         if stats:
                             stats["timeouts"] += 1
                             stats["errors"] += 1
@@ -660,7 +760,9 @@ class PluginManager:
 
                     # Principle 3: Validate PluginResponse
                     if result is None:
-                        self.logger.warning(f"Plugin {name} returned None, treating as passthrough")
+                        self.logger.warning(
+                            f"Plugin {name} returned None, treating as passthrough"
+                        )
                         continue
                     if not isinstance(result, PluginResponse):
                         self.logger.error(
@@ -669,7 +771,9 @@ class PluginManager:
                         if stats:
                             stats["errors"] += 1
                         if fail_closed:
-                            context.error = f"Plugin {name} returned invalid response type"
+                            context.error = (
+                                f"Plugin {name} returned invalid response type"
+                            )
                             context.stop_chain = True
                         continue
 
@@ -703,10 +807,12 @@ class PluginManager:
                             loop = asyncio.get_running_loop()
                             await asyncio.wait_for(
                                 loop.run_in_executor(_PLUGIN_EXECUTOR, func, context),
-                                timeout=timeout_s
+                                timeout=timeout_s,
                             )
                     except asyncio.TimeoutError:
-                        self.logger.warning(f"Plugin {name} TIMEOUT ({timeout_ms}ms) in {hook.value}")
+                        self.logger.warning(
+                            f"Plugin {name} TIMEOUT ({timeout_ms}ms) in {hook.value}"
+                        )
                         if stats:
                             stats["timeouts"] += 1
                             stats["errors"] += 1
@@ -727,7 +833,13 @@ class PluginManager:
                     context.error = str(e)
                     context.stop_chain = True
 
-            except (asyncio.TimeoutError, AttributeError, TypeError, RuntimeError, ValueError) as e:
+            except (
+                asyncio.TimeoutError,
+                AttributeError,
+                TypeError,
+                RuntimeError,
+                ValueError,
+            ) as e:
                 self.logger.error(f"Error executing plugin {name} in {hook.value}: {e}")
                 context.error = str(e)
                 if stats:
@@ -841,7 +953,12 @@ class PluginManager:
 
         # 1. Build new state into FRESH dicts. self.* is untouched throughout.
         try:
-            new_rings, new_meta, new_instances, new_stats = await self._build_plugin_state()
+            (
+                new_rings,
+                new_meta,
+                new_instances,
+                new_stats,
+            ) = await self._build_plugin_state()
         except Exception as e:
             self.logger.error(f"Hot-Swap build failed (state untouched): {e}")
             raise
@@ -925,35 +1042,54 @@ class PluginManager:
         installed_manifest = os.path.join(self.installed_dir, "manifest.yaml")
 
         if not os.path.exists(installed_manifest):
-            with open(installed_manifest, 'w') as f:
+            with open(installed_manifest, "w") as f:
                 yaml.safe_dump({"plugins": []}, f)
 
-        with open(installed_manifest, 'r') as f:
+        with open(installed_manifest, "r") as f:
             manifest = yaml.safe_load(f) or {"plugins": []}
 
         # Check for duplicates
-        existing = [p for p in manifest["plugins"] if p.get("name") == manifest_entry.get("name")]
+        existing = [
+            p
+            for p in manifest["plugins"]
+            if p.get("name") == manifest_entry.get("name")
+        ]
         if existing:
-            self.logger.warning(f"Plugin '{manifest_entry['name']}' already installed, updating...")
-            manifest["plugins"] = [p for p in manifest["plugins"] if p.get("name") != manifest_entry["name"]]
+            self.logger.warning(
+                f"Plugin '{manifest_entry['name']}' already installed, updating..."
+            )
+            manifest["plugins"] = [
+                p
+                for p in manifest["plugins"]
+                if p.get("name") != manifest_entry["name"]
+            ]
 
         # M.1 — record SHA-256 of the plugin source so subsequent loads can
         # detect tampering. Only Python plugins go through this path; WASM
         # uses its own file extension and is loaded by the WASM runner.
-        if manifest_entry.get("type", "python") == "python" and "sha256" not in manifest_entry:
+        if (
+            manifest_entry.get("type", "python") == "python"
+            and "sha256" not in manifest_entry
+        ):
             entrypoint = manifest_entry.get("entrypoint", "")
             if ":" in entrypoint:
                 module_path = entrypoint.split(":", 1)[0]
-                src_path = os.path.join(self.plugins_dir, f"{module_path.replace('.', '/')}.py")
+                src_path = os.path.join(
+                    self.plugins_dir, f"{module_path.replace('.', '/')}.py"
+                )
                 # Same containment guard as _load_plugin — never read outside plugins_dir.
                 safe_base = os.path.abspath(self.plugins_dir) + os.sep
-                if os.path.abspath(src_path).startswith(safe_base) and os.path.exists(src_path):
+                if os.path.abspath(src_path).startswith(safe_base) and os.path.exists(
+                    src_path
+                ):
                     with open(src_path, "r") as src_file:
-                        manifest_entry["sha256"] = compute_plugin_sha256(src_file.read())
+                        manifest_entry["sha256"] = compute_plugin_sha256(
+                            src_file.read()
+                        )
 
         manifest["plugins"].append(manifest_entry)
 
-        with open(installed_manifest, 'w') as f:
+        with open(installed_manifest, "w") as f:
             yaml.safe_dump(manifest, f, default_flow_style=False)
 
         await self.hot_swap()
@@ -965,7 +1101,7 @@ class PluginManager:
         if not os.path.exists(installed_manifest):
             return False
 
-        with open(installed_manifest, 'r') as f:
+        with open(installed_manifest, "r") as f:
             manifest = yaml.safe_load(f) or {"plugins": []}
 
         original_count = len(manifest["plugins"])
@@ -974,7 +1110,7 @@ class PluginManager:
         if len(manifest["plugins"]) == original_count:
             return False
 
-        with open(installed_manifest, 'w') as f:
+        with open(installed_manifest, "w") as f:
             yaml.safe_dump(manifest, f, default_flow_style=False)
 
         self._plugin_meta.pop(name, None)

@@ -50,16 +50,21 @@ def create_router(agent) -> APIRouter:
         # R2-09: Require minimum subject length to prevent broad matches
         # (e.g., subject="a" matching all session_ids starting with 'a').
         if len(subject) < 8:
-            raise HTTPException(status_code=400, detail="Subject must be at least 8 characters")
+            raise HTTPException(
+                status_code=400, detail="Subject must be at least 8 characters"
+            )
 
         # 1. Pre-audit: write the intent into the immutable hash chain
         #    BEFORE any irreversible action. Use json.dumps so the subject
         #    string can't break the JSON structure.
-        audit_meta = json.dumps({
-            "action": "erase",
-            "subject": subject,
-            "phase": "intent",
-        }, separators=(",", ":"))
+        audit_meta = json.dumps(
+            {
+                "action": "erase",
+                "subject": subject,
+                "phase": "intent",
+            },
+            separators=(",", ":"),
+        )
         try:
             await agent.store.log_audit(
                 ts=int(time.time()),
@@ -106,7 +111,9 @@ def create_router(agent) -> APIRouter:
         if total_deleted == 0:
             # Audit row is already there — leave it. The caller learns
             # nothing existed, the trail still shows the request was made.
-            raise HTTPException(status_code=404, detail=f"No data found for subject '{subject}'")
+            raise HTTPException(
+                status_code=404, detail=f"No data found for subject '{subject}'"
+            )
 
         logger.info(f"GDPR erasure: subject='{subject}' deleted={result}")
         return {
@@ -124,15 +131,24 @@ def create_router(agent) -> APIRouter:
         """
         _check_admin_auth(request)
         if len(subject) < 8:
-            raise HTTPException(status_code=400, detail="Subject must be at least 8 characters")
+            raise HTTPException(
+                status_code=400, detail="Subject must be at least 8 characters"
+            )
         data = await agent.store.export_subject_data(subject)
-        total_records = len(data.get("audit", [])) + len(data.get("spend", [])) + len(data.get("roles", []))
+        total_records = (
+            len(data.get("audit", []))
+            + len(data.get("spend", []))
+            + len(data.get("roles", []))
+        )
 
         if total_records == 0:
-            raise HTTPException(status_code=404, detail=f"No data found for subject '{subject}'")
+            raise HTTPException(
+                status_code=404, detail=f"No data found for subject '{subject}'"
+            )
 
         # Scrub sensitive fields from export
         from core.export import scrub_dict
+
         scrubbed_audit = [scrub_dict(r) for r in data.get("audit", [])]
         scrubbed_spend = [scrub_dict(r) for r in data.get("spend", [])]
 

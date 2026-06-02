@@ -76,9 +76,7 @@ class ModelRateLimiter(BasePlugin):
             "total_checked": self._total_checked,
             "total_limited": self._total_limited,
             "active_windows": len(self._windows),
-            "limit_rate": round(
-                self._total_limited / max(self._total_checked, 1), 4
-            ),
+            "limit_rate": round(self._total_limited / max(self._total_checked, 1), 4),
         }
 
     async def execute(self, ctx: PluginContext) -> PluginResponse:

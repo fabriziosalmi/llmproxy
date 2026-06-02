@@ -1,4 +1,5 @@
 """Admin routes: proxy toggle, status, version, service-info, features, priority, panic."""
+
 import os
 import time
 import logging
@@ -19,7 +20,9 @@ logger = logging.getLogger("llmproxy.routes.admin")
 _FORECAST_MIN_HOURS = 5.0 / 60.0  # 5 minutes
 
 
-def _compute_forecast(*, spent: float, daily_limit: float, elapsed_hours: float) -> dict:
+def _compute_forecast(
+    *, spent: float, daily_limit: float, elapsed_hours: float
+) -> dict:
     """Return today's spend forecast block.
 
     All money fields are USD. None values mean "not enough data yet" or
@@ -60,7 +63,9 @@ def _compute_forecast(*, spent: float, daily_limit: float, elapsed_hours: float)
 def create_router(agent) -> APIRouter:
     router = APIRouter()
 
-    def _parse_int_param(raw: str | None, *, default: int, minimum: int, maximum: int) -> int:
+    def _parse_int_param(
+        raw: str | None, *, default: int, minimum: int, maximum: int
+    ) -> int:
         try:
             val = int(raw) if raw is not None else default
         except (TypeError, ValueError):
@@ -97,7 +102,9 @@ def create_router(agent) -> APIRouter:
 
     @router.get("/api/v1/version")
     async def get_version():
-        version_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "VERSION")
+        version_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "VERSION"
+        )
         version_path = os.path.normpath(version_path)
         if os.path.exists(version_path):
             with open(version_path, "r") as f:
@@ -110,7 +117,7 @@ def create_router(agent) -> APIRouter:
         return {
             "host": request.client.host if request.client else "0.0.0.0",  # nosec B104
             "port": port,
-            "url": f"http://{request.client.host if request.client else 'localhost'}:{port}/v1"
+            "url": f"http://{request.client.host if request.client else 'localhost'}:{port}/v1",
         }
 
     @router.get("/api/v1/features")
@@ -122,8 +129,9 @@ def create_router(agent) -> APIRouter:
         return {
             "host": agent.config.get("server", {}).get("host", "0.0.0.0"),  # nosec B104
             "port": agent.config.get("server", {}).get("port", 8090),
-            "tailscale_active": agent.config.get("server", {}).get("host") not in ("0.0.0.0", "127.0.0.1"),  # nosec B104
-            "version": getattr(agent, "_version", "0.0.0")
+            "tailscale_active": agent.config.get("server", {}).get("host")
+            not in ("0.0.0.0", "127.0.0.1"),  # nosec B104
+            "version": getattr(agent, "_version", "0.0.0"),
         }
 
     @router.post("/api/v1/features/toggle")
@@ -134,7 +142,9 @@ def create_router(agent) -> APIRouter:
         if name in agent.features:
             agent.features[name] = data.get("enabled", not agent.features[name])
             await agent.store.set_state(f"feature_{name}", agent.features[name])
-            await agent._add_log(f"SHIELD: Feature '{name}' {'ENABLED' if agent.features[name] else 'DISABLED'}")
+            await agent._add_log(
+                f"SHIELD: Feature '{name}' {'ENABLED' if agent.features[name] else 'DISABLED'}"
+            )
             agent.security.config[name] = {"enabled": agent.features[name]}
             return {"name": name, "enabled": agent.features[name]}
         raise HTTPException(status_code=400, detail="Unknown feature")
@@ -145,7 +155,9 @@ def create_router(agent) -> APIRouter:
         data = await request.json()
         agent.priority_mode = data.get("enabled", False)
         await agent.store.set_state("priority_mode", agent.priority_mode)
-        await agent._add_log(f"SYSTEM: Priority Steering {'ENABLED' if agent.priority_mode else 'DISABLED'}")
+        await agent._add_log(
+            f"SYSTEM: Priority Steering {'ENABLED' if agent.priority_mode else 'DISABLED'}"
+        )
         return {"enabled": agent.priority_mode}
 
     # ── Spend forecasting (M.2) ──
@@ -158,12 +170,15 @@ def create_router(agent) -> APIRouter:
         it's what they'd compute by hand otherwise.
         """
         import datetime as _dt
+
         daily_limit = float(agent.config.get("budget", {}).get("daily_limit", 0.0))
         spent = float(getattr(agent, "total_cost_today", 0.0))
         now = _dt.datetime.now()
         midnight = _dt.datetime.combine(now.date(), _dt.time.min)
         elapsed_hours = max((now - midnight).total_seconds() / 3600.0, 0.0)
-        return _compute_forecast(spent=spent, daily_limit=daily_limit, elapsed_hours=elapsed_hours)
+        return _compute_forecast(
+            spent=spent, daily_limit=daily_limit, elapsed_hours=elapsed_hours
+        )
 
     @router.get("/api/v1/analytics/forecast")
     async def get_spend_forecast(request: Request):
@@ -208,18 +223,21 @@ def create_router(agent) -> APIRouter:
         the rpm/burst the limiter is currently serving."""
         _check_admin_auth(request)
         from core.rate_limiter import RateLimitMiddleware, RATE_LIMIT_PRESETS
+
         block: dict = {"presets": RATE_LIMIT_PRESETS}
         if RateLimitMiddleware.instance is not None:
             block.update(RateLimitMiddleware.instance.current_config())
         else:
             # Fallback when the middleware was never instantiated (tests, no-app).
             cfg = agent.config.get("rate_limiting", {})
-            block.update({
-                "enabled": cfg.get("enabled", False),
-                "preset": None,
-                "requests_per_minute": cfg.get("requests_per_minute", 60),
-                "burst": cfg.get("burst", 10),
-            })
+            block.update(
+                {
+                    "enabled": cfg.get("enabled", False),
+                    "preset": None,
+                    "requests_per_minute": cfg.get("requests_per_minute", 60),
+                    "burst": cfg.get("burst", 10),
+                }
+            )
         return block
 
     @router.post("/api/v1/rate-limit/preset")
@@ -229,6 +247,7 @@ def create_router(agent) -> APIRouter:
         effect immediately. Persists to the store, restart-safe."""
         _check_admin_auth(request)
         from core.rate_limiter import RateLimitMiddleware, RATE_LIMIT_PRESETS
+
         data = await request.json()
         name = (data.get("preset") or "").lower().strip()
         if name not in RATE_LIMIT_PRESETS:
@@ -266,7 +285,9 @@ def create_router(agent) -> APIRouter:
         except (TypeError, ValueError):
             raise HTTPException(status_code=400, detail="cost_weight must be a number")
         if not 0.0 <= new_weight <= 1.0:
-            raise HTTPException(status_code=400, detail="cost_weight must be in [0.0, 1.0]")
+            raise HTTPException(
+                status_code=400, detail="cost_weight must be in [0.0, 1.0]"
+            )
         agent.routing_cost_weight = new_weight
         await agent.store.set_state("routing:cost_weight", new_weight)
         await agent._add_log(
@@ -279,6 +300,7 @@ def create_router(agent) -> APIRouter:
     async def get_guards_status():
         """Consolidated security subsystem status."""
         from core.firewall_asgi import ByteLevelFirewallMiddleware
+
         return {
             "features": agent.features,
             "circuit_breakers": agent.circuit_manager.get_all_states(),
@@ -288,11 +310,15 @@ def create_router(agent) -> APIRouter:
                 "total_scanned": ByteLevelFirewallMiddleware.total_scanned,
                 "total_blocked": ByteLevelFirewallMiddleware.total_blocked,
                 "block_by_signature": ByteLevelFirewallMiddleware.block_by_signature,
-                "signatures_count": len(ByteLevelFirewallMiddleware._FALLBACK_SIGNATURES),
+                "signatures_count": len(
+                    ByteLevelFirewallMiddleware._FALLBACK_SIGNATURES
+                ),
             },
             "rate_limiter": {
                 "enabled": agent.config.get("rate_limiting", {}).get("enabled", False),
-                "requests_per_minute": agent.config.get("rate_limiting", {}).get("requests_per_minute", 60),
+                "requests_per_minute": agent.config.get("rate_limiting", {}).get(
+                    "requests_per_minute", 60
+                ),
             },
             "budget": {
                 "total_cost_today": agent.total_cost_today,
@@ -306,6 +332,7 @@ def create_router(agent) -> APIRouter:
     async def get_webhooks():
         """List configured webhook endpoints."""
         from core.webhooks import EventType
+
         return {
             "enabled": agent.webhooks.enabled,
             "endpoints": [
@@ -326,6 +353,7 @@ def create_router(agent) -> APIRouter:
         if not agent.exporter:
             return {"enabled": False}
         import os
+
         export_dir = str(agent.exporter.output_dir)
         files = []
         if os.path.isdir(export_dir):
@@ -338,17 +366,16 @@ def create_router(agent) -> APIRouter:
             "output_dir": export_dir,
             "scrub_pii": agent.exporter.scrub,
             "compress": agent.exporter.compress_on_rotate,
-            "current_date": str(agent.exporter._current_date) if agent.exporter._current_date else None,
+            "current_date": str(agent.exporter._current_date)
+            if agent.exporter._current_date
+            else None,
             "files": files,
         }
 
     @router.get("/api/v1/rbac/roles")
     async def get_rbac_roles():
         """RBAC role matrix."""
-        return {
-            role: sorted(perms)
-            for role, perms in agent.rbac.permissions.items()
-        }
+        return {role: sorted(perms) for role, perms in agent.rbac.permissions.items()}
 
     @router.get("/api/v1/metrics/latency")
     async def get_latency_metrics():
@@ -363,7 +390,11 @@ def create_router(agent) -> APIRouter:
             if "ttft_ms" in trace:
                 ttft_samples.append(trace["ttft_ms"])
 
-        ttft_percentiles = agent.plugin_manager._percentiles(ttft_samples) if ttft_samples else {"p50": 0, "p95": 0, "p99": 0}
+        ttft_percentiles = (
+            agent.plugin_manager._percentiles(ttft_samples)
+            if ttft_samples
+            else {"p50": 0, "p95": 0, "p99": 0}
+        )
 
         return {
             "rings": ring_latency,
@@ -411,15 +442,22 @@ def create_router(agent) -> APIRouter:
             agent._config_hash = new_hash
             # Reinitialize config-dependent subsystems
             from core.webhooks import WebhookDispatcher
+
             new_webhooks = WebhookDispatcher(agent.config)
             agent.webhooks = new_webhooks
             if old_webhooks and old_webhooks is not new_webhooks:
                 try:
                     await old_webhooks.close()
                 except Exception:
-                    logger.warning("Previous webhook dispatcher close failed during reload", exc_info=True)
+                    logger.warning(
+                        "Previous webhook dispatcher close failed during reload",
+                        exc_info=True,
+                    )
             from core.security import SecurityShield
-            agent.security = SecurityShield(agent.config, assistant=agent.security.assistant)
+
+            agent.security = SecurityShield(
+                agent.config, assistant=agent.security.assistant
+            )
             await agent._add_log("Config reloaded via admin API", level="SYSTEM")
             return {"status": "reloaded", "changed": old_hash != new_hash}
         except Exception as e:
@@ -432,10 +470,17 @@ def create_router(agent) -> APIRouter:
     async def emergency_panic(request: Request):
         _check_admin_auth(request)
         from core.webhooks import EventType
+
         agent.proxy_enabled = False
         await agent.store.set_state("proxy_enabled", False)
-        await agent._add_log("EMERGENCY: Panic Kill-Switch activated. ALL TRAFFIC DROPPED.", level="CRITICAL")
-        await agent.webhooks.dispatch(EventType.PANIC_ACTIVATED, {"action": "kill_switch", "timestamp": time.strftime("%H:%M:%S")})
+        await agent._add_log(
+            "EMERGENCY: Panic Kill-Switch activated. ALL TRAFFIC DROPPED.",
+            level="CRITICAL",
+        )
+        await agent.webhooks.dispatch(
+            EventType.PANIC_ACTIVATED,
+            {"action": "kill_switch", "timestamp": time.strftime("%H:%M:%S")},
+        )
         return {"status": "HALTED"}
 
     # ── Spend Analytics (R2.3) ──
@@ -445,7 +490,9 @@ def create_router(agent) -> APIRouter:
         """Spend breakdown by model, provider, key, or date."""
         _check_admin_auth(request)
         params = request.query_params
-        limit = _parse_int_param(params.get("limit"), default=50, minimum=1, maximum=1000)
+        limit = _parse_int_param(
+            params.get("limit"), default=50, minimum=1, maximum=1000
+        )
         result = await agent.store.query_spend(
             date_from=params.get("from", ""),
             date_to=params.get("to", ""),
@@ -467,7 +514,9 @@ def create_router(agent) -> APIRouter:
     async def analytics_top_models(request: Request):
         """Top models by spend."""
         _check_admin_auth(request)
-        limit = _parse_int_param(request.query_params.get("limit"), default=10, minimum=1, maximum=200)
+        limit = _parse_int_param(
+            request.query_params.get("limit"), default=10, minimum=1, maximum=200
+        )
         result = await agent.store.query_spend(
             group_by="model",
             limit=limit,
@@ -494,23 +543,26 @@ def create_router(agent) -> APIRouter:
         for row in by_model:
             reqs = row.get("requests", 0) or 1
             cost = row.get("total_cost_usd", 0.0)
-            total_tokens = (row.get("total_prompt_tokens", 0) or 0) + (row.get("total_completion_tokens", 0) or 0)
+            total_tokens = (row.get("total_prompt_tokens", 0) or 0) + (
+                row.get("total_completion_tokens", 0) or 0
+            )
             avg_cost = cost / max(reqs, 1)
-            efficiency.append({
-                "model": row.get("model", "unknown"),
-                "requests": reqs,
-                "total_cost_usd": round(cost, 4),
-                "avg_cost_per_request_usd": round(avg_cost, 6),
-                "avg_tokens_per_request": round(
-                    total_tokens / max(reqs, 1)
-                ),
-            })
+            efficiency.append(
+                {
+                    "model": row.get("model", "unknown"),
+                    "requests": reqs,
+                    "total_cost_usd": round(cost, 4),
+                    "avg_cost_per_request_usd": round(avg_cost, 6),
+                    "avg_tokens_per_request": round(total_tokens / max(reqs, 1)),
+                }
+            )
         efficiency.sort(key=lambda x: x["avg_cost_per_request_usd"])
 
         # Savings vs a premium-tier baseline. Honest scope: this measures
         # model-mix economics, not the routing slider in isolation.
         # See core.pricing.estimate_baseline_savings for the contract.
         from core.pricing import estimate_baseline_savings
+
         savings = estimate_baseline_savings(by_model)
 
         return {
@@ -558,7 +610,9 @@ def create_router(agent) -> APIRouter:
         """
         _check_admin_auth(request)
         history = getattr(agent, "metrics_history", None)
-        interval_s = int(agent.config.get("metrics", {}).get("history_interval_s", 3600))
+        interval_s = int(
+            agent.config.get("metrics", {}).get("history_interval_s", 3600)
+        )
         slots = getattr(history, "slots", 24) if history is not None else 24
         return {
             "hours": slots,
@@ -582,7 +636,9 @@ def create_router(agent) -> APIRouter:
             schema = request.app.openapi()
         except Exception as e:  # noqa: BLE001
             logger.error(f"OpenAPI schema build failed: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail="OpenAPI schema build failed") from e
+            raise HTTPException(
+                status_code=500, detail="OpenAPI schema build failed"
+            ) from e
         return schema
 
     @router.get("/api/v1/config/yaml")
@@ -600,12 +656,15 @@ def create_router(agent) -> APIRouter:
         _check_admin_auth(request)
         import yaml as _yaml
         from core.export import scrub_dict
+
         try:
             redacted = scrub_dict(agent.config or {})
             text = _yaml.safe_dump(redacted, default_flow_style=False, sort_keys=False)
         except Exception as e:  # noqa: BLE001 — surface, don't crash the route
             logger.error(f"YAML serialisation failed: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail="YAML serialisation failed") from e
+            raise HTTPException(
+                status_code=500, detail="YAML serialisation failed"
+            ) from e
         return {"yaml": text}
 
     @router.get("/api/v1/config/warnings")
@@ -619,6 +678,7 @@ def create_router(agent) -> APIRouter:
         """
         _check_admin_auth(request)
         from core.startup_checks import get_startup_warnings
+
         return {"warnings": get_startup_warnings()}
 
     @router.get("/api/v1/audit")
@@ -626,10 +686,18 @@ def create_router(agent) -> APIRouter:
         """Query persistent audit log with filters."""
         _check_admin_auth(request)
         params = request.query_params
-        status = _parse_int_param(params.get("status"), default=0, minimum=0, maximum=599)
-        blocked = _parse_int_param(params.get("blocked"), default=-1, minimum=-1, maximum=1)
-        limit = _parse_int_param(params.get("limit"), default=100, minimum=1, maximum=1000)
-        offset = _parse_int_param(params.get("offset"), default=0, minimum=0, maximum=1_000_000)
+        status = _parse_int_param(
+            params.get("status"), default=0, minimum=0, maximum=599
+        )
+        blocked = _parse_int_param(
+            params.get("blocked"), default=-1, minimum=-1, maximum=1
+        )
+        limit = _parse_int_param(
+            params.get("limit"), default=100, minimum=1, maximum=1000
+        )
+        offset = _parse_int_param(
+            params.get("offset"), default=0, minimum=0, maximum=1_000_000
+        )
         return await agent.store.query_audit(
             date_from=params.get("from", ""),
             date_to=params.get("to", ""),
@@ -648,6 +716,7 @@ def create_router(agent) -> APIRouter:
         """Reset all firewall WAF counters to zero."""
         _check_admin_auth(request)
         from core.firewall_asgi import ByteLevelFirewallMiddleware
+
         ByteLevelFirewallMiddleware.total_scanned = 0
         ByteLevelFirewallMiddleware.total_blocked = 0
         ByteLevelFirewallMiddleware.block_by_signature.clear()
@@ -662,16 +731,18 @@ def create_router(agent) -> APIRouter:
         _check_admin_auth(request)
         result = {}
         # L1 negative cache
-        if hasattr(agent, 'negative_cache') and agent.negative_cache:
+        if hasattr(agent, "negative_cache") and agent.negative_cache:
             agent.negative_cache.clear()
             result["negative_cache"] = "cleared"
         # L2 positive cache
-        if hasattr(agent, 'cache_backend') and agent.cache_backend:
+        if hasattr(agent, "cache_backend") and agent.cache_backend:
             try:
                 evicted = await agent.cache_backend.evict_expired()
                 result["positive_cache"] = f"evicted {evicted} entries"
             except Exception as e:
-                logger.error(f"Cache eviction failed during clear_caches: {e}", exc_info=True)
+                logger.error(
+                    f"Cache eviction failed during clear_caches: {e}", exc_info=True
+                )
                 raise HTTPException(status_code=502, detail="Cache eviction failed")
         return {"status": "cleared", **result}
 
@@ -680,7 +751,7 @@ def create_router(agent) -> APIRouter:
         """Reset SecurityShield session memory and threat ledger."""
         _check_admin_auth(request)
         result: dict[str, Any] = {}
-        if hasattr(agent, 'security'):
+        if hasattr(agent, "security"):
             sessions = len(agent.security.session_memory)
             agent.security.session_memory.clear()
             result["sessions_cleared"] = sessions
@@ -697,6 +768,7 @@ def create_router(agent) -> APIRouter:
         cb = await agent.circuit_manager.get_breaker(endpoint_id)
         async with cb._lock:
             from core.circuit_breaker import CircuitState
+
             cb.state = CircuitState.CLOSED
             cb.failure_count = 0
             cb._half_open_probe_active = False
@@ -707,12 +779,16 @@ def create_router(agent) -> APIRouter:
         """Send a test payload to all configured webhook endpoints."""
         _check_admin_auth(request)
         from core.webhooks import EventType
+
         try:
             await agent.webhooks.dispatch(
                 EventType.INJECTION_BLOCKED,
                 {"message": "Test webhook from LLMProxy UI", "test": True},
             )
-            return {"status": "sent", "message": "Test payload dispatched to all endpoints"}
+            return {
+                "status": "sent",
+                "message": "Test payload dispatched to all endpoints",
+            }
         except Exception as e:
             logger.error(f"Webhook test dispatch failed: {e}", exc_info=True)
             raise HTTPException(status_code=502, detail="Webhook test dispatch failed")

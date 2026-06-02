@@ -19,6 +19,7 @@ import pytest
 
 # ── C1: Rate Limiter Under Concurrent Load ────────────────────
 
+
 class TestRateLimiterConcurrency:
     """Proves the asyncio.Lock on RateLimiter prevents over-dispensing."""
 
@@ -58,6 +59,7 @@ class TestRateLimiterConcurrency:
 
 # ── C2: Budget Guard Under Concurrent Load ────────────────────
 
+
 class TestBudgetGuardConcurrency:
     """Proves the _spend_lock prevents budget overspend under concurrent requests."""
 
@@ -68,15 +70,19 @@ class TestBudgetGuardConcurrency:
         from plugins.marketplace.smart_budget_guard import SmartBudgetGuard
         from core.plugin_engine import PluginContext
 
-        guard = SmartBudgetGuard(config={
-            "session_budget_usd": 0.001,  # Very tight budget to guarantee blocks
-            "team_budget_usd": 1000.0,
-        })
+        guard = SmartBudgetGuard(
+            config={
+                "session_budget_usd": 0.001,  # Very tight budget to guarantee blocks
+                "team_budget_usd": 1000.0,
+            }
+        )
 
         async def make_request(i):
             ctx = PluginContext(
                 body={
-                    "messages": [{"role": "user", "content": f"Request number {i} " * 30}],
+                    "messages": [
+                        {"role": "user", "content": f"Request number {i} " * 30}
+                    ],
                     "model": "gpt-4o",
                 },
                 session_id="concurrent_session",
@@ -103,6 +109,7 @@ class TestBudgetGuardConcurrency:
 
 # ── C3: Neural Router Stats Under Concurrent Load ─────────────
 
+
 class TestNeuralRouterStatsConcurrency:
     """Proves the _stats_lock prevents counter corruption."""
 
@@ -111,15 +118,17 @@ class TestNeuralRouterStatsConcurrency:
     async def test_concurrent_updates_count_correctly(self):
         """C3: 500 concurrent updates → request_count == 500."""
         from plugins.default.neural_router import (
-            update_endpoint_stats, get_endpoint_stats, _endpoint_stats,
+            update_endpoint_stats,
+            get_endpoint_stats,
+            _endpoint_stats,
         )
 
         _endpoint_stats.clear()
         N = 500
 
-        await asyncio.gather(*[
-            update_endpoint_stats("stress_ep", 100.0, True) for _ in range(N)
-        ])
+        await asyncio.gather(
+            *[update_endpoint_stats("stress_ep", 100.0, True) for _ in range(N)]
+        )
 
         stats = get_endpoint_stats("stress_ep")
         assert stats["request_count"] == N, (
@@ -131,7 +140,9 @@ class TestNeuralRouterStatsConcurrency:
     async def test_concurrent_multi_endpoint_isolation(self):
         """C3b: Concurrent updates to different endpoints don't interfere."""
         from plugins.default.neural_router import (
-            update_endpoint_stats, get_endpoint_stats, _endpoint_stats,
+            update_endpoint_stats,
+            get_endpoint_stats,
+            _endpoint_stats,
         )
 
         _endpoint_stats.clear()
@@ -155,6 +166,7 @@ class TestNeuralRouterStatsConcurrency:
 
 
 # ── C4: Deduplicator Concurrent Identical Keys ────────────────
+
 
 class TestDeduplicatorConcurrency:
     """Proves the lock ensures exactly-once execution for duplicate keys."""

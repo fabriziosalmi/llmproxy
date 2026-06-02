@@ -19,8 +19,12 @@ class EventLogger:
     """Manages log and telemetry queues with bounded capacity and DLQ overflow."""
 
     def __init__(self, log_maxsize: int = 100, telemetry_maxsize: int = 1000):
-        self.log_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=log_maxsize)
-        self.telemetry_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=telemetry_maxsize)
+        self.log_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(
+            maxsize=log_maxsize
+        )
+        self.telemetry_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(
+            maxsize=telemetry_maxsize
+        )
         # Fan-out subscribers for SSE consumers. Each subscriber gets its own queue
         # so events are broadcast (not consumed by only one client).
         self._log_subscribers: set[asyncio.Queue[dict[str, Any]]] = set()
@@ -31,7 +35,9 @@ class EventLogger:
         self._dlq_worker_task: asyncio.Task | None = None
 
     @staticmethod
-    def _fanout(subscribers: set[asyncio.Queue[dict[str, Any]]], item: dict[str, Any]) -> None:
+    def _fanout(
+        subscribers: set[asyncio.Queue[dict[str, Any]]], item: dict[str, Any]
+    ) -> None:
         """Best-effort non-blocking broadcast to subscriber queues.
 
         If a subscriber queue is full, drop its oldest message to keep the
@@ -65,8 +71,13 @@ class EventLogger:
     def unsubscribe_telemetry(self, q: asyncio.Queue[dict[str, Any]]) -> None:
         self._telemetry_subscribers.discard(q)
 
-    async def add_log(self, message: str, level: str = "INFO",
-                      metadata: dict | None = None, trace_id: str | None = None):
+    async def add_log(
+        self,
+        message: str,
+        level: str = "INFO",
+        metadata: dict | None = None,
+        trace_id: str | None = None,
+    ):
         entry: Dict[str, Any] = {
             "timestamp": time.strftime("%H:%M:%S"),
             "level": level,
@@ -82,7 +93,11 @@ class EventLogger:
         self._fanout(self._log_subscribers, entry)
 
     async def broadcast_event(self, event_type: str, data: Dict[str, Any]):
-        event = {"type": event_type, "timestamp": datetime.now().isoformat(), "data": data}
+        event = {
+            "type": event_type,
+            "timestamp": datetime.now().isoformat(),
+            "data": data,
+        }
         if self.telemetry_queue.full():
             dropped = self.telemetry_queue.get_nowait()
             self._schedule_dlq_write(dropped)
@@ -129,6 +144,7 @@ class EventLogger:
         Non-blocking, best-effort -- prevents silent data loss under load spikes.
         Rotates the file when it exceeds _DLQ_MAX_BYTES to prevent unbounded growth."""
         import os
+
         try:
             # Rotate if oversized
             try:

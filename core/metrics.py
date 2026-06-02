@@ -10,67 +10,82 @@ Exposes /metrics endpoint via prometheus_client with:
 """
 
 from prometheus_client import (
-    Counter, Histogram, Gauge, start_http_server, generate_latest, CONTENT_TYPE_LATEST,
+    Counter,
+    Histogram,
+    Gauge,
+    start_http_server,
+    generate_latest,
+    CONTENT_TYPE_LATEST,
 )
 
 # ─── Latency buckets tuned for LLM workloads (ms → seconds) ───
-LATENCY_BUCKETS = (
-    0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0
-)
+LATENCY_BUCKETS = (0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0)
 
 # ─── Core request metrics ───
 REQUEST_COUNT = Counter(
-    'llm_proxy_requests_total',
-    'Total number of requests handled',
-    ['method', 'endpoint', 'http_status']
+    "llm_proxy_requests_total",
+    "Total number of requests handled",
+    ["method", "endpoint", "http_status"],
 )
 REQUEST_ERRORS = Counter(
-    'llm_proxy_request_errors_total',
-    'Total failed requests (4xx/5xx)',
-    ['endpoint', 'error_class']
+    "llm_proxy_request_errors_total",
+    "Total failed requests (4xx/5xx)",
+    ["endpoint", "error_class"],
 )
 REQUEST_LATENCY = Histogram(
-    'llm_proxy_request_latency_seconds',
-    'Latency of requests in seconds (P50/P95/P99 via buckets)',
-    ['endpoint'],
+    "llm_proxy_request_latency_seconds",
+    "Latency of requests in seconds (P50/P95/P99 via buckets)",
+    ["endpoint"],
     buckets=LATENCY_BUCKETS,
 )
 
 # ─── Infrastructure metrics ───
-ACTIVE_AGENTS = Gauge('llm_proxy_active_agents', 'Number of currently running agents')
-ENDPOINT_POOL_SIZE = Gauge('llm_proxy_endpoint_pool_size', 'Number of endpoints in pool', ['status'])
-CIRCUIT_OPEN = Gauge('llm_proxy_circuit_open', 'Whether circuit breaker is open', ['endpoint'])
+ACTIVE_AGENTS = Gauge("llm_proxy_active_agents", "Number of currently running agents")
+ENDPOINT_POOL_SIZE = Gauge(
+    "llm_proxy_endpoint_pool_size", "Number of endpoints in pool", ["status"]
+)
+CIRCUIT_OPEN = Gauge(
+    "llm_proxy_circuit_open", "Whether circuit breaker is open", ["endpoint"]
+)
 
 # ─── Token & cost metrics ───
-TOKEN_USAGE = Counter('llm_proxy_token_usage_total', 'Total token usage', ['endpoint', 'role'])
-ESTIMATED_COST = Counter('llm_proxy_cost_total', 'Estimated cost in USD', ['endpoint', 'model'])
-ROI_METRIC = Gauge('llm_proxy_roi_efficiency', 'Estimated efficiency (Success / Cost)')
-BUDGET_CONSUMED = Gauge('llm_proxy_budget_consumed_usd', 'Budget consumed this month')
-BUDGET_LIMIT = Gauge('llm_proxy_budget_limit_usd', 'Monthly budget limit')
+TOKEN_USAGE = Counter(
+    "llm_proxy_token_usage_total", "Total token usage", ["endpoint", "role"]
+)
+ESTIMATED_COST = Counter(
+    "llm_proxy_cost_total", "Estimated cost in USD", ["endpoint", "model"]
+)
+ROI_METRIC = Gauge("llm_proxy_roi_efficiency", "Estimated efficiency (Success / Cost)")
+BUDGET_CONSUMED = Gauge("llm_proxy_budget_consumed_usd", "Budget consumed this month")
+BUDGET_LIMIT = Gauge("llm_proxy_budget_limit_usd", "Monthly budget limit")
 
 # ─── Streaming metrics ───
 STREAMING_TTFT = Histogram(
-    'llm_proxy_streaming_ttft_seconds',
-    'Time To First Token for streams',
-    ['endpoint'],
+    "llm_proxy_streaming_ttft_seconds",
+    "Time To First Token for streams",
+    ["endpoint"],
     buckets=(0.01, 0.025, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0),
 )
 
 # ─── Ring execution metrics ───
 RING_LATENCY = Histogram(
-    'llm_proxy_ring_latency_seconds',
-    'Per-ring execution latency',
-    ['ring'],
+    "llm_proxy_ring_latency_seconds",
+    "Per-ring execution latency",
+    ["ring"],
     buckets=(0.0005, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0),
 )
 
 # ─── Security metrics ───
-INJECTION_BLOCKED = Counter('llm_proxy_injection_blocked_total', 'Injection attempts blocked')
-AUTH_FAILURES = Counter('llm_proxy_auth_failures_total', 'Authentication failures', ['reason'])
+INJECTION_BLOCKED = Counter(
+    "llm_proxy_injection_blocked_total", "Injection attempts blocked"
+)
+AUTH_FAILURES = Counter(
+    "llm_proxy_auth_failures_total", "Authentication failures", ["reason"]
+)
 AUDIT_PERSISTENCE = Counter(
-    'llm_proxy_audit_persistence_total',
-    'Audit-log write attempts and outcomes',
-    ['route', 'outcome'],  # route: chat|completions|forwarder_stream ; outcome: ok|fail
+    "llm_proxy_audit_persistence_total",
+    "Audit-log write attempts and outcomes",
+    ["route", "outcome"],  # route: chat|completions|forwarder_stream ; outcome: ok|fail
 )
 
 
@@ -82,6 +97,7 @@ def start_metrics_server(port: int = 9091):
 def get_metrics_response():
     """Generate Prometheus metrics for inline /metrics endpoint."""
     return generate_latest(), CONTENT_TYPE_LATEST
+
 
 class MetricsTracker:
     @staticmethod
@@ -98,7 +114,13 @@ class MetricsTracker:
         ENDPOINT_POOL_SIZE.labels(status=status).set(size)
 
     @staticmethod
-    def track_usage(endpoint: str, model: str, prompt_tokens: int, completion_tokens: int, cost: float):
+    def track_usage(
+        endpoint: str,
+        model: str,
+        prompt_tokens: int,
+        completion_tokens: int,
+        cost: float,
+    ):
         TOKEN_USAGE.labels(endpoint=endpoint, role="prompt").inc(prompt_tokens)
         TOKEN_USAGE.labels(endpoint=endpoint, role="completion").inc(completion_tokens)
         ESTIMATED_COST.labels(endpoint=endpoint, model=model).inc(cost)

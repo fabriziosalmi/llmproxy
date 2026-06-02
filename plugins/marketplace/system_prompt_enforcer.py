@@ -85,6 +85,5 @@ class SystemPromptEnforcer(BasePlugin):
     async def on_load(self):
         preview = self.prompt[:60] + "..." if len(self.prompt) > 60 else self.prompt
         self.logger.info(
-            f"SystemPromptEnforcer loaded: mode={self.mode}, "
-            f"prompt='{preview}'"
+            f"SystemPromptEnforcer loaded: mode={self.mode}, prompt='{preview}'"
         )

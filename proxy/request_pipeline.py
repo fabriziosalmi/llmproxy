@@ -63,7 +63,9 @@ async def process_proxy_request(
         metadata={
             "rotator": orchestrator,
             "req_id": uuid.uuid4().hex[:16],
-            "_cache_control": request.headers.get("cache-control", "") if request else "",
+            "_cache_control": request.headers.get("cache-control", "")
+            if request
+            else "",
         },
         state=orchestrator.plugin_state,
     )
@@ -77,10 +79,15 @@ async def process_proxy_request(
             raise HTTPException(status_code=403, detail=neg_reason)
 
         # Pre-ring: SecurityShield (injection scoring + trajectory + cross-session)
-        client_ip = request.client.host if hasattr(request, 'client') and request.client else ""
+        client_ip = (
+            request.client.host if hasattr(request, "client") and request.client else ""
+        )
         key_prefix = session_id[:8] if session_id != "default" else ""
         security_error = await orchestrator.security.inspect(
-            ctx.body, session_id, ip=client_ip, key_prefix=key_prefix,
+            ctx.body,
+            session_id,
+            ip=client_ip,
+            key_prefix=key_prefix,
         )
         if security_error:
             logger.warning(f"SecurityShield blocked: {security_error}")
@@ -94,10 +101,15 @@ async def process_proxy_request(
         MetricsTracker.track_ring_latency("ingress", time.perf_counter() - r1_start)
         if ctx.stop_chain:
             MetricsTracker.track_injection_blocked()
-            orchestrator._spawn_task(orchestrator.webhooks.dispatch(
-                EventType.INJECTION_BLOCKED,
-                {"reason": ctx.error or "Ingress Blocked", "session": session_id[:8]},
-            ))
+            orchestrator._spawn_task(
+                orchestrator.webhooks.dispatch(
+                    EventType.INJECTION_BLOCKED,
+                    {
+                        "reason": ctx.error or "Ingress Blocked",
+                        "session": session_id[:8],
+                    },
+                )
+            )
             raise HTTPException(status_code=403, detail=ctx.error or "Ingress Blocked")
 
         # RING 2: PRE-FLIGHT (PII masking, budget guard, loop breaker, cache lookup)
@@ -117,7 +129,8 @@ async def process_proxy_request(
                     cached_data = ctx.metadata.get("_cached_response_data")
                     if cached_data:
                         ctx.response = StreamingResponse(
-                            fake_stream(cached_data), media_type="text/event-stream",
+                            fake_stream(cached_data),
+                            media_type="text/event-stream",
                             headers={"X-LLMProxy-Cache": "HIT"},
                         )
                 return ctx.response
@@ -129,7 +142,9 @@ async def process_proxy_request(
 
         # Model alias/group resolution (before routing)
         original_model = ctx.body.get("model", "")
-        resolved_model, resolved_provider = resolve_model(orchestrator.config, original_model)
+        resolved_model, resolved_provider = resolve_model(
+            orchestrator.config, original_model
+        )
         if resolved_model != original_model:
             ctx.body["model"] = resolved_model
             ctx.metadata["_model_alias"] = original_model
@@ -148,7 +163,9 @@ async def process_proxy_request(
                 local_model = budget_cfg.get("local_model", "ollama/llama3.3")
                 original_before_downgrade = ctx.body.get("model", "")
                 ctx.metadata["_budget_downgrade"] = True
-                ctx.metadata["_original_model_pre_downgrade"] = original_before_downgrade
+                ctx.metadata["_original_model_pre_downgrade"] = (
+                    original_before_downgrade
+                )
                 ctx.body["model"] = local_model
                 ctx.metadata["_budget_downgrade_headers"] = {
                     "X-LLMProxy-Model-Downgraded": "true",
@@ -166,7 +183,9 @@ async def process_proxy_request(
         await orchestrator.plugin_manager.execute_ring(PluginHook.ROUTING, ctx)
         MetricsTracker.track_ring_latency("routing", time.perf_counter() - r3_start)
         if ctx.stop_chain:
-            raise HTTPException(status_code=503, detail=ctx.error or "No Routing Target")
+            raise HTTPException(
+                status_code=503, detail=ctx.error or "No Routing Target"
+            )
 
         target = ctx.metadata.get("target_endpoint")
         headers = ctx.body.get("headers", {})
@@ -186,7 +205,11 @@ async def process_proxy_request(
         cost_ref["_budget_lock"] = orchestrator._budget_lock
         cost_ref["_rotator"] = orchestrator  # ref for total_cost_today update
         await orchestrator.forwarder.forward_with_fallback(
-            ctx, target, headers, session, cost_ref=cost_ref,
+            ctx,
+            target,
+            headers,
+            session,
+            cost_ref=cost_ref,
         )
         # For non-streaming responses, charge budget immediately.
         # For streaming, the charge happens in the stream generator's
@@ -199,11 +222,18 @@ async def process_proxy_request(
 
         # Update endpoint performance stats for smart routing
         routed_endpoint_id = getattr(
-            ctx.metadata.get("target_endpoint"), 'id',
+            ctx.metadata.get("target_endpoint"),
+            "id",
             ctx.metadata.get("_provider", "unknown"),
         )
-        success = ctx.response and hasattr(ctx.response, "status_code") and ctx.response.status_code < 400
-        await update_endpoint_stats(routed_endpoint_id, ctx.metadata["duration"] * 1000, bool(success))
+        success = (
+            ctx.response
+            and hasattr(ctx.response, "status_code")
+            and ctx.response.status_code < 400
+        )
+        await update_endpoint_stats(
+            routed_endpoint_id, ctx.metadata["duration"] * 1000, bool(success)
+        )
 
         # RING 4: POST-FLIGHT (response sanitization, watermarking)
         r4_start = time.perf_counter()
@@ -216,7 +246,9 @@ async def process_proxy_request(
         async def _bg_ring():
             r5_start = time.perf_counter()
             await orchestrator.plugin_manager.execute_ring(PluginHook.BACKGROUND, ctx)
-            MetricsTracker.track_ring_latency("background", time.perf_counter() - r5_start)
+            MetricsTracker.track_ring_latency(
+                "background", time.perf_counter() - r5_start
+            )
 
             cache_key = ctx.metadata.get("_cache_key")
             if (
@@ -229,7 +261,11 @@ async def process_proxy_request(
             ):
                 try:
                     response_data = json.loads(ctx.response.body.decode())
-                    content = response_data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                    content = (
+                        response_data.get("choices", [{}])[0]
+                        .get("message", {})
+                        .get("content", "")
+                    )
                     if "[SEC_ERR:" not in content:
                         await orchestrator.cache_backend.put(
                             body=ctx.body,
@@ -247,8 +283,12 @@ async def process_proxy_request(
             cache_status = ctx.metadata.get("_cache_status", "")
             if cache_status:
                 ctx.response.headers["X-LLMProxy-Cache"] = cache_status
-            ctx.response.headers["X-LLMProxy-Provider"] = ctx.metadata.get("_provider", "")
-            ctx.response.headers["X-LLMProxy-Request-Id"] = ctx.metadata.get("req_id", "")
+            ctx.response.headers["X-LLMProxy-Provider"] = ctx.metadata.get(
+                "_provider", ""
+            )
+            ctx.response.headers["X-LLMProxy-Request-Id"] = ctx.metadata.get(
+                "req_id", ""
+            )
             # Budget downgrade notification headers
             for k, v in ctx.metadata.get("_budget_downgrade_headers", {}).items():
                 ctx.response.headers[k] = v

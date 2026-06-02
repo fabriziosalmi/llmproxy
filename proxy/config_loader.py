@@ -29,10 +29,15 @@ def load_config(config_path: str) -> Dict[str, Any]:
     env values without needing a YAML edit.
     """
     if os.path.exists(config_path):
-        with open(config_path, 'r') as f:
+        with open(config_path, "r") as f:
             cfg = yaml.safe_load(f) or {}
     else:
-        dev_mode = os.environ.get("LLM_PROXY_DEV_MODE", "").strip().lower() in ("1", "true", "yes", "on")
+        dev_mode = os.environ.get("LLM_PROXY_DEV_MODE", "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
         cfg = {"server": {"auth": {"enabled": not dev_mode}}}
         if dev_mode:
             logger.warning(
@@ -50,6 +55,7 @@ def load_config(config_path: str) -> Dict[str, Any]:
     # reload watcher). Keeps LLM_PROXY_ENDPOINT_<NAME>_* declarations in
     # sync with the live config without requiring YAML edits.
     from core.env_endpoints import inject_env_endpoints
+
     inject_env_endpoints(cfg)
 
     # Env override for the WAF toggle. Applied after YAML so env wins.
@@ -68,6 +74,6 @@ def compute_config_hash(config_path: str) -> str:
     detection — a missing-then-missing transition is correctly a no-op).
     """
     if os.path.exists(config_path):
-        with open(config_path, 'rb') as f:
+        with open(config_path, "rb") as f:
             return hashlib.md5(f.read(), usedforsecurity=False).hexdigest()
     return ""

@@ -26,7 +26,10 @@ class GoogleAdapter(BaseModelAdapter):
     provider_name = "google"
 
     def translate_embedding_request(
-        self, base_url: str, body: Dict[str, Any], headers: Dict[str, str],
+        self,
+        base_url: str,
+        body: Dict[str, Any],
+        headers: Dict[str, str],
     ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
         """OpenAI /v1/embeddings → Gemini embedContent."""
         model = body.get("model", "text-embedding-004")
@@ -53,7 +56,9 @@ class GoogleAdapter(BaseModelAdapter):
 
         return url, gemini_body, google_headers
 
-    def translate_embedding_response(self, response_data: Dict[str, Any]) -> Dict[str, Any]:
+    def translate_embedding_response(
+        self, response_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Gemini embedContent response → OpenAI format."""
         if "error" in response_data:
             return response_data
@@ -63,11 +68,13 @@ class GoogleAdapter(BaseModelAdapter):
 
         return {
             "object": "list",
-            "data": [{
-                "object": "embedding",
-                "index": 0,
-                "embedding": values,
-            }],
+            "data": [
+                {
+                    "object": "embedding",
+                    "index": 0,
+                    "embedding": values,
+                }
+            ],
             "model": response_data.get("model", ""),
             "usage": {
                 "prompt_tokens": 0,  # Gemini doesn't report token counts for embeddings
@@ -76,7 +83,10 @@ class GoogleAdapter(BaseModelAdapter):
         }
 
     def translate_request(
-        self, base_url: str, body: Dict[str, Any], headers: Dict[str, str],
+        self,
+        base_url: str,
+        body: Dict[str, Any],
+        headers: Dict[str, str],
     ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
         model = body.get("model", "gemini-2.5-flash")
         stream = body.get("stream", False)
@@ -130,15 +140,21 @@ class GoogleAdapter(BaseModelAdapter):
         if body.get("top_p") is not None:
             gen_config["topP"] = body["top_p"]
         if body.get("max_tokens") or body.get("max_completion_tokens"):
-            gen_config["maxOutputTokens"] = body.get("max_tokens") or body.get("max_completion_tokens")
+            gen_config["maxOutputTokens"] = body.get("max_tokens") or body.get(
+                "max_completion_tokens"
+            )
         if body.get("stop"):
-            gen_config["stopSequences"] = body["stop"] if isinstance(body["stop"], list) else [body["stop"]]
+            gen_config["stopSequences"] = (
+                body["stop"] if isinstance(body["stop"], list) else [body["stop"]]
+            )
         if gen_config:
             gemini_body["generationConfig"] = gen_config
 
         # Tool use
         if body.get("tools"):
-            gemini_body["tools"] = [{"functionDeclarations": _translate_tools(body["tools"])}]
+            gemini_body["tools"] = [
+                {"functionDeclarations": _translate_tools(body["tools"])}
+            ]
 
         return url, gemini_body, google_headers
 
@@ -149,7 +165,9 @@ class GoogleAdapter(BaseModelAdapter):
 
         candidates = response_data.get("candidates", [])
         if not candidates:
-            return {"error": {"message": "No candidates in response", "type": "api_error"}}
+            return {
+                "error": {"message": "No candidates in response", "type": "api_error"}
+            }
 
         candidate = candidates[0]
         content = candidate.get("content", {})
@@ -162,14 +180,16 @@ class GoogleAdapter(BaseModelAdapter):
                 text_parts.append(part["text"])
             elif "functionCall" in part:
                 fc = part["functionCall"]
-                tool_calls.append({
-                    "id": f"call_{i}",
-                    "type": "function",
-                    "function": {
-                        "name": fc.get("name", ""),
-                        "arguments": json.dumps(fc.get("args", {})),
-                    },
-                })
+                tool_calls.append(
+                    {
+                        "id": f"call_{i}",
+                        "type": "function",
+                        "function": {
+                            "name": fc.get("name", ""),
+                            "arguments": json.dumps(fc.get("args", {})),
+                        },
+                    }
+                )
 
         message: Dict[str, Any] = {
             "role": "assistant",
@@ -194,11 +214,13 @@ class GoogleAdapter(BaseModelAdapter):
             "object": "chat.completion",
             "created": int(time.time()),
             "model": response_data.get("modelVersion", ""),
-            "choices": [{
-                "index": 0,
-                "message": message,
-                "finish_reason": finish_reason_map.get(gemini_finish, "stop"),
-            }],
+            "choices": [
+                {
+                    "index": 0,
+                    "message": message,
+                    "finish_reason": finish_reason_map.get(gemini_finish, "stop"),
+                }
+            ],
             "usage": {
                 "prompt_tokens": usage_meta.get("promptTokenCount", 0),
                 "completion_tokens": usage_meta.get("candidatesTokenCount", 0),
@@ -234,11 +256,13 @@ class GoogleAdapter(BaseModelAdapter):
                                 "object": "chat.completion.chunk",
                                 "created": int(time.time()),
                                 "model": "",
-                                "choices": [{
-                                    "index": 0,
-                                    "delta": {"content": text_content},
-                                    "finish_reason": None,
-                                }],
+                                "choices": [
+                                    {
+                                        "index": 0,
+                                        "delta": {"content": text_content},
+                                        "finish_reason": None,
+                                    }
+                                ],
                             }
                             output_lines.append(f"data: {json.dumps(openai_chunk)}\n\n")
 
@@ -251,11 +275,13 @@ class GoogleAdapter(BaseModelAdapter):
                                 "object": "chat.completion.chunk",
                                 "created": int(time.time()),
                                 "model": "",
-                                "choices": [{
-                                    "index": 0,
-                                    "delta": {},
-                                    "finish_reason": "stop",
-                                }],
+                                "choices": [
+                                    {
+                                        "index": 0,
+                                        "delta": {},
+                                        "finish_reason": "stop",
+                                    }
+                                ],
                             }
                             output_lines.append(f"data: {json.dumps(openai_chunk)}\n\n")
                             output_lines.append("data: [DONE]\n\n")
@@ -274,7 +300,9 @@ class GoogleAdapter(BaseModelAdapter):
         headers: Dict[str, str],
         session: aiohttp.ClientSession,
     ) -> Response:
-        async with session.post(url, json=body, headers=headers, timeout=self._REQUEST_TIMEOUT) as resp:
+        async with session.post(
+            url, json=body, headers=headers, timeout=self._REQUEST_TIMEOUT
+        ) as resp:
             content = await resp.read()
             status = resp.status
 
@@ -286,7 +314,9 @@ class GoogleAdapter(BaseModelAdapter):
             except (json.JSONDecodeError, KeyError):
                 pass
 
-        return Response(content=content, status_code=status, media_type="application/json")
+        return Response(
+            content=content, status_code=status, media_type="application/json"
+        )
 
     async def stream(
         self,
@@ -295,7 +325,9 @@ class GoogleAdapter(BaseModelAdapter):
         headers: Dict[str, str],
         session: aiohttp.ClientSession,
     ) -> AsyncGenerator[bytes, None]:
-        async with session.post(url, json=body, headers=headers, timeout=self._REQUEST_TIMEOUT) as resp:
+        async with session.post(
+            url, json=body, headers=headers, timeout=self._REQUEST_TIMEOUT
+        ) as resp:
             async for chunk in resp.content.iter_any():
                 translated = self.translate_stream_chunk(chunk)
                 if translated:
@@ -321,12 +353,14 @@ def _translate_multimodal_parts(content_list: list) -> list:
                 # Base64 inline: data:image/png;base64,iVBOR...
                 try:
                     header, data = url[5:].split(";base64,", 1)
-                    parts.append({
-                        "inlineData": {
-                            "mimeType": header,
-                            "data": data,
-                        },
-                    })
+                    parts.append(
+                        {
+                            "inlineData": {
+                                "mimeType": header,
+                                "data": data,
+                            },
+                        }
+                    )
                 except ValueError:
                     parts.append({"text": f"[image: {url[:100]}]"})
             else:
@@ -340,12 +374,14 @@ def _translate_multimodal_parts(content_list: list) -> list:
                     mime = "image/gif"
                 elif ".webp" in lower_url:
                     mime = "image/webp"
-                parts.append({
-                    "fileData": {
-                        "mimeType": mime,
-                        "fileUri": url,
-                    },
-                })
+                parts.append(
+                    {
+                        "fileData": {
+                            "mimeType": mime,
+                            "fileUri": url,
+                        },
+                    }
+                )
         else:
             parts.append({"text": str(part)})
 
@@ -358,9 +394,13 @@ def _translate_tools(openai_tools: list) -> list:
     for tool in openai_tools:
         if tool.get("type") == "function":
             fn = tool["function"]
-            declarations.append({
-                "name": fn["name"],
-                "description": fn.get("description", ""),
-                "parameters": fn.get("parameters", {"type": "object", "properties": {}}),
-            })
+            declarations.append(
+                {
+                    "name": fn["name"],
+                    "description": fn.get("description", ""),
+                    "parameters": fn.get(
+                        "parameters", {"type": "object", "properties": {}}
+                    ),
+                }
+            )
     return declarations

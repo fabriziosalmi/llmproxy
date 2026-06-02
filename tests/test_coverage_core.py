@@ -13,8 +13,8 @@ from unittest.mock import MagicMock, AsyncMock, patch
 
 # ── startup_checks ────────────────────────────────────────────
 
-class TestStartupChecks:
 
+class TestStartupChecks:
     def _valid_config(self):
         return {
             "server": {
@@ -22,7 +22,11 @@ class TestStartupChecks:
                 "auth": {"enabled": True, "api_keys_env": "LLM_PROXY_API_KEYS"},
             },
             "endpoints": {
-                "openai": {"provider": "openai", "api_key_env": "OPENAI_API_KEY", "models": ["gpt-4o"]},
+                "openai": {
+                    "provider": "openai",
+                    "api_key_env": "OPENAI_API_KEY",
+                    "models": ["gpt-4o"],
+                },
             },
             "security": {"max_payload_size_kb": 512},
             "caching": {"enabled": True, "db_path": "cache.db"},
@@ -30,6 +34,7 @@ class TestStartupChecks:
 
     def test_valid_config_no_errors(self):
         from core.startup_checks import validate_config
+
         os.environ["LLM_PROXY_API_KEYS"] = "sk-proxy-test123"
         os.environ["OPENAI_API_KEY"] = "sk-proj-realkey123"
         warnings = validate_config(self._valid_config())
@@ -37,12 +42,14 @@ class TestStartupChecks:
 
     def test_missing_api_keys_raises(self):
         from core.startup_checks import validate_config, StartupError
+
         os.environ.pop("LLM_PROXY_API_KEYS", None)
         with pytest.raises(StartupError, match="LLM_PROXY_API_KEYS"):
             validate_config(self._valid_config())
 
     def test_placeholder_api_key_raises(self):
         from core.startup_checks import validate_config, StartupError
+
         os.environ["LLM_PROXY_API_KEYS"] = "sk-proxy-CHANGE-ME"
         with pytest.raises(StartupError, match="LLM_PROXY_API_KEYS"):
             validate_config(self._valid_config())
@@ -54,6 +61,7 @@ class TestStartupChecks:
         the first provider without patching files.
         """
         from core.startup_checks import validate_config
+
         os.environ["LLM_PROXY_API_KEYS"] = "sk-proxy-test"
         config = self._valid_config()
         config["endpoints"] = {}
@@ -63,6 +71,7 @@ class TestStartupChecks:
     def test_no_active_providers_warns(self):
         """Endpoints declared but no API keys yet — still start in onboarding mode."""
         from core.startup_checks import validate_config
+
         os.environ["LLM_PROXY_API_KEYS"] = "sk-proxy-test"
         os.environ.pop("OPENAI_API_KEY", None)
         warnings = validate_config(self._valid_config())
@@ -73,18 +82,22 @@ class TestStartupChecks:
         include a direct link to the provider's key/billing dashboard so
         the operator doesn't have to guess where to fix it."""
         from core.startup_checks import validate_config
+
         os.environ["LLM_PROXY_API_KEYS"] = "sk-proxy-test"
         os.environ.pop("OPENAI_API_KEY", None)
         warnings = validate_config(self._valid_config())
         # The endpoint named 'openai' is missing its key — its warning must
         # carry the OpenAI billing link.
         ep_warning = next((w for w in warnings if "openai" in w and "needs" in w), None)
-        assert ep_warning is not None, f"Expected per-endpoint missing-key warning, got: {warnings}"
+        assert ep_warning is not None, (
+            f"Expected per-endpoint missing-key warning, got: {warnings}"
+        )
         assert "platform.openai.com" in ep_warning
         assert "billing" in ep_warning.lower()
 
     def test_auth_disabled_skips_key_check(self):
         from core.startup_checks import validate_config
+
         os.environ.pop("LLM_PROXY_API_KEYS", None)
         os.environ["OPENAI_API_KEY"] = "sk-proj-real"
         config = self._valid_config()
@@ -94,6 +107,7 @@ class TestStartupChecks:
 
     def test_invalid_port_raises(self):
         from core.startup_checks import validate_config, StartupError
+
         os.environ["LLM_PROXY_API_KEYS"] = "sk-proxy-test"
         os.environ["OPENAI_API_KEY"] = "sk-proj-real"
         config = self._valid_config()
@@ -103,6 +117,7 @@ class TestStartupChecks:
 
     def test_small_payload_warning(self):
         from core.startup_checks import validate_config
+
         os.environ["LLM_PROXY_API_KEYS"] = "sk-proxy-test"
         os.environ["OPENAI_API_KEY"] = "sk-proj-real"
         config = self._valid_config()
@@ -112,6 +127,7 @@ class TestStartupChecks:
 
     def test_caching_no_db_path_warning(self):
         from core.startup_checks import validate_config
+
         os.environ["LLM_PROXY_API_KEYS"] = "sk-proxy-test"
         os.environ["OPENAI_API_KEY"] = "sk-proj-real"
         config = self._valid_config()
@@ -121,6 +137,7 @@ class TestStartupChecks:
 
     def test_run_startup_checks_exits_on_failure(self):
         from core.startup_checks import run_startup_checks
+
         os.environ.pop("LLM_PROXY_API_KEYS", None)
         config = self._valid_config()
         with pytest.raises(SystemExit):
@@ -128,6 +145,7 @@ class TestStartupChecks:
 
     def test_run_startup_checks_passes_with_warnings(self):
         from core.startup_checks import run_startup_checks
+
         os.environ["LLM_PROXY_API_KEYS"] = "sk-proxy-test"
         os.environ["OPENAI_API_KEY"] = "sk-proj-real"
         config = self._valid_config()
@@ -136,6 +154,7 @@ class TestStartupChecks:
 
     def test_ollama_no_auth_counts_as_active(self):
         from core.startup_checks import validate_config
+
         os.environ["LLM_PROXY_API_KEYS"] = "sk-proxy-test"
         config = self._valid_config()
         config["endpoints"] = {
@@ -147,11 +166,12 @@ class TestStartupChecks:
 
 # ── EventLogger ───────────────────────────────────────────────
 
-class TestEventLogger:
 
+class TestEventLogger:
     @pytest.mark.asyncio
     async def test_add_log_basic(self):
         from proxy.event_log import EventLogger
+
         el = EventLogger(log_maxsize=10)
         await el.add_log("test message", level="INFO")
         assert not el.log_queue.empty()
@@ -162,6 +182,7 @@ class TestEventLogger:
     @pytest.mark.asyncio
     async def test_add_log_with_trace_id(self):
         from proxy.event_log import EventLogger
+
         el = EventLogger()
         await el.add_log("traced", trace_id="abc123")
         entry = el.log_queue.get_nowait()
@@ -170,6 +191,7 @@ class TestEventLogger:
     @pytest.mark.asyncio
     async def test_log_queue_overflow_drops_oldest(self):
         from proxy.event_log import EventLogger
+
         el = EventLogger(log_maxsize=2)
         await el.add_log("first")
         await el.add_log("second")
@@ -179,6 +201,7 @@ class TestEventLogger:
     @pytest.mark.asyncio
     async def test_broadcast_event(self):
         from proxy.event_log import EventLogger
+
         el = EventLogger(telemetry_maxsize=10)
         await el.broadcast_event("test_event", {"key": "val"})
         event = el.telemetry_queue.get_nowait()
@@ -188,6 +211,7 @@ class TestEventLogger:
     @pytest.mark.asyncio
     async def test_telemetry_overflow(self):
         from proxy.event_log import EventLogger
+
         el = EventLogger(telemetry_maxsize=1)
         await el.broadcast_event("first", {})
         await el.broadcast_event("second", {})  # Drops "first"
@@ -196,8 +220,8 @@ class TestEventLogger:
 
 # ── Background loops ─────────────────────────────────────────
 
-class TestBackgroundLoops:
 
+class TestBackgroundLoops:
     @pytest.mark.asyncio
     async def test_drain_pending_writes(self):
         from proxy.background import drain_pending_writes
@@ -240,27 +264,37 @@ class TestBackgroundLoops:
 
 # ── ZeroTrustManager ─────────────────────────────────────────
 
-class TestZeroTrustManager:
 
+class TestZeroTrustManager:
     def test_disabled_returns_empty_headers(self):
         from core.zero_trust import ZeroTrustManager
+
         zt = ZeroTrustManager({"security": {"zero_trust": {"enabled": False}}})
         assert zt.get_identity_headers() == {}
 
     def test_disabled_returns_no_ssl(self):
         from core.zero_trust import ZeroTrustManager
+
         zt = ZeroTrustManager({"security": {"zero_trust": {"enabled": False}}})
         assert zt.get_ssl_context() is None
 
     def test_enabled_no_cert_returns_no_ssl(self):
         from core.zero_trust import ZeroTrustManager
-        with patch.dict(os.environ, {"LLM_PROXY_IDENTITY_SECRET": "test-secret-that-is-at-least-32-bytes-long"}):
+
+        with patch.dict(
+            os.environ,
+            {"LLM_PROXY_IDENTITY_SECRET": "test-secret-that-is-at-least-32-bytes-long"},
+        ):
             zt = ZeroTrustManager({"security": {"zero_trust": {"enabled": True}}})
             assert zt.get_ssl_context() is None
 
     def test_enabled_generates_jwt_headers(self):
         from core.zero_trust import ZeroTrustManager
-        with patch.dict(os.environ, {"LLM_PROXY_IDENTITY_SECRET": "test-secret-that-is-at-least-32-bytes-long"}):
+
+        with patch.dict(
+            os.environ,
+            {"LLM_PROXY_IDENTITY_SECRET": "test-secret-that-is-at-least-32-bytes-long"},
+        ):
             zt = ZeroTrustManager({"security": {"zero_trust": {"enabled": True}}})
             headers = zt.get_identity_headers()
             assert "X-Proxy-Identity" in headers
@@ -270,6 +304,7 @@ class TestZeroTrustManager:
     @pytest.mark.asyncio
     async def test_tailscale_verify_missing_socket(self):
         from core.zero_trust import ZeroTrustManager
+
         zt = ZeroTrustManager({"security": {"zero_trust": {"enabled": False}}})
         zt.ts_socket = "/nonexistent/socket"
         result = await zt.verify_tailscale_identity("100.64.0.1")
@@ -279,16 +314,18 @@ class TestZeroTrustManager:
 
 # ── app_factory._read_version ────────────────────────────────
 
-class TestAppFactory:
 
+class TestAppFactory:
     def test_read_version_returns_string(self):
         from proxy.app_factory import _read_version
+
         version = _read_version()
         assert isinstance(version, str)
         assert len(version) > 0
 
     def test_read_version_missing_file_returns_default(self):
         from proxy.app_factory import _read_version
+
         with patch("builtins.open", side_effect=FileNotFoundError):
             assert _read_version() == "0.0.0"
 
@@ -300,6 +337,7 @@ class TestAppFactory:
         requests to the proxy, which is the wrong default for a security
         gateway."""
         from proxy.app_factory import _resolve_cors_origins
+
         cfg = {"server": {"port": 8090}}
         origins = _resolve_cors_origins(cfg)
         assert origins == [
@@ -312,6 +350,7 @@ class TestAppFactory:
         """Default origins follow `server.port` so a non-default port still
         gets a working dev UI without manual CORS config."""
         from proxy.app_factory import _resolve_cors_origins
+
         cfg = {"server": {"port": 9000}}
         origins = _resolve_cors_origins(cfg)
         assert "http://localhost:9000" in origins
@@ -321,18 +360,21 @@ class TestAppFactory:
         """An operator who sets `cors_origins` (even to '*') gets exactly
         that — the default only applies when the key is unset."""
         from proxy.app_factory import _resolve_cors_origins
+
         cfg = {"server": {"port": 8090, "cors_origins": ["https://app.example.com"]}}
         origins = _resolve_cors_origins(cfg)
         assert origins == ["https://app.example.com"]
 
     def test_cors_explicit_wildcard_respected(self):
         from proxy.app_factory import _resolve_cors_origins
+
         cfg = {"server": {"port": 8090, "cors_origins": ["*"]}}
         assert _resolve_cors_origins(cfg) == ["*"]
 
     def test_cors_empty_server_block_falls_back_to_loopback(self):
         """No server section at all → still default to loopback (port 8090)."""
         from proxy.app_factory import _resolve_cors_origins
+
         origins = _resolve_cors_origins({})
         assert origins == [
             "http://localhost:8090",
@@ -342,8 +384,8 @@ class TestAppFactory:
 
 # ── base_agent ────────────────────────────────────────────────
 
-class TestBaseAgent:
 
+class TestBaseAgent:
     def test_base_agent_subclass(self):
         from core.base_agent import BaseAgent
 

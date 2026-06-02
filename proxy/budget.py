@@ -30,7 +30,9 @@ logger = logging.getLogger("llmproxy.budget")
 
 
 async def charge_and_persist(
-    rotator: Any, lock: asyncio.Lock, amount: float,
+    rotator: Any,
+    lock: asyncio.Lock,
+    amount: float,
 ) -> None:
     """Atomically add `amount` to `rotator.total_cost_today` and enqueue
     a persistence write.
@@ -50,7 +52,8 @@ async def charge_and_persist(
         rotator.total_cost_today += amount
         try:
             rotator.enqueue_write(
-                "budget:daily_total", rotator.total_cost_today,
+                "budget:daily_total",
+                rotator.total_cost_today,
             )
         except Exception as e:  # noqa: BLE001 — never let persistence kill the request
             logger.debug(f"Budget enqueue skipped: {e}")

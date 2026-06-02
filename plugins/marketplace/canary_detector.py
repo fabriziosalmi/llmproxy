@@ -68,7 +68,12 @@ class CanaryDetector(BasePlugin):
             if not choices:
                 return ""
             return choices[0].get("message", {}).get("content", "")
-        except (json.JSONDecodeError, AttributeError, UnicodeDecodeError, TypeError) as e:
+        except (
+            json.JSONDecodeError,
+            AttributeError,
+            UnicodeDecodeError,
+            TypeError,
+        ) as e:
             logger.debug("CanaryDetector response parse skipped: %s", e)
             return ""
 
@@ -117,9 +122,7 @@ class CanaryDetector(BasePlugin):
         return {
             "total_checked": self._total_checked,
             "leaks_detected": self._leaks_detected,
-            "leak_rate": round(
-                self._leaks_detected / max(self._total_checked, 1), 4
-            ),
+            "leak_rate": round(self._leaks_detected / max(self._total_checked, 1), 4),
         }
 
     async def execute(self, ctx: PluginContext) -> PluginResponse:

@@ -22,6 +22,7 @@ import pytest
 # Minimal mock store satisfying the StateBackend protocol
 # ---------------------------------------------------------------------------
 
+
 class MockStore:
     """In-memory store implementing set_state/get_state for testing."""
 
@@ -43,6 +44,7 @@ class MockStore:
 # ---------------------------------------------------------------------------
 # Isolated queue+drain logic (avoids instantiating full RotatorAgent)
 # ---------------------------------------------------------------------------
+
 
 class _WriteQueue:
     """Extracts the enqueue_write / _drain_pending_writes logic from RotatorAgent
@@ -76,6 +78,7 @@ class _WriteQueue:
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 class TestEnqueueWrite:
     """Tests for the enqueue_write method."""

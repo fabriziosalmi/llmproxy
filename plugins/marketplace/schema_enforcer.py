@@ -31,12 +31,19 @@ def _validate_json_schema(data: Any, schema: Dict[str, Any]) -> list[str]:
     expected_type = schema.get("type")
     if expected_type:
         type_map = {
-            "object": dict, "array": list, "string": str,
-            "number": (int, float), "integer": int, "boolean": bool, "null": type(None),
+            "object": dict,
+            "array": list,
+            "string": str,
+            "number": (int, float),
+            "integer": int,
+            "boolean": bool,
+            "null": type(None),
         }
         expected = type_map.get(expected_type)
         if expected and not isinstance(data, expected):
-            errors.append(f"Expected type '{expected_type}', got '{type(data).__name__}'")
+            errors.append(
+                f"Expected type '{expected_type}', got '{type(data).__name__}'"
+            )
             return errors
 
     if isinstance(data, dict):
@@ -133,11 +140,13 @@ class SchemaEnforcer(BasePlugin):
             return PluginResponse.block(
                 status_code=422,
                 error_type="schema_validation_failed",
-                message=f"LLM response failed schema validation: {'; '.join(errors[:5])}"
+                message=f"LLM response failed schema validation: {'; '.join(errors[:5])}",
             )
 
         # Warn mode: pass through but log
-        self.logger.warning(f"Schema validation failed ({len(errors)} errors): {errors[:3]}")
+        self.logger.warning(
+            f"Schema validation failed ({len(errors)} errors): {errors[:3]}"
+        )
         return PluginResponse.passthrough()
 
     async def on_load(self):

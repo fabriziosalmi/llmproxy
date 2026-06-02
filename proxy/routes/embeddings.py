@@ -57,7 +57,9 @@ def create_router(agent) -> APIRouter:
         token = ""
         if agent.config["server"]["auth"]["enabled"]:
             if not api_key:
-                raise HTTPException(status_code=401, detail="Unauthorized: Missing API key")
+                raise HTTPException(
+                    status_code=401, detail="Unauthorized: Missing API key"
+                )
             token = api_key.replace("Bearer ", "").strip()
             if not token:
                 raise HTTPException(status_code=401, detail="Unauthorized: Empty token")
@@ -70,22 +72,33 @@ def create_router(agent) -> APIRouter:
                         identity = await agent.identity.verify_token(token)
                 except ValueError:
                     MetricsTracker.track_auth_failure("jwt_invalid")
-                    raise HTTPException(status_code=401, detail="Unauthorized: Invalid or expired token")
+                    raise HTTPException(
+                        status_code=401, detail="Unauthorized: Invalid or expired token"
+                    )
 
             if identity and identity.verified:
                 request.state.identity = identity
                 request.state.user = identity.email or identity.subject
                 request.state.roles = identity.roles
                 if not agent.rbac.check_permission(identity.roles, "proxy:use"):
-                    raise HTTPException(status_code=403, detail="Insufficient permissions")
-                await agent.rbac.set_user_roles(identity.subject, identity.email, identity.roles)
+                    raise HTTPException(
+                        status_code=403, detail="Insufficient permissions"
+                    )
+                await agent.rbac.set_user_roles(
+                    identity.subject, identity.email, identity.roles
+                )
             else:
                 if not agent._verify_api_key(token):
                     MetricsTracker.track_auth_failure("invalid_key")
-                    raise HTTPException(status_code=401, detail="Unauthorized: Invalid API key or JWT")
+                    raise HTTPException(
+                        status_code=401, detail="Unauthorized: Invalid API key or JWT"
+                    )
 
                 if not await agent.rbac.check_quota(token):
-                    raise HTTPException(status_code=402, detail="Enterprise Quota Exceeded for this API Key.")
+                    raise HTTPException(
+                        status_code=402,
+                        detail="Enterprise Quota Exceeded for this API Key.",
+                    )
 
         body = await request.json()
         model = body.get("model", "text-embedding-3-small")
@@ -104,7 +117,9 @@ def create_router(agent) -> APIRouter:
             ip = request.client.host if request.client else "anon"
             ua = request.headers.get("user-agent", "")
             lang = request.headers.get("accept-language", "")
-            session_id = hashlib.sha256(f"{ip}:{ua}:{lang}".encode("utf-8")).hexdigest()[:16]
+            session_id = hashlib.sha256(
+                f"{ip}:{ua}:{lang}".encode("utf-8")
+            ).hexdigest()[:16]
         security_error = await agent.security.inspect(
             {"messages": [{"role": "user", "content": inspect_text}]},
             session_id,
@@ -123,11 +138,12 @@ def create_router(agent) -> APIRouter:
             raise HTTPException(
                 status_code=400,
                 detail=f"Provider '{adapter.provider_name}' does not support embeddings. "
-                       f"Use an OpenAI, Google, or Ollama embedding model instead.",
+                f"Use an OpenAI, Google, or Ollama embedding model instead.",
             )
 
         # Resolve endpoint URL and provider API key from config
         import os
+
         endpoints_cfg = agent.config.get("endpoints", {})
         base_url = ""
         provider_api_key = ""
@@ -152,8 +168,12 @@ def create_router(agent) -> APIRouter:
             headers["Authorization"] = f"Bearer {provider_api_key}"
 
         # Translate request
-        target_url, translated_body, translated_headers = adapter.translate_embedding_request(
-            base_url, body, headers,
+        target_url, translated_body, translated_headers = (
+            adapter.translate_embedding_request(
+                base_url,
+                body,
+                headers,
+            )
         )
 
         # Forward request
@@ -161,13 +181,19 @@ def create_router(agent) -> APIRouter:
         session = await agent._get_session()
 
         try:
-            response = await adapter.request(target_url, translated_body, translated_headers, session)
+            response = await adapter.request(
+                target_url, translated_body, translated_headers, session
+            )
         except Exception as e:
             logger.error(f"Embedding request failed: {e}")
-            raise HTTPException(status_code=502, detail="Embedding upstream request failed")
+            raise HTTPException(
+                status_code=502, detail="Embedding upstream request failed"
+            )
 
         duration = time.time() - start
-        MetricsTracker.track_request("POST", "/v1/embeddings", response.status_code, duration)
+        MetricsTracker.track_request(
+            "POST", "/v1/embeddings", response.status_code, duration
+        )
 
         # Translate response if needed (Google Gemini format → OpenAI)
         if response.status_code == 200 and hasattr(response, "body"):
@@ -176,6 +202,7 @@ def create_router(agent) -> APIRouter:
                 translated = adapter.translate_embedding_response(data)
                 if translated is not data:
                     from starlette.responses import Response as StarletteResponse
+
                     response = StarletteResponse(
                         content=json.dumps(translated).encode("utf-8"),
                         status_code=200,
@@ -193,6 +220,7 @@ def create_router(agent) -> APIRouter:
                 tokens = usage.get("total_tokens", 0) or usage.get("prompt_tokens", 0)
                 cost_usd = estimate_cost(model, tokens, 0)
                 from proxy.budget import charge_and_persist
+
                 await charge_and_persist(agent, agent._budget_lock, cost_usd)
         except Exception as e:
             logger.warning("Embedding cost tracking skipped: %s", e)

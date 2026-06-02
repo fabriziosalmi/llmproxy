@@ -15,19 +15,27 @@ class OllamaAdapter(OpenAIAdapter):
     provider_name = "ollama"
 
     def translate_embedding_request(
-        self, base_url: str, body: Dict[str, Any], headers: Dict[str, str],
+        self,
+        base_url: str,
+        body: Dict[str, Any],
+        headers: Dict[str, str],
     ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
         # Ollama supports OpenAI-compatible /v1/embeddings
         base = base_url.rstrip("/")
         if "/v1" not in base:
             base = f"{base}/v1"
         url = f"{base}/embeddings"
-        ollama_headers = {k: v for k, v in headers.items() if k.lower() != "authorization"}
+        ollama_headers = {
+            k: v for k, v in headers.items() if k.lower() != "authorization"
+        }
         ollama_headers["content-type"] = "application/json"
         return url, body, ollama_headers
 
     def translate_request(
-        self, base_url: str, body: Dict[str, Any], headers: Dict[str, str],
+        self,
+        base_url: str,
+        body: Dict[str, Any],
+        headers: Dict[str, str],
     ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
         # Ollama is OpenAI-compatible — just fix the URL
         base = base_url.rstrip("/")
@@ -36,7 +44,9 @@ class OllamaAdapter(OpenAIAdapter):
         url = f"{base}/chat/completions"
 
         # Ollama doesn't need auth — strip it to avoid confusion
-        ollama_headers = {k: v for k, v in headers.items() if k.lower() != "authorization"}
+        ollama_headers = {
+            k: v for k, v in headers.items() if k.lower() != "authorization"
+        }
         ollama_headers["content-type"] = "application/json"
 
         return url, body, ollama_headers

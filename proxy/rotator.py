@@ -45,7 +45,9 @@ logger = logging.getLogger("llmproxy.rotator")
 class ProxyOrchestrator(BaseAgent):
     """Security gateway orchestrator — routes requests through the plugin pipeline."""
 
-    def __init__(self, store: BaseRepository, assistant=None, config_path: str = "config.yaml"):
+    def __init__(
+        self, store: BaseRepository, assistant=None, config_path: str = "config.yaml"
+    ):
         super().__init__("rotator")
         self._session: Optional[aiohttp.ClientSession] = None
         self.store = store
@@ -58,10 +60,13 @@ class ProxyOrchestrator(BaseAgent):
         self.signature_store = None
         try:
             from core.signature_loader import SignatureStore
+
             sig_cfg = self.config.get("security", {}).get("signatures", {})
+            pricing_cfg = self.config.get("pricing", {})
             self.signature_store = SignatureStore(
                 signatures_path=sig_cfg.get("signatures_file", "data/signatures.yaml"),
                 corpus_path=sig_cfg.get("corpus_file", "data/injection_corpus.yaml"),
+                pricing_path=pricing_cfg.get("pricing_file", "data/pricing.yaml"),
             )
             self.signature_store.load()
         except Exception as e:
@@ -72,16 +77,22 @@ class ProxyOrchestrator(BaseAgent):
         self.zt_manager = ZeroTrustManager(self.config)
         self.rbac = RBACManager()
         self.identity = IdentityManager(self.config)
-        self.circuit_manager = CircuitManager(on_state_change=self._on_circuit_state_change)
+        self.circuit_manager = CircuitManager(
+            on_state_change=self._on_circuit_state_change
+        )
 
         # Alerting & compliance
         self.webhooks = WebhookDispatcher(self.config)
         export_cfg = self.config.get("observability", {}).get("export", {})
-        self.exporter = DatasetExporter(
-            output_dir=export_cfg.get("output_dir", "exports"),
-            scrub=export_cfg.get("scrub_pii", True),
-            compress_on_rotate=export_cfg.get("compress_on_rotate", True),
-        ) if export_cfg.get("enabled") else None
+        self.exporter = (
+            DatasetExporter(
+                output_dir=export_cfg.get("output_dir", "exports"),
+                scrub=export_cfg.get("scrub_pii", True),
+                compress_on_rotate=export_cfg.get("compress_on_rotate", True),
+            )
+            if export_cfg.get("enabled")
+            else None
+        )
 
         # Budget tracking (hydrated from SQLite in setup())
         self.total_cost_today = 0.0
@@ -110,7 +121,7 @@ class ProxyOrchestrator(BaseAgent):
 
         # Event logging (extracted to proxy/event_log.py)
         self._event_logger = EventLogger()
-        self.log_queue = self._event_logger.log_queue          # backward compat
+        self.log_queue = self._event_logger.log_queue  # backward compat
         self.telemetry_queue = self._event_logger.telemetry_queue  # backward compat
 
         # L1: Negative cache (in-memory WAF drop)
@@ -127,10 +138,12 @@ class ProxyOrchestrator(BaseAgent):
             db_path=cache_cfg.get("db_path", "cache.db"),
             ttl=cache_cfg.get("ttl", 3600),
             enabled=cache_cfg.get("enabled", True),
+            config=cache_cfg,
         )
 
         # Request deduplication (idempotency key support)
         from core.deduplicator import RequestDeduplicator
+
         self.deduplicator = RequestDeduplicator(ttl_seconds=300)
 
         # Plugin engine
@@ -144,8 +157,11 @@ class ProxyOrchestrator(BaseAgent):
 
         # Response signing (S2: cryptographic provenance)
         from core.response_signer import ResponseSigner
+
         signing_cfg = self.config.get("security", {}).get("response_signing", {})
-        signing_key = signing_cfg.get("secret") or os.environ.get("LLM_PROXY_SIGNING_KEY", "")
+        signing_key = signing_cfg.get("secret") or os.environ.get(
+            "LLM_PROXY_SIGNING_KEY", ""
+        )
         self.response_signer = ResponseSigner(signing_key)
 
         # Request forwarder (extracted to proxy/forwarder.py).
@@ -177,11 +193,13 @@ class ProxyOrchestrator(BaseAgent):
 
     def _load_config(self):
         from .config_loader import load_config
+
         return load_config(self.config_path)
 
     def _compute_config_hash_sync(self) -> str:
         """Blocking hash — must run via to_thread() from async context."""
         from .config_loader import compute_config_hash
+
         return compute_config_hash(self.config_path)
 
     def enqueue_write(self, key: str, value: Any):
@@ -195,20 +213,24 @@ class ProxyOrchestrator(BaseAgent):
         """Register config.yaml endpoints into the persistence store.
         Thin shim — see proxy/seeding.seed_endpoints_from_config."""
         from .seeding import seed_endpoints_from_config
+
         return await seed_endpoints_from_config(self.config, self.store)
 
     async def flush_budget_now(self):
         """Immediate flush of pending writes — called on critical budget thresholds."""
         from .background import drain_pending_writes
+
         await drain_pending_writes(self)
 
     def _get_api_keys(self) -> list[str]:
         from .auth_helpers import resolve_api_keys
+
         return resolve_api_keys(self.config)
 
     def _verify_api_key(self, token: str) -> bool:
         """Constant-time API-key check (see proxy/auth_helpers.verify_api_key)."""
         from .auth_helpers import verify_api_key
+
         return verify_api_key(token, self._get_api_keys())
 
     # ── HTTP Session ──
@@ -223,6 +245,7 @@ class ProxyOrchestrator(BaseAgent):
             if self._session is not None and not self._session.closed:
                 return self._session
             from .http_session import build_http_session
+
             self._session = build_http_session(self.config)
             connector = self._session.connector
             pool_cfg = self.config.get("connection_pool", {})
@@ -237,18 +260,28 @@ class ProxyOrchestrator(BaseAgent):
     def _on_circuit_state_change(self, endpoint: str, old_state: str, new_state: str):
         MetricsTracker.set_circuit_state(endpoint, new_state == "open")
         if new_state == "open":
-            self._spawn_task(self.webhooks.dispatch(
-                EventType.CIRCUIT_OPEN, {"endpoint": endpoint, "from": old_state, "to": new_state}
-            ))
+            self._spawn_task(
+                self.webhooks.dispatch(
+                    EventType.CIRCUIT_OPEN,
+                    {"endpoint": endpoint, "from": old_state, "to": new_state},
+                )
+            )
         elif old_state == "open" and new_state == "closed":
-            self._spawn_task(self.webhooks.dispatch(
-                EventType.ENDPOINT_RECOVERED, {"endpoint": endpoint}
-            ))
+            self._spawn_task(
+                self.webhooks.dispatch(
+                    EventType.ENDPOINT_RECOVERED, {"endpoint": endpoint}
+                )
+            )
 
     # ── Logging (delegates to EventLogger) ──
 
-    async def _add_log(self, message: str, level: str = "INFO",
-                       metadata: dict | None = None, trace_id: str | None = None):
+    async def _add_log(
+        self,
+        message: str,
+        level: str = "INFO",
+        metadata: dict | None = None,
+        trace_id: str | None = None,
+    ):
         await self._event_logger.add_log(message, level, metadata, trace_id)
 
     async def broadcast_event(self, event_type: str, data: Dict[str, Any]):
@@ -259,9 +292,12 @@ class ProxyOrchestrator(BaseAgent):
     async def setup(self):
         """Pre-flight: DB init, plugin load, state hydration, cache init."""
         from .background import (
-            config_watch_loop, write_flush_loop,
-            cache_eviction_loop, dedup_cleanup_loop,
-            retention_purge_loop, local_discovery_loop,
+            config_watch_loop,
+            write_flush_loop,
+            cache_eviction_loop,
+            dedup_cleanup_loop,
+            retention_purge_loop,
+            local_discovery_loop,
             metrics_history_loop,
         )
         from core.metrics_history import MetricsHistory
@@ -288,27 +324,37 @@ class ProxyOrchestrator(BaseAgent):
         if saved_preset:
             try:
                 from core.rate_limiter import RateLimitMiddleware
+
                 if RateLimitMiddleware.instance is not None:
                     await RateLimitMiddleware.instance.apply_preset(saved_preset)
             except (ValueError, RuntimeError) as e:
-                self.logger.warning(f"Persisted rate-limit preset '{saved_preset}' rejected: {e}")
+                self.logger.warning(
+                    f"Persisted rate-limit preset '{saved_preset}' rejected: {e}"
+                )
         for f in self.features:
-            self.features[f] = await self.store.get_state(f"feature_{f}", self.features[f])
+            self.features[f] = await self.store.get_state(
+                f"feature_{f}", self.features[f]
+            )
             self.security.config[f] = {"enabled": self.features[f]}
 
         # Budget hydration (daily reset). See proxy/budget.hydrate_daily_total.
         from .budget import hydrate_daily_total
+
         self.total_cost_today, self._budget_date = await hydrate_daily_total(self.store)
 
         # Background loops (extracted to proxy/background.py)
-        eviction_interval = self.config.get("caching", {}).get("eviction_interval", 3600)
+        eviction_interval = self.config.get("caching", {}).get(
+            "eviction_interval", 3600
+        )
         if self.cache_backend._enabled:
             self._spawn_task(cache_eviction_loop(self.cache_backend, eviction_interval))
         self._spawn_task(config_watch_loop(self, 30))
         self._spawn_task(write_flush_loop(self, 0.25))
         # Q.3 — hourly snapshot loop; interval configurable for ops who want
         # finer-grain KPI sparklines (10-min slots = 4h trailing) or coarser.
-        history_interval = int(self.config.get("metrics", {}).get("history_interval_s", 3600))
+        history_interval = int(
+            self.config.get("metrics", {}).get("history_interval_s", 3600)
+        )
         self._spawn_task(metrics_history_loop(self, history_interval))
 
         # Auto-discover local OpenAI-compatible providers (Ollama, LM Studio,
@@ -316,6 +362,7 @@ class ProxyOrchestrator(BaseAgent):
         # who already has a local provider running — no YAML or .env edits.
         try:
             from core.local_probe import discover_local_endpoints
+
             discovered = await discover_local_endpoints(self.config)
             if discovered:
                 self._discovered_local = discovered
@@ -328,7 +375,10 @@ class ProxyOrchestrator(BaseAgent):
 
         # Active health probing
         from core.health_prober import EndpointHealthProber
-        self._health_prober = EndpointHealthProber(self.config, self.circuit_manager, self._get_session)
+
+        self._health_prober = EndpointHealthProber(
+            self.config, self.circuit_manager, self._get_session
+        )
         self._spawn_task(self._health_prober.start())
 
         # Periodic local/peer re-discovery — catches peers that come back
@@ -336,7 +386,10 @@ class ProxyOrchestrator(BaseAgent):
         # boot-time scan (LLM_PROXY_LOCAL_DISCOVERY=0 / discovery.local_scan=false).
         disc_cfg = self.config.get("discovery", {}) or {}
         import os as _os
-        _disabled = _os.environ.get("LLM_PROXY_LOCAL_DISCOVERY", "").strip().lower() in ("0", "false", "off", "no")
+
+        _disabled = _os.environ.get(
+            "LLM_PROXY_LOCAL_DISCOVERY", ""
+        ).strip().lower() in ("0", "false", "off", "no")
         if not _disabled and disc_cfg.get("local_scan", True):
             scan_interval = int(disc_cfg.get("scan_interval_s", 300))
             if scan_interval > 0:
@@ -360,6 +413,7 @@ class ProxyOrchestrator(BaseAgent):
         await self.setup()
         try:
             from core.ready_banner import print_ready_banner
+
             print_ready_banner(
                 self.config,
                 bind_host=host,
@@ -381,10 +435,13 @@ class ProxyOrchestrator(BaseAgent):
 
     # ── Core Proxy Pipeline ──
 
-    async def proxy_request(self, request, body: Dict[str, Any] | None = None, session_id: str = "default"):
+    async def proxy_request(
+        self, request, body: Dict[str, Any] | None = None, session_id: str = "default"
+    ):
         """Run a request through the 5-ring pipeline.
         Thin shim — see proxy/request_pipeline.process_proxy_request."""
         from .request_pipeline import process_proxy_request
+
         return await process_proxy_request(self, request, body, session_id)
 
 

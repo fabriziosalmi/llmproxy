@@ -32,7 +32,9 @@ class TokenCounter(BasePlugin):
     hook = PluginHook.BACKGROUND
     version = "1.0.0"
     author = "llmproxy"
-    description = "Extracts real token counts from API responses and corrects budget estimates"
+    description = (
+        "Extracts real token counts from API responses and corrects budget estimates"
+    )
     timeout_ms = 5  # JSON parse only
 
     def __init__(self, config: Dict[str, Any] = None):
@@ -59,6 +61,7 @@ class TokenCounter(BasePlugin):
     def _compute_cost(self, model: str, input_tokens: int, output_tokens: int) -> float:
         """Compute actual cost from real token counts using per-model pricing."""
         from core.pricing import estimate_cost
+
         return estimate_cost(model, input_tokens, output_tokens)
 
     def get_stats(self) -> Dict[str, Any]:
@@ -109,4 +112,6 @@ class TokenCounter(BasePlugin):
         return PluginResponse.passthrough()
 
     async def on_load(self):
-        self.logger.info("TokenCounter loaded: using per-model pricing from core.pricing")
+        self.logger.info(
+            "TokenCounter loaded: using per-model pricing from core.pricing"
+        )

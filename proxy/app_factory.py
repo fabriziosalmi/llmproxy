@@ -44,12 +44,14 @@ logger = logging.getLogger("llmproxy.app_factory")
 #   /api/v1/identity/exchange — token exchange: JWT validated inside the route
 #   /api/v1/identity/me       — returns {"authenticated": false} for callers
 #                               without a token; route does its own check
-_PUBLIC_EXACT: frozenset = frozenset({
-    "/health",
-    "/api/v1/identity/config",
-    "/api/v1/identity/exchange",
-    "/api/v1/identity/me",
-})
+_PUBLIC_EXACT: frozenset = frozenset(
+    {
+        "/health",
+        "/api/v1/identity/config",
+        "/api/v1/identity/exchange",
+        "/api/v1/identity/me",
+    }
+)
 
 # Path prefixes that are fully protected (deny-all except _PUBLIC_EXACT above).
 _PROTECTED_PREFIXES: tuple = ("/api/v1/", "/admin/")
@@ -57,22 +59,30 @@ _PROTECTED_PREFIXES: tuple = ("/api/v1/", "/admin/")
 # Root-level paths outside the prefixes above that also require auth.
 # /metrics exposes token counts, model usage, budget, and timing side-channels
 # that allow traffic-pattern inference across tenants.
-_ALSO_PROTECT: frozenset = frozenset({
-    "/metrics",
-})
+_ALSO_PROTECT: frozenset = frozenset(
+    {
+        "/metrics",
+    }
+)
 
 # Query-string auth fallback is allowed only for browser EventSource endpoints
 # that cannot attach custom Authorization headers.
-_QUERY_TOKEN_FALLBACK_PATHS: frozenset = frozenset({
-    "/api/v1/logs",
-})
+_QUERY_TOKEN_FALLBACK_PATHS: frozenset = frozenset(
+    {
+        "/api/v1/logs",
+    }
+)
 # ───────────────────────────────────────────────────────────────────────────
 
 
 def _read_version() -> str:
     """Read version from VERSION file."""
     try:
-        with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "VERSION")) as f:
+        with open(
+            os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "VERSION"
+            )
+        ) as f:
             return f.read().strip()
     except FileNotFoundError:
         return "0.0.0"
@@ -105,9 +115,9 @@ _PERMISSIONS_POLICY = (
 )
 _UI_CSP = (
     "default-src 'self'; "
-    "script-src 'self'; "                  # Tailwind is compiled at build time — no JIT eval
-    "style-src 'self' 'unsafe-inline'; "   # Inline style attrs (gauge widths, color overrides)
-    "font-src 'self'; "                    # Fonts are local (vendor/fonts/)
+    "script-src 'self'; "  # Tailwind is compiled at build time — no JIT eval
+    "style-src 'self' 'unsafe-inline'; "  # Inline style attrs (gauge widths, color overrides)
+    "font-src 'self'; "  # Fonts are local (vendor/fonts/)
     "img-src 'self' data:; "
     "connect-src 'self'; "
     "frame-ancestors 'none'; "
@@ -115,7 +125,7 @@ _UI_CSP = (
     "form-action 'self'"
 )
 _API_CSP = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
-_TRACE_ID_RE = re.compile(r'^[a-fA-F0-9-]{1,64}$')
+_TRACE_ID_RE = re.compile(r"^[a-fA-F0-9-]{1,64}$")
 
 
 def install_security_headers(app: FastAPI) -> None:
@@ -124,6 +134,7 @@ def install_security_headers(app: FastAPI) -> None:
     Extracted so unit tests can mount it on a bare FastAPI without pulling
     in the full create_app() dependency tree (store, plugins, tracing, ...).
     """
+
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
         response = await call_next(request)
@@ -145,7 +156,9 @@ def install_security_headers(app: FastAPI) -> None:
         # Validate trace_id is hex+dash only to prevent log injection via
         # crafted X-Trace-Id headers (e.g. SQL/SIEM injection).
         traceparent = request.headers.get("traceparent", "")
-        trace_id = request.headers.get("x-trace-id") or (traceparent.split("-")[1] if "-" in traceparent else None)
+        trace_id = request.headers.get("x-trace-id") or (
+            traceparent.split("-")[1] if "-" in traceparent else None
+        )
         if trace_id and _TRACE_ID_RE.match(trace_id):
             response.headers["X-Trace-Id"] = trace_id
         # CSP differentiated by path: UI shell needs script/style/connect,
@@ -192,7 +205,9 @@ def create_app(agent) -> FastAPI:
     # (those closures remain as defence-in-depth only).
     @app.middleware("http")
     async def global_admin_auth(request: Request, call_next):
-        auth_enabled_live = agent.config.get("server", {}).get("auth", {}).get("enabled", False)
+        auth_enabled_live = (
+            agent.config.get("server", {}).get("auth", {}).get("enabled", False)
+        )
         if not auth_enabled_live:
             return await call_next(request)
 
@@ -219,6 +234,7 @@ def create_app(agent) -> FastAPI:
                 token = request.query_params.get("token", "")
             if not agent._verify_api_key(token):
                 from fastapi.responses import JSONResponse
+
                 logger.warning(
                     f"Global auth: rejected {request.method} {path} "
                     f"from {request.client.host if request.client else 'unknown'}"
@@ -246,12 +262,14 @@ def create_app(agent) -> FastAPI:
                     cl_value = int(content_length)
                 except ValueError:
                     from fastapi.responses import JSONResponse
+
                     return JSONResponse(
                         status_code=400,
                         content={"detail": "Invalid Content-Length header"},
                     )
                 if cl_value > max_payload_bytes:
                     from fastapi.responses import JSONResponse
+
                     return JSONResponse(
                         status_code=413,
                         content={
@@ -308,16 +326,23 @@ def create_app(agent) -> FastAPI:
         app.add_middleware(
             ByteLevelFirewallMiddleware,
             max_body_bytes=max_payload_bytes,
-            signature_store=getattr(agent, 'signature_store', None),
+            signature_store=getattr(agent, "signature_store", None),
         )
-    app.add_middleware(RateLimitMiddleware, config=agent.config)
+    app.add_middleware(RateLimitMiddleware, config=agent.config, agent=agent)
 
     from .routes import (
-        admin_router, registry_router, identity_router,
-        plugins_router, telemetry_router, chat_router,
-        models_router, embeddings_router, completions_router,
+        admin_router,
+        registry_router,
+        identity_router,
+        plugins_router,
+        telemetry_router,
+        chat_router,
+        models_router,
+        embeddings_router,
+        completions_router,
         gdpr_router,
     )
+
     app.include_router(chat_router(agent))
     app.include_router(completions_router(agent))
     app.include_router(embeddings_router(agent))
@@ -346,7 +371,11 @@ def create_app(agent) -> FastAPI:
             for entry in os.listdir(ui_public):
                 full = os.path.join(ui_public, entry)
                 if os.path.isdir(full):
-                    app.mount(f"/ui/{entry}", StaticFiles(directory=full), name=f"ui-public-{entry}")
+                    app.mount(
+                        f"/ui/{entry}",
+                        StaticFiles(directory=full),
+                        name=f"ui-public-{entry}",
+                    )
         app.mount("/ui", StaticFiles(directory=ui_src, html=True), name="ui")
         logger.warning(
             "UI: no build found at %s — serving source tree directly. Tailwind "
@@ -366,6 +395,7 @@ def create_app(agent) -> FastAPI:
     @app.on_event("shutdown")
     async def _shutdown():
         from proxy.background import drain_pending_writes
+
         # 1. Flush plugin state (SmartBudgetGuard persists on_unload)
         for name, instance in agent.plugin_manager._plugin_instances.items():
             try:
@@ -376,9 +406,10 @@ def create_app(agent) -> FastAPI:
         await drain_pending_writes(agent)
         # 3. Force SQLite WAL checkpoint before container receives SIGKILL
         try:
-            db_path = getattr(agent.store, 'db_path', None)
+            db_path = getattr(agent.store, "db_path", None)
             if db_path:
                 import aiosqlite
+
                 async with aiosqlite.connect(db_path) as conn:
                     await conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         except Exception as e:

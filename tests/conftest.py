@@ -26,6 +26,7 @@ def _reset_semantic_corpus():
     yield
     try:
         import core.semantic_analyzer as sa
+
         sa._active_corpus = None
         sa._corpus_cache = None
     except ImportError:
@@ -52,18 +53,24 @@ class InMemoryRepository(BaseRepository):
         return list(self._endpoints.values())
 
     async def get_pool(self) -> List[LLMEndpoint]:
-        return [e for e in self._endpoints.values() if e.status == EndpointStatus.VERIFIED]
+        return [
+            e for e in self._endpoints.values() if e.status == EndpointStatus.VERIFIED
+        ]
 
     async def get_by_status(self, status: EndpointStatus) -> List[LLMEndpoint]:
         return [e for e in self._endpoints.values() if e.status == status]
 
-    async def update_status(self, endpoint_id: str, status: EndpointStatus, metadata: Optional[Dict] = None):
+    async def update_status(
+        self, endpoint_id: str, status: EndpointStatus, metadata: Optional[Dict] = None
+    ):
         if endpoint_id in self._endpoints:
             self._endpoints[endpoint_id].status = status
             if metadata:
                 self._endpoints[endpoint_id].metadata = metadata
 
-    async def update_metrics(self, endpoint_id: str, latency_ms: float, success_rate: float):
+    async def update_metrics(
+        self, endpoint_id: str, latency_ms: float, success_rate: float
+    ):
         if endpoint_id in self._endpoints:
             self._endpoints[endpoint_id].latency_ms = latency_ms
             self._endpoints[endpoint_id].success_rate = success_rate
@@ -81,11 +88,13 @@ def make_openai_response(content: str = "Hello! How can I help?", model: str = "
         "id": "chatcmpl-test123",
         "object": "chat.completion",
         "model": model,
-        "choices": [{
-            "index": 0,
-            "message": {"role": "assistant", "content": content},
-            "finish_reason": "stop",
-        }],
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": content},
+                "finish_reason": "stop",
+            }
+        ],
         "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
     }
 

@@ -89,7 +89,9 @@ class ModelDowngrader(BasePlugin):
         # Perform downgrade
         ctx.metadata["_original_model"] = current_model
         ctx.metadata["_downgraded_to"] = target_model
-        ctx.metadata["_downgrade_reason"] = f"complexity={complexity:.3f}<{self.complexity_threshold}"
+        ctx.metadata["_downgrade_reason"] = (
+            f"complexity={complexity:.3f}<{self.complexity_threshold}"
+        )
         ctx.body["model"] = target_model
 
         self._total_downgraded += 1

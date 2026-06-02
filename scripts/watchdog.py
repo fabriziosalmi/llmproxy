@@ -10,13 +10,13 @@ import logging
 LOG_FILE = ".proxy.log"
 PID_FILE = ".proxy.pid"
 HEALTH_URL = "http://127.0.0.1:8090/health"
-CHECK_INTERVAL = 30 # seconds
+CHECK_INTERVAL = 30  # seconds
 
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - WATCHDOG - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - WATCHDOG - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger("watchdog")
+
 
 def is_proxy_alive():
     try:
@@ -24,6 +24,7 @@ def is_proxy_alive():
         return response.status_code == 200
     except Exception:
         return False
+
 
 def restart_proxy():
     logger.warning("Proxy unresponsive! Initiating emergency restart...")
@@ -33,6 +34,7 @@ def restart_proxy():
         logger.info("Emergency restart command dispatched.")
     except Exception as e:
         logger.error(f"Failed to restart proxy: {e}")
+
 
 def main():
     logger.info("Isolated Watchdog started. Monitoring LLMPROXY...")
@@ -45,6 +47,7 @@ def main():
             logger.info("Heartbeat: LLMPROXY is healthy.")
 
         time.sleep(CHECK_INTERVAL)
+
 
 if __name__ == "__main__":
     main()

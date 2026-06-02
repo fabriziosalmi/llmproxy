@@ -65,7 +65,9 @@ class LightweightAgent:
         self.chatbot.track_error = AsyncMock()
         self.exporter = None
         self.zt_manager = MagicMock()
-        self.zt_manager.verify_tailscale_identity = AsyncMock(return_value={"status": "unverified"})
+        self.zt_manager.verify_tailscale_identity = AsyncMock(
+            return_value={"status": "unverified"}
+        )
         self.plugin_manager = MagicMock()
         self.plugin_manager.list_plugins = MagicMock(return_value=[])
         self.plugin_manager.manifest_path = "plugins/manifest.yaml"
@@ -99,13 +101,21 @@ class LightweightAgent:
 
         # Request deduplication
         from core.deduplicator import RequestDeduplicator
+
         self.deduplicator = RequestDeduplicator()
 
         from proxy.routes import (
-            admin_router, registry_router, identity_router,
-            plugins_router, telemetry_router, chat_router,
-            models_router, embeddings_router, completions_router,
+            admin_router,
+            registry_router,
+            identity_router,
+            plugins_router,
+            telemetry_router,
+            chat_router,
+            models_router,
+            embeddings_router,
+            completions_router,
         )
+
         self.app.include_router(chat_router(self))
         self.app.include_router(completions_router(self))
         self.app.include_router(embeddings_router(self))
@@ -136,6 +146,7 @@ class LightweightAgent:
 
     def _verify_api_key(self, token: str) -> bool:
         import hmac as _hmac
+
         if not token:
             return False
         tb = token.encode("utf-8", errors="replace")
@@ -148,13 +159,19 @@ class LightweightAgent:
     async def _add_log(self, message, level="INFO", metadata=None):
         """Lightweight log — mirrors RotatorAgent._add_log."""
         import time
-        entry = {"timestamp": time.strftime("%H:%M:%S"), "level": level, "message": message}
+
+        entry = {
+            "timestamp": time.strftime("%H:%M:%S"),
+            "level": level,
+            "message": message,
+        }
         if self.log_queue.full():
             self.log_queue.get_nowait()
         await self.log_queue.put(entry)
 
 
 # ── Fixtures ──
+
 
 @pytest.fixture
 def store():
@@ -190,6 +207,7 @@ async def auth_client(agent_with_auth):
 
 
 # ── Health & Info Routes ──
+
 
 @pytest.mark.asyncio
 async def test_health_endpoint(client):
@@ -240,6 +258,7 @@ async def test_network_info_endpoint(client):
 
 # ── Proxy Admin Routes ──
 
+
 @pytest.mark.asyncio
 async def test_proxy_status(client):
     resp = await client.get("/api/v1/proxy/status")
@@ -282,6 +301,7 @@ async def test_panic_killswitch(client, agent):
 
 # ── Feature Toggle Routes ──
 
+
 @pytest.mark.asyncio
 async def test_features_list(client):
     resp = await client.get("/api/v1/features")
@@ -293,13 +313,17 @@ async def test_features_list(client):
 
 @pytest.mark.asyncio
 async def test_feature_toggle(client, agent):
-    resp = await client.post("/api/v1/features/toggle", json={"name": "injection_guard", "enabled": False})
+    resp = await client.post(
+        "/api/v1/features/toggle", json={"name": "injection_guard", "enabled": False}
+    )
     assert resp.status_code == 200
     assert resp.json()["enabled"] is False
     assert agent.features["injection_guard"] is False
 
     # Toggle back
-    resp = await client.post("/api/v1/features/toggle", json={"name": "injection_guard", "enabled": True})
+    resp = await client.post(
+        "/api/v1/features/toggle", json={"name": "injection_guard", "enabled": True}
+    )
     assert resp.json()["enabled"] is True
 
 
@@ -311,6 +335,7 @@ async def test_feature_toggle_unknown(client):
 
 # ── Registry Routes ──
 
+
 @pytest.mark.asyncio
 async def test_registry_empty(client):
     resp = await client.get("/api/v1/registry")
@@ -321,6 +346,7 @@ async def test_registry_empty(client):
 @pytest.mark.asyncio
 async def test_registry_with_endpoint(client, store):
     from models import LLMEndpoint, EndpointStatus
+
     ep = LLMEndpoint(
         id="ep-1",
         url="http://localhost:11434/v1",
@@ -344,7 +370,13 @@ async def test_registry_with_endpoint(client, store):
 @pytest.mark.asyncio
 async def test_registry_toggle_endpoint(client, store):
     from models import LLMEndpoint, EndpointStatus
-    ep = LLMEndpoint(id="ep-2", url="http://example.com/v1", status=EndpointStatus.VERIFIED, metadata={})
+
+    ep = LLMEndpoint(
+        id="ep-2",
+        url="http://example.com/v1",
+        status=EndpointStatus.VERIFIED,
+        metadata={},
+    )
     await store.add_endpoint(ep)
 
     resp = await client.post("/api/v1/registry/ep-2/toggle")
@@ -355,7 +387,13 @@ async def test_registry_toggle_endpoint(client, store):
 @pytest.mark.asyncio
 async def test_registry_set_priority(client, store):
     from models import LLMEndpoint, EndpointStatus
-    ep = LLMEndpoint(id="ep-3", url="http://example.com/v2", status=EndpointStatus.VERIFIED, metadata={})
+
+    ep = LLMEndpoint(
+        id="ep-3",
+        url="http://example.com/v2",
+        status=EndpointStatus.VERIFIED,
+        metadata={},
+    )
     await store.add_endpoint(ep)
 
     resp = await client.post("/api/v1/registry/ep-3/priority", json={"priority": 10})
@@ -366,7 +404,13 @@ async def test_registry_set_priority(client, store):
 @pytest.mark.asyncio
 async def test_registry_delete_endpoint(client, store):
     from models import LLMEndpoint, EndpointStatus
-    ep = LLMEndpoint(id="ep-4", url="http://example.com/v3", status=EndpointStatus.VERIFIED, metadata={})
+
+    ep = LLMEndpoint(
+        id="ep-4",
+        url="http://example.com/v3",
+        status=EndpointStatus.VERIFIED,
+        metadata={},
+    )
     await store.add_endpoint(ep)
 
     resp = await client.delete("/api/v1/registry/ep-4")
@@ -384,6 +428,7 @@ async def test_registry_toggle_nonexistent(client):
 
 
 # ── Plugin Routes ──
+
 
 @pytest.mark.asyncio
 async def test_plugins_list(client):
@@ -412,6 +457,7 @@ async def test_plugins_install_missing_fields(client):
 
 # ── Identity Routes ──
 
+
 @pytest.mark.asyncio
 async def test_identity_config(client):
     resp = await client.get("/api/v1/identity/config")
@@ -429,6 +475,7 @@ async def test_identity_me_unauthenticated(client):
 
 # ── Chat Completions (Auth Disabled) ──
 
+
 @pytest.mark.asyncio
 async def test_chat_completions_no_auth(client, agent):
     """With auth disabled, chat should work without API key."""
@@ -438,10 +485,13 @@ async def test_chat_completions_no_auth(client, agent):
     )
     agent.proxy_request = AsyncMock(return_value=mock_response)
 
-    resp = await client.post("/v1/chat/completions", json={
-        "model": "gpt-4",
-        "messages": [{"role": "user", "content": "Hello"}],
-    })
+    resp = await client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "gpt-4",
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert data["choices"][0]["message"]["content"] == "Test response"
@@ -452,23 +502,30 @@ async def test_chat_completions_no_auth(client, agent):
 async def test_chat_completions_proxy_disabled(client, agent):
     """When proxy is stopped, requests should be rejected."""
     agent.proxy_enabled = False
-    resp = await client.post("/v1/chat/completions", json={
-        "model": "gpt-4",
-        "messages": [{"role": "user", "content": "Hello"}],
-    })
+    resp = await client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "gpt-4",
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+    )
     assert resp.status_code == 503
     agent.proxy_enabled = True  # Reset
 
 
 # ── Chat Completions (Auth Enabled) ──
 
+
 @pytest.mark.asyncio
 async def test_chat_auth_missing_key(auth_client):
     """Requests without API key should be rejected."""
-    resp = await auth_client.post("/v1/chat/completions", json={
-        "model": "gpt-4",
-        "messages": [{"role": "user", "content": "Hello"}],
-    })
+    resp = await auth_client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "gpt-4",
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+    )
     assert resp.status_code == 401
 
 
@@ -501,6 +558,7 @@ async def test_chat_auth_valid_key(auth_client, agent_with_auth):
 
 # ── Budget Persistence ──
 
+
 @pytest.mark.asyncio
 async def test_budget_persisted_after_request(client, agent, store):
     """J.5: total_cost_today should be persisted to store after each request.
@@ -519,10 +577,13 @@ async def test_budget_persisted_after_request(client, agent, store):
 
     agent.proxy_request = _mock_proxy_request
 
-    await client.post("/v1/chat/completions", json={
-        "model": "gpt-4",
-        "messages": [{"role": "user", "content": "Hello"}],
-    })
+    await client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "gpt-4",
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+    )
 
     # Give async tasks time to complete
     await asyncio.sleep(0.1)
@@ -534,6 +595,7 @@ async def test_budget_persisted_after_request(client, agent, store):
 
 # ── State Persistence ──
 
+
 @pytest.mark.asyncio
 async def test_proxy_toggle_persists_state(client, store):
     await client.post("/api/v1/proxy/toggle", json={"enabled": False})
@@ -543,7 +605,9 @@ async def test_proxy_toggle_persists_state(client, store):
 
 @pytest.mark.asyncio
 async def test_feature_toggle_persists_state(client, store):
-    await client.post("/api/v1/features/toggle", json={"name": "language_guard", "enabled": False})
+    await client.post(
+        "/api/v1/features/toggle", json={"name": "language_guard", "enabled": False}
+    )
     saved = await store.get_state("feature_language_guard")
     assert saved is False
 
@@ -579,7 +643,9 @@ async def client_with_models():
         "ollama": {"provider": "ollama", "models": ["llama3.3"]},
     }
     agent = LightweightAgent(store, config)
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=agent.app), base_url="http://test") as c:
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=agent.app), base_url="http://test"
+    ) as c:
         yield c
 
 

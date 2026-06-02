@@ -16,6 +16,7 @@ def shield():
 
 # ── Detection ──
 
+
 def test_detects_email(shield):
     assert shield._check_pii_leak("Contact me at john@example.com please") is True
 
@@ -40,6 +41,7 @@ def test_detects_credit_card(shield):
 
 # ── Masking ──
 
+
 def test_mask_email(shield):
     text = "Send to alice@corp.com"
     masked = shield.mask_pii(text)
@@ -60,6 +62,7 @@ def test_mask_preserves_non_pii(shield):
 
 
 # ── Vault & Demasking ──
+
 
 def test_vault_stores_originals(shield):
     text = "Email: test@example.org"
@@ -84,6 +87,7 @@ def test_disabled_shield_passthrough(shield):
 
 # ── Multiple PII in one text ──
 
+
 def test_mask_multiple_pii(shield):
     text = "alice@a.com and bob@b.com and 555-000-1111"
     masked = shield.mask_pii(text)
@@ -95,6 +99,7 @@ def test_mask_multiple_pii(shield):
 
 
 # ── Presidio availability marker ──
+
 
 def test_presidio_availability_flag():
     """Verify the _PRESIDIO_AVAILABLE flag is a bool (either path works)."""

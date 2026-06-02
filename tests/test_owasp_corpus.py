@@ -51,7 +51,10 @@ def _load_corpus() -> list[dict[str, Any]]:
 def _make_shield() -> SecurityShield:
     """Build a SecurityShield with default config (no ai_assistant — pure
     static analysis). Mirrors how the proxy initialises it at boot."""
-    return SecurityShield({"injection_guard": {"enabled": True}, "language_guard": {"enabled": True}}, assistant=None)
+    return SecurityShield(
+        {"injection_guard": {"enabled": True}, "language_guard": {"enabled": True}},
+        assistant=None,
+    )
 
 
 def _make_firewall() -> ByteLevelFirewallMiddleware:
@@ -66,7 +69,9 @@ def _make_firewall() -> ByteLevelFirewallMiddleware:
     return ByteLevelFirewallMiddleware(_stub_app)
 
 
-def _check_one(entry: dict[str, Any], shield: SecurityShield, fw: ByteLevelFirewallMiddleware) -> dict[str, Any]:
+def _check_one(
+    entry: dict[str, Any], shield: SecurityShield, fw: ByteLevelFirewallMiddleware
+) -> dict[str, Any]:
     """Run a single corpus entry through the security pipeline.
 
     Returns a result dict:
@@ -154,21 +159,27 @@ def test_llm01_prompt_injection_coverage(corpus_results):
     """LLM01 — Prompt Injection. Floor 90 % (current: 100 % after S.1-S.5)."""
     cov = _coverage_by_category(corpus_results)["LLM01"]
     rate = cov["passed"] / cov["total"]
-    assert rate >= 0.90, f"LLM01 coverage {rate:.0%} < 90% — {cov['passed']}/{cov['total']}"
+    assert rate >= 0.90, (
+        f"LLM01 coverage {rate:.0%} < 90% — {cov['passed']}/{cov['total']}"
+    )
 
 
 def test_llm02_pii_coverage(corpus_results):
     """LLM02 — Sensitive Info Disclosure. Floor 87 % (current: 100 %)."""
     cov = _coverage_by_category(corpus_results)["LLM02"]
     rate = cov["passed"] / cov["total"]
-    assert rate >= 0.87, f"LLM02 coverage {rate:.0%} < 87% — {cov['passed']}/{cov['total']}"
+    assert rate >= 0.87, (
+        f"LLM02 coverage {rate:.0%} < 87% — {cov['passed']}/{cov['total']}"
+    )
 
 
 def test_llm07_system_prompt_leakage_coverage(corpus_results):
     """LLM07 — System Prompt Leakage. Floor 80 % (current: 100 % after S.2/S.3)."""
     cov = _coverage_by_category(corpus_results)["LLM07"]
     rate = cov["passed"] / cov["total"]
-    assert rate >= 0.80, f"LLM07 coverage {rate:.0%} < 80% — {cov['passed']}/{cov['total']}"
+    assert rate >= 0.80, (
+        f"LLM07 coverage {rate:.0%} < 80% — {cov['passed']}/{cov['total']}"
+    )
 
 
 def test_benign_false_positive_ceiling(corpus_results):
@@ -177,7 +188,9 @@ def test_benign_false_positive_ceiling(corpus_results):
     cov = _coverage_by_category(corpus_results)["BENIGN"]
     rate = cov["passed"] / cov["total"]
     fp = 1 - rate
-    assert fp <= 0.30, f"Benign false-positive rate {fp:.0%} > 30% — {cov['passed']}/{cov['total']} pass"
+    assert fp <= 0.30, (
+        f"Benign false-positive rate {fp:.0%} > 30% — {cov['passed']}/{cov['total']} pass"
+    )
 
 
 # ── Report generator ──────────────────────────────────────────────────
@@ -207,7 +220,9 @@ def _format_report(results: list[dict[str, Any]]) -> str:
         rate = c["passed"] / c["total"] if c["total"] else 0
         out.append(f"| **{cat}** | {c['passed']} | {c['total']} | {rate * 100:.0f}% |")
     out.append("")
-    out.append("**Out-of-scope categories** (caller-side / build-side / model-side, not proxy-side):")
+    out.append(
+        "**Out-of-scope categories** (caller-side / build-side / model-side, not proxy-side):"
+    )
     out.append(
         "LLM03 (supply chain) · LLM04 (data poisoning) · LLM06 (excessive agency) · "
         "LLM08 (embedding) · LLM09 (misinformation) · LLM10 (consumption — handled by "
@@ -242,7 +257,8 @@ def _format_report(results: list[dict[str, Any]]) -> str:
     # Known gaps — entries that failed and are NOT marked as documented
     # tradeoffs. These are the action items for the next signature-tuning pass.
     gaps = [
-        r for r in results
+        r
+        for r in results
         if not r.get("pass")
         and r.get("expected_action") not in ("out_of_scope", "allow")
         and not r.get("expected_block_known_tradeoff")
@@ -289,7 +305,7 @@ def _format_report(results: list[dict[str, Any]]) -> str:
         "- Coverage numbers are bounds, not guarantees against novel attacks. "
         "Re-run + extend the corpus when new attack patterns surface.\n"
         "- Benign-control false positives mostly cluster on **meta-discussion of "
-        "attack patterns** (e.g. \"explain how prompt injection works\"). The "
+        'attack patterns** (e.g. "explain how prompt injection works"). The '
         "proxy errs on the side of caution there — tradeoff baked into the "
         "0.7 threshold.\n"
         "- LLM03/04/06/08/09 are out-of-scope for the proxy itself — they "

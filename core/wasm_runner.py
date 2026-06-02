@@ -63,9 +63,35 @@ def _check_extism() -> bool:
     global _extism_available
     if _extism_available is None:
         try:
-            import extism  # noqa: F401
+            import extism
+
+            try:
+                version = extism.extism_version()
+                logger.info(
+                    f"Extism runtime detected. SDK Version: {extism.__version__}, C Library Version: {version}"
+                )
+            except AttributeError:
+                logger.warning(
+                    "Extism SDK loaded, but extism_version() is unavailable. Check library installation."
+                )
             _extism_available = True
-        except ImportError:
+        except ImportError as e:
+            logger.error(
+                f"Extism Python SDK import failed: {e}. "
+                "Ensure the 'extism' package is installed ('pip install extism')."
+            )
+            _extism_available = False
+        except OSError as e:
+            logger.error(
+                f"Extism shared C library loading failed: {e}. "
+                "WASM plugins require the Extism shared library ('libextism') to be installed on your system. "
+                "See https://extism.org/docs/install/ for instructions."
+            )
+            _extism_available = False
+        except Exception as e:
+            logger.error(
+                f"Extism runtime initialization failed: {e.__class__.__name__}: {e}"
+            )
             _extism_available = False
     return _extism_available
 
@@ -106,7 +132,9 @@ class WasmRunner:
         Called once at plugin load time (not per-request).
         """
         if not _check_extism():
-            self.logger.warning("Extism not installed — WASM plugins unavailable. pip install extism")
+            self.logger.error(
+                "WASM plugin loading aborted — Extism runtime is unavailable."
+            )
             return False
 
         try:
@@ -124,12 +152,17 @@ class WasmRunner:
     def _sync_load(self) -> Any:
         """Synchronous WASM load (runs in thread pool)."""
         import extism
+
         with open(self.wasm_path, "rb") as f:
             wasm_bytes = f.read()
         return extism.Plugin(wasm_bytes, wasi=True)
 
-    async def execute(self, body: Dict[str, Any], metadata: Dict[str, Any] | None = None,
-                      session_id: str = "default") -> PluginResponse:
+    async def execute(
+        self,
+        body: Dict[str, Any],
+        metadata: Dict[str, Any] | None = None,
+        session_id: str = "default",
+    ) -> PluginResponse:
         """
         Execute the WASM plugin with the given context.
 
@@ -209,14 +242,18 @@ class WasmRunner:
         # Validate action
         valid_actions = {a.value for a in PluginAction}
         if action not in valid_actions:
-            self.logger.warning(f"WASM returned unknown action '{action}', treating as passthrough")
+            self.logger.warning(
+                f"WASM returned unknown action '{action}', treating as passthrough"
+            )
             return PluginResponse.passthrough()
 
         if action == "block":
             return PluginResponse.block(
                 status_code=output.get("status_code", 403),
                 error_type=output.get("error_type", "wasm_block"),
-                message=output.get("message") or output.get("reason") or "Blocked by WASM plugin",
+                message=output.get("message")
+                or output.get("reason")
+                or "Blocked by WASM plugin",
             )
         elif action == "modify":
             body = output.get("body")

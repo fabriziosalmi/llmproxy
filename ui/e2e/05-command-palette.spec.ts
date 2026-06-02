@@ -13,6 +13,8 @@ test.describe('command palette', () => {
     test.beforeEach(async ({ authedPage }) => {
         await authedPage.goto('/ui/#/threats');
         await expect(authedPage.locator('#login-overlay')).not.toBeVisible();
+        // Wait for the app to be fully booted/hydrated (timerange slot rendered).
+        await expect(authedPage.locator('[data-tr-root]')).toBeAttached({ timeout: 10_000 });
     });
 
     test('Cmd+K opens the palette and Escape closes it', async ({ authedPage }) => {

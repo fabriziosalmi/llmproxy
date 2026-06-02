@@ -35,7 +35,9 @@ class SmartBudgetGuard(BasePlugin):
     hook = PluginHook.PRE_FLIGHT
     version = "1.1.0"
     author = "llmproxy"
-    description = "Pre-flight budget enforcement with cost estimation and SQLite persistence"
+    description = (
+        "Pre-flight budget enforcement with cost estimation and SQLite persistence"
+    )
     timeout_ms = 10  # Slightly higher to account for first-execute hydration
 
     def __init__(self, config: Dict[str, Any] = None):
@@ -59,17 +61,19 @@ class SmartBudgetGuard(BasePlugin):
     def _estimate_tokens(self, body: Dict[str, Any]) -> int:
         """Estimate input token count from messages using tiktoken or heuristic."""
         from core.tokenizer import count_messages_tokens
+
         model = body.get("model", "")
         return count_messages_tokens(body.get("messages", []), model)
 
     def _estimate_cost(self, model: str, input_tokens: int) -> float:
         """Estimate total cost (input + expected output) using per-model pricing."""
         from core.pricing import estimate_cost_pre_flight
+
         return estimate_cost_pre_flight(model, input_tokens, self.avg_output_ratio)
 
     def _get_store(self, ctx: PluginContext):
         """Get store from PluginState DI (returns None if unavailable)."""
-        if ctx.state and hasattr(ctx.state, 'extra'):
+        if ctx.state and hasattr(ctx.state, "extra"):
             return ctx.state.extra.get("store")
         return None
 
@@ -83,6 +87,7 @@ class SmartBudgetGuard(BasePlugin):
             return
         try:
             import datetime as _dt
+
             today = _dt.date.today().isoformat()
             saved_date = await store.get_state("budget:guard_date", None)
 
@@ -115,6 +120,7 @@ class SmartBudgetGuard(BasePlugin):
             return
         try:
             import datetime as _dt
+
             await store.set_state("budget:guard_date", _dt.date.today().isoformat())
             await store.set_state("budget:sessions", dict(self._session_spend))
             await store.set_state("budget:teams", dict(self._team_spend))
@@ -170,7 +176,9 @@ class SmartBudgetGuard(BasePlugin):
             # Record estimated spend (will be corrected post-flight with actual tokens)
             self._session_spend[session_id] += estimated_cost
             self._team_spend[team_key] += estimated_cost
-            session_usage_pct = (self._session_spend[session_id] / self.session_budget_usd)
+            session_usage_pct = (
+                self._session_spend[session_id] / self.session_budget_usd
+            )
 
         # J.5: Persist updated budget (async, non-blocking)
         if store:
@@ -193,8 +201,9 @@ class SmartBudgetGuard(BasePlugin):
 
         return PluginResponse.passthrough()
 
-    async def record_actual_cost(self, session_id: str, team_key: str,
-                                 estimated: float, actual: float):
+    async def record_actual_cost(
+        self, session_id: str, team_key: str, estimated: float, actual: float
+    ):
         """
         Called post-flight to correct the estimate with actual token usage.
         Delta = actual - estimated is applied to running totals.

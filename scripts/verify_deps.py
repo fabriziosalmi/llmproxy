@@ -32,9 +32,9 @@ logger = logging.getLogger("llmproxy.verify_deps")
 
 # Packages that MUST NOT be installed (known-compromised or dangerous in proxy context)
 BLOCKED_PACKAGES = {
-    "litellm",      # Supply chain attack 2026-03-24
+    "litellm",  # Supply chain attack 2026-03-24
     "openai-proxy",  # Typosquat risk
-    "llm-proxy",     # Typosquat risk
+    "llm-proxy",  # Typosquat risk
 }
 
 
@@ -67,11 +67,11 @@ def scan_pth_files() -> list[str]:
     issues = []
     legitimate_prefixes = {
         "distutils-precedence",  # setuptools
-        "easy-install",          # setuptools legacy
-        "_virtualenv",           # virtualenv
-        "__editable__",          # PEP 660 editable installs
-        "a1_coverage",           # coverage.py subprocess measurement
-        "coverage",              # coverage.py
+        "easy-install",  # setuptools legacy
+        "_virtualenv",  # virtualenv
+        "__editable__",  # PEP 660 editable installs
+        "a1_coverage",  # coverage.py subprocess measurement
+        "coverage",  # coverage.py
     }
 
     for site_dir in sys.path:
@@ -99,25 +99,48 @@ def scan_pth_files() -> list[str]:
                 #   - Exfiltrates via RSA-encrypted POST to lookalike domain
                 #   - Creates persistence via systemd user service
                 EXEC_PATTERNS = [
-                    "exec(", "eval(", "compile(", "subprocess",
-                    "__import__", "importlib",
+                    "exec(",
+                    "eval(",
+                    "compile(",
+                    "subprocess",
+                    "__import__",
+                    "importlib",
                 ]
                 NETWORK_PATTERNS = [
-                    "urllib", "requests", "http.client", "socket",
-                    "urlopen", ".post(", ".get(",
+                    "urllib",
+                    "requests",
+                    "http.client",
+                    "socket",
+                    "urlopen",
+                    ".post(",
+                    ".get(",
                 ]
                 PERSISTENCE_PATTERNS = [
-                    "systemd", "crontab", "sysmon",
-                    "/root/", "/.config/", "launchd",
+                    "systemd",
+                    "crontab",
+                    "sysmon",
+                    "/root/",
+                    "/.config/",
+                    "launchd",
                 ]
                 EXFIL_PATTERNS = [
-                    "base64", ".ssh/", ".env", ".aws/",
-                    "credentials", "wallet", ".kube/config",
-                    "IMDS", "metadata.google", "169.254.169.254",
+                    "base64",
+                    ".ssh/",
+                    ".env",
+                    ".aws/",
+                    "credentials",
+                    "wallet",
+                    ".kube/config",
+                    "IMDS",
+                    "metadata.google",
+                    "169.254.169.254",
                 ]
                 SPAWN_PATTERNS = [
-                    "Popen", "os.system", "os.popen",
-                    "fork(", "spawn",
+                    "Popen",
+                    "os.system",
+                    "os.popen",
+                    "fork(",
+                    "spawn",
                 ]
 
                 for line in content.splitlines():
@@ -197,14 +220,11 @@ def verify_all(strict: bool = False) -> bool:
             return False
 
         if strict:
-            logger.error(
-                f"STRICT MODE: {len(all_issues)} issue(s) found. Aborting."
-            )
+            logger.error(f"STRICT MODE: {len(all_issues)} issue(s) found. Aborting.")
             return False
 
         logger.warning(
-            f"Supply chain check: {len(all_issues)} warning(s), "
-            "0 critical. Proceeding."
+            f"Supply chain check: {len(all_issues)} warning(s), 0 critical. Proceeding."
         )
         return True
     else:

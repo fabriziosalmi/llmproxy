@@ -32,7 +32,10 @@ class OpenAICompatAdapter(OpenAIAdapter):
         self._provider_hint = provider_hint
 
     def translate_request(
-        self, base_url: str, body: Dict[str, Any], headers: Dict[str, str],
+        self,
+        base_url: str,
+        body: Dict[str, Any],
+        headers: Dict[str, str],
     ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
         # Use provider default URL if base_url looks like a placeholder
         if not base_url or base_url in ("", "http://localhost"):

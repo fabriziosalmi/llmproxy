@@ -2,6 +2,7 @@
 Route modules for RotatorAgent.
 Split from the original monolithic _setup_routes() in rotator.py (J.6 refactor).
 """
+
 from .admin import create_router as admin_router
 from .registry import create_router as registry_router
 from .identity import create_router as identity_router
