@@ -7,7 +7,7 @@ from typing import Dict, Optional, Callable
 try:
     import redis.asyncio as redis
 except ImportError:
-    redis = None
+    redis = None  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -207,7 +207,7 @@ class RedisCircuitBreaker(BaseCircuitBreaker):
         self.failure_threshold = failure_threshold
         self.recovery_timeout = recovery_timeout
         self._on_state_change = on_state_change
-        
+
         self.k_state = f"cb:{name}:state"
         self.k_fail = f"cb:{name}:fail"
         self.k_last = f"cb:{name}:last"
@@ -231,7 +231,7 @@ class RedisCircuitBreaker(BaseCircuitBreaker):
                 logger.info(f"CircuitBreaker ({self.name}): OPEN → HALF_OPEN, admitting probe.")
                 self._notify_state_change("open", "half_open")
                 return True
-            return res == 1
+            return res == 1  # type: ignore
         except Exception as e:
             logger.warning(f"Redis CB check failed: {e}")
             return True
@@ -278,16 +278,16 @@ class RedisCircuitBreaker(BaseCircuitBreaker):
 
 class CircuitManager:
     def __init__(
-        self, 
+        self,
         on_state_change: Optional[Callable[[str, str, str], None]] = None,
         redis_url: Optional[str] = None
     ):
         self._circuits: Dict[str, BaseCircuitBreaker] = {}
         self._on_state_change = on_state_change
         self._lock = asyncio.Lock()
-        
+
         self.redis_client = None
-        self.scripts = {}
+        self.scripts = {}  # type: ignore
         if redis_url and redis:
             try:
                 self.redis_client = redis.from_url(redis_url, decode_responses=True)
@@ -318,7 +318,7 @@ class CircuitManager:
                     )
                 else:
                     self._circuits[endpoint_id] = LocalCircuitBreaker(
-                        name=endpoint_id, 
+                        name=endpoint_id,
                         on_state_change=self._on_state_change
                     )
             return self._circuits[endpoint_id]

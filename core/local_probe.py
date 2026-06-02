@@ -135,7 +135,7 @@ def _is_enabled(config: dict[str, Any]) -> bool:
     env_val = os.environ.get("LLM_PROXY_LOCAL_DISCOVERY")
     if env_val is not None:
         return env_val.strip().lower() not in ("0", "false", "off", "no", "")
-    return config.get("discovery", {}).get("local_scan", True)
+    return config.get("discovery", {}).get("local_scan", True)  # type: ignore
 
 
 def _url_already_configured(endpoints: dict[str, Any], base_url: str) -> bool:

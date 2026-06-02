@@ -246,10 +246,10 @@ class RequestForwarder:
         attempts = []
 
         is_budget_saturated = ctx.metadata.get("_budget_saturated", False)
-        
+
         if is_budget_saturated:
             raise HTTPException(
-                status_code=402, 
+                status_code=402,
                 detail="FinOps: Budget Exceeded (HTTP 402). Silent downgrades are disabled to preserve strict downstream parsing logic."
             )
 

@@ -83,12 +83,12 @@ def create_router(agent) -> APIRouter:
             return  # Auth disabled — development mode, allow all
         auth_header = request.headers.get("Authorization", "")
         token = auth_header.replace("Bearer ", "").strip()
-        
+
         if hasattr(agent, "jwt_authenticator") and agent.jwt_authenticator.enabled:
             if not agent.jwt_authenticator.verify_token(token):
                 raise HTTPException(status_code=401, detail="Admin: Unauthorized (Invalid JWT)")
             return
-            
+
         if not agent._verify_api_key(token):
             raise HTTPException(status_code=401, detail="Admin: Unauthorized")
 
@@ -805,7 +805,7 @@ def create_router(agent) -> APIRouter:
         try:
             # 1. NOW: Health, throughput, degradation state, auth mode
             uptime = time.time() - getattr(agent, "_start_time", time.time())
-            
+
             pool = []
             healthy_count = 0
             circuits_open = 0
@@ -815,7 +815,7 @@ def create_router(agent) -> APIRouter:
                     breaker = await agent.circuit_manager.get_breaker(e.id)
                     if await breaker.can_execute():
                         healthy_count += 1
-                
+
                 circuit_states = await agent.circuit_manager.get_all_states()
                 circuits_open = sum(
                     1 for s in circuit_states.values() if s.get("state") == "open"
@@ -824,7 +824,7 @@ def create_router(agent) -> APIRouter:
                 logger.warning(f"Error querying pool status for summary: {e}")
 
             auth_enabled = agent.config.get("server", {}).get("auth", {}).get("enabled", False)
-            
+
             # Coalesce overall health and degradation state
             degradation_state = "nominal"
             if circuits_open > 0:
@@ -849,7 +849,7 @@ def create_router(agent) -> APIRouter:
 
             # 2. ATTENTION: prioritized anomalies (TriageIssue list)
             attention = []
-            
+
             # 2a. Circuit Breakers open/half_open
             try:
                 circuit_states = await agent.circuit_manager.get_all_states()
@@ -973,13 +973,13 @@ def create_router(agent) -> APIRouter:
 
             # Sort attention by severity (critical first) and confidence DESC
             severity_order = {"critical": 0, "warning": 1}
-            attention.sort(key=lambda x: (severity_order.get(x["severity"], 2), -x["confidence"]))
+            attention.sort(key=lambda x: (severity_order.get(x["severity"], 2), -x["confidence"]))  # type: ignore
 
             # 3. DO NEXT: Suggested actions and follow-up tasks
             do_next = []
             for item in attention:
                 if item["kind"] in ("circuit_breaker_open", "circuit_breaker_half_open"):
-                    ep = item["blast_radius"].replace("endpoint:", "")
+                    ep = item["blast_radius"].replace("endpoint:", "")  # type: ignore
                     do_next.append({
                         "id": f"task:reset_cb:{ep}",
                         "title": f"Reset circuit breaker for {ep}",
@@ -1061,14 +1061,14 @@ def create_router(agent) -> APIRouter:
                 "do_next": do_next,
                 "recent_changes": recent_changes
             }
-        except Exception as e:
+        except Exception:
             logger.error("Dashboard summary generation failed", exc_info=True)
             raise HTTPException(status_code=500, detail="Internal server error")
 
     @router.get("/api/v1/slos")
     async def get_slos(request: Request):
         _check_admin_auth(request)
-        
+
         # 1. Error Rates (SLOs) from circuit breakers
         circuits = await agent.circuit_manager.get_all_states()
         endpoints_slo = {}
@@ -1083,13 +1083,13 @@ def create_router(agent) -> APIRouter:
                 "error_rate": round(error_rate, 4),
                 "circuit_state": state.get("state", "closed")
             }
-            
+
         # 2. Budget Burn
         budget_cfg = agent.config.get("budget", {})
         daily_limit = budget_cfg.get("daily_limit", 50.0)
         spent = agent.total_cost_today
         burn_pct = (spent / daily_limit) if daily_limit > 0 else 0.0
-        
+
         return {
             "budget": {
                 "limit": daily_limit,

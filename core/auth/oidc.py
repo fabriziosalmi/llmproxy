@@ -14,7 +14,7 @@ class JWTAuthenticator:
         auth_config = config.get("server", {}).get("admin_auth", {})
         # If explicitly enabled, it will override static API keys
         self.enabled = auth_config.get("oidc_enabled", False)
-        
+
         # In a full IdP setup (Auth0, Okta, Keycloak), this could be a JWKS client.
         # For this integration, we support a provided secret/public key.
         self.secret = auth_config.get("jwt_secret", "fallback-dev-secret-do-not-use")
@@ -26,11 +26,11 @@ class JWTAuthenticator:
         if not self.enabled:
             # If OIDC is not enabled, we fallback to the proxy's API key mechanism
             return False
-            
+
         try:
             payload = jwt.decode(
-                token, 
-                self.secret, 
+                token,
+                self.secret,
                 algorithms=self.algorithms,
                 audience=self.audience,
                 issuer=self.issuer

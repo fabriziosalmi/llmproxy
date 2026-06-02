@@ -77,10 +77,10 @@ class ProxyOrchestrator(BaseAgent):
         self.zt_manager = ZeroTrustManager(self.config)
         self.rbac = RBACManager()
         self.identity = IdentityManager(self.config)
-        
+
         from core.auth.oidc import JWTAuthenticator
         self.jwt_authenticator = JWTAuthenticator(self.config)
-        
+
         cache_cfg = self.config.get("caching", {})
         redis_url = cache_cfg.get("redis_url") or os.environ.get("REDIS_URL")
         self.circuit_manager = CircuitManager(
@@ -257,7 +257,7 @@ class ProxyOrchestrator(BaseAgent):
             connector = self._session.connector
             pool_cfg = self.config.get("connection_pool", {})
             self.logger.info(
-                f"HTTP pool: max={connector.limit} per_host={connector.limit_per_host} "
+                f"HTTP pool: max={connector.limit} per_host={connector.limit_per_host} "  # type: ignore
                 f"keepalive={pool_cfg.get('keepalive_timeout', 30)}s"
             )
             return self._session

@@ -241,7 +241,7 @@ def create_router(agent) -> APIRouter:
 
         ep = LLMEndpoint(
             id=ep_id,
-            url=url,
+            url=url,  # type: ignore
             status=EndpointStatus.VERIFIED,
             metadata={"provider": provider, "priority": priority, "models": models},
         )
