@@ -2,6 +2,57 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.21.70] — 2026-06-02
+
+### CI/CD, Linting, & Project Hygiene
+
+Resolved several critical linter, formatting, and test runner failures:
+- **Frontend linter fix**: Captured the dynamic import callback `stopPoll` from `mountEndpointsView` in `ui/components/registry.js`, resolving a blocking `no-undef` ESLint error in CI.
+- **Python linter formatting**: Cleaned up trailing whitespace in `core/rate_limiter.py`, `proxy/forwarder.py`, and `proxy/request_pipeline.py` using `ruff check --fix .`.
+- **Security Dependency Upgrades**:
+  - Upgraded frontend testing tools to address critical Vitest security vulnerability alerts.
+  - Upgraded PyJWT to `2.13.0` to address backend CVE security alerts.
+  - Upgraded python dependencies including `cachetools`, `prometheus-client`, and `sentry-sdk`.
+- **Testing & E2E**:
+  - Configured integration tests to skip when offline, and fixed issues with the E2E test runs.
+- **Docs & Storage Alignments**:
+  - Aligned storage configurations reference and WASM telemetry behaviors.
+
+---
+
+## [1.21.69] — 2026-06-02
+
+### Version Bump & E2E test fixes
+
+- Bumped project version to `1.21.69`.
+- Cleaned up and verified E2E test coverage suite.
+
+---
+
+## [1.21.68] — 2026-06-02
+
+### Dependencies updates
+
+- Upgraded key dependencies: `cachetools`, `prometheus-client`, and `sentry-sdk`.
+
+---
+
+## [1.21.67] — 2026-06-02
+
+### Security Fixes
+
+- Upgraded `PyJWT` to version `2.13.0` to resolve known backend CVEs.
+
+---
+
+## [1.21.66] — 2026-06-02
+
+### Offline Integration Tests
+
+- Configured integration tests to gracefully skip offline.
+
+---
+
 ## [1.21.65] — 2026-05-20
 
 ### Spec — MCP-native gateway REVIEWED-1 (refinements before implementation)
