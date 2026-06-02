@@ -77,8 +77,15 @@ class ProxyOrchestrator(BaseAgent):
         self.zt_manager = ZeroTrustManager(self.config)
         self.rbac = RBACManager()
         self.identity = IdentityManager(self.config)
+        
+        from core.auth.oidc import JWTAuthenticator
+        self.jwt_authenticator = JWTAuthenticator(self.config)
+        
+        cache_cfg = self.config.get("caching", {})
+        redis_url = cache_cfg.get("redis_url") or os.environ.get("REDIS_URL")
         self.circuit_manager = CircuitManager(
-            on_state_change=self._on_circuit_state_change
+            on_state_change=self._on_circuit_state_change,
+            redis_url=redis_url
         )
 
         # Alerting & compliance

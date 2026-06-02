@@ -83,6 +83,12 @@ def create_router(agent) -> APIRouter:
             return  # Auth disabled — development mode, allow all
         auth_header = request.headers.get("Authorization", "")
         token = auth_header.replace("Bearer ", "").strip()
+        
+        if hasattr(agent, "jwt_authenticator") and agent.jwt_authenticator.enabled:
+            if not agent.jwt_authenticator.verify_token(token):
+                raise HTTPException(status_code=401, detail="Admin: Unauthorized (Invalid JWT)")
+            return
+            
         if not agent._verify_api_key(token):
             raise HTTPException(status_code=401, detail="Admin: Unauthorized")
 
@@ -303,7 +309,7 @@ def create_router(agent) -> APIRouter:
 
         return {
             "features": agent.features,
-            "circuit_breakers": agent.circuit_manager.get_all_states(),
+            "circuit_breakers": await agent.circuit_manager.get_all_states(),
             "firewall": {
                 "enabled": getattr(agent, "firewall_enabled", True),
                 "disabled_reason": getattr(agent, "firewall_disabled_reason", None),
@@ -810,7 +816,7 @@ def create_router(agent) -> APIRouter:
                     if await breaker.can_execute():
                         healthy_count += 1
                 
-                circuit_states = agent.circuit_manager.get_all_states()
+                circuit_states = await agent.circuit_manager.get_all_states()
                 circuits_open = sum(
                     1 for s in circuit_states.values() if s.get("state") == "open"
                 )
@@ -846,7 +852,7 @@ def create_router(agent) -> APIRouter:
             
             # 2a. Circuit Breakers open/half_open
             try:
-                circuit_states = agent.circuit_manager.get_all_states()
+                circuit_states = await agent.circuit_manager.get_all_states()
                 for ep_id, state_info in circuit_states.items():
                     st = state_info.get("state", "closed")
                     if st in ("open", "half_open"):
@@ -1058,5 +1064,40 @@ def create_router(agent) -> APIRouter:
         except Exception as e:
             logger.error("Dashboard summary generation failed", exc_info=True)
             raise HTTPException(status_code=500, detail="Internal server error")
+
+    @router.get("/api/v1/slos")
+    async def get_slos(request: Request):
+        _check_admin_auth(request)
+        
+        # 1. Error Rates (SLOs) from circuit breakers
+        circuits = await agent.circuit_manager.get_all_states()
+        endpoints_slo = {}
+        for ep, state in circuits.items():
+            successes = state.get("success_count", 0)
+            failures = state.get("failure_count", 0)
+            total = successes + failures
+            error_rate = (failures / total) if total > 0 else 0.0
+            endpoints_slo[ep] = {
+                "success_count": successes,
+                "failure_count": failures,
+                "error_rate": round(error_rate, 4),
+                "circuit_state": state.get("state", "closed")
+            }
+            
+        # 2. Budget Burn
+        budget_cfg = agent.config.get("budget", {})
+        daily_limit = budget_cfg.get("daily_limit", 50.0)
+        spent = agent.total_cost_today
+        burn_pct = (spent / daily_limit) if daily_limit > 0 else 0.0
+        
+        return {
+            "budget": {
+                "limit": daily_limit,
+                "spent": round(spent, 6),
+                "burn_percentage": round(burn_pct * 100, 2),
+                "saturated": spent >= daily_limit
+            },
+            "upstream_error_rates": endpoints_slo
+        }
 
     return router

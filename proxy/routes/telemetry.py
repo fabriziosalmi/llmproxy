@@ -130,7 +130,7 @@ def create_router(agent) -> APIRouter:
             for e in pool:
                 if await (await agent.circuit_manager.get_breaker(e.id)).can_execute():
                     healthy_count += 1
-            circuit_states = agent.circuit_manager.get_all_states()
+            circuit_states = await agent.circuit_manager.get_all_states()
             circuits_open = sum(
                 1 for s in circuit_states.values() if s.get("state") == "open"
             )

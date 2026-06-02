@@ -20,6 +20,9 @@ services:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
     # Make the Docker host reachable as `host.docker.internal` from inside the
     # container on Linux (macOS/Windows Desktop already provide this alias).
     # Needed for auto-discovery of locally-running Ollama/LM Studio/vLLM.
@@ -38,8 +41,24 @@ services:
         reservations:
           memory: 512M
 
+  redis:
+    image: redis:7-alpine
+    container_name: llmproxy-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
 volumes:
   llmproxy-data:
     driver: local
   llmproxy-plugins:
+    driver: local
+  redis-data:
     driver: local

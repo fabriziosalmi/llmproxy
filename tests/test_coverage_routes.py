@@ -58,7 +58,7 @@ def _make_mock_agent():
     breaker.report_failure = AsyncMock()
     agent.circuit_manager = MagicMock()
     agent.circuit_manager.get_breaker = AsyncMock(return_value=breaker)
-    agent.circuit_manager.get_all_states = MagicMock(return_value={})
+    agent.circuit_manager.get_all_states = AsyncMock(return_value={})
 
     # Plugin manager mock — rings is a real dict so /health's iteration works.
     agent.plugin_manager = MagicMock()
@@ -166,14 +166,14 @@ class TestTelemetryRoutes:
         from proxy.routes.telemetry import create_router
 
         app, agent = _make_app_with_routes(create_router)
-        agent.circuit_manager.get_all_states.return_value = {
+        agent.circuit_manager.get_all_states = AsyncMock(return_value={
             "openai": {"state": "open", "failure_count": 5, "failure_threshold": 5},
             "anthropic": {
                 "state": "closed",
                 "failure_count": 0,
                 "failure_threshold": 5,
             },
-        }
+        })
 
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"

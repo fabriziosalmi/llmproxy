@@ -55,5 +55,5 @@ pytest-asyncio>=0.23.0
 # Optional: Parquet export
 # pyarrow
 
-# Optional: Distributed HA rate limiting
-# redis>=5.0.0
+# Distributed HA rate limiting & circuit breakers
+redis>=5.0.0

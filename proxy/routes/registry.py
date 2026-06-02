@@ -292,7 +292,7 @@ def create_router(agent) -> APIRouter:
     async def get_registry():
         endpoints = await agent.store.get_all()
         circuit_states = (
-            agent.circuit_manager.get_all_states()
+            await agent.circuit_manager.get_all_states()
             if hasattr(agent, "circuit_manager")
             else {}
         )

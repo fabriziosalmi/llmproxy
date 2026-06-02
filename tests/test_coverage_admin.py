@@ -52,7 +52,7 @@ def _make_admin_app():
     agent.security.config = {}
 
     agent.circuit_manager = MagicMock()
-    agent.circuit_manager.get_all_states.return_value = {}
+    agent.circuit_manager.get_all_states = AsyncMock(return_value={})
 
     agent.negative_cache = MagicMock()
     agent.negative_cache.stats.return_value = {"size": 0, "hits": 0}
@@ -735,9 +735,9 @@ class TestForecastMath:
         app, agent = _make_admin_app()
         
         # Mock active circuit breakers
-        agent.circuit_manager.get_all_states.return_value = {
+        agent.circuit_manager.get_all_states = AsyncMock(return_value={
             "openai": {"state": "open", "last_state_change": 1234567}
-        }
+        })
         # Mock pool
         mock_ep = MagicMock()
         mock_ep.id = "openai"
