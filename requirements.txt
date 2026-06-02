@@ -10,7 +10,7 @@ aiohttp==3.13.5
 aiosqlite==0.22.1
 
 # Monitoring
-prometheus-client==0.24.1
+prometheus-client==0.25.0
 
 # Security & Identity
 cryptography==46.0.7
