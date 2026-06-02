@@ -24,6 +24,10 @@ server:
     enabled: true
     model_path: "smollm-360m-instruct-mlx"
     fallback_threshold: 0.1
+  storage:
+    type: "sqlite"            # sqlite (default) or postgres
+    # dsn_env: "DATABASE_URL"
+    # dsn: "postgresql://postgres:postgres@localhost:5432/llmproxy"
 
 # Security shield — read by SecurityShield at root level
 security:
