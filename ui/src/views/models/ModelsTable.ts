@@ -5,6 +5,7 @@
  * existing drilldown service can hook in.
  */
 import { createBadge, createButton, createTable } from '../../ui';
+import { copyText } from '../../../services/file_actions.js';
 import type { TableColumn, TableHandle } from '../../ui';
 import { isEmbeddingModel, providerColor, type Model } from './types';
 
@@ -36,9 +37,22 @@ function renderProviderCell(row: Model): HTMLElement {
     return span;
 }
 
-function renderInspectCell(row: Model): HTMLElement {
+function renderInspectCell(row: Model, deps: ModelsTableDeps): HTMLElement {
     const wrap = document.createElement('div');
-    wrap.className = 'flex justify-end';
+    wrap.className = 'flex justify-end gap-1';
+    const copy = createButton({
+        label: 'Copy ID',
+        size: 'sm',
+        variant: 'ghost',
+        testId: `model-copy-${row.id}`,
+    });
+    copy.addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        const ok = await copyText(row.id);
+        deps.toast?.(ok ? `Copied ${row.id}` : `Copy failed for ${row.id}`, ok ? 'success' : 'error');
+    });
+    wrap.appendChild(copy);
+
     const btn = createButton({
         label: 'Inspect',
         size: 'sm',
@@ -71,7 +85,7 @@ export function createModelsTable(rows: Model[], deps: ModelsTableDeps = {}): Ta
             key: '__inspect',
             label: 'Actions',
             align: 'right',
-            render: renderInspectCell,
+            render: (row) => renderInspectCell(row, deps),
         },
     ];
 

@@ -1,4 +1,6 @@
 import { renderCorpus, renderRetentionInfo, renderSigningStatus, renderTrackedIps } from './SecuritySummary';
+import { getHashParam, setHashParams } from '../../../services/urlstate.js';
+import { downloadText } from '../../../services/file_actions.js';
 import { renderAuditEmpty, renderAuditError, renderAuditLoading, renderAuditTable } from './AuditResultsTable';
 import {
     renderChainStatus,
@@ -14,6 +16,7 @@ import {
 
 type SecurityDeps = {
     fetchGuardsStatus: () => Promise<any>;
+    fetchSecurityCorpus: () => Promise<any>;
     getToken: () => string;
     origin: string;
     toast: (msg: string, type?: 'success' | 'error' | 'warning' | 'info', duration?: number) => void;
@@ -33,7 +36,7 @@ type SecurityTargets = {
 };
 
 export async function renderSecuritySummary(deps: SecurityDeps, targets: SecurityTargets): Promise<void> {
-    await Promise.allSettled([loadGuardsStatus(deps, targets), loadRetention(deps, targets), loadCorpus(targets)]);
+    await Promise.allSettled([loadGuardsStatus(deps, targets), loadRetention(deps, targets), loadCorpus(deps, targets)]);
 }
 
 let initialized = false;
@@ -46,6 +49,7 @@ export function initSecurityView(deps: SecurityDeps): void {
     wireGdprErase(deps);
     wireGdprPurge(deps);
     wireAuditQuery(deps);
+    restoreAuditQueryFromUrl();
 }
 
 export async function renderSecurityView(deps: SecurityDeps, targets: SecurityTargets): Promise<void> {
@@ -78,21 +82,12 @@ async function loadRetention(deps: SecurityDeps, targets: SecurityTargets): Prom
     }
 }
 
-async function loadCorpus(targets: SecurityTargets): Promise<void> {
-    const stats = {
-        total_patterns: 60,
-        categories: {
-            override: 9,
-            extraction: 8,
-            hijack: 8,
-            bypass: 6,
-            multilingual: 7,
-            delimiter: 5,
-            social: 7,
-            exfiltration: 4,
-        },
-    };
-    renderCorpus(targets.corpusPatterns, targets.corpusCategories, stats);
+async function loadCorpus(deps: SecurityDeps, targets: SecurityTargets): Promise<void> {
+    try {
+        renderCorpus(targets.corpusPatterns, targets.corpusCategories, await deps.fetchSecurityCorpus());
+    } catch {
+        renderCorpus(targets.corpusPatterns, targets.corpusCategories, { total_patterns: 0, categories: {} });
+    }
 }
 
 async function authJson(deps: SecurityDeps, path: string): Promise<any> {
@@ -142,13 +137,7 @@ function wireGdprExport(deps: SecurityDeps): void {
         renderGdprPending(resultEl, 'Exporting...');
         try {
             const data = await authJson(deps, `/api/v1/gdpr/export/${encodeURIComponent(subject)}`);
-            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `dsar_${subject}_${new Date().toISOString().slice(0, 10)}.json`;
-            a.click();
-            URL.revokeObjectURL(url);
+            downloadText(`dsar_${subject}_${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(data, null, 2), 'application/json');
             const count = (data.audit?.length || 0) + (data.spend?.length || 0) + (data.roles?.length || 0);
             renderGdprSuccess(resultEl, `Downloaded ${count} records for "${subject}"`);
             deps.toast(`DSAR export downloaded (${count} records)`, 'success');
@@ -239,6 +228,12 @@ function wireAuditQuery(deps: SecurityDeps): void {
         if (key) params.set('key_prefix', key);
         if (blocked && blocked !== '-1') params.set('blocked', blocked);
         params.set('limit', limit);
+        setHashParams({
+            audit_model: model || null,
+            audit_key: key || null,
+            audit_blocked: blocked && blocked !== '-1' ? blocked : null,
+            audit_limit: limit === '25' ? null : limit,
+        });
         try {
             const data = await authJson(deps, `/api/v1/audit?${params.toString()}`);
             const sinceMs = deps.timerange.sinceEpochMs();
@@ -259,4 +254,25 @@ function wireAuditQuery(deps: SecurityDeps): void {
             renderAuditError(resultsEl, e?.message || 'Unknown error');
         }
     });
+}
+
+function restoreAuditQueryFromUrl(): void {
+    const model = document.getElementById('audit-model') as HTMLInputElement | null;
+    const key = document.getElementById('audit-key') as HTMLInputElement | null;
+    const blocked = document.getElementById('audit-blocked') as HTMLSelectElement | null;
+    const limit = document.getElementById('audit-limit') as HTMLInputElement | null;
+
+    const modelValue = getHashParam('audit_model');
+    const keyValue = getHashParam('audit_key');
+    const blockedValue = getHashParam('audit_blocked');
+    const limitValue = getHashParam('audit_limit');
+
+    if (model && modelValue) model.value = modelValue;
+    if (key && keyValue) key.value = keyValue;
+    if (blocked && blockedValue) blocked.value = blockedValue;
+    if (limit && limitValue) limit.value = limitValue;
+
+    if (modelValue || keyValue || blockedValue || limitValue) {
+        setTimeout(() => document.getElementById('sec-audit-query-btn')?.click(), 0);
+    }
 }

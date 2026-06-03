@@ -188,6 +188,19 @@ class TestAdminRoutes:
         assert "budget" in data
 
     @pytest.mark.asyncio
+    async def test_security_corpus_stats(self):
+        app, agent = _make_admin_app()
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            resp = await c.get("/api/v1/security/corpus")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_patterns"] >= 50
+        assert "categories" in data
+        assert data["method"] == "trigram_jaccard_sliding_window"
+
+    @pytest.mark.asyncio
     async def test_export_status_disabled(self):
         app, agent = _make_admin_app()
         async with AsyncClient(
@@ -196,6 +209,25 @@ class TestAdminRoutes:
             resp = await c.get("/api/v1/export/status")
         assert resp.status_code == 200
         assert resp.json()["enabled"] is False
+
+    @pytest.mark.asyncio
+    async def test_download_export_file_confined_to_export_dir(self, tmp_path):
+        app, agent = _make_admin_app()
+        export_dir = tmp_path / "exports"
+        export_dir.mkdir()
+        (export_dir / "audit.jsonl").write_text('{"ok":true}\n')
+        agent.exporter = MagicMock()
+        agent.exporter.output_dir = export_dir
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            ok = await c.get("/api/v1/export/files/audit.jsonl")
+            escape = await c.get("/api/v1/export/files/%2E%2E/secrets.env")
+
+        assert ok.status_code == 200
+        assert ok.text == '{"ok":true}\n'
+        assert escape.status_code == 400
 
     @pytest.mark.asyncio
     async def test_rbac_roles(self):

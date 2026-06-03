@@ -1477,10 +1477,15 @@
                                 <input
                                     id="log-filter"
                                     type="text"
-                                    placeholder="Filter..."
+                                    placeholder="Filter message, req_id..."
                                     aria-label="Log message filter"
                                     class="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-white font-mono w-48 focus:border-rose-500/50"
                                 />
+                                <div id="log-filter-chips" class="hidden lg:flex items-center gap-1">
+                                    <button type="button" data-log-level="ERROR" class="px-2 py-1 rounded border border-white/10 text-[9px] font-bold text-slate-500 hover:text-rose-300 hover:bg-white/5">ERROR</button>
+                                    <button type="button" data-log-level="SECURITY" class="px-2 py-1 rounded border border-white/10 text-[9px] font-bold text-slate-500 hover:text-amber-300 hover:bg-white/5">SECURITY</button>
+                                    <button type="button" data-log-token="blocked" class="px-2 py-1 rounded border border-white/10 text-[9px] font-bold text-slate-500 hover:text-white hover:bg-white/5">blocked</button>
+                                </div>
                                 <button
                                     type="button"
                                     id="clear-logs-btn"

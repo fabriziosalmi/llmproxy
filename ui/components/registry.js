@@ -49,6 +49,7 @@ export function initRegistry() {
                     api: {
                         fetchRegistry: api.fetchRegistry,
                         addEndpoint: api.addEndpoint,
+                        probeEndpoint: api.probeEndpoint,
                         toggleEndpoint: api.toggleEndpoint,
                         deleteEndpoint: api.deleteEndpoint,
                         updatePriority: api.updatePriority,

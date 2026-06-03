@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Request, HTTPException
+from fastapi.responses import FileResponse
 
 logger = logging.getLogger("llmproxy.routes.admin")
 
@@ -334,6 +335,13 @@ def create_router(agent) -> APIRouter:
             },
         }
 
+    @router.get("/api/v1/security/corpus")
+    async def get_security_corpus():
+        """Semantic injection corpus stats used by the Security dashboard."""
+        from core.semantic_analyzer import get_corpus_stats
+
+        return get_corpus_stats()
+
     @router.get("/api/v1/webhooks")
     async def get_webhooks():
         """List configured webhook endpoints."""
@@ -377,6 +385,22 @@ def create_router(agent) -> APIRouter:
             else None,
             "files": files,
         }
+
+    @router.get("/api/v1/export/files/{filename:path}")
+    async def download_export_file(filename: str, request: Request):
+        """Download a recent export file, confined to the configured export dir."""
+        _check_admin_auth(request)
+        if not agent.exporter:
+            raise HTTPException(status_code=404, detail="Export disabled")
+        import os
+
+        export_dir = os.path.abspath(str(agent.exporter.output_dir))
+        requested = os.path.abspath(os.path.join(export_dir, filename))
+        if os.path.commonpath([export_dir, requested]) != export_dir:
+            raise HTTPException(status_code=400, detail="Invalid export filename")
+        if not os.path.isfile(requested):
+            raise HTTPException(status_code=404, detail="Export file not found")
+        return FileResponse(requested, filename=os.path.basename(requested))
 
     @router.get("/api/v1/rbac/roles")
     async def get_rbac_roles():

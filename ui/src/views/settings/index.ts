@@ -69,7 +69,7 @@ export function mountSettingsView(hosts: SettingsHosts, opts: MountSettingsOptio
         const handle = mountWebhooks(hosts.webhooks, opts.api, opts.toast);
         refreshes.push(handle.refresh);
     }
-    if (hosts.export) refreshes.push(mountDataExport(hosts.export, opts.api));
+    if (hosts.export) refreshes.push(mountDataExport(hosts.export, opts.api, { toast: opts.toast }));
     if (hosts.system) refreshes.push(mountSystemInfo(hosts.system, opts.api));
     if (hosts.configYaml) refreshes.push(mountConfigYaml(hosts.configYaml, opts.api));
     if (hosts.rateLimit) {

@@ -99,6 +99,9 @@ export const api = {
     async updatePriority(id, priority) {
         return _post(`${BASE_URL}/api/v1/registry/${id}/priority`, { priority });
     },
+    async probeEndpoint(id) {
+        return _post(`${BASE_URL}/api/v1/registry/${id}/probe`, {});
+    },
 
     async fetchProxyStatus() {
         return _json(`${BASE_URL}/api/v1/proxy/status`);
@@ -142,6 +145,12 @@ export const api = {
     async fetchGuardsStatus() {
         return _json(`${BASE_URL}/api/v1/guards/status`);
     },
+    async fetchSecurityCorpus() {
+        return _json(`${BASE_URL}/api/v1/security/corpus`);
+    },
+    async fetchSlos() {
+        return _json(`${BASE_URL}/api/v1/slos`);
+    },
     async fetchCacheStats() {
         return _json(`${BASE_URL}/api/v1/cache/stats`);
     },
@@ -150,6 +159,9 @@ export const api = {
     },
     async fetchExportStatus() {
         return _json(`${BASE_URL}/api/v1/export/status`);
+    },
+    exportFileUrl(name) {
+        return `${BASE_URL}/api/v1/export/files/${encodeURIComponent(name)}`;
     },
     async fetchRbacRoles() {
         return _json(`${BASE_URL}/api/v1/rbac/roles`);

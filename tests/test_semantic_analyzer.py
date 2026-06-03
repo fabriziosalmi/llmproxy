@@ -13,6 +13,7 @@ Validates that:
 from core.semantic_analyzer import (
     semantic_scan,
     get_corpus_stats,
+    set_corpus,
     _to_trigrams,
     _jaccard,
 )
@@ -215,6 +216,14 @@ class TestCorpusStats:
     def test_method_is_documented(self):
         stats = get_corpus_stats()
         assert stats["method"] == "trigram_jaccard_sliding_window"
+
+    def test_stats_and_match_use_active_corpus(self):
+        set_corpus([("custom sentinel jailbreak phrase", "custom")])
+        stats = get_corpus_stats()
+        assert stats["total_patterns"] == 1
+        assert stats["categories"] == {"custom": 1}
+        result = semantic_scan("custom sentinel jailbreak phrase", threshold=0.9)
+        assert result == (1.0, "custom", "custom sentinel jailbreak phrase")
 
 
 # ══════════════════════════════════════════════════════════

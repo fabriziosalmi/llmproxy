@@ -3,6 +3,7 @@ import { formatAge, formatKind, renderTriageDashboard } from './TriageDashboard'
 import type { DashboardSummary } from './TriageDashboard';
 import { api } from '../../../../services/api.js';
 import { store } from '../../../../services/store.js';
+import { toast } from '../../../../services/toast.js';
 
 // Mock api, store, and toast
 vi.mock('../../../../services/api.js', () => ({
@@ -218,6 +219,36 @@ describe('renderTriageDashboard', () => {
         
         vi.runAllTimers();
         expect(refreshSpy).toHaveBeenCalled();
+    });
+
+    it('ignores corrupted acknowledged issue storage instead of breaking render', () => {
+        storage = makeStorage({ 'llmproxy:acknowledged_issues': '{bad json' });
+        Object.defineProperty(globalThis, 'localStorage', { value: storage, configurable: true });
+
+        expect(() => renderTriageDashboard(mockSummary)).not.toThrow();
+        expect(triageQueue.textContent).toContain('CIRCUIT BREAKER OPEN');
+    });
+
+    it('surfaces a warning when mute cannot be persisted', () => {
+        storage = makeStorage();
+        storage.setItem = vi.fn(() => {
+            throw new Error('quota exceeded');
+        });
+        Object.defineProperty(globalThis, 'localStorage', { value: storage, configurable: true });
+
+        const refreshSpy = vi.fn();
+        renderTriageDashboard(mockSummary, refreshSpy);
+
+        const card = triageQueue.querySelector('[data-issue-id="cb:openai"]') as HTMLElement;
+        const muteBtn = Array.from(card.querySelectorAll('button')).find(
+            (btn) => btn.textContent === 'Mute (15m)'
+        ) as HTMLButtonElement;
+
+        muteBtn.click();
+
+        expect(toast).toHaveBeenCalledWith('Unable to mute this alert category', 'warning');
+        vi.runAllTimers();
+        expect(refreshSpy).not.toHaveBeenCalled();
     });
 
     it('navigates to the relevant tab on Inspect', () => {

@@ -2,6 +2,7 @@
  * Main Content Component - Orchestrates views
  */
 import { store } from '../services/store.js';
+import { hashParts, hashTab } from '../services/urlstate.js';
 
 const VALID_TABS = ['threats', 'guards', 'plugins', 'endpoints', 'models', 'analytics', 'security', 'logs', 'settings'];
 
@@ -9,8 +10,10 @@ export function renderContent() {
     const { currentTab } = store.state;
 
     // Sync hash without triggering hashchange
-    if (window.location.hash !== `#/${currentTab}`) {
-        history.replaceState(null, '', `#/${currentTab}`);
+    const { view, params } = hashParts();
+    if (view !== `#/${currentTab}`) {
+        const qs = params.toString();
+        history.replaceState(null, '', `#/${currentTab}${qs ? `?${qs}` : ''}`);
     }
 
     document.querySelectorAll('.content-view').forEach((view) => view.classList.add('hidden'));
@@ -43,14 +46,14 @@ export function initNavigation() {
     });
 
     // Restore tab from URL hash on load
-    const hashTab = window.location.hash.replace('#/', '');
-    if (hashTab && VALID_TABS.includes(hashTab)) {
-        store.update({ currentTab: hashTab });
+    const initialTab = hashTab();
+    if (initialTab && VALID_TABS.includes(initialTab)) {
+        store.update({ currentTab: initialTab });
     }
 
     // Handle browser back/forward
     window.addEventListener('hashchange', () => {
-        const tab = window.location.hash.replace('#/', '');
+        const tab = hashTab();
         if (tab && VALID_TABS.includes(tab) && tab !== store.state.currentTab) {
             store.update({ currentTab: tab });
         }

@@ -72,11 +72,16 @@ export const store = {
         };
 
         // Pause when page hidden
-        document.addEventListener('visibilitychange', () => {
+        const onVisibilityChange = () => {
             document.hidden ? stop() : start();
-        });
+        };
+
+        document.addEventListener('visibilitychange', onVisibilityChange);
 
         start();
-        return stop;
+        return () => {
+            stop();
+            document.removeEventListener('visibilitychange', onVisibilityChange);
+        };
     },
 };

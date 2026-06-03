@@ -385,6 +385,59 @@ async def test_registry_toggle_endpoint(client, store):
 
 
 @pytest.mark.asyncio
+async def test_registry_probe_endpoint_updates_status_and_metrics(client, store, monkeypatch):
+    from models import LLMEndpoint, EndpointStatus
+    import proxy.routes.registry as registry_mod
+
+    ep = LLMEndpoint(
+        id="probe-me",
+        url="http://example.com/v1",
+        status=EndpointStatus.DISCOVERED,
+        metadata={"models": ["old"]},
+    )
+    await store.add_endpoint(ep)
+
+    class FakeResponse:
+        status = 200
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return False
+
+        async def text(self):
+            return '{"data":[{"id":"gpt-test"}]}'
+
+        async def json(self, content_type=None):
+            return {"data": [{"id": "gpt-test"}]}
+
+    class FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return False
+
+        def get(self, url, headers=None, timeout=None):
+            assert url == "http://example.com/v1/models"
+            return FakeResponse()
+
+    monkeypatch.setattr(registry_mod.aiohttp, "ClientSession", lambda: FakeSession())
+
+    resp = await client.post("/api/v1/registry/probe-me/probe")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["models_count"] == 1
+
+    listed = next(row for row in (await client.get("/api/v1/registry")).json() if row["id"] == "probe-me")
+    assert listed["status"] == "Live"
+    refreshed = next(e for e in await store.get_all() if e.id == "probe-me")
+    assert refreshed.success_rate == 1.0
+
+
+@pytest.mark.asyncio
 async def test_registry_set_priority(client, store):
     from models import LLMEndpoint, EndpointStatus
 

@@ -4,6 +4,7 @@
  */
 import { api } from '../services/api.js';
 import { store } from '../services/store.js';
+import { downloadText, rowsToCsv, stamp } from '../services/file_actions.js';
 
 export function initAnalytics() {
     refreshAnalytics();
@@ -80,6 +81,7 @@ function renderEfficiency(data) {
             <div class="flex items-center gap-4">
                 <span class="text-[9px] font-mono text-emerald-400">Cheapest: ${cheapest}</span>
                 <span class="text-[9px] font-mono text-rose-400">Most expensive: ${mostExpensive}</span>
+                <button type="button" id="analytics-efficiency-export" class="text-[9px] font-bold text-slate-400 hover:text-white px-2 py-1 rounded border border-white/10 hover:bg-white/5 transition-colors">Export CSV</button>
             </div>
         </div>
         <div class="overflow-x-auto rounded-xl">
@@ -111,6 +113,24 @@ function renderEfficiency(data) {
             </table>
         </div>
         <div class="mt-3 text-[9px] text-slate-600 font-mono">Period total: $${(data.period_total_usd?.total_usd || 0).toFixed(4)}</div>`;
+
+    document.getElementById('analytics-efficiency-export')?.addEventListener('click', () => {
+        const exportRows = models.map((m) => ({
+            model: m.model,
+            requests: m.requests || 0,
+            total_cost_usd: m.total_cost_usd || 0,
+            avg_cost_per_request_usd: m.avg_cost_per_request_usd || 0,
+            avg_tokens_per_request: Math.round(m.avg_tokens_per_request || 0),
+        }));
+        downloadText(
+            `llmproxy-cost-efficiency-${stamp()}.csv`,
+            rowsToCsv(
+                ['model', 'requests', 'total_cost_usd', 'avg_cost_per_request_usd', 'avg_tokens_per_request'],
+                exportRows
+            ),
+            'text/csv'
+        );
+    });
 }
 
 function renderBreakdown(containerId, title, rows, groupCol) {
@@ -126,7 +146,10 @@ function renderBreakdown(containerId, title, rows, groupCol) {
     }
 
     container.innerHTML = `
-        <h3 class="text-xs font-bold text-white mb-4">${title}</h3>
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-xs font-bold text-white">${title}</h3>
+            <button type="button" data-analytics-export="${groupCol}" class="text-[9px] font-bold text-slate-400 hover:text-white px-2 py-1 rounded border border-white/10 hover:bg-white/5 transition-colors">Export CSV</button>
+        </div>
         <div class="overflow-x-auto rounded-xl">
             <table class="w-full min-w-[640px]">
                 <thead>
@@ -157,6 +180,20 @@ function renderBreakdown(containerId, title, rows, groupCol) {
             </table>
         </div>
     `;
+
+    container.querySelector(`[data-analytics-export="${groupCol}"]`)?.addEventListener('click', () => {
+        const exportRows = rows.map((r) => ({
+            [groupCol]: r[groupCol] || 'unknown',
+            requests: r.requests || 0,
+            total_cost_usd: r.total_cost_usd || 0,
+            avg_latency_ms: r.avg_latency_ms || 0,
+        }));
+        downloadText(
+            `llmproxy-spend-by-${groupCol}-${stamp()}.csv`,
+            rowsToCsv([groupCol, 'requests', 'total_cost_usd', 'avg_latency_ms'], exportRows),
+            'text/csv'
+        );
+    });
 }
 
 function setText(id, value) {

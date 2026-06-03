@@ -13,6 +13,17 @@ LLMProxy supports 15 LLM providers with automatic request/response translation. 
 
 The four sources coexist — auto-discovery never clobbers an explicitly configured endpoint (collisions get a `-auto` or `-<host>` suffix so both entries remain visible).
 
+## Runtime probe
+
+Use the endpoint probe to validate a provider without sending an inference request:
+
+```bash
+curl -X POST http://localhost:8090/api/v1/registry/openai/probe \
+  -H "Authorization: Bearer your-key"
+```
+
+The probe calls the provider model-listing endpoint, updates live status, latency, and model metadata, and leaves routing configuration unchanged.
+
 ## Env-declared endpoints
 
 Declare an OpenAI-compatible endpoint entirely through environment variables:
