@@ -106,7 +106,8 @@ export function mountDataExport(host: HTMLElement, api: ExportApi, opts: DataExp
                     actions.className = 'flex items-center gap-1';
                     const copyBtn = document.createElement('button');
                     copyBtn.type = 'button';
-                    copyBtn.className = 'text-[9px] font-bold text-slate-500 hover:text-white px-2 py-1 rounded border border-white/10 hover:bg-white/5';
+                    copyBtn.className =
+                        'text-[9px] font-bold text-slate-500 hover:text-white px-2 py-1 rounded border border-white/10 hover:bg-white/5';
                     copyBtn.textContent = 'Copy path';
                     copyBtn.setAttribute('data-testid', `export-copy-${f.name}`);
                     copyBtn.addEventListener('click', async () => {
@@ -119,7 +120,8 @@ export function mountDataExport(host: HTMLElement, api: ExportApi, opts: DataExp
                         const dl = document.createElement('a');
                         dl.href = api.exportFileUrl(f.name);
                         dl.download = f.name;
-                        dl.className = 'text-[9px] font-bold text-slate-500 hover:text-white px-2 py-1 rounded border border-white/10 hover:bg-white/5';
+                        dl.className =
+                            'text-[9px] font-bold text-slate-500 hover:text-white px-2 py-1 rounded border border-white/10 hover:bg-white/5';
                         dl.textContent = 'Download';
                         dl.setAttribute('data-testid', `export-download-${f.name}`);
                         actions.appendChild(dl);

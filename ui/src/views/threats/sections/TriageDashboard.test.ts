@@ -117,7 +117,7 @@ describe('renderTriageDashboard', () => {
     beforeEach(() => {
         vi.useFakeTimers();
         container = document.createElement('div');
-        
+
         triageQueue = document.createElement('div');
         triageQueue.id = 'triage-issues-queue';
         container.appendChild(triageQueue);
@@ -135,10 +135,10 @@ describe('renderTriageDashboard', () => {
         container.appendChild(nowHealthBadge);
 
         document.body.appendChild(container);
-        
+
         storage = makeStorage();
         Object.defineProperty(globalThis, 'localStorage', { value: storage, configurable: true });
-        
+
         vi.clearAllMocks();
     });
 
@@ -210,13 +210,13 @@ describe('renderTriageDashboard', () => {
         const muteBtn = Array.from(card.querySelectorAll('button')).find(
             (btn) => btn.textContent === 'Mute (15m)'
         ) as HTMLButtonElement;
-        
+
         expect(muteBtn).not.toBeUndefined();
         muteBtn.click();
 
         const mutes = JSON.parse(localStorage.getItem('llmproxy:muted_issues') || '{}');
         expect(mutes['circuit_breaker_open']).toBeGreaterThan(Date.now());
-        
+
         vi.runAllTimers();
         expect(refreshSpy).toHaveBeenCalled();
     });
@@ -267,7 +267,7 @@ describe('renderTriageDashboard', () => {
 
     it('resets a circuit breaker when CB Reset clicked', async () => {
         vi.mocked(api.resetCircuitBreaker).mockResolvedValueOnce({ ok: true });
-        
+
         const refreshSpy = vi.fn();
         renderTriageDashboard(mockSummary, refreshSpy);
 
@@ -280,7 +280,7 @@ describe('renderTriageDashboard', () => {
         resetBtn.click();
 
         expect(api.resetCircuitBreaker).toHaveBeenCalledWith('openai');
-        
+
         // Wait for promise resolution
         await vi.runAllTimersAsync();
         expect(refreshSpy).toHaveBeenCalled();
@@ -298,7 +298,7 @@ describe('renderTriageDashboard', () => {
         ctaBtn.click();
 
         expect(api.resetCircuitBreaker).toHaveBeenCalledWith('openai');
-        
+
         // Wait for promise resolution
         await vi.runAllTimersAsync();
         expect(refreshSpy).toHaveBeenCalled();

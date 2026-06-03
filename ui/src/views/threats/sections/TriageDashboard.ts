@@ -62,10 +62,7 @@ export function formatKind(kind: string): string {
 /**
  * Renders the triage dashboard zones: Needs Attention, Do Next, and global context bar.
  */
-export function renderTriageDashboard(
-    summary: DashboardSummary,
-    onRefreshRequest?: () => void
-): void {
+export function renderTriageDashboard(summary: DashboardSummary, onRefreshRequest?: () => void): void {
     // 1. Update Global Context Bar - Incident State
     const incidentStateSpan = document.getElementById('context-incident-state');
     if (incidentStateSpan) {
@@ -83,17 +80,20 @@ export function renderTriageDashboard(
         dot.className = 'w-1 h-1 rounded-full animate-pulse';
 
         if (activeCriticalCount > 0) {
-            incidentStateSpan.className = 'flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-rose-500/10 border border-rose-500/20 text-[10px] text-rose-400 font-mono';
+            incidentStateSpan.className =
+                'flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-rose-500/10 border border-rose-500/20 text-[10px] text-rose-400 font-mono';
             dot.className += ' bg-rose-400';
             incidentStateSpan.appendChild(dot);
             incidentStateSpan.append('ACTIVE ALERTS');
         } else if (activeWarningCount > 0) {
-            incidentStateSpan.className = 'flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-[10px] text-amber-400 font-mono';
+            incidentStateSpan.className =
+                'flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-[10px] text-amber-400 font-mono';
             dot.className += ' bg-amber-400';
             incidentStateSpan.appendChild(dot);
             incidentStateSpan.append('DEGRADED');
         } else {
-            incidentStateSpan.className = 'flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-400 font-mono';
+            incidentStateSpan.className =
+                'flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-400 font-mono';
             dot.className += ' bg-emerald-400';
             incidentStateSpan.appendChild(dot);
             incidentStateSpan.append('NOMINAL');
@@ -106,11 +106,14 @@ export function renderTriageDashboard(
         const state = summary.now.health;
         healthBadge.textContent = state.toUpperCase();
         if (state === 'critical') {
-            healthBadge.className = 'text-[10px] font-mono text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20';
+            healthBadge.className =
+                'text-[10px] font-mono text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20';
         } else if (state === 'degraded') {
-            healthBadge.className = 'text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20';
+            healthBadge.className =
+                'text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20';
         } else {
-            healthBadge.className = 'text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20';
+            healthBadge.className =
+                'text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20';
         }
     }
 
@@ -137,10 +140,7 @@ function getActiveMutes(): Set<string> {
     return active;
 }
 
-function renderNeedsAttention(
-    issues: TriageIssue[],
-    onRefreshRequest?: () => void
-): void {
+function renderNeedsAttention(issues: TriageIssue[], onRefreshRequest?: () => void): void {
     const queue = document.getElementById('triage-issues-queue');
     const badge = document.getElementById('triage-count-badge');
     if (!queue) return;
@@ -203,14 +203,16 @@ function renderNeedsAttention(
 
         // Blast radius
         const blastBadge = document.createElement('span');
-        blastBadge.className = 'text-[9px] font-mono px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20';
+        blastBadge.className =
+            'text-[9px] font-mono px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20';
         blastBadge.textContent = item.blast_radius;
         badgesLeft.appendChild(blastBadge);
 
         // State indicator: 'new' vs 'persistent'
         if (item.state === 'new') {
             const stateDot = document.createElement('span');
-            stateDot.className = 'flex items-center gap-1 text-[9px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded';
+            stateDot.className =
+                'flex items-center gap-1 text-[9px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded';
             const dot = document.createElement('span');
             dot.className = 'w-1 h-1 rounded-full bg-emerald-400 animate-ping';
             stateDot.appendChild(dot);
@@ -223,7 +225,7 @@ function renderNeedsAttention(
         // Info: Age + Confidence
         const infoRight = document.createElement('div');
         infoRight.className = 'text-[9px] font-mono text-slate-500 flex items-center gap-2';
-        
+
         const ageSpan = document.createElement('span');
         ageSpan.textContent = formatAge(item.age_sec);
         infoRight.appendChild(ageSpan);
@@ -258,7 +260,8 @@ function renderNeedsAttention(
         // 1. Acknowledge Action
         const ackBtn = document.createElement('button');
         ackBtn.type = 'button';
-        ackBtn.className = 'px-2 py-1 rounded text-[9px] font-bold transition-all bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10';
+        ackBtn.className =
+            'px-2 py-1 rounded text-[9px] font-bold transition-all bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10';
         ackBtn.textContent = isAck ? 'Acknowledged' : 'Acknowledge';
         ackBtn.disabled = isAck;
         ackBtn.addEventListener('click', (e) => {
@@ -276,7 +279,8 @@ function renderNeedsAttention(
         // 2. Mute Category Action
         const muteBtn = document.createElement('button');
         muteBtn.type = 'button';
-        muteBtn.className = 'px-2 py-1 rounded text-[9px] font-bold transition-all bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10';
+        muteBtn.className =
+            'px-2 py-1 rounded text-[9px] font-bold transition-all bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10';
         muteBtn.textContent = 'Mute (15m)';
         muteBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -300,7 +304,8 @@ function renderNeedsAttention(
         // 3. Inspect Link
         const inspectBtn = document.createElement('button');
         inspectBtn.type = 'button';
-        inspectBtn.className = 'px-2 py-1 rounded text-[9px] font-bold transition-all bg-sky-500/10 border border-sky-500/20 text-sky-400 hover:bg-sky-500/20';
+        inspectBtn.className =
+            'px-2 py-1 rounded text-[9px] font-bold transition-all bg-sky-500/10 border border-sky-500/20 text-sky-400 hover:bg-sky-500/20';
         inspectBtn.textContent = 'Inspect';
         inspectBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -322,7 +327,8 @@ function renderNeedsAttention(
         if (item.kind.startsWith('circuit_breaker') && item.suggested_actions.includes('reset_cb')) {
             const resetBtn = document.createElement('button');
             resetBtn.type = 'button';
-            resetBtn.className = 'px-2 py-1 rounded text-[9px] font-bold transition-all bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20';
+            resetBtn.className =
+                'px-2 py-1 rounded text-[9px] font-bold transition-all bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20';
             resetBtn.textContent = 'Reset CB';
             resetBtn.addEventListener('click', async (e) => {
                 e.stopPropagation();
@@ -347,10 +353,7 @@ function renderNeedsAttention(
     });
 }
 
-function renderDoNext(
-    tasks: DoNextTask[],
-    onRefreshRequest?: () => void
-): void {
+function renderDoNext(tasks: DoNextTask[], onRefreshRequest?: () => void): void {
     const doNextContainer = document.getElementById('do-next-tasks');
     if (!doNextContainer) return;
 
@@ -366,7 +369,8 @@ function renderDoNext(
 
     tasks.forEach((task) => {
         const row = document.createElement('div');
-        row.className = 'flex items-start justify-between bg-white/[0.01] border border-white/[0.03] rounded-xl p-3 gap-3 hover:bg-white/[0.03] transition-colors';
+        row.className =
+            'flex items-start justify-between bg-white/[0.01] border border-white/[0.03] rounded-xl p-3 gap-3 hover:bg-white/[0.03] transition-colors';
 
         const content = document.createElement('div');
         content.className = 'flex-1 min-w-0';

@@ -20,19 +20,23 @@ describe('mountDataExport', () => {
             value: { writeText },
         });
         const toast = vi.fn();
-        const refresh = mountDataExport(host, {
-            fetchExportStatus: vi.fn().mockResolvedValue({
-                enabled: true,
-                output_dir: '/var/exports',
-                scrub_pii: true,
-                compress: false,
-                files: [
-                    { name: 'audit-2026-04-25.jsonl', size_bytes: 51200 },
-                    { name: 'audit-2026-04-24.jsonl', size_bytes: 1024 },
-                ],
-            }),
-            exportFileUrl: (name) => `/api/v1/export/files/${name}`,
-        }, { toast });
+        const refresh = mountDataExport(
+            host,
+            {
+                fetchExportStatus: vi.fn().mockResolvedValue({
+                    enabled: true,
+                    output_dir: '/var/exports',
+                    scrub_pii: true,
+                    compress: false,
+                    files: [
+                        { name: 'audit-2026-04-25.jsonl', size_bytes: 51200 },
+                        { name: 'audit-2026-04-24.jsonl', size_bytes: 1024 },
+                    ],
+                }),
+                exportFileUrl: (name) => `/api/v1/export/files/${name}`,
+            },
+            { toast }
+        );
         await refresh();
         expect(host.textContent).toContain('/var/exports');
         expect(host.querySelector('[data-testid="export-pii-badge"]')?.textContent).toContain('ON');
@@ -41,7 +45,9 @@ describe('mountDataExport', () => {
         expect(files.textContent).toContain('audit-2026-04-25.jsonl');
         expect(files.textContent).toContain('50.0 KB');
         expect(files.textContent).toContain('1.0 KB');
-        expect(host.querySelector<HTMLAnchorElement>('[data-testid="export-download-audit-2026-04-25.jsonl"]')?.href).toContain('/api/v1/export/files/audit-2026-04-25.jsonl');
+        expect(
+            host.querySelector<HTMLAnchorElement>('[data-testid="export-download-audit-2026-04-25.jsonl"]')?.href
+        ).toContain('/api/v1/export/files/audit-2026-04-25.jsonl');
 
         host.querySelector<HTMLButtonElement>('[data-testid="export-copy-audit-2026-04-25.jsonl"]')!.click();
         await new Promise((r) => setTimeout(r, 0));

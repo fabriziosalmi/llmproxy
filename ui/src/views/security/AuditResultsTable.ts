@@ -68,7 +68,11 @@ export function renderAuditTable(container: HTMLElement, items: AuditItem[], ran
     jsonBtn.type = 'button';
     jsonBtn.setAttribute('data-testid', 'audit-export-json');
     jsonBtn.addEventListener('click', () => {
-        downloadText(`llmproxy-audit-${stamp()}.json`, JSON.stringify({ range: rangeLabel, items }, null, 2), 'application/json');
+        downloadText(
+            `llmproxy-audit-${stamp()}.json`,
+            JSON.stringify({ range: rangeLabel, items }, null, 2),
+            'application/json'
+        );
     });
     actions.appendChild(csvBtn);
     actions.appendChild(jsonBtn);
