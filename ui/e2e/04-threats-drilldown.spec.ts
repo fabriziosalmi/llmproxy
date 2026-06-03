@@ -19,6 +19,7 @@ test.describe('threats drilldown', () => {
         await installSseMock(authedPage);
         await authedPage.goto('/ui/#/threats');
         await expect(authedPage.locator('#login-overlay')).not.toBeVisible();
+        await authedPage.getByRole('button', { name: 'Investigate' }).click();
         await authedPage.evaluate(() =>
             (window as unknown as { __sseWaitForClient: (timeoutMs?: number) => Promise<void> }).__sseWaitForClient(
                 8000

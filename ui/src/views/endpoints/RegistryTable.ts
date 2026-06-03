@@ -10,7 +10,9 @@ import { rum } from '../../services/rum';
 import type { CircuitState, Endpoint } from './types';
 
 export interface RegistryTableDeps {
-    onProbeEndpoint: (id: string) => Promise<{ ok?: boolean; status?: number; latency_ms?: number; models_count?: number }>;
+    onProbeEndpoint: (
+        id: string
+    ) => Promise<{ ok?: boolean; status?: number; latency_ms?: number; models_count?: number }>;
     onResetCircuitBreaker: (id: string) => Promise<void>;
     onToggleEndpoint: (id: string) => Promise<void>;
     onDeleteEndpoint: (id: string) => Promise<void>;

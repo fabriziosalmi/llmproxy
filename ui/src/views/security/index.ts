@@ -36,7 +36,11 @@ type SecurityTargets = {
 };
 
 export async function renderSecuritySummary(deps: SecurityDeps, targets: SecurityTargets): Promise<void> {
-    await Promise.allSettled([loadGuardsStatus(deps, targets), loadRetention(deps, targets), loadCorpus(deps, targets)]);
+    await Promise.allSettled([
+        loadGuardsStatus(deps, targets),
+        loadRetention(deps, targets),
+        loadCorpus(deps, targets),
+    ]);
 }
 
 let initialized = false;
@@ -137,7 +141,11 @@ function wireGdprExport(deps: SecurityDeps): void {
         renderGdprPending(resultEl, 'Exporting...');
         try {
             const data = await authJson(deps, `/api/v1/gdpr/export/${encodeURIComponent(subject)}`);
-            downloadText(`dsar_${subject}_${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(data, null, 2), 'application/json');
+            downloadText(
+                `dsar_${subject}_${new Date().toISOString().slice(0, 10)}.json`,
+                JSON.stringify(data, null, 2),
+                'application/json'
+            );
             const count = (data.audit?.length || 0) + (data.spend?.length || 0) + (data.roles?.length || 0);
             renderGdprSuccess(resultEl, `Downloaded ${count} records for "${subject}"`);
             deps.toast(`DSAR export downloaded (${count} records)`, 'success');
