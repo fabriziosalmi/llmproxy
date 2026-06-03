@@ -19,6 +19,7 @@ Each configured endpoint is displayed with:
 
 | Action | Description |
 |--------|-------------|
+| **Test** | Run a model-listing probe and refresh status/latency/model metadata |
 | **Toggle** | Enable or disable an endpoint without removing it |
 | **Delete** | Remove an endpoint from the registry |
 | **Priority** | Set routing priority for endpoint selection |
@@ -42,6 +43,10 @@ curl http://localhost:8090/api/v1/registry \
 
 # Toggle endpoint
 curl -X POST http://localhost:8090/api/v1/registry/openai/toggle \
+  -H "Authorization: Bearer your-key"
+
+# Test endpoint without inference
+curl -X POST http://localhost:8090/api/v1/registry/openai/probe \
   -H "Authorization: Bearer your-key"
 
 # Set priority

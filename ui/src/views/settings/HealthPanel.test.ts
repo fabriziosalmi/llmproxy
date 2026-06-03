@@ -112,4 +112,22 @@ describe('mountHealthPanel', () => {
         expect(host.querySelectorAll('[data-testid^="health-component-"]')).toHaveLength(7);
         expect(host.querySelector('[data-testid="health-component-mystery"]')).not.toBeNull();
     });
+
+    it('renders SLO snapshot when /api/v1/slos is available', async () => {
+        const handle = mountHealthPanel(host, {
+            fetchHealth: vi.fn().mockResolvedValue(_ok),
+            fetchSlos: vi.fn().mockResolvedValue({
+                budget: { limit: 10, spent: 2.5, burn_percentage: 25, saturated: false },
+                upstream_error_rates: {
+                    openai: { success_count: 90, failure_count: 10, error_rate: 0.1, circuit_state: 'closed' },
+                    local: { success_count: 10, failure_count: 5, error_rate: 0.3333, circuit_state: 'open' },
+                },
+            }),
+        });
+        await handle.refresh();
+        expect(host.querySelector('[data-testid="health-slos"]')).not.toBeNull();
+        expect(host.textContent).toContain('25.00%');
+        expect(host.textContent).toContain('local');
+        expect(host.textContent).toContain('33.33% error');
+    });
 });

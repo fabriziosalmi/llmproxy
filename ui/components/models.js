@@ -7,6 +7,7 @@
  */
 import { api } from '../services/api.js';
 import { store } from '../services/store.js';
+import { toast } from '../services/toast.js';
 
 const EMBEDDING_PREFIXES = [
     'text-embedding',
@@ -69,6 +70,7 @@ export function initModels() {
                 },
                 {
                     api: { fetchModels: api.fetchModels },
+                    toast,
                     poll: (fn, intervalMs) => store.poll(fn, intervalMs, 'models'),
                 }
             );

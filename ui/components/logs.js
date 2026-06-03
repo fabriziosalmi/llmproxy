@@ -2,6 +2,7 @@
  * Logs Component (Phase 11: Zenith xterm.js Edition)
  */
 import { store } from '../services/store.js';
+import { getHashParam, setHashParams } from '../services/urlstate.js';
 
 let term;
 let fitAddon;
@@ -142,6 +143,8 @@ export function initLogs() {
 
     connectLogStream();
 
+    initLogFilters();
+
     const clearBtn = document.getElementById('clear-logs-btn');
     if (clearBtn) {
         clearBtn.addEventListener('click', () => {
@@ -165,17 +168,56 @@ export function initLogs() {
     }
 }
 
+function initLogFilters() {
+    const filterInput = document.getElementById('log-filter');
+    const chips = document.getElementById('log-filter-chips');
+    if (filterInput) {
+        const q = getHashParam('log_q');
+        if (q) filterInput.value = q;
+        filterInput.addEventListener('input', () => {
+            setHashParams({ log_q: filterInput.value.trim() || null });
+        });
+    }
+    const activeLevel = getHashParam('log_level') || '';
+    chips?.querySelectorAll('button[data-log-level]').forEach((btn) => {
+        const level = btn.dataset.logLevel || '';
+        btn.classList.toggle('bg-white/10', level === activeLevel);
+        btn.classList.toggle('text-white', level === activeLevel);
+        btn.addEventListener('click', () => {
+            const next = getHashParam('log_level') === level ? null : level;
+            setHashParams({ log_level: next });
+            chips.querySelectorAll('button[data-log-level]').forEach((b) => {
+                const on = next === b.dataset.logLevel;
+                b.classList.toggle('bg-white/10', on);
+                b.classList.toggle('text-white', on);
+            });
+        });
+    });
+    chips?.querySelectorAll('button[data-log-token]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            if (!filterInput) return;
+            const token = btn.dataset.logToken || '';
+            filterInput.value = filterInput.value.trim() ? `${filterInput.value.trim()} | ${token}` : token;
+            setHashParams({ log_q: filterInput.value });
+        });
+    });
+}
+
 function appendLogToTerm(log) {
     if (!term) return;
 
     // Check filters
+    const levelFilter = getHashParam('log_level');
+    if (levelFilter && String(log.level || '').toUpperCase() !== levelFilter.toUpperCase()) {
+        return;
+    }
     const filterInput = document.getElementById('log-filter');
     if (filterInput && filterInput.value.trim() !== '') {
         const pipes = filterInput.value
             .split('|')
             .map((s) => s.trim().toLowerCase())
             .filter((s) => s);
-        const text = (log.message || '').toLowerCase();
+        const text = `${log.level || ''} ${log.message || ''} ${JSON.stringify(log)}`.toLowerCase();
         const matches = pipes.every((p) => text.includes(p.replace(/grep['" ]+/g, '').replace(/['"]/g, '')));
         if (!matches) return;
     }

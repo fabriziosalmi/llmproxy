@@ -9,6 +9,7 @@
  * filters everything out.
  */
 import { createEmptyState, createErrorState } from '../../ui';
+import { getHashParam, setHashParams } from '../../../services/urlstate.js';
 import { renderModelsKpis, type ModelsKpiData } from './Kpi';
 import { createModelsTable } from './ModelsTable';
 import { isEmbeddingModel, type Model } from './types';
@@ -19,6 +20,7 @@ export interface ModelsApi {
 
 export interface MountModelsOptions {
     api: ModelsApi;
+    toast?: (message: string, kind?: 'success' | 'error' | 'warning' | 'info') => void;
     pollIntervalMs?: number;
     poll?: (fn: () => void, intervalMs: number) => () => void;
     initial?: Model[];
@@ -52,7 +54,7 @@ export function mountModelsView(hosts: ModelsHosts, opts: MountModelsOptions): (
     if (!hosts.kpis || !hosts.table) return () => {};
 
     let allModels: Model[] = opts.initial ?? [];
-    let query = '';
+    let query = getHashParam('q')?.trim() ?? '';
 
     function paint(): void {
         const kpis = deriveKpis(allModels);
@@ -88,14 +90,14 @@ export function mountModelsView(hosts: ModelsHosts, opts: MountModelsOptions): (
             return;
         }
 
-        target.appendChild(createModelsTable(chat).root);
+        target.appendChild(createModelsTable(chat, { toast: opts.toast }).root);
 
         if (embedding.length > 0) {
             const heading = document.createElement('p');
             heading.className = 'text-[9px] font-bold text-rose-400 uppercase tracking-widest mt-6 mb-2';
             heading.textContent = 'Embedding Models';
             target.appendChild(heading);
-            target.appendChild(createModelsTable(embedding).root);
+            target.appendChild(createModelsTable(embedding, { toast: opts.toast }).root);
         }
 
         const footer = document.createElement('p');
@@ -132,11 +134,13 @@ export function mountModelsView(hosts: ModelsHosts, opts: MountModelsOptions): (
     if (hosts.search) {
         const fresh = hosts.search.cloneNode(true) as HTMLInputElement;
         hosts.search.parentNode?.replaceChild(fresh, hosts.search);
+        fresh.value = query;
         let timer: ReturnType<typeof setTimeout> | null = null;
         fresh.addEventListener('input', () => {
             if (timer) clearTimeout(timer);
             timer = setTimeout(() => {
                 query = fresh.value.trim();
+                setHashParams({ q: query || null });
                 paint();
             }, SEARCH_DEBOUNCE_MS);
         });

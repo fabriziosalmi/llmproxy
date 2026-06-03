@@ -4,11 +4,13 @@
  * priority controls, row actions).
  */
 import { createBadge, createButton, createTable, cx } from '../../ui';
+import { copyText } from '../../../services/file_actions.js';
 import type { TableColumn, TableHandle } from '../../ui';
 import { rum } from '../../services/rum';
 import type { CircuitState, Endpoint } from './types';
 
 export interface RegistryTableDeps {
+    onProbeEndpoint: (id: string) => Promise<{ ok?: boolean; status?: number; latency_ms?: number; models_count?: number }>;
     onResetCircuitBreaker: (id: string) => Promise<void>;
     onToggleEndpoint: (id: string) => Promise<void>;
     onDeleteEndpoint: (id: string) => Promise<void>;
@@ -36,6 +38,24 @@ const ICON_DOWN =
     '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>';
 const ICON_UP =
     '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>';
+
+function shellQuote(value: string): string {
+    return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function endpointCurlSnippet(row: Endpoint): string {
+    const model = row.models?.[0] || 'auto';
+    const body = JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: `Ping ${row.id}` }],
+    });
+    return [
+        `curl ${shellQuote(window.location.origin + '/v1/chat/completions')} \\`,
+        `  -H ${shellQuote('Authorization: Bearer $LLM_PROXY_API_KEY')} \\`,
+        `  -H ${shellQuote('Content-Type: application/json')} \\`,
+        `  -d ${shellQuote(body)}`,
+    ].join('\n');
+}
 
 function renderStatusCell(row: Endpoint): HTMLElement {
     const intent = STATUS_INTENT[row.status ?? ''] ?? 'warning';
@@ -132,6 +152,51 @@ function renderPriorityCell(row: Endpoint, deps: RegistryTableDeps): DocumentFra
 function renderActionsCell(row: Endpoint, deps: RegistryTableDeps): DocumentFragment {
     // N.5: cellClassName provides the flex/justify-end/gap layout on <td>.
     const wrap = document.createDocumentFragment();
+
+    const copyCurl = createButton({
+        label: 'Copy cURL',
+        size: 'sm',
+        variant: 'ghost',
+        testId: `ep-copy-curl-${row.id}`,
+    });
+    copyCurl.addEventListener('click', async () => {
+        const ok = await copyText(endpointCurlSnippet(row));
+        deps.toast?.(ok ? `Copied cURL for ${row.id}` : `Copy failed for ${row.id}`, ok ? 'success' : 'error');
+    });
+    wrap.appendChild(copyCurl);
+
+    const probe = createButton({
+        label: 'Test',
+        size: 'sm',
+        variant: 'ghost',
+        testId: `ep-probe-${row.id}`,
+    });
+    probe.addEventListener('click', async () => {
+        const btn = probe as HTMLButtonElement;
+        btn.disabled = true;
+        const label = btn.querySelector('span:last-child');
+        const original = label?.textContent ?? 'Test';
+        if (label) label.textContent = 'Testing...';
+        rum.action('endpoint_probe', { id: row.id });
+        try {
+            const res = await deps.onProbeEndpoint(row.id);
+            if (res.ok) {
+                deps.toast?.(
+                    `Endpoint ${row.id} reachable (${Math.round(res.latency_ms ?? 0)}ms, ${res.models_count ?? 0} models)`,
+                    'success'
+                );
+            } else {
+                deps.toast?.(`Endpoint ${row.id} probe failed${res.status ? `: HTTP ${res.status}` : ''}`, 'warning');
+            }
+            await deps.refresh();
+        } catch (err) {
+            deps.toast?.(`Probe failed: ${(err as Error)?.message ?? err}`, 'error');
+        } finally {
+            btn.disabled = false;
+            if (label) label.textContent = original;
+        }
+    });
+    wrap.appendChild(probe);
 
     const inspect = createButton({
         label: 'Inspect',

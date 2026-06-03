@@ -48,7 +48,7 @@ docker run -d --name llmproxy -p 8090:8090 \
   -e LLM_PROXY_API_KEYS=sk-proxy-test \
   -e OPENAI_API_KEY=$OPENAI_API_KEY \
   -v llmproxy-data:/app/data \
-  ghcr.io/fabriziosalmi/llmproxy:1.21.74
+  ghcr.io/fabriziosalmi/llmproxy:1.21.75
 ```
 
 Each release publishes `:latest`, the full semver (`:X.Y.Z`), the minor (`:X.Y`), plus a per-commit short SHA tag for reproducible deploys.
@@ -199,21 +199,24 @@ LLMProxy exposes an OpenAI-compatible API on port 8090.
 
 ### Administration
 
-| Endpoint                        | Method | Description                                  |
-| ------------------------------- | ------ | -------------------------------------------- |
-| `/api/v1/registry`              | `GET`  | Endpoint pool state.                         |
-| `/api/v1/registry/{id}/toggle`  | `POST` | Enable/disable an endpoint.                  |
-| `/api/v1/proxy/toggle`          | `POST` | Enable/disable the proxy.                    |
-| `/api/v1/panic`                 | `POST` | Emergency kill switch.                       |
-| `/api/v1/features`              | `GET`  | Security guard feature flags.                |
-| `/api/v1/features/toggle`       | `POST` | Toggle a guard.                              |
-| `/api/v1/analytics/spend`       | `GET`  | Spend breakdown by model/provider/key/date.  |
-| `/api/v1/audit`                 | `GET`  | Audit log query with filters.                |
-| `/api/v1/audit/verify`          | `GET`  | Verify audit chain integrity.                |
-| `/api/v1/plugins`               | `GET`  | List installed plugins.                      |
-| `/api/v1/plugins/install`       | `POST` | Install a plugin (AST-scanned, hot-swapped). |
-| `/api/v1/gdpr/erase/{subject}`  | `POST` | Right to erasure (Article 17).               |
-| `/api/v1/gdpr/export/{subject}` | `GET`  | Data subject access request (Article 15).    |
+| Endpoint                                | Method | Description                                  |
+| --------------------------------------- | ------ | -------------------------------------------- |
+| `/api/v1/registry`                      | `GET`  | Endpoint pool state and model lists.         |
+| `/api/v1/registry/{id}/probe`           | `POST` | Probe an endpoint with `GET /v1/models`.     |
+| `/api/v1/registry/{id}/toggle`          | `POST` | Enable/disable an endpoint.                  |
+| `/api/v1/proxy/toggle`                  | `POST` | Enable/disable the proxy.                    |
+| `/api/v1/panic`                         | `POST` | Emergency kill switch.                       |
+| `/api/v1/features`                      | `GET`  | Security guard feature flags.                |
+| `/api/v1/features/toggle`               | `POST` | Toggle a guard.                              |
+| `/api/v1/analytics/spend`               | `GET`  | Spend breakdown by model/provider/key/date.  |
+| `/api/v1/audit`                         | `GET`  | Audit log query with filters.                |
+| `/api/v1/audit/verify`                  | `GET`  | Verify audit chain integrity.                |
+| `/api/v1/security/corpus`               | `GET`  | Active semantic injection corpus statistics. |
+| `/api/v1/export/files/{filename}`       | `GET`  | Download a generated export file.            |
+| `/api/v1/plugins`                       | `GET`  | List installed plugins.                      |
+| `/api/v1/plugins/install`               | `POST` | Install a plugin (AST-scanned, hot-swapped). |
+| `/api/v1/gdpr/erase/{subject}`          | `POST` | Right to erasure (Article 17).               |
+| `/api/v1/gdpr/export/{subject}`         | `GET`  | Data subject access request (Article 15).    |
 
 Full API reference in the [docs](docs/).
 
@@ -305,10 +308,10 @@ Real-time Security Operations Center UI at `/ui`.
 | Plugins   | Pipeline grid with per-plugin stats, install/uninstall/hot-swap                   |
 | Models    | Aggregated model registry with search/filter                                      |
 | Analytics | Spend breakdown by model and provider                                             |
-| Security  | Audit chain verification, GDPR controls, semantic corpus stats                    |
-| Endpoints | Registry table with circuit breaker state, priority, toggle/delete                |
-| Live Logs | xterm.js terminal with WebGL rendering and JSON syntax highlighting               |
-| Settings  | Identity, RBAC matrix, webhooks, data export                                      |
+| Security  | Audit chain verification, GDPR controls, semantic corpus stats and deep-link filters |
+| Endpoints | Registry table with circuit breaker state, model probe, priority, toggle/delete   |
+| Live Logs | xterm.js terminal with WebGL rendering, quick filters, and JSON search            |
+| Settings  | Identity, RBAC matrix, webhooks, SLO health, data export download/copy            |
 
 Keyboard shortcuts: `Cmd+K` (command palette), `F` (cinema mode). URL hash routing (`#/guards`, `#/logs`, ...).
 

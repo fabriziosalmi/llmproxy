@@ -23,8 +23,27 @@ export interface HealthResponse {
     components?: Record<string, Record<string, unknown> & { status?: ComponentStatus; detail?: string }>;
 }
 
+export interface SlosResponse {
+    budget?: {
+        limit?: number;
+        spent?: number;
+        burn_percentage?: number;
+        saturated?: boolean;
+    };
+    upstream_error_rates?: Record<
+        string,
+        {
+            success_count?: number;
+            failure_count?: number;
+            error_rate?: number;
+            circuit_state?: string;
+        }
+    >;
+}
+
 export interface HealthApi {
     fetchHealth: () => Promise<HealthResponse | null>;
+    fetchSlos?: () => Promise<SlosResponse | null>;
 }
 
 const STATUS_INTENT: Record<ComponentStatus, BadgeIntent> = {
@@ -134,6 +153,78 @@ function _renderComponentTile(name: string, comp: Record<string, unknown>): HTML
     return tile;
 }
 
+function _formatUsd(value: number | undefined): string {
+    return typeof value === 'number' ? `$${value.toFixed(value < 1 ? 4 : 2)}` : '—';
+}
+
+function _renderSlos(slot: HTMLElement, data: SlosResponse | null | undefined): void {
+    if (!data) {
+        slot.replaceChildren();
+        return;
+    }
+
+    const budget = data.budget ?? {};
+    const endpoints = Object.entries(data.upstream_error_rates ?? {});
+    const worst = endpoints
+        .map(([id, row]) => ({ id, ...row, error_rate: row.error_rate ?? 0 }))
+        .sort((a, b) => b.error_rate - a.error_rate)[0];
+
+    const wrap = document.createElement('section');
+    wrap.className = 'mt-4 border-t border-white/[0.06] pt-4';
+    wrap.setAttribute('data-testid', 'health-slos');
+
+    const head = document.createElement('div');
+    head.className = 'flex items-center justify-between mb-3';
+    const title = document.createElement('h3');
+    title.className = 'text-[10px] font-bold text-slate-300 uppercase tracking-widest';
+    title.textContent = 'SLO Snapshot';
+    head.appendChild(title);
+    head.appendChild(
+        createBadge({
+            label: budget.saturated ? 'budget saturated' : 'tracking',
+            intent: budget.saturated ? 'danger' : 'success',
+            size: 'sm',
+            dot: !budget.saturated,
+            testId: 'health-slos-badge',
+        })
+    );
+    wrap.appendChild(head);
+
+    const grid = document.createElement('div');
+    grid.className = 'grid grid-cols-1 sm:grid-cols-2 gap-3';
+
+    const budgetTile = document.createElement('article');
+    budgetTile.className = cx(
+        'bg-white/[0.03] rounded-xl border p-3',
+        budget.saturated ? 'border-rose-500/25' : 'border-emerald-500/20'
+    );
+    budgetTile.innerHTML = `
+        <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Budget Burn</p>
+        <p class="text-lg font-black font-mono text-white">${(budget.burn_percentage ?? 0).toFixed(2)}%</p>
+        <p class="text-[10px] font-mono text-slate-500">${_formatUsd(budget.spent)} spent / ${_formatUsd(budget.limit)} limit</p>
+    `;
+    grid.appendChild(budgetTile);
+
+    const upstreamTile = document.createElement('article');
+    upstreamTile.className = 'bg-white/[0.03] rounded-xl border border-white/[0.06] p-3';
+    if (worst) {
+        upstreamTile.innerHTML = `
+            <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Worst Upstream</p>
+            <p class="text-sm font-black font-mono text-white truncate">${worst.id}</p>
+            <p class="text-[10px] font-mono text-slate-500">${(worst.error_rate * 100).toFixed(2)}% error · ${worst.failure_count ?? 0} fail / ${worst.success_count ?? 0} ok · ${worst.circuit_state ?? 'closed'}</p>
+        `;
+    } else {
+        upstreamTile.innerHTML = `
+            <p class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Worst Upstream</p>
+            <p class="text-[10px] font-mono text-slate-600 italic">No upstream samples yet</p>
+        `;
+    }
+    grid.appendChild(upstreamTile);
+
+    wrap.appendChild(grid);
+    slot.replaceChildren(wrap);
+}
+
 export interface HealthPanelHandle {
     refresh: () => Promise<void>;
 }
@@ -160,6 +251,10 @@ export function mountHealthPanel(host: HTMLElement, api: HealthApi): HealthPanel
     grid.setAttribute('data-testid', 'health-grid');
     card.appendChild(grid);
 
+    const slosSlot = document.createElement('div');
+    slosSlot.setAttribute('data-testid', 'health-slos-slot');
+    card.appendChild(slosSlot);
+
     // Loading state — N skeleton tiles (one per known component).
     for (const _name of COMPONENT_ORDER) {
         grid.appendChild(createSkeleton({ shape: 'block', height: '4rem', ariaLabel: '' }));
@@ -170,7 +265,10 @@ export function mountHealthPanel(host: HTMLElement, api: HealthApi): HealthPanel
 
     async function refresh(): Promise<void> {
         try {
-            const data = await api.fetchHealth();
+            const [data, slos] = await Promise.all([
+                api.fetchHealth(),
+                api.fetchSlos ? api.fetchSlos().catch(() => null) : Promise.resolve(null),
+            ]);
             if (!data) {
                 grid.replaceChildren(
                     createErrorState({
@@ -180,6 +278,7 @@ export function mountHealthPanel(host: HTMLElement, api: HealthApi): HealthPanel
                     })
                 );
                 overallSlot.replaceChildren();
+                slosSlot.replaceChildren();
                 return;
             }
 
@@ -221,6 +320,7 @@ export function mountHealthPanel(host: HTMLElement, api: HealthApi): HealthPanel
             } else {
                 grid.replaceChildren(...tiles);
             }
+            _renderSlos(slosSlot, slos);
         } catch (err) {
             grid.replaceChildren(
                 createErrorState({
@@ -232,6 +332,7 @@ export function mountHealthPanel(host: HTMLElement, api: HealthApi): HealthPanel
                 })
             );
             overallSlot.replaceChildren();
+            slosSlot.replaceChildren();
         }
     }
 

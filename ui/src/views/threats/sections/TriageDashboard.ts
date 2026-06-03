@@ -152,7 +152,9 @@ function renderNeedsAttention(
     let acknowledged: string[] = [];
     try {
         acknowledged = JSON.parse(localStorage.getItem('llmproxy:acknowledged_issues') || '[]');
-    } catch {}
+    } catch {
+        acknowledged = [];
+    }
     const ackSet = new Set(acknowledged);
 
     // Filter out muted categories
@@ -289,7 +291,9 @@ function renderNeedsAttention(
                 setTimeout(() => {
                     if (onRefreshRequest) onRefreshRequest();
                 }, 300);
-            } catch {}
+            } catch {
+                toast('Unable to mute this alert category', 'warning');
+            }
         });
         actionsRow.appendChild(muteBtn);
 

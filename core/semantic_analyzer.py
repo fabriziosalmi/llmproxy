@@ -401,7 +401,8 @@ def semantic_scan(
                 break
 
     if best_score >= threshold and best_idx >= 0:
-        best_pattern = INJECTION_CORPUS[best_idx][0]
+        source = _active_corpus if _active_corpus is not None else INJECTION_CORPUS
+        best_pattern = source[best_idx][0]
         return (round(best_score, 4), best_category, best_pattern)
 
     return None
@@ -410,10 +411,11 @@ def semantic_scan(
 def get_corpus_stats() -> dict:
     """Return corpus statistics for monitoring/dashboard."""
     categories: dict[str, int] = {}
-    for _, category in INJECTION_CORPUS:
+    source = _active_corpus if _active_corpus is not None else INJECTION_CORPUS
+    for _, category in source:
         categories[category] = categories.get(category, 0) + 1
     return {
-        "total_patterns": len(INJECTION_CORPUS),
+        "total_patterns": len(source),
         "categories": categories,
         "ngram_size": _NGRAM_SIZE,
         "method": "trigram_jaccard_sliding_window",

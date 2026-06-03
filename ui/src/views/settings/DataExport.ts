@@ -1,11 +1,17 @@
 import { createBadge, createCard, createEmptyState, createErrorState, createSkeleton } from '../../ui';
+import { copyText } from '../../../services/file_actions.js';
 import type { ExportStatus } from './types';
 
 export interface ExportApi {
     fetchExportStatus: () => Promise<ExportStatus>;
+    exportFileUrl?: (name: string) => string;
 }
 
-function field(label: string, value: string): HTMLElement {
+export interface DataExportOptions {
+    toast?: (message: string, kind?: 'success' | 'error' | 'warning' | 'info') => void;
+}
+
+function field(label: string, value: string, testId?: string): HTMLElement {
     const wrap = document.createElement('div');
     const lab = document.createElement('label');
     lab.className = 'text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block';
@@ -13,12 +19,13 @@ function field(label: string, value: string): HTMLElement {
     const val = document.createElement('p');
     val.className = 'text-[10px] text-white font-mono';
     val.textContent = value;
+    if (testId) val.setAttribute('data-testid', testId);
     wrap.appendChild(lab);
     wrap.appendChild(val);
     return wrap;
 }
 
-export function mountDataExport(host: HTMLElement, api: ExportApi): () => Promise<void> {
+export function mountDataExport(host: HTMLElement, api: ExportApi, opts: DataExportOptions = {}): () => Promise<void> {
     const heading = document.createElement('h2');
     heading.className = 'text-xs font-bold text-white mb-4';
     heading.textContent = 'Data Export';
@@ -49,12 +56,12 @@ export function mountDataExport(host: HTMLElement, api: ExportApi): () => Promis
             const wrap = document.createElement('div');
             const grid = document.createElement('div');
             grid.className = 'grid grid-cols-2 gap-4 mb-3';
-            grid.appendChild(field('Output Dir', data.output_dir ?? '--'));
-            const opts = document.createElement('div');
+            grid.appendChild(field('Output Dir', data.output_dir ?? '--', 'export-output-dir'));
+            const optionsBlock = document.createElement('div');
             const lab = document.createElement('label');
             lab.className = 'text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 block';
             lab.textContent = 'Options';
-            opts.appendChild(lab);
+            optionsBlock.appendChild(lab);
             const optsRow = document.createElement('div');
             optsRow.className = 'flex items-center gap-2';
             optsRow.appendChild(
@@ -73,8 +80,8 @@ export function mountDataExport(host: HTMLElement, api: ExportApi): () => Promis
                     testId: 'export-compress-badge',
                 })
             );
-            opts.appendChild(optsRow);
-            grid.appendChild(opts);
+            optionsBlock.appendChild(optsRow);
+            grid.appendChild(optionsBlock);
             wrap.appendChild(grid);
 
             const files = data.files ?? [];
@@ -95,8 +102,34 @@ export function mountDataExport(host: HTMLElement, api: ExportApi): () => Promis
                     const size = document.createElement('span');
                     size.className = 'text-[10px] font-mono text-slate-600';
                     size.textContent = `${(f.size_bytes / 1024).toFixed(1)} KB`;
+                    const actions = document.createElement('div');
+                    actions.className = 'flex items-center gap-1';
+                    const copyBtn = document.createElement('button');
+                    copyBtn.type = 'button';
+                    copyBtn.className = 'text-[9px] font-bold text-slate-500 hover:text-white px-2 py-1 rounded border border-white/10 hover:bg-white/5';
+                    copyBtn.textContent = 'Copy path';
+                    copyBtn.setAttribute('data-testid', `export-copy-${f.name}`);
+                    copyBtn.addEventListener('click', async () => {
+                        const fullPath = data.output_dir ? `${data.output_dir.replace(/\/$/, '')}/${f.name}` : f.name;
+                        const ok = await copyText(fullPath);
+                        opts.toast?.(ok ? `Copied ${f.name}` : `Copy failed for ${f.name}`, ok ? 'success' : 'error');
+                    });
+                    actions.appendChild(copyBtn);
+                    if (api.exportFileUrl) {
+                        const dl = document.createElement('a');
+                        dl.href = api.exportFileUrl(f.name);
+                        dl.download = f.name;
+                        dl.className = 'text-[9px] font-bold text-slate-500 hover:text-white px-2 py-1 rounded border border-white/10 hover:bg-white/5';
+                        dl.textContent = 'Download';
+                        dl.setAttribute('data-testid', `export-download-${f.name}`);
+                        actions.appendChild(dl);
+                    }
                     row.appendChild(name);
-                    row.appendChild(size);
+                    const right = document.createElement('div');
+                    right.className = 'flex items-center gap-2';
+                    right.appendChild(size);
+                    right.appendChild(actions);
+                    row.appendChild(right);
                     tail.appendChild(row);
                 }
                 wrap.appendChild(tail);

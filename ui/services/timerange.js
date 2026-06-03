@@ -59,11 +59,14 @@ const _listeners = new Set();
 function _persistHash() {
     // Keep the tr=… param in the hash without clobbering the view hash (#/audit).
     const hash = window.location.hash || '';
-    const view = hash.split('?')[0] || '#/threats';
+    const [viewPart, query = ''] = hash.split('?');
+    const view = viewPart || '#/threats';
+    const params = new URLSearchParams(query);
     let tag;
     if (_state.preset === 'custom') tag = `custom:${_state.from}:${_state.to}`;
     else tag = _state.preset;
-    const next = `${view}?tr=${encodeURIComponent(tag)}`;
+    params.set('tr', tag);
+    const next = `${view}?${params.toString()}`;
     try {
         history.replaceState(null, '', next);
     } catch {

@@ -12,6 +12,7 @@ const ROWS: Endpoint[] = [
         circuit_state: 'closed',
         latency: '120ms',
         priority: 10,
+        models: ['gpt-4o-mini'],
     },
     {
         id: 'flaky',
@@ -38,6 +39,7 @@ const ROWS: Endpoint[] = [
 
 let host: HTMLElement;
 let deps: {
+    onProbeEndpoint: any;
     onResetCircuitBreaker: any;
     onToggleEndpoint: any;
     onDeleteEndpoint: any;
@@ -50,6 +52,7 @@ beforeEach(() => {
     host = document.createElement('div');
     document.body.appendChild(host);
     deps = {
+        onProbeEndpoint: vi.fn().mockResolvedValue({ ok: true, status: 200, latency_ms: 42, models_count: 3 }),
         onResetCircuitBreaker: vi.fn().mockResolvedValue(undefined),
         onToggleEndpoint: vi.fn().mockResolvedValue(undefined),
         onDeleteEndpoint: vi.fn().mockResolvedValue(undefined),
@@ -91,6 +94,21 @@ describe('createRegistryTable', () => {
         expect(inspect?.dataset.drilldown).toBe('endpoint:openai');
     });
 
+    it('Copy cURL writes a runnable proxy request snippet', async () => {
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText },
+        });
+        const t = createRegistryTable(ROWS, deps);
+        host.appendChild(t.root);
+        host.querySelector<HTMLButtonElement>('[data-testid="ep-copy-curl-openai"]')!.click();
+        await new Promise((r) => setTimeout(r, 0));
+        expect(writeText).toHaveBeenCalledWith(expect.stringContaining('/v1/chat/completions'));
+        expect(writeText).toHaveBeenCalledWith(expect.stringContaining('gpt-4o-mini'));
+        expect(deps.toast).toHaveBeenCalledWith(expect.stringContaining('openai'), 'success');
+    });
+
     it('priority up/down call onUpdatePriority with the new value and trigger a refresh', async () => {
         const t = createRegistryTable(ROWS, deps);
         host.appendChild(t.root);
@@ -122,6 +140,16 @@ describe('createRegistryTable', () => {
         await new Promise((r) => setTimeout(r, 0));
         expect(deps.onResetCircuitBreaker).toHaveBeenCalledWith('flaky');
         expect(deps.toast).toHaveBeenCalledWith(expect.stringContaining('flaky'), 'success');
+        expect(deps.refresh).toHaveBeenCalled();
+    });
+
+    it('Test endpoint probes connectivity, reports the result, and refreshes', async () => {
+        const t = createRegistryTable(ROWS, deps);
+        host.appendChild(t.root);
+        host.querySelector<HTMLButtonElement>('[data-testid="ep-probe-openai"]')!.click();
+        await new Promise((r) => setTimeout(r, 0));
+        expect(deps.onProbeEndpoint).toHaveBeenCalledWith('openai');
+        expect(deps.toast).toHaveBeenCalledWith(expect.stringContaining('reachable'), 'success');
         expect(deps.refresh).toHaveBeenCalled();
     });
 

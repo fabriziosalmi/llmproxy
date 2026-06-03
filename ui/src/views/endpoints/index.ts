@@ -16,6 +16,7 @@ import type { AddEndpointInput, Endpoint } from './types';
 export interface EndpointsApi {
     fetchRegistry: () => Promise<Endpoint[]>;
     addEndpoint: (input: AddEndpointInput) => Promise<unknown>;
+    probeEndpoint: (id: string) => Promise<{ ok?: boolean; status?: number; latency_ms?: number; models_count?: number }>;
     toggleEndpoint: (id: string) => Promise<unknown>;
     deleteEndpoint: (id: string) => Promise<unknown>;
     updatePriority: (id: string, priority: number) => Promise<unknown>;
@@ -105,6 +106,7 @@ export function mountEndpointsView(hosts: EndpointsHosts, opts: MountEndpointsOp
             onResetCircuitBreaker: async (id) => {
                 await opts.api.resetCircuitBreaker(id);
             },
+            onProbeEndpoint: async (id) => opts.api.probeEndpoint(id),
             onToggleEndpoint: async (id) => {
                 await opts.api.toggleEndpoint(id);
             },

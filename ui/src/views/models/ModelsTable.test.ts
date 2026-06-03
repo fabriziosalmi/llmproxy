@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createModelsTable } from './ModelsTable';
 import type { Model } from './types';
 
@@ -46,6 +46,21 @@ describe('createModelsTable', () => {
         const inspect = host.querySelector<HTMLElement>('[data-testid="model-inspect-gpt-4o-mini"]');
         expect(inspect).not.toBeNull();
         expect(inspect?.dataset.drilldown).toBe('model:gpt-4o-mini');
+    });
+
+    it('Copy ID writes the exact model id to the clipboard', async () => {
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText },
+        });
+        const toast = vi.fn();
+        const t = createModelsTable(ROWS, { toast });
+        host.appendChild(t.root);
+        host.querySelector<HTMLButtonElement>('[data-testid="model-copy-gpt-4o-mini"]')!.click();
+        await new Promise((r) => setTimeout(r, 0));
+        expect(writeText).toHaveBeenCalledWith('gpt-4o-mini');
+        expect(toast).toHaveBeenCalledWith(expect.stringContaining('gpt-4o-mini'), 'success');
     });
 
     it('provider cell carries the bespoke color class for known providers', () => {

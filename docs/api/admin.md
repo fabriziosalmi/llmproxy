@@ -54,6 +54,14 @@ GET /api/v1/registry
 
 Returns full model pool state (Live / Discovered / Offline) for all configured endpoints.
 
+### Probe Endpoint
+
+```
+POST /api/v1/registry/{id}/probe
+```
+
+Runs a low-cost `GET /v1/models` health probe against the endpoint, refreshes status/latency/model metadata, and returns the probe result. It does not run inference.
+
 ### Toggle Endpoint
 
 ```
@@ -126,6 +134,22 @@ GET /api/v1/audit
 **Params:** `from`, `to`, `model`, `key_prefix`, `status`, `blocked`
 
 Persistent audit log with PII masking.
+
+## Security Corpus
+
+```
+GET /api/v1/security/corpus
+```
+
+Returns active semantic injection corpus statistics loaded from the runtime analyzer, including category counts and pattern totals.
+
+## Data Export Files
+
+```
+GET /api/v1/export/files/{filename}
+```
+
+Downloads a generated export file from the configured export directory. The path is confined to that directory.
 
 ## System Info
 

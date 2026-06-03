@@ -5,9 +5,11 @@ import ipaddress
 import logging
 import os
 import re
+import time
 from urllib.parse import urlparse
 from typing import Any
 
+import aiohttp
 from fastapi import APIRouter, Request, HTTPException
 
 from models import EndpointStatus
@@ -74,6 +76,19 @@ def create_router(agent) -> APIRouter:
         if not agent._verify_api_key(token):
             raise HTTPException(status_code=401, detail="Registry: Unauthorized")
 
+    def _models_url(base_url: str) -> str:
+        return f"{base_url.rstrip('/')}/models"
+
+    def _endpoint_auth_headers(endpoint_id: str) -> dict[str, str]:
+        cfg = (agent.config.get("endpoints", {}) or {}).get(endpoint_id, {})
+        if not isinstance(cfg, dict):
+            return {}
+        key_env = cfg.get("api_key_env")
+        key = os.environ.get(key_env, "") if key_env else ""
+        if key and cfg.get("auth_type") != "none":
+            return {"Authorization": f"Bearer {key}"}
+        return {}
+
     @router.post("/api/v1/registry/scan")
     async def scan_local_endpoints(request: Request):
         """N.7 — On-demand local autodiscovery.
@@ -138,6 +153,82 @@ def create_router(agent) -> APIRouter:
         await agent.store.update_status(endpoint_id, new_status)
         await agent._add_log(f"ENDPOINT: {endpoint_id} set to {new_status.value}")
         return {"id": endpoint_id, "status": new_status.value}
+
+    @router.post("/api/v1/registry/{endpoint_id}/probe")
+    async def probe_endpoint(endpoint_id: str, request: Request):
+        """Probe a registered endpoint with GET /v1/models.
+
+        This is an operator connectivity check, not an inference smoke test:
+        it never sends user prompts or consumes model tokens.
+        """
+        _check_admin_auth(request)
+        all_endpoints = await agent.store.get_all()
+        target = next((e for e in all_endpoints if e.id == endpoint_id), None)
+        if not target:
+            raise HTTPException(status_code=404, detail="Endpoint not found")
+
+        url = _models_url(str(target.url))
+        headers = _endpoint_auth_headers(endpoint_id)
+        started = time.perf_counter()
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    url,
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=3.0),
+                ) as resp:
+                    latency_ms = round((time.perf_counter() - started) * 1000, 1)
+                    text = await resp.text()
+                    models_count = 0
+                    if resp.status == 200:
+                        try:
+                            body = await resp.json(content_type=None)
+                            models_count = len(body.get("data") or body.get("models") or [])
+                        except (ValueError, AttributeError):
+                            models_count = 0
+                        await agent.store.update_status(endpoint_id, EndpointStatus.VERIFIED)
+                        await agent.store.update_metrics(endpoint_id, latency_ms, 1.0)
+                        await agent._add_log(
+                            f"ENDPOINT: {endpoint_id} probe OK ({latency_ms:.1f}ms, {models_count} models)",
+                            level="SYSTEM",
+                        )
+                        return {
+                            "id": endpoint_id,
+                            "ok": True,
+                            "status": resp.status,
+                            "latency_ms": latency_ms,
+                            "models_count": models_count,
+                            "url": url,
+                        }
+                    await agent.store.update_status(endpoint_id, EndpointStatus.DISCOVERED)
+                    await agent._add_log(
+                        f"ENDPOINT: {endpoint_id} probe failed HTTP {resp.status}",
+                        level="WARNING",
+                    )
+                    return {
+                        "id": endpoint_id,
+                        "ok": False,
+                        "status": resp.status,
+                        "latency_ms": latency_ms,
+                        "models_count": 0,
+                        "url": url,
+                        "detail": text[:200],
+                    }
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            await agent.store.update_status(endpoint_id, EndpointStatus.DISCOVERED)
+            await agent._add_log(
+                f"ENDPOINT: {endpoint_id} probe failed ({type(e).__name__})",
+                level="WARNING",
+            )
+            return {
+                "id": endpoint_id,
+                "ok": False,
+                "status": 0,
+                "latency_ms": round((time.perf_counter() - started) * 1000, 1),
+                "models_count": 0,
+                "url": url,
+                "detail": type(e).__name__,
+            }
 
     # SSE connection limit — prevents resource exhaustion
     _MAX_TELEMETRY_STREAMS = 20
@@ -306,6 +397,7 @@ def create_router(agent) -> APIRouter:
                 else e.status.name,
                 "latency": f"{e.latency_ms:.0f}ms" if e.latency_ms else "--",
                 "priority": e.metadata.get("priority", 0),
+                "models": e.metadata.get("models", []),
                 "type": e.metadata.get("provider_type", "Generic"),
                 "circuit_state": circuit_states.get(e.id, {}).get("state", "closed"),
                 "failure_count": circuit_states.get(e.id, {}).get("failure_count", 0),

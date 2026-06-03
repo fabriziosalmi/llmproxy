@@ -62,6 +62,7 @@ const _loadedTabs = new Set();
 function getSecurityDeps() {
     return {
         fetchGuardsStatus: api.fetchGuardsStatus,
+        fetchSecurityCorpus: api.fetchSecurityCorpus,
         getToken: () => localStorage.getItem('proxy_key') || '',
         origin: window.location.origin,
         toast,
@@ -588,6 +589,10 @@ function initHUD() {
             },
             { id: 'view-logs', name: 'Nav: Live Logs', desc: 'Real-time SSE log stream' },
             { id: 'view-settings', name: 'Nav: Settings', desc: 'Identity, rate limits, system info' },
+            { id: 'add-endpoint', name: 'Endpoint: Add Endpoint', desc: 'Open the endpoint registration form' },
+            { id: 'scan-local', name: 'Endpoint: Scan Local', desc: 'Find Ollama, LM Studio, vLLM, or LiteLLM' },
+            { id: 'reset-open-breakers', name: 'Ops: Reset Open Breakers', desc: 'Reset every OPEN/HALF circuit breaker' },
+            { id: 'export-current-view', name: 'Export: Current View', desc: 'Run the visible CSV/JSON export action' },
             { id: 'toggle-proxy', name: 'System: Kill Switch', desc: 'Emergency halt all traffic' },
             { id: 'clear-logs', name: 'Terminal: Clear Buffer', desc: 'Clear audit log terminal' },
         ];
@@ -848,7 +853,60 @@ function initHUD() {
         });
     }
 
+    async function openEndpointForm(andScan = false) {
+        store.update({ currentTab: 'endpoints' });
+        _ensureTabLoaded('endpoints');
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const form = document.querySelector('[data-testid="add-endpoint-form"]');
+        if (form?.classList.contains('hidden')) {
+            document.getElementById('add-endpoint-toggle')?.click();
+            await new Promise((resolve) => setTimeout(resolve, 40));
+        }
+        if (andScan) {
+            document.querySelector('[data-testid="ep-scan-btn"]')?.click();
+        } else {
+            document.querySelector('#ep-name')?.focus?.();
+        }
+    }
+
+    async function resetOpenBreakers() {
+        const targets = (store.state.registry || []).filter((e) =>
+            ['open', 'half_open'].includes(String(e.circuit_state || '').toLowerCase())
+        );
+        if (!targets.length) {
+            toast('No open circuit breakers to reset', 'info');
+            return;
+        }
+        const results = await Promise.allSettled(targets.map((e) => api.resetCircuitBreaker(e.id)));
+        const ok = results.filter((r) => r.status === 'fulfilled').length;
+        toast(`Reset ${ok}/${targets.length} circuit breakers`, ok === targets.length ? 'success' : 'warning');
+    }
+
+    function exportCurrentView() {
+        const current = document.getElementById(`view-${store.state.currentTab}`);
+        const btn = current?.querySelector(
+            '[data-analytics-export], [data-testid="audit-export-csv"], [data-testid="audit-export-json"]'
+        );
+        if (btn instanceof HTMLElement) {
+            btn.click();
+            toast('Export started', 'success');
+            return;
+        }
+        toast('No export action available in this view', 'info');
+    }
+
     function executeCommand(id) {
+        const custom = {
+            'add-endpoint': () => void openEndpointForm(false),
+            'scan-local': () => void openEndpointForm(true),
+            'reset-open-breakers': () => void resetOpenBreakers(),
+            'export-current-view': exportCurrentView,
+        };
+        if (custom[id]) {
+            custom[id]();
+            console.info(`Executed HUD command: ${id}`);
+            return;
+        }
         const targets = {
             'toggle-proxy': 'panic-btn',
             'clear-logs': 'clear-logs-btn',

@@ -10,6 +10,8 @@ Built with **xterm.js** and the WebGL renderer for high-performance log renderin
 
 - **Real-time streaming** via Server-Sent Events (SSE)
 - **JSON syntax highlighting** — keys, values, and timestamps are color-coded
+- **Quick filters** — jump to `ERROR`, `SECURITY`, or blocked events from the toolbar
+- **Deep-link search** — `#/logs?log_level=error&log_q=timeout` restores filtered log views
 - **Font**: JetBrains Mono (primary), Fira Code (fallback)
 - **Auto-scroll** — follows new log entries
 
