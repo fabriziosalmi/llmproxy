@@ -53,7 +53,7 @@ export function createCard(opts: CardOptions = {}): HTMLElement {
         const bodyEl = document.createElement('div');
         bodyEl.className = 'p-4';
         if (typeof opts.body === 'string') {
-            bodyEl.innerHTML = opts.body;
+            bodyEl.textContent = opts.body;
         } else if (Array.isArray(opts.body)) {
             for (const child of opts.body) bodyEl.appendChild(child);
         } else {
