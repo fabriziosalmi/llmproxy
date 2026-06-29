@@ -1,6 +1,6 @@
 # LLMProxy
 
-Security gateway for Large Language Models. Routes requests across 15 providers with automatic fallback, cost-aware smart routing, and a 6-layer defense pipeline. Drop-in replacement for the OpenAI API.
+Security gateway for Large Language Models. Routes requests across 24 providers with automatic fallback, cost-aware smart routing, and a 6-layer defense pipeline. Drop-in replacement for the OpenAI API.
 
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)
@@ -13,7 +13,7 @@ Security gateway for Large Language Models. Routes requests across 15 providers 
 
 ## Why LLMProxy
 
-- **One endpoint, 15 providers** -- Send OpenAI-compatible requests and let the proxy handle translation, failover, and cost optimization across 14 dedicated providers (OpenAI, Anthropic, Google, Azure, Ollama, Groq, Together, Mistral, DeepSeek, xAI, Perplexity, Fireworks, OpenRouter, and SambaNova) plus a generic OpenAI-compatible adapter.
+- **One endpoint, 24 providers** -- Send OpenAI-compatible requests and let the proxy handle translation, failover, and cost optimization across 23 dedicated providers (OpenAI, Anthropic, Google, Azure, Ollama, Groq, Together, Mistral, DeepSeek, xAI, Perplexity, Fireworks, OpenRouter, SambaNova, Cohere, Hugging Face, Cloudflare Workers AI, Cerebras AI, Nebius AI, Hyperbolic AI, Novita AI, Lambda Labs, and AI/ML API) plus a generic OpenAI-compatible adapter.
 - **Security by default** -- Byte-level ASGI firewall, injection scoring, PII masking, cross-session threat intelligence, immutable audit ledger, HMAC response signing. Fail-closed auth middleware denies all admin paths unless explicitly whitelisted.
 - **Cost control** -- Per-model pricing for 30+ models, daily budget limits with automatic downgrade across fallback chains (Predictive FinOps Routing with HTTP 402 rejection), per-session spend tracking, cost-efficiency analytics.
 - **Extensible** -- 18 marketplace plugins (budget guard, A/B routing, schema enforcement, canary detection, ...) with a Redis-backed distributed ring pipeline. Write your own in Python or WASM.
@@ -190,7 +190,7 @@ LLMProxy exposes an OpenAI-compatible API on port 8090.
 
 | Endpoint               | Method | Description                                                |
 | ---------------------- | ------ | ---------------------------------------------------------- |
-| `/v1/chat/completions` | `POST` | Chat completion (streaming + non-streaming). 15 providers. |
+| `/v1/chat/completions` | `POST` | Chat completion (streaming + non-streaming). 24 providers. |
 | `/v1/completions`      | `POST` | Legacy text completion.                                    |
 | `/v1/embeddings`       | `POST` | Embeddings (OpenAI, Google, Ollama, Azure).                |
 | `/v1/models`           | `GET`  | Model discovery (aggregated from all providers).           |

@@ -6,7 +6,7 @@ LLMProxy is a **security-first proxy** for Large Language Models. It sits betwee
 
 The request pipeline processes every LLM call through 10 security layers:
 
-1. **Multi-Provider Translation** — 15 providers with automatic request/response format translation
+1. **Multi-Provider Translation** — 24 providers with automatic request/response format translation
 2. **Cross-Provider Fallback** — Configurable fallback chains (e.g. GPT-4o fails → Claude Sonnet → Gemini Pro)
 3. **Smart Routing** — EMA-weighted endpoint selection based on latency and success rate
 4. **ASGI Firewall** — Byte-level L7 request filtering
@@ -49,7 +49,7 @@ The `RotatorAgent` orchestrates 9 route modules under `proxy/routes/`:
 ## Why LLMProxy?
 
 - **Security-first**: Every request passes through injection detection, PII masking, and trajectory analysis before reaching any LLM
-- **Provider-agnostic**: Single API endpoint supporting 15 providers with automatic format translation
+- **Provider-agnostic**: Single API endpoint supporting 24 providers with automatic format translation
 - **Cost control**: Per-model pricing, Predictive FinOps (HTTP 402 budget enforcement), automatic model downgrading for simple prompts
 - **Observable**: Prometheus metrics, OpenTelemetry traces, real-time SOC dashboard, webhook alerts
 - **Extensible**: Ring-based plugin pipeline with Python SDK and WASM sandbox for untrusted code
