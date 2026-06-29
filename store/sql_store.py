@@ -432,46 +432,54 @@ class SQLiteStore:
 
         async with self._audit_lock:
             conn = await self._get_conn()
-            # Get the hash of the last entry (chain link)
-            async with conn.execute(
-                "SELECT entry_hash FROM audit_log ORDER BY id DESC LIMIT 1"
-            ) as cursor:
-                row = await cursor.fetchone()
-                prev_hash = row[0] if row and row[0] else "GENESIS"
+            await conn.execute("BEGIN IMMEDIATE")
+            try:
+                # Get the hash of the last entry (chain link)
+                async with conn.execute(
+                    "SELECT entry_hash FROM audit_log ORDER BY id DESC LIMIT 1"
+                ) as cursor:
+                    row = await cursor.fetchone()
+                    prev_hash = row[0] if row and row[0] else "GENESIS"
 
-            # Compute deterministic hash: SHA256(prev_hash|ts|req_id|session_id|...)
-            payload = (
-                f"{prev_hash}|{ts}|{req_id}|{session_id}|{key_prefix}|"
-                f"{model}|{provider}|{status}|{prompt_tokens}|{completion_tokens}|"
-                f"{cost_usd}|{latency_ms}|{blocked_int}|{block_reason}|{metadata}"
-            )
-            entry_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+                # Compute deterministic hash: SHA256(prev_hash|ts|req_id|session_id|...)
+                payload = (
+                    f"{prev_hash}|{ts}|{req_id}|{session_id}|{key_prefix}|"
+                    f"{model}|{provider}|{status}|{prompt_tokens}|{completion_tokens}|"
+                    f"{cost_usd}|{latency_ms}|{blocked_int}|{block_reason}|{metadata}"
+                )
+                entry_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
-            await conn.execute(
-                "INSERT INTO audit_log (ts, req_id, session_id, key_prefix, model, provider, "
-                "status, prompt_tokens, completion_tokens, cost_usd, latency_ms, blocked, "
-                "block_reason, metadata, entry_hash, prev_hash) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (
-                    ts,
-                    req_id,
-                    session_id,
-                    key_prefix,
-                    model,
-                    provider,
-                    status,
-                    prompt_tokens,
-                    completion_tokens,
-                    cost_usd,
-                    latency_ms,
-                    blocked_int,
-                    block_reason,
-                    metadata,
-                    entry_hash,
-                    prev_hash,
-                ),
-            )
-            await conn.commit()
+                await conn.execute(
+                    "INSERT INTO audit_log (ts, req_id, session_id, key_prefix, model, provider, "
+                    "status, prompt_tokens, completion_tokens, cost_usd, latency_ms, blocked, "
+                    "block_reason, metadata, entry_hash, prev_hash) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (
+                        ts,
+                        req_id,
+                        session_id,
+                        key_prefix,
+                        model,
+                        provider,
+                        status,
+                        prompt_tokens,
+                        completion_tokens,
+                        cost_usd,
+                        latency_ms,
+                        blocked_int,
+                        block_reason,
+                        metadata,
+                        entry_hash,
+                        prev_hash,
+                    ),
+                )
+                await conn.commit()
+            except Exception as e:
+                try:
+                    await conn.rollback()
+                except Exception:
+                    pass
+                raise e
 
     async def query_audit(
         self,

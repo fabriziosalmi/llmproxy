@@ -19,7 +19,7 @@ Latency and success_rate are updated after each request via update_endpoint_stat
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, Optional
 from core.plugin_engine import PluginContext
 from core.pricing import get_pricing
 
@@ -39,7 +39,12 @@ _stats_lock = asyncio.Lock()
 _EMA_ALPHA = 0.2
 
 
-async def update_endpoint_stats(endpoint_id: str, latency_ms: float, success: bool):
+async def update_endpoint_stats(
+    endpoint_id: str,
+    latency_ms: float,
+    success: bool,
+    redis_client: Optional[Any] = None,
+):
     """Update endpoint performance stats with exponential moving average.
 
     Called after each completed request from rotator.py.
@@ -61,6 +66,51 @@ async def update_endpoint_stats(endpoint_id: str, latency_ms: float, success: bo
             + (1 - _EMA_ALPHA) * stats["success_rate"]
         )
         stats["request_count"] += 1
+
+    if redis_client:
+        try:
+            res = await redis_client.hgetall(f"ep:stats:{endpoint_id}")
+            if res:
+                db_lat = float(res.get("latency_ms", latency_ms))
+                db_succ = float(res.get("success_rate", 1.0 if success else 0.0))
+                db_count = int(res.get("request_count", 0))
+            else:
+                db_lat = latency_ms
+                db_succ = 1.0 if success else 0.0
+                db_count = 0
+
+            new_lat = _EMA_ALPHA * latency_ms + (1 - _EMA_ALPHA) * db_lat
+            new_succ = _EMA_ALPHA * (1.0 if success else 0.0) + (1 - _EMA_ALPHA) * db_succ
+            new_count = db_count + 1
+
+            await redis_client.hset(
+                f"ep:stats:{endpoint_id}",
+                mapping={
+                    "latency_ms": str(new_lat),
+                    "success_rate": str(new_succ),
+                    "request_count": str(new_count),
+                },
+            )
+        except Exception as e:
+            logger.warning(f"Failed to update Redis stats for {endpoint_id}: {e}")
+
+
+async def sync_endpoint_stats_from_redis(redis_client):
+    """Pulls all endpoint stats from Redis and updates local _endpoint_stats."""
+    async with _stats_lock:
+        try:
+            keys = await redis_client.keys("ep:stats:*")
+            for key in keys:
+                endpoint_id = key.split(":")[-1]
+                res = await redis_client.hgetall(key)
+                if res:
+                    _endpoint_stats[endpoint_id] = {
+                        "latency_ms": float(res.get("latency_ms", 0.0)),
+                        "success_rate": float(res.get("success_rate", 1.0)),
+                        "request_count": int(res.get("request_count", 0)),
+                    }
+        except Exception as e:
+            logger.warning(f"Failed to sync endpoint stats from Redis: {e}")
 
 
 def get_endpoint_stats(endpoint_id: str) -> dict[str, Any]:

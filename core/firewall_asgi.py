@@ -103,10 +103,17 @@ class ByteLevelFirewallMiddleware:
         b"emergency override authorized",
     ]
 
-    def __init__(self, app, max_body_bytes: int = 5_000_000, signature_store=None):
+    def __init__(
+        self,
+        app,
+        max_body_bytes: int = 5_000_000,
+        signature_store=None,
+        enabled: bool = True,
+    ):
         self.app = app
         self.max_body_bytes = max_body_bytes
         self._signature_store = signature_store
+        self.enabled = enabled
 
     # R2-06: Cyrillic/Greek confusable homoglyphs (NFKC doesn't normalize these)
     _CONFUSABLE_MAP = str.maketrans(
@@ -414,7 +421,10 @@ class ByteLevelFirewallMiddleware:
         full_body = b"".join(body_parts)
 
         _scan_start = time.perf_counter()
-        blocked, sig, encoding = self._scan_payload(full_body)
+        if self.enabled:
+            blocked, sig, encoding = self._scan_payload(full_body)
+        else:
+            blocked, sig, encoding = False, "", ""
         _scan_ms = (time.perf_counter() - _scan_start) * 1000
 
         cls = ByteLevelFirewallMiddleware

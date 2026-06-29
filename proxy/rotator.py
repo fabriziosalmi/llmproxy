@@ -83,9 +83,19 @@ class ProxyOrchestrator(BaseAgent):
 
         cache_cfg = self.config.get("caching", {})
         redis_url = cache_cfg.get("redis_url") or os.environ.get("REDIS_URL")
+        self.redis_client = None
+        if redis_url:
+            try:
+                import redis.asyncio as aioredis
+                self.redis_client = aioredis.from_url(redis_url, decode_responses=True)
+                logger.info(f"Orchestrator shared Redis client initialized: {redis_url}")
+            except Exception as e:
+                logger.warning(f"Failed to connect to shared Redis: {e}")
+
         self.circuit_manager = CircuitManager(
             on_state_change=self._on_circuit_state_change,
-            redis_url=redis_url
+            redis_url=redis_url,
+            redis_client=self.redis_client
         )
 
         # Alerting & compliance
@@ -306,6 +316,7 @@ class ProxyOrchestrator(BaseAgent):
             retention_purge_loop,
             local_discovery_loop,
             metrics_history_loop,
+            smart_router_sync_loop,
         )
         from core.metrics_history import MetricsHistory
 
@@ -363,6 +374,8 @@ class ProxyOrchestrator(BaseAgent):
             self.config.get("metrics", {}).get("history_interval_s", 3600)
         )
         self._spawn_task(metrics_history_loop(self, history_interval))
+        if self.redis_client:
+            self._spawn_task(smart_router_sync_loop(self, 5))
 
         # Auto-discover local OpenAI-compatible providers (Ollama, LM Studio,
         # vLLM, LiteLLM) before seeding. Zero-config path for the developer

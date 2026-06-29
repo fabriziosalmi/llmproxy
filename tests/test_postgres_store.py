@@ -163,12 +163,12 @@ async def test_postgres_query_spend(mock_pool_and_conn):
 
 @pytest.mark.asyncio
 async def test_postgres_log_audit_chain(mock_pool_and_conn):
-    mock_pool, _ = mock_pool_and_conn
+    mock_pool, mock_conn = mock_pool_and_conn
     store = PostgresStore("postgresql://localhost/dummy")
     store._pool = mock_pool
 
     # First write (genesis)
-    mock_pool.fetchrow.return_value = None
+    mock_conn.fetchrow.return_value = None
     await store.log_audit(
         ts=1700000000,
         req_id="req1",
@@ -183,15 +183,15 @@ async def test_postgres_log_audit_chain(mock_pool_and_conn):
         latency_ms=150.0,
     )
 
-    sql = mock_pool.execute.call_args[0][0]
-    args = mock_pool.execute.call_args[0][1:]
+    sql = mock_conn.execute.call_args_list[1][0][0]
+    args = mock_conn.execute.call_args_list[1][0][1:]
     assert "INSERT INTO audit_log" in sql
     assert args[15] == "GENESIS"  # prev_hash is GENESIS
     first_hash = args[14]
     assert len(first_hash) == 64  # valid SHA-256 hash string
 
     # Second write (linked)
-    mock_pool.fetchrow.return_value = [first_hash]
+    mock_conn.fetchrow.return_value = [first_hash]
     await store.log_audit(
         ts=1700000100,
         req_id="req2",
@@ -206,7 +206,7 @@ async def test_postgres_log_audit_chain(mock_pool_and_conn):
         latency_ms=180.0,
     )
 
-    args2 = mock_pool.execute.call_args[0][1:]
+    args2 = mock_conn.execute.call_args_list[3][0][1:]
     assert args2[15] == first_hash  # prev_hash links to first entry_hash
 
 

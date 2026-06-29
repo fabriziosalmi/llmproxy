@@ -22,6 +22,7 @@ import time
 import hashlib
 import logging
 import unicodedata
+import asyncio
 from typing import Optional, Dict, Any
 
 try:
@@ -119,6 +120,27 @@ class NegativeCache:
             "drops": self._drops,
             "ttl": int(self._store.ttl),
         }
+
+
+def _find_semantic_match(cache_rows: list, current_prompt: str, threshold: float) -> Optional[str]:
+    from core.semantic_analyzer import _to_trigrams, _jaccard
+
+    current_trigrams = _to_trigrams(current_prompt)
+    best_sim = 0.0
+    best_res = None
+
+    for res_str, cached_prompt in cache_rows:
+        cached_trigrams = _to_trigrams(cached_prompt)
+        sim = _jaccard(current_trigrams, cached_trigrams)
+        if sim > best_sim:
+            best_sim = sim
+            best_res = res_str
+            if best_sim >= 0.98:  # early exit for near-exact match
+                break
+
+    if best_sim >= threshold:
+        return best_res
+    return None
 
 
 class CacheBackend:
@@ -259,33 +281,21 @@ class CacheBackend:
 
             if current_prompt:
                 try:
-                    # Retrieve all active cache entries with prompts for the same model
+                    # Retrieve last 200 active cache entries with prompts for the same model
                     async with self._conn.execute(
-                        "SELECT response, prompt FROM response_cache WHERE model = ? AND created_at > ? AND prompt != ''",
+                        "SELECT response, prompt FROM response_cache WHERE model = ? AND created_at > ? AND prompt != '' ORDER BY created_at DESC LIMIT 200",
                         (model, cutoff),
                     ) as cursor:
                         cache_rows = await cursor.fetchall()
 
                     if cache_rows:
-                        from core.semantic_analyzer import _to_trigrams, _jaccard
-
-                        current_trigrams = _to_trigrams(current_prompt)
-                        best_sim = 0.0
-                        best_res = None
-
-                        for res_str, cached_prompt in cache_rows:
-                            cached_trigrams = _to_trigrams(cached_prompt)
-                            sim = _jaccard(current_trigrams, cached_trigrams)
-                            if sim > best_sim:
-                                best_sim = sim
-                                best_res = res_str
-                                if best_sim >= 0.98:  # early exit for near-exact match
-                                    break
-
-                        if best_sim >= self._semantic_threshold and best_res:
+                        best_res = await asyncio.to_thread(
+                            _find_semantic_match, cache_rows, current_prompt, self._semantic_threshold
+                        )
+                        if best_res:
                             self._hits += 1
                             logger.info(
-                                f"Cache SEMANTIC HIT: sim={best_sim:.4f} (threshold={self._semantic_threshold})"
+                                f"Cache SEMANTIC HIT: (model={model}, threshold={self._semantic_threshold})"
                             )
                             try:
                                 return json.loads(best_res)  # type: ignore
