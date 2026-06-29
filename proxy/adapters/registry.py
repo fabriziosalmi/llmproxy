@@ -33,6 +33,15 @@ _ADAPTERS = {
     "fireworks": OpenAICompatAdapter("fireworks"),
     "openrouter": OpenAICompatAdapter("openrouter"),
     "sambanova": OpenAICompatAdapter("sambanova"),
+    "cohere": OpenAICompatAdapter("cohere"),
+    "huggingface": OpenAICompatAdapter("huggingface"),
+    "cloudflare": OpenAICompatAdapter("cloudflare"),
+    "cerebras": OpenAICompatAdapter("cerebras"),
+    "nebius": OpenAICompatAdapter("nebius"),
+    "hyperbolic": OpenAICompatAdapter("hyperbolic"),
+    "novita": OpenAICompatAdapter("novita"),
+    "lambdalabs": OpenAICompatAdapter("lambdalabs"),
+    "aimlapi": OpenAICompatAdapter("aimlapi"),
     "openai-compatible": OpenAICompatAdapter(),
 }
 
@@ -70,8 +79,9 @@ MODEL_PREFIXES = [
     ("qwen", "ollama"),
     # Microsoft
     ("phi-", "ollama"),
-    # Cohere (OpenAI-compatible)
-    ("command-", "openai-compatible"),
+    # Cohere
+    ("command-", "cohere"),
+    ("cohere/", "cohere"),
 ]
 
 
@@ -174,6 +184,51 @@ SUPPORTED_PROVIDERS = {
         "name": "SambaNova",
         "auth": "bearer",
         "base_url": "https://api.sambanova.ai/v1",
+    },
+    "cohere": {
+        "name": "Cohere",
+        "auth": "bearer",
+        "base_url": "https://api.cohere.com/v2",
+    },
+    "huggingface": {
+        "name": "Hugging Face",
+        "auth": "bearer",
+        "base_url": "https://api-inference.huggingface.co/v1",
+    },
+    "cloudflare": {
+        "name": "Cloudflare Workers AI",
+        "auth": "bearer",
+        "base_url": "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1",
+    },
+    "cerebras": {
+        "name": "Cerebras AI",
+        "auth": "bearer",
+        "base_url": "https://api.cerebras.ai/v1",
+    },
+    "nebius": {
+        "name": "Nebius AI",
+        "auth": "bearer",
+        "base_url": "https://api.studio.nebius.ai/v1",
+    },
+    "hyperbolic": {
+        "name": "Hyperbolic AI",
+        "auth": "bearer",
+        "base_url": "https://api.hyperbolic.xyz/v1",
+    },
+    "novita": {
+        "name": "Novita AI",
+        "auth": "bearer",
+        "base_url": "https://api.novita.ai/v3/openai",
+    },
+    "lambdalabs": {
+        "name": "Lambda Labs",
+        "auth": "bearer",
+        "base_url": "https://api.lambdalabs.com/v1",
+    },
+    "aimlapi": {
+        "name": "AI/ML API",
+        "auth": "bearer",
+        "base_url": "https://api.aimlapi.com",
     },
     "openai-compatible": {
         "name": "OpenAI-Compatible",

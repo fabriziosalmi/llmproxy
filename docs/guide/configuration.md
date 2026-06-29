@@ -41,7 +41,7 @@ endpoints:
     rate_limit: { rpm: 1000 }
 ```
 
-See [Endpoints Reference](/reference/endpoints) for all 15 providers.
+See [Endpoints Reference](/reference/endpoints) for all 24 providers.
 
 ## Fallback Chains
 

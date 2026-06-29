@@ -8,7 +8,7 @@ The core proxy endpoints — OpenAI-compatible API for chat, completions, embedd
 POST /v1/chat/completions
 ```
 
-Unified inference endpoint supporting all 15 providers with automatic format translation, cross-provider fallback, and model aliases.
+Unified inference endpoint supporting all 24 providers with automatic format translation, cross-provider fallback, and model aliases.
 
 **Headers:**
 ```
