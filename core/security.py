@@ -504,23 +504,17 @@ class SecurityShield:
             # 2a. Regex threat scoring (fast, <0.1ms)
             threat_score, threat_patterns = self._calculate_threat_score(prompt)
 
-            # 2b. Semantic scan (trigram Jaccard, runs in thread executor)
+            # 2b. Semantic scan (trigram Jaccard, delegated to default thread pool)
             semantic_result = None
             if self.config.get("semantic_analysis", {}).get("enabled", True):
                 from core.semantic_analyzer import semantic_scan
-                from concurrent.futures import ThreadPoolExecutor
 
                 threshold = self.config.get("semantic_analysis", {}).get(
                     "threshold", 0.35
                 )
-                if not hasattr(self, "_semantic_executor"):
-                    self._semantic_executor = ThreadPoolExecutor(
-                        max_workers=4, thread_name_prefix="semantic"
-                    )
                 try:
                     semantic_result = await asyncio.wait_for(
-                        asyncio.get_running_loop().run_in_executor(
-                            self._semantic_executor,
+                        asyncio.to_thread(
                             semantic_scan,
                             prompt,
                             threshold,
@@ -805,8 +799,6 @@ class SecurityShield:
             r"<\|im_start\|>",
             r"<\|im_end\|>",
             r"\[inst\]",
-            r"^human:",
-            r"^assistant:",
         ]
         if any(re.search(p, normalized) for p in threat_patterns):
             return True
