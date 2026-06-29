@@ -416,44 +416,49 @@ class PostgresStore:
 
         async with self._audit_lock:
             pool = await self.init_pool()
-            # Get the hash of the last entry (chain link)
-            row = await pool.fetchrow(
-                "SELECT entry_hash FROM audit_log ORDER BY id DESC LIMIT 1"
-            )
-            prev_hash = row[0] if row and row[0] else "GENESIS"
+            async with pool.acquire() as conn:
+                async with conn.transaction():
+                    # Acquire transaction-scoped advisory lock for hash chain serialization
+                    await conn.execute("SELECT pg_advisory_xact_lock(987654321)")
 
-            # Compute deterministic hash
-            payload = (
-                f"{prev_hash}|{ts}|{req_id}|{session_id}|{key_prefix}|"
-                f"{model}|{provider}|{status}|{prompt_tokens}|{completion_tokens}|"
-                f"{cost_usd}|{latency_ms}|{blocked_int}|{block_reason}|{metadata}"
-            )
-            entry_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+                    # Get the hash of the last entry (chain link)
+                    row = await conn.fetchrow(
+                        "SELECT entry_hash FROM audit_log ORDER BY id DESC LIMIT 1"
+                    )
+                    prev_hash = row[0] if row and row[0] else "GENESIS"
 
-            await pool.execute(
-                """
-                INSERT INTO audit_log (ts, req_id, session_id, key_prefix, model, provider,
-                                       status, prompt_tokens, completion_tokens, cost_usd, latency_ms, blocked,
-                                       block_reason, metadata, entry_hash, prev_hash)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-                """,
-                ts,
-                req_id,
-                session_id,
-                key_prefix,
-                model,
-                provider,
-                status,
-                prompt_tokens,
-                completion_tokens,
-                cost_usd,
-                latency_ms,
-                blocked_int,
-                block_reason,
-                metadata,
-                entry_hash,
-                prev_hash,
-            )
+                    # Compute deterministic hash
+                    payload = (
+                        f"{prev_hash}|{ts}|{req_id}|{session_id}|{key_prefix}|"
+                        f"{model}|{provider}|{status}|{prompt_tokens}|{completion_tokens}|"
+                        f"{cost_usd}|{latency_ms}|{blocked_int}|{block_reason}|{metadata}"
+                    )
+                    entry_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+                    await conn.execute(
+                        """
+                        INSERT INTO audit_log (ts, req_id, session_id, key_prefix, model, provider,
+                                               status, prompt_tokens, completion_tokens, cost_usd, latency_ms, blocked,
+                                               block_reason, metadata, entry_hash, prev_hash)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                        """,
+                        ts,
+                        req_id,
+                        session_id,
+                        key_prefix,
+                        model,
+                        provider,
+                        status,
+                        prompt_tokens,
+                        completion_tokens,
+                        cost_usd,
+                        latency_ms,
+                        blocked_int,
+                        block_reason,
+                        metadata,
+                        entry_hash,
+                        prev_hash,
+                    )
 
     async def query_audit(
         self,

@@ -2,7 +2,7 @@ import asyncio
 import time
 import logging
 from enum import Enum
-from typing import Dict, Optional, Callable
+from typing import Dict, Optional, Callable, Any
 
 try:
     import redis.asyncio as redis
@@ -204,14 +204,41 @@ class RedisCircuitBreaker(BaseCircuitBreaker):
         self.redis = redis_client
         self.scripts = scripts
         self.name = name
-        self.failure_threshold = failure_threshold
-        self.recovery_timeout = recovery_timeout
+        self._failure_threshold = failure_threshold
+        self._recovery_timeout = recovery_timeout
         self._on_state_change = on_state_change
 
         self.k_state = f"cb:{name}:state"
         self.k_fail = f"cb:{name}:fail"
         self.k_last = f"cb:{name}:last"
         self.k_probe = f"cb:{name}:probe"
+
+        self._local_fallback = LocalCircuitBreaker(
+            name=name,
+            failure_threshold=failure_threshold,
+            recovery_timeout=recovery_timeout,
+            on_state_change=on_state_change,
+        )
+
+    @property
+    def failure_threshold(self) -> int:
+        return self._failure_threshold
+
+    @failure_threshold.setter
+    def failure_threshold(self, val: int):
+        self._failure_threshold = val
+        if hasattr(self, "_local_fallback"):
+            self._local_fallback.failure_threshold = val
+
+    @property
+    def recovery_timeout(self) -> int:
+        return self._recovery_timeout
+
+    @recovery_timeout.setter
+    def recovery_timeout(self, val: int):
+        self._recovery_timeout = val
+        if hasattr(self, "_local_fallback"):
+            self._local_fallback.recovery_timeout = val
 
     def _notify_state_change(self, old_state: str, new_state: str):
         if self._on_state_change:
@@ -233,8 +260,8 @@ class RedisCircuitBreaker(BaseCircuitBreaker):
                 return True
             return res == 1  # type: ignore
         except Exception as e:
-            logger.warning(f"Redis CB check failed: {e}")
-            return True
+            logger.warning(f"Redis CB check failed: {e}. Falling back to local CB.")
+            return await self._local_fallback.can_execute()
 
     async def report_success(self):
         try:
@@ -246,7 +273,8 @@ class RedisCircuitBreaker(BaseCircuitBreaker):
                 logger.info(f"CircuitBreaker ({self.name}): Success detected. Closing circuit.")
                 self._notify_state_change("half_open", "closed")
         except Exception as e:
-            logger.warning(f"Redis CB success report failed: {e}")
+            logger.warning(f"Redis CB success report failed: {e}. Falling back to local CB.")
+            await self._local_fallback.report_success()
 
     async def report_failure(self):
         try:
@@ -259,7 +287,8 @@ class RedisCircuitBreaker(BaseCircuitBreaker):
                 logger.warning(f"CircuitBreaker ({self.name}): Failure threshold reached. Opening circuit.")
                 self._notify_state_change("closed", "open")
         except Exception as e:
-            logger.warning(f"Redis CB failure report failed: {e}")
+            logger.warning(f"Redis CB failure report failed: {e}. Falling back to local CB.")
+            await self._local_fallback.report_failure()
 
     async def get_state_info(self) -> dict:
         try:
@@ -273,22 +302,25 @@ class RedisCircuitBreaker(BaseCircuitBreaker):
                 "backend": "redis"
             }
         except Exception:
-            return {"state": "unknown", "backend": "redis_error"}
+            local_info = await self._local_fallback.get_state_info()
+            local_info["backend"] = "redis_fallback_local"
+            return local_info
 
 
 class CircuitManager:
     def __init__(
         self,
         on_state_change: Optional[Callable[[str, str, str], None]] = None,
-        redis_url: Optional[str] = None
+        redis_url: Optional[str] = None,
+        redis_client: Optional[Any] = None,
     ):
         self._circuits: Dict[str, BaseCircuitBreaker] = {}
         self._on_state_change = on_state_change
         self._lock = asyncio.Lock()
 
-        self.redis_client = None
+        self.redis_client = redis_client
         self.scripts = {}  # type: ignore
-        if redis_url and redis:
+        if self.redis_client is None and redis_url and redis:
             try:
                 self.redis_client = redis.from_url(redis_url, decode_responses=True)
                 logger.info(f"CircuitManager using Redis: {redis_url}")

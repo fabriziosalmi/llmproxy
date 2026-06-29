@@ -322,12 +322,13 @@ def create_app(agent) -> FastAPI:
             "responses will not be blocked by the WAF. Use only in trusted environments.",
             agent.firewall_disabled_reason,
         )
-    else:
-        app.add_middleware(
-            ByteLevelFirewallMiddleware,
-            max_body_bytes=max_payload_bytes,
-            signature_store=getattr(agent, "signature_store", None),
-        )
+
+    app.add_middleware(
+        ByteLevelFirewallMiddleware,
+        max_body_bytes=max_payload_bytes,
+        signature_store=getattr(agent, "signature_store", None),
+        enabled=firewall_enabled,
+    )
     app.add_middleware(RateLimitMiddleware, config=agent.config, agent=agent)
 
     from .routes import (
@@ -440,5 +441,10 @@ def create_app(agent) -> FastAPI:
         except Exception as e:
             logger.error(f"Exporter close failed on shutdown: {e}")
         await agent.cache_backend.close()
+        try:
+            if getattr(agent, "redis_client", None):
+                await agent.redis_client.aclose()
+        except Exception as e:
+            logger.error(f"Redis client close failed on shutdown: {e}")
 
     return app

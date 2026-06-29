@@ -222,3 +222,16 @@ async def retention_purge_loop(store, retention_days: int = 90, interval: int = 
                 )
         except Exception as e:
             logger.warning(f"Retention purge error: {e}")
+
+
+async def smart_router_sync_loop(agent, interval: int = 5):
+    """Periodically synchronize local _endpoint_stats with Redis."""
+    if not getattr(agent, "redis_client", None):
+        return
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            from plugins.default.smart_router import sync_endpoint_stats_from_redis
+            await sync_endpoint_stats_from_redis(agent.redis_client)
+        except Exception as e:
+            logger.warning(f"Smart router sync loop error: {e}")

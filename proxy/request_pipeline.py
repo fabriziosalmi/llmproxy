@@ -238,7 +238,10 @@ async def process_proxy_request(
             and ctx.response.status_code < 400
         )
         await update_endpoint_stats(
-            routed_endpoint_id, ctx.metadata["duration"] * 1000, bool(success)
+            routed_endpoint_id,
+            ctx.metadata["duration"] * 1000,
+            bool(success),
+            redis_client=getattr(orchestrator, "redis_client", None),
         )
 
         # RING 4: POST-FLIGHT (response sanitization, watermarking)
