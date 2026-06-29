@@ -126,6 +126,7 @@ ALLOWED_MODULES = {
     "collections",
     "time",
     "core",  # core.plugin_sdk, core.plugin_engine (for PluginContext import)
+    "fastapi",
 }
 
 
@@ -179,12 +180,20 @@ def ast_scan(source: str, plugin_name: str) -> bool:
                     raise PluginSecurityError(
                         f"Plugin '{plugin_name}': Forbidden import '{alias.name}'"
                     )
+                if module_root not in ALLOWED_MODULES:
+                    raise PluginSecurityError(
+                        f"Plugin '{plugin_name}': Import '{alias.name}' is not in allowed list"
+                    )
         elif isinstance(node, ast.ImportFrom):
             if node.module:
                 module_root = node.module.split(".")[0]
                 if module_root in FORBIDDEN_MODULES:
                     raise PluginSecurityError(
                         f"Plugin '{plugin_name}': Forbidden import from '{node.module}'"
+                    )
+                if module_root not in ALLOWED_MODULES:
+                    raise PluginSecurityError(
+                        f"Plugin '{plugin_name}': Import from '{node.module}' is not in allowed list"
                     )
 
         # Check for exec/eval/__import__ calls

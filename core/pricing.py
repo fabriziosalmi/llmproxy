@@ -91,6 +91,9 @@ _SORTED_PREFIXES: list = sorted(MODEL_PRICING.keys(), key=len, reverse=True)
 def set_config_overrides(overrides: Dict[str, Dict[str, float]]):
     """Apply pricing overrides from config.yaml at startup."""
     _config_overrides.update(overrides)
+    global _SORTED_PREFIXES
+    all_prefixes = set(MODEL_PRICING.keys()) | set(_config_overrides.keys())
+    _SORTED_PREFIXES = sorted(all_prefixes, key=len, reverse=True)
 
 
 def get_pricing(model: str) -> Dict[str, float]:
@@ -112,6 +115,8 @@ def get_pricing(model: str) -> Dict[str, float]:
     # Longest-prefix matching for versioned model names (e.g. "gpt-4o-2024-08-06")
     for prefix in _SORTED_PREFIXES:
         if model.startswith(prefix):
+            if prefix in _config_overrides:
+                return _config_overrides[prefix]
             return MODEL_PRICING[prefix]
     # Unknown model — fall back to default and warn (once).
     if model and model not in _DEFAULT_PRICING_WARNED:

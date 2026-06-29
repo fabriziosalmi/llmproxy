@@ -6,6 +6,37 @@ from core.plugin_engine import PluginContext
 logger = logging.getLogger("llmproxy.plugins.json_healer")
 
 
+def _parse_depth(s: str) -> tuple[int, int, bool]:
+    """Parse braces and brackets depth, ignoring strings and escaped chars."""
+    in_string = False
+    escaped = False
+    braces_count = 0
+    brackets_count = 0
+
+    for char in s:
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if char == '"':
+            in_string = not in_string
+            continue
+        if not in_string:
+            if char == "{":
+                braces_count += 1
+            elif char == "}":
+                if braces_count > 0:
+                    braces_count -= 1
+            elif char == "[":
+                brackets_count += 1
+            elif char == "]":
+                if brackets_count > 0:
+                    brackets_count -= 1
+    return braces_count, brackets_count, in_string
+
+
 async def repair(ctx: PluginContext):
     """Ring 4: Post-Flight JSON Auto-Healer.
 
@@ -20,17 +51,14 @@ async def repair(ctx: PluginContext):
         body_str = ctx.response.body.decode()
         # Does it look like truncated JSON?
         if body_str.strip().startswith("{") and not body_str.strip().endswith("}"):
-            open_braces = body_str.count("{")
-            close_braces = body_str.count("}")
-            open_brackets = body_str.count("[")
-            close_brackets = body_str.count("]")
+            braces_count, brackets_count, in_string = _parse_depth(body_str)
 
             repaired = body_str.strip()
-            if repaired.count('"') % 2 != 0:
+            if in_string:
                 repaired += '"'
 
-            repaired += "]" * (open_brackets - close_brackets)
-            repaired += "}" * (open_braces - close_braces)
+            repaired += "]" * brackets_count
+            repaired += "}" * braces_count
 
             try:
                 json.loads(repaired)

@@ -440,6 +440,11 @@ def create_app(agent) -> FastAPI:
                 await agent.exporter.close()
         except Exception as e:
             logger.error(f"Exporter close failed on shutdown: {e}")
+        try:
+            if getattr(agent, "rbac", None):
+                await agent.rbac.close()
+        except Exception as e:
+            logger.error(f"RBAC manager close failed on shutdown: {e}")
         await agent.cache_backend.close()
         try:
             if getattr(agent, "redis_client", None):

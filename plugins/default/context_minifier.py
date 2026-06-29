@@ -19,7 +19,7 @@ async def compress(ctx: PluginContext):
     original_len = len(content)
     if original_len > 1000:  # Only minify large payloads
         content = re.sub(r"/\*.*?\*/", "", content, flags=re.DOTALL)
-        content = re.sub(r"//.*?\n", "\n", content)
+        content = re.sub(r"(?<!http:)(?<!https:)(?<!file:)(?<!ftp:)//.*?\n", "\n", content)
         content = re.sub(r"\n\s*\n", "\n", content)
         content = re.sub(r"[ \t]{2,}", " ", content)
 
