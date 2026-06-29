@@ -1,7 +1,7 @@
 import sqlite3
 import asyncio
 import logging
-from typing import Dict, Optional, List, Set
+from typing import Dict, Optional, List, Set, Any
 
 logger = logging.getLogger(__name__)
 
@@ -51,13 +51,14 @@ DEFAULT_PERMISSIONS: Dict[str, Set[str]] = {
 class RBACManager:
     """Manages API Key quotas, budgets, and role-based access.
 
-    All SQLite operations are wrapped in asyncio.to_thread() to avoid
-    blocking the event loop. Sync variants (_sync_*) exist for __init__.
+    Uses aiosqlite connection sharing for fast, non-blocking async operations.
     """
 
     def __init__(self, db_path: str = "endpoints.db"):
         self.db_path = db_path
         self.permissions = dict(DEFAULT_PERMISSIONS)
+        self._conn: Optional[Any] = None
+        self._conn_lock = asyncio.Lock()
         self._sync_init_db()
 
     def _sync_init_db(self):
@@ -82,16 +83,34 @@ class RBACManager:
             """)
             conn.commit()
 
-    def _sync_check_quota(self, api_key: str) -> bool:
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute(
-                "SELECT monthly_budget, consumed_budget, hard_limit FROM quotas WHERE api_key = ?",
-                (api_key,),
-            )
-            row = cursor.fetchone()
+    async def _get_conn(self):
+        if not self._conn:
+            async with self._conn_lock:
+                if not self._conn:
+                    import aiosqlite
+                    self._conn = await aiosqlite.connect(self.db_path)
+                    self._conn.row_factory = aiosqlite.Row
+                    await self._conn.execute("PRAGMA journal_mode=WAL")
+                    await self._conn.execute("PRAGMA synchronous=NORMAL")
+        return self._conn
+
+    async def close(self):
+        """Close shared database connection."""
+        if self._conn:
+            await self._conn.close()
+            self._conn = None
+
+    async def check_quota(self, api_key: str) -> bool:
+        """Returns True if the API key has remaining budget."""
+        conn = await self._get_conn()
+        async with conn.execute(
+            "SELECT monthly_budget, consumed_budget, hard_limit FROM quotas WHERE api_key = ?",
+            (api_key,),
+        ) as cursor:
+            row = await cursor.fetchone()
             if not row:
                 return True
-            budget, consumed, hard_limit = row
+            budget, consumed, hard_limit = row[0], row[1], row[2]
             if hard_limit and consumed >= budget:
                 logger.warning(
                     f"RBAC: Quota exceeded ({consumed}/{budget})"
@@ -99,25 +118,14 @@ class RBACManager:
                 return False
             return True
 
-    async def check_quota(self, api_key: str) -> bool:
-        """Returns True if the API key has remaining budget.
-
-        Runs the SQLite read in a thread-pool worker so it never blocks the
-        asyncio event loop, which would stall ALL concurrent requests.
-        """
-        return await asyncio.to_thread(self._sync_check_quota, api_key)
-
-    def _sync_update_usage(self, api_key: str, cost: float):
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute(
-                "UPDATE quotas SET consumed_budget = consumed_budget + ? WHERE api_key = ?",
-                (cost, api_key),
-            )
-            conn.commit()
-
     async def update_usage(self, api_key: str, cost: float):
-        """Increments the consumed budget for an API key (non-blocking)."""
-        await asyncio.to_thread(self._sync_update_usage, api_key, cost)
+        """Increments the consumed budget for an API key."""
+        conn = await self._get_conn()
+        await conn.execute(
+            "UPDATE quotas SET consumed_budget = consumed_budget + ? WHERE api_key = ?",
+            (cost, api_key),
+        )
+        await conn.commit()
 
     def add_quota(self, api_key: str, team: str, budget: float):
         """Configures a quota for a new or existing key."""
@@ -145,36 +153,24 @@ class RBACManager:
             perms |= self.permissions.get(role, set())
         return perms
 
-    def _sync_set_user_roles(
-        self, subject: str, email: Optional[str], roles: List[str]
-    ):
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute(
-                "INSERT OR REPLACE INTO user_roles (subject, email, roles) VALUES (?, ?, ?)",
-                (subject, email, ",".join(roles)),
-            )
-            conn.commit()
-
     async def set_user_roles(
         self, subject: str, email: Optional[str], roles: List[str]
     ):
-        """Persist user->role mapping (non-blocking).
+        """Persist user->role mapping."""
+        conn = await self._get_conn()
+        await conn.execute(
+            "INSERT OR REPLACE INTO user_roles (subject, email, roles) VALUES (?, ?, ?)",
+            (subject, email, ",".join(roles)),
+        )
+        await conn.commit()
 
-        Runs the SQLite write in a thread-pool worker — calling sqlite3 directly
-        on the asyncio event loop stalls ALL concurrent requests.
-        """
-        await asyncio.to_thread(self._sync_set_user_roles, subject, email, roles)
-
-    def _sync_get_user_roles(self, subject: str) -> List[str]:
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute(
-                "SELECT roles FROM user_roles WHERE subject = ?", (subject,)
-            )
-            row = cursor.fetchone()
+    async def get_user_roles(self, subject: str) -> List[str]:
+        """Look up persisted roles for a user subject."""
+        conn = await self._get_conn()
+        async with conn.execute(
+            "SELECT roles FROM user_roles WHERE subject = ?", (subject,)
+        ) as cursor:
+            row = await cursor.fetchone()
             if row and row[0]:
                 return [r.strip() for r in row[0].split(",") if r.strip()]
         return ["user"]
-
-    async def get_user_roles(self, subject: str) -> List[str]:
-        """Look up persisted roles for a user subject (non-blocking)."""
-        return await asyncio.to_thread(self._sync_get_user_roles, subject)
