@@ -354,6 +354,11 @@ def semantic_scan(
     if not prompt or not prompt.strip():
         return None
 
+    # DoS protection: if prompt is extremely large (e.g. > 32k chars), scan only the head and tail.
+    # Injection attacks must target instruction boundaries to succeed in practice.
+    if len(prompt) > 32000:
+        prompt = prompt[:16000] + "\n[...truncated for security scan...]\n" + prompt[-16000:]
+
     # ── Optimization 1: normalize ONCE (was: 57× per scan) ──
     normalized_prompt = _normalize(prompt)
     if not normalized_prompt:
