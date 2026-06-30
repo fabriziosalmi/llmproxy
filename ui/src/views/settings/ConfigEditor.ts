@@ -159,9 +159,20 @@ export function mountConfigEditor(host: HTMLElement, api: ConfigEditorApi, toast
         },
     });
 
+    const revertBtn = createButton({
+        label: 'Revert',
+        variant: 'ghost',
+        size: 'sm',
+        testId: 'config-revert-btn',
+        onClick: async () => {
+            await refresh(); // re-fetch the on-disk source, discarding unsaved edits
+            renderResult('info', ['Reverted to the on-disk config.']);
+        },
+    });
+
     const footer = document.createElement('div');
     footer.className = 'flex items-center gap-2 mt-3';
-    footer.append(validateBtn, applyBtn);
+    footer.append(validateBtn, applyBtn, revertBtn);
 
     async function refresh(): Promise<void> {
         body.replaceChildren(createSkeleton({ repeat: 6 }));

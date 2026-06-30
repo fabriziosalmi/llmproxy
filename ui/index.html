@@ -1503,13 +1503,29 @@
                 </div>
 
                 <!-- SETTINGS VIEW -->
-                <div id="view-settings" class="content-view hidden">
+                <div id="view-settings" class="content-view hidden scroll-smooth">
                     <!-- Each section is mounted independently by src/views/settings/*.
                      The legacy markup nested inside each *-host wrapper is the
-                     fallback shown without a Vite build. -->
+                     fallback shown without a Vite build. Cards are grouped into
+                     labelled sections with a sticky jump-nav for usability. -->
 
-                    <!-- Config Warnings (only visible when src/views/settings/ConfigWarnings.ts mounts) -->
+                    <!-- Sticky section nav (jump links) -->
+                    <div
+                        class="sticky top-0 z-20 -mx-1 mb-4 flex gap-2 overflow-x-auto whitespace-nowrap bg-[#0a0a0c]/70 backdrop-blur-xl py-2"
+                    >
+                        <a href="#settings-sec-access" class="settings-navpill">Access &amp; Identity</a>
+                        <a href="#settings-sec-traffic" class="settings-navpill">Traffic &amp; Routing</a>
+                        <a href="#settings-sec-config" class="settings-navpill">Configuration</a>
+                        <a href="#settings-sec-integrations" class="settings-navpill">Integrations</a>
+                        <a href="#settings-sec-system" class="settings-navpill">System &amp; Data</a>
+                    </div>
+
+                    <!-- Config Warnings banner (only visible when there are warnings) -->
                     <div id="settings-config-warnings-host" class="mb-4"></div>
+
+                    <!-- ── Access & Identity ── -->
+                    <section id="settings-sec-access" class="scroll-mt-16 mb-8">
+                        <h3 class="settings-group-title">Access &amp; Identity</h3>
 
                     <!-- Identity & Access -->
                     <div id="settings-identity-host" class="mb-4">
@@ -1546,6 +1562,33 @@
                             </div>
                         </div>
                     </div>
+                    </section>
+
+                    <!-- ── Traffic & Routing ── -->
+                    <section id="settings-sec-traffic" class="scroll-mt-16 mb-8">
+                        <h3 class="settings-group-title">Traffic &amp; Routing</h3>
+
+                    <!-- P.1 — Rate-limit preset picker -->
+                    <div id="settings-rate-limit-host" class="mb-4"></div>
+
+                    <!-- Q.1 — Routing cost-weight slider (K.1 backend) -->
+                    <div id="settings-routing-host" class="mb-4"></div>
+                    </section>
+
+                    <!-- ── Configuration ── -->
+                    <section id="settings-sec-config" class="scroll-mt-16 mb-8">
+                        <h3 class="settings-group-title">Configuration</h3>
+
+                    <!-- O.5 — Active config (YAML, read-only, secrets redacted) -->
+                    <div id="settings-config-yaml-host" class="mb-4"></div>
+
+                    <!-- Edit Configuration — admin YAML editor (validate + apply) -->
+                    <div id="settings-config-editor-host" class="mb-4"></div>
+                    </section>
+
+                    <!-- ── Integrations ── -->
+                    <section id="settings-sec-integrations" class="scroll-mt-16 mb-8">
+                        <h3 class="settings-group-title">Integrations</h3>
 
                     <!-- Webhooks -->
                     <div id="settings-webhooks-host" class="mb-4">
@@ -1566,18 +1609,16 @@
                         </div>
                     </div>
 
-                    <!-- Data Export -->
-                    <div id="settings-export-host" class="mb-4">
-                        <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6">
-                            <h2 class="text-xs font-bold text-white mb-4">Data Export</h2>
-                            <div id="export-status">
-                                <p class="text-[9px] text-slate-600 font-mono">Loading...</p>
-                            </div>
-                        </div>
-                    </div>
+                    <!-- Q.2 — API Reference (OpenAPI schema) -->
+                    <div id="settings-api-reference-host" class="mb-4"></div>
+                    </section>
+
+                    <!-- ── System & Data ── -->
+                    <section id="settings-sec-system" class="scroll-mt-16 mb-8">
+                        <h3 class="settings-group-title">System &amp; Data</h3>
 
                     <!-- System Info -->
-                    <div id="settings-system-host">
+                    <div id="settings-system-host" class="mb-4">
                         <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6">
                             <h2 class="text-xs font-bold text-white mb-2">System Info</h2>
                             <div class="grid grid-cols-2 gap-4">
@@ -1602,22 +1643,18 @@
                     </div>
 
                     <!-- P.3 — Per-component Health panel (M.3 backend) -->
-                    <div id="settings-health-host" class="mt-6"></div>
+                    <div id="settings-health-host" class="mb-4"></div>
 
-                    <!-- P.1 — Rate-limit preset picker -->
-                    <div id="settings-rate-limit-host" class="mt-6"></div>
-
-                    <!-- Q.1 — Routing cost-weight slider (K.1 backend) -->
-                    <div id="settings-routing-host" class="mt-6"></div>
-
-                    <!-- Q.2 — API Reference (OpenAPI schema) -->
-                    <div id="settings-api-reference-host" class="mt-6"></div>
-
-                    <!-- O.5 — Active config (YAML, read-only, secrets redacted) -->
-                    <div id="settings-config-yaml-host" class="mt-6"></div>
-
-                    <!-- Edit Configuration — admin YAML editor (validate + apply) -->
-                    <div id="settings-config-editor-host" class="mt-6"></div>
+                    <!-- Data Export -->
+                    <div id="settings-export-host" class="mb-4">
+                        <div class="bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6">
+                            <h2 class="text-xs font-bold text-white mb-4">Data Export</h2>
+                            <div id="export-status">
+                                <p class="text-[9px] text-slate-600 font-mono">Loading...</p>
+                            </div>
+                        </div>
+                    </div>
+                    </section>
                 </div>
             </div>
         </main>
