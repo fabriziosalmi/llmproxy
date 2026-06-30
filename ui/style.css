@@ -93,6 +93,20 @@ button:active,
 .sidebar.collapsed .sidebar-bottom {
     justify-content: center;
 }
+/* Collapsed = icon rail. The nav labels are plain <span>s (not .sidebar-text),
+   so hide them directly, drop the section headers, and centre each icon. */
+.sidebar.collapsed .nav-item {
+    justify-content: center;
+    gap: 0;
+    padding-left: 0;
+    padding-right: 0;
+}
+.sidebar.collapsed .nav-item span {
+    display: none;
+}
+.sidebar.collapsed nav > p {
+    display: none;
+}
 .sidebar-text {
     transition: all 0.2s ease;
 }

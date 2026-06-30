@@ -694,6 +694,8 @@
 
                 <!-- GUARDS VIEW -->
                 <div id="view-guards" class="content-view hidden">
+                    <!-- Gateway Status + Priority Steering sit side-by-side (half width). -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                     <!-- Master Toggle (mounted by src/views/guards/Toggles.ts; legacy
                      markup below renders when no Vite build is present). -->
                     <div id="guards-master-host" data-testid="guards-master-host">
@@ -745,6 +747,7 @@
                                 </button>
                             </div>
                         </div>
+                    </div>
                     </div>
 
                     <!-- Cache Performance -->
