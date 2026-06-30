@@ -46,7 +46,9 @@ export function mountToggleCard(container: HTMLElement, opts: MountToggleOptions
     toggle.root.replaceChildren(toggle.root.querySelector('[role="switch"]')!);
     row.appendChild(toggle.root);
 
-    const card = createCard({ body: row, className: 'mb-6', elevation: 'flat' });
+    // No bottom margin: the parent grid (Gateway Status | Priority Steering)
+    // owns spacing via its gap, and the two cards share one row.
+    const card = createCard({ body: row, className: '', elevation: 'flat' });
     container.replaceChildren(card);
 
     // Attach the click handler AFTER mount so we can intercept the toggle's
