@@ -1,0 +1,11 @@
+apiVersion: v2
+name: llmproxy
+description: Helm chart for LLMProxy — The Enterprise GenAI Gateway
+type: application
+version: 1.21.81
+appVersion: 1.21.81
+dependencies:
+  - name: redis
+    version: 18.0.0
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled

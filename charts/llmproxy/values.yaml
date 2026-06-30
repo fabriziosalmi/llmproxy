@@ -1,0 +1,137 @@
+# Default values for llmproxy.
+# This is a YAML-formatted file.
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/fabriziosalmi/llmproxy
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "1.21.81"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  fsGroup: 999
+
+securityContext:
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 999
+  runAsGroup: 999
+
+service:
+  type: ClusterIP
+  port: 8090
+  metricsPort: 9091
+  adminPort: 8081
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: llmproxy.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+  requests:
+    cpu: 200m
+    memory: 512Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Redis dependency configuration (bundled or external)
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: false
+  master:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+# Secrets and Env Configs
+env: {}
+  # DB_TYPE: postgres
+  # DATABASE_URL: "postgresql://user:pass@host:5432/db"
+
+secrets:
+  # Existing secret name to load environment variables (e.g. API keys) from
+  existingSecret: ""
+  # Or provide them inline (will be created as a new Kubernetes Secret)
+  inline: {}
+    # OPENAI_API_KEY: ""
+    # ANTHROPIC_API_KEY: ""
+    # LLM_PROXY_API_KEYS: ""
+
+# config.yaml content to be injected via ConfigMap
+config: |
+  server:
+    host: 0.0.0.0
+    port: 8090
+    timeout: 30s
+    keep_alive: 60s
+    tls:
+      enabled: false
+    auth:
+      enabled: false
+      api_keys_env: "LLM_PROXY_API_KEYS"
+    metrics:
+      enabled: true
+      port: 9091
+    admin:
+      enabled: true
+      port: 8081
+    storage:
+      type: "sqlite"
+  security:
+    enabled: true
+    max_payload_size_kb: 512
+    max_messages: 50
+    link_sanitization:
+      enabled: true
+  rotation:
+    strategy: "round_robin"
+    failover:
+      enabled: true
+      max_retries: 3
+      retry_delay: 1s
+      switch_on_status: [429, 500, 503]
