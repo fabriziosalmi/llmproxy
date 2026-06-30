@@ -107,3 +107,8 @@ docs/CYBERAPI_INTEGRATION.md
 docs/ECOSYSTEM_MAP.md
 docs/INTEGRATION_ARCHITECTURE.md
 .venv
+
+# Helm
+charts/*/charts/*.tgz
+charts/*/charts/
+charts/*/requirements.lock
