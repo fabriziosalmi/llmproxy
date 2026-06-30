@@ -88,14 +88,19 @@ def create_router(agent) -> APIRouter:
             else:
                 if not agent._verify_api_key(token):
                     MetricsTracker.track_auth_failure("invalid_key")
+                    _ip = request.client.host if request.client else "unknown"
+                    # Surface on the Security dashboard's live event feed — a
+                    # rejected key is exactly the signal an operator wants to see.
+                    await agent._add_log(
+                        f"AUTH: rejected invalid API key from {_ip}",
+                        level="SECURITY",
+                    )
                     agent._spawn_task(
                         agent.webhooks.dispatch(
                             EventType.AUTH_FAILURE,
                             {
                                 "reason": "invalid_api_key",
-                                "ip": request.client.host
-                                if request.client
-                                else "unknown",
+                                "ip": _ip,
                             },
                         )
                     )
