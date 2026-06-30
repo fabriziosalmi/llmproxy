@@ -178,6 +178,15 @@ export const api = {
     async fetchConfigYaml() {
         return _json(`${BASE_URL}/api/v1/config/yaml`);
     },
+    async fetchConfigRaw() {
+        return _json(`${BASE_URL}/api/v1/config/raw`);
+    },
+    async validateConfig(yaml) {
+        return _post(`${BASE_URL}/api/v1/config/validate`, { yaml });
+    },
+    async applyConfig(yaml) {
+        return _post(`${BASE_URL}/api/v1/config/apply`, { yaml });
+    },
     async fetchRateLimitConfig() {
         return _json(`${BASE_URL}/api/v1/rate-limit/config`);
     },

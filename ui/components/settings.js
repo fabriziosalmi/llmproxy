@@ -36,6 +36,7 @@ export async function initSettings() {
                     export: document.getElementById('settings-export-host'),
                     system: document.getElementById('settings-system-host'),
                     configYaml: document.getElementById('settings-config-yaml-host'),
+                    configEditor: document.getElementById('settings-config-editor-host'),
                     rateLimit: document.getElementById('settings-rate-limit-host'),
                     health: document.getElementById('settings-health-host'),
                     routing: document.getElementById('settings-routing-host'),

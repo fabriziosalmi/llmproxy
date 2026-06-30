@@ -14,6 +14,19 @@ All notable changes to LLMProxy are documented here.
   log-like content, leaving natural-language prompts untouched; `safe` mode is
   prose-lossless. Disabled by default; fails open. Covered by `tests/test_l0_compressor.py`.
 
+### Added — Config editing from the Admin UI
+- **Edit Configuration (Settings)**: a guarded, admin-only YAML editor for the
+  on-disk `config.yaml` *source*. Two-step by design — **Validate** runs a pure
+  dry-run (`POST /api/v1/config/validate`) surfacing errors + warnings; **Apply**
+  (`POST /api/v1/config/apply`) requires a typed confirmation, then the backend
+  backs up the current file, writes atomically, hot-reloads subsystems, and
+  audits the change. An invalid config is rejected with `400` and **never
+  written**; a config that fails to reload is **automatically rolled back**.
+  Edits target the env-ref-based source (no inline secrets), not the redacted
+  runtime view. New endpoints: `GET /api/v1/config/raw`, `…/validate`, `…/apply`
+  (all admin-gated, 256 KB cap). Covered by `tests/test_config_editing.py` and
+  `ConfigEditor.test.ts`.
+
 ### Fixed — Live data
 - **Live Logs & threat event feed blank on load**: both subscribe to the
   live-only `/api/v1/logs` SSE stream, which only pushed *new* events — with no
