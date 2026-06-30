@@ -14,6 +14,13 @@ All notable changes to LLMProxy are documented here.
   log-like content, leaving natural-language prompts untouched; `safe` mode is
   prose-lossless. Disabled by default; fails open. Covered by `tests/test_l0_compressor.py`.
 
+### Added — Documentation page
+- **New Docs view** in the sidebar (`#/docs`): hero + quick-start, core-concepts
+  and key-endpoints reference, and icon quick-links to the full documentation,
+  the repository, and the author's GitHub & LinkedIn profiles. Static view (no
+  data fetch), wired via the existing nav/router (`VALID_TABS`, `nav-docs`,
+  `view-docs`).
+
 ### Changed — Settings page redesign
 - **Grouped, navigable Settings**: the flat list of 12 cards is reorganised into
   five labelled sections — **Access & Identity**, **Traffic & Routing**,

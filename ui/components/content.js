@@ -4,7 +4,7 @@
 import { store } from '../services/store.js';
 import { hashParts, hashTab } from '../services/urlstate.js';
 
-const VALID_TABS = ['threats', 'guards', 'plugins', 'endpoints', 'models', 'analytics', 'security', 'logs', 'settings'];
+const VALID_TABS = ['threats', 'guards', 'plugins', 'endpoints', 'models', 'analytics', 'security', 'logs', 'settings', 'docs'];
 
 export function renderContent() {
     const { currentTab } = store.state;
