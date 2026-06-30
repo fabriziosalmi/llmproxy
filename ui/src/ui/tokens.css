@@ -111,11 +111,22 @@ html.theme-light body {
     color: #1a1a1c;
 }
 
-/* App-shell + card backgrounds */
+/* App-shell + card backgrounds. Cover EVERY near-black surface class actually
+ * used (both #050506 and #0a0a0c, bare + each opacity variant) — missing the
+ * bare `bg-[#050506]` (the <body>/<main> background) left the whole shell dark. */
+html.theme-light .bg-\[\#050506\],
 html.theme-light .bg-\[\#0a0a0c\],
-html.theme-light .bg-\[\#050506\]\/70,
+html.theme-light .bg-\[\#050506\]\/98,
 html.theme-light .bg-\[\#0a0a0c\]\/95 {
     background-color: rgb(245 245 247) !important;
+}
+/* Translucent shell overlays (sticky headers, sidebar, nav) — keep a hint of
+ * glass so backdrop-blur still reads as a frosted panel on the light substrate. */
+html.theme-light .bg-\[\#050506\]\/70,
+html.theme-light .bg-\[\#050506\]\/80,
+html.theme-light .bg-\[\#0a0a0c\]\/70,
+html.theme-light .bg-\[\#0a0a0c\]\/80 {
+    background-color: rgb(245 245 247 / 0.8) !important;
 }
 
 /* Glassmorphic translucent overlays — flip white-on-dark to dark-on-light */
