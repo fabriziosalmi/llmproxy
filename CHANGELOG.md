@@ -2,6 +2,27 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.22.0] — 2026-06-30
+
+### Community Contributions 🙏
+
+This release lands work generously shared by **[Francesco Stimola](https://github.com/francesco-stimola/llmproxy-extended)**,
+whose `llmproxy-extended` fork explored ONNX-based PII anonymization. Thank you,
+Francesco — open source is at its best when good ideas travel. ❤️
+
+- **ONNX PII Masker (opt-in)**: New `pre_flight` plugin
+  (`plugins/installed/onnx_pii_masker.py`) offering an alternative to the default
+  Presidio masker, backed by the OpenAI Privacy Filter NER model over ONNX
+  Runtime. Detects 8 focused categories (`PRIVATE_PERSON`, `PRIVATE_EMAIL`,
+  `PRIVATE_PHONE`, `PRIVATE_ADDRESS`, `PRIVATE_URL`, `PRIVATE_DATE`,
+  `ACCOUNT_NUMBER`, `SECRET`) with vault-based reversible tokenization and
+  per-request placeholder consistency. **Disabled by default** — enable it in
+  `plugins/manifest.yaml`, install the optional ONNX dependencies, and
+  pre-download the model. Fails open (passes through) when unavailable, so the
+  default pipeline is never affected. *(Contributed by Francesco Stimola.)*
+- **Cross-platform E2E**: `ui/playwright.config.ts` now launches the dev server
+  correctly on Windows as well as POSIX shells. *(Contributed by Francesco Stimola.)*
+
 ## [1.21.73] — 2026-06-02
 
 ### Phase 4 Quality Assurance & Distributed Architecture

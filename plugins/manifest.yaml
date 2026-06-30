@@ -146,6 +146,42 @@ plugins:
         min: 0.5
         max: 0.99
 
+  # ── Community: ONNX PII Masker (opt-in) ──
+  # Contributed by Francesco Stimola (llmproxy-extended). Disabled by default:
+  # enable it AND disable the default "PII Neural Masker" above to swap Presidio
+  # for the OpenAI Privacy Filter NER model. Requires the optional ONNX deps in
+  # requirements.txt and a local model download. Passes through if unavailable.
+
+  - name: "ONNX PII Masker"
+    hook: "pre_flight"
+    priority: 19
+    enabled: false
+    fail_policy: "open"
+    type: "python"
+    entrypoint: "installed.onnx_pii_masker:OnnxPiiMasker"
+    version: "1.0.0"
+    author: "Francesco Stimola (llmproxy-extended)"
+    description: "PII masking via OpenAI Privacy Filter NER (ONNX). Opt-in alternative to Presidio. 8 categories: PRIVATE_PERSON, PRIVATE_EMAIL, PRIVATE_PHONE, PRIVATE_ADDRESS, PRIVATE_URL, PRIVATE_DATE, ACCOUNT_NUMBER, SECRET."
+    timeout_ms: 2000
+    config:
+      model_id: "openai/privacy-filter"
+      variant: "int8"
+      backend: "auto"
+      force_cpu: false
+    ui_schema:
+      - key: "variant"
+        type: "select"
+        label: "Model Variant"
+        description: "ONNX quantization variant. int8 recommended (1.6 GB, ~99% accuracy, DML-safe)."
+        default: "int8"
+        options: ["int8", "fp16", "fp32", "q4", "q4f16"]
+      - key: "backend"
+        type: "select"
+        label: "Inference Backend"
+        description: "auto = DirectML if available (int8 only), otherwise CPU."
+        default: "auto"
+        options: ["auto", "cpu", "directml"]
+
   # ── Optional Marketplace Plugins (disabled by default — opt-in) ──
 
   - name: "Prompt Complexity Scorer"
