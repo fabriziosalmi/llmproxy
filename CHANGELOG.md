@@ -14,6 +14,13 @@ All notable changes to LLMProxy are documented here.
   log-like content, leaving natural-language prompts untouched; `safe` mode is
   prose-lossless. Disabled by default; fails open. Covered by `tests/test_l0_compressor.py`.
 
+### Fixed — Live data
+- **Live Logs & threat event feed blank on load**: both subscribe to the
+  live-only `/api/v1/logs` SSE stream, which only pushed *new* events — with no
+  recent traffic the pages stayed empty. `EventLogger` now keeps a replayable
+  ring of recent entries and the SSE endpoint backfills it on connect, so the
+  Logs terminal and Threats "recent security events" show history immediately.
+
 ### Fixed — Security dashboard
 - **Tracked IPs / Response Signing always blank**: `/api/v1/guards/status` never
   returned the `security_shield.threat_ledger` and `response_signing` objects the
