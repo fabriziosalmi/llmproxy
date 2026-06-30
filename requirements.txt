@@ -24,7 +24,7 @@ sentry-sdk[fastapi]==2.61.1
 # Observability
 opentelemetry-api>=1.25.0
 opentelemetry-sdk>=1.25.0
-opentelemetry-instrumentation>=0.46b0
+opentelemetry-instrumentation>=0.64b0
 opentelemetry-instrumentation-fastapi>=0.46b0
 opentelemetry-instrumentation-aiohttp-client>=0.63b1
 opentelemetry-instrumentation-aiohttp-server>=0.63b1
