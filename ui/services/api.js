@@ -240,6 +240,9 @@ export const api = {
     async fetchTopModels(limit = 10) {
         return _json(`${BASE_URL}/api/v1/analytics/spend/topmodels?limit=${limit}`);
     },
+    async fetchCostEfficiency() {
+        return _json(`${BASE_URL}/api/v1/analytics/cost-efficiency`);
+    },
     async fetchAudit(params = {}) {
         const qs = new URLSearchParams(params).toString();
         return _json(`${BASE_URL}/api/v1/audit?${qs}`);

@@ -20,6 +20,8 @@ import { initTheme, getTheme, setTheme } from './src/services/theme';
 // Apply persisted theme before any render so we don't flash dark→light.
 initTheme();
 
+const BASE_URL = window.location.origin;
+
 // Header theme toggle: button shows the icon for the theme it WILL switch TO,
 // not the active theme — same affordance as macOS appearance.
 function refreshThemeIcons() {
@@ -64,7 +66,7 @@ function getSecurityDeps() {
         fetchGuardsStatus: api.fetchGuardsStatus,
         fetchSecurityCorpus: api.fetchSecurityCorpus,
         getToken: () => localStorage.getItem('proxy_key') || '',
-        origin: window.location.origin,
+        origin: BASE_URL,
         toast,
         timerange: {
             sinceEpochMs: () => timerange.sinceEpochMs(),
@@ -271,7 +273,7 @@ async function init() {
     if (pendingToken) {
         sessionStorage.removeItem('_oauth_id_token');
         try {
-            const res = await fetch(`${window.location.origin}/api/v1/identity/exchange`, {
+            const res = await fetch(`${BASE_URL}/api/v1/identity/exchange`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ token: pendingToken }),
@@ -333,7 +335,7 @@ async function init() {
                 // anonymously reachable. Probing a public 200-on-anonymous
                 // endpoint (e.g. /version) would accept any garbage when
                 // server.auth is disabled.
-                const res = await fetch(`${window.location.origin}/api/v1/identity/me`, {
+                const res = await fetch(`${BASE_URL}/api/v1/identity/me`, {
                     headers: { Authorization: `Bearer ${key}` },
                 });
                 if (!res.ok) {
