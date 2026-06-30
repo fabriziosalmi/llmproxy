@@ -52,6 +52,20 @@ class TestGetPricing:
         assert p["input"] == 99.0
         _config_overrides.clear()
 
+    def test_dynamic_set_model_pricing_preserves_overrides(self):
+        from core.pricing import set_model_pricing, _SORTED_PREFIXES, MODEL_PRICING
+        original_pricing = dict(MODEL_PRICING)
+        try:
+            _config_overrides.clear()
+            set_config_overrides({"custom-override-prefix": {"input": 5.0, "output": 10.0}})
+            set_model_pricing({"gpt-4o": {"input": 2.5, "output": 10.0}})
+            assert "custom-override-prefix" in _SORTED_PREFIXES
+            p = get_pricing("custom-override-prefix-version-1")
+            assert p["input"] == 5.0
+            _config_overrides.clear()
+        finally:
+            set_model_pricing(original_pricing)
+
 
 class TestEstimateCost:
     def test_gpt4o_cost(self):

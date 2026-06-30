@@ -149,9 +149,9 @@ def create_router(agent) -> APIRouter:
                 ]
             body = await request.json()
 
-            # Request deduplication via X-Idempotency-Key header
+            # Request deduplication via X-Idempotency-Key header (only for non-streaming)
             idempotency_key = request.headers.get("X-Idempotency-Key")
-            if idempotency_key:
+            if idempotency_key and not body.get("stream"):
                 dedup_key = f"{session_id}:{idempotency_key}"
                 response = await agent.deduplicator.execute_or_wait(
                     dedup_key,

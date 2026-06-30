@@ -21,10 +21,12 @@ from core.plugin_engine import PluginContext, PluginState
 
 
 @pytest.fixture
-def cache_backend(tmp_path):
+async def cache_backend(tmp_path):
     """Create a CacheBackend with a temp DB file."""
     db_path = str(tmp_path / "test_cache.db")
-    return CacheBackend(db_path=db_path, ttl=3600, enabled=True)
+    backend = CacheBackend(db_path=db_path, ttl=3600, enabled=True)
+    yield backend
+    await backend.close()
 
 
 @pytest.fixture

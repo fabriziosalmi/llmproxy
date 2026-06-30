@@ -28,7 +28,11 @@ async def db_store():
     store = SQLStore(db_path=path)
     await store.init_db()
     yield store
-    os.unlink(path)
+    await store.close()
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
 
 
 def _make_audit_entry(

@@ -12,8 +12,7 @@ def mock_redis():
 
 @pytest.fixture
 def circuit_manager(mock_redis):
-    manager = CircuitManager(redis_url="redis://localhost")
-    manager.redis_client = mock_redis
+    manager = CircuitManager(redis_client=mock_redis)
     manager.scripts = {'check': 'abc', 'success': 'def', 'failure': 'ghi'}
     return manager
 

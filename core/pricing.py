@@ -93,7 +93,7 @@ def set_config_overrides(overrides: Dict[str, Dict[str, float]]):
     _config_overrides.update(overrides)
     global _SORTED_PREFIXES
     all_prefixes = set(MODEL_PRICING.keys()) | set(_config_overrides.keys())
-    _SORTED_PREFIXES = sorted(all_prefixes, key=len, reverse=True)
+    _SORTED_PREFIXES[:] = sorted(all_prefixes, key=len, reverse=True)
 
 
 def get_pricing(model: str) -> Dict[str, float]:
@@ -228,7 +228,6 @@ def estimate_cost_pre_flight(
         est_output_tokens / 1_000_000
     ) * pricing["output"]
 
-
 def set_model_pricing(pricing: dict):
     """Dynamically overwrite MODEL_PRICING and re-sort _SORTED_PREFIXES."""
     global MODEL_PRICING, _SORTED_PREFIXES
@@ -241,5 +240,6 @@ def set_model_pricing(pricing: dict):
                 "input": float(v.get("input", 0.0)),
                 "output": float(v.get("output", 0.0)),
             }
-    _SORTED_PREFIXES[:] = sorted(MODEL_PRICING.keys(), key=len, reverse=True)
+    all_prefixes = set(MODEL_PRICING.keys()) | set(_config_overrides.keys())
+    _SORTED_PREFIXES[:] = sorted(all_prefixes, key=len, reverse=True)
     logger.info("Hot-reloaded model pricing table: %d entries", len(MODEL_PRICING))

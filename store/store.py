@@ -69,6 +69,10 @@ class SQLiteRepository(BaseRepository):
     async def query_audit(self, **kwargs):
         return await self.sql.query_audit(**kwargs)
 
+    async def close(self):
+        """Close the underlying SQLite store connection."""
+        await self.sql.close()
+
 
 # Legacy alias for backward compatibility during refactor
 EndpointStore = SQLiteRepository

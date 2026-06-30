@@ -6,12 +6,17 @@ from core.plugin_engine import PluginContext
 logger = logging.getLogger("llmproxy.plugins.json_healer")
 
 
-def _parse_depth(s: str) -> tuple[int, int, bool]:
-    """Parse braces and brackets depth, ignoring strings and escaped chars."""
+def _get_closing_sequence(s: str) -> tuple[str, str, bool]:
+    """Parse braces and brackets stack to find closing tokens.
+
+    Returns:
+        1. Adjusted string (with trailing commas stripped or colons completed).
+        2. Sequence of closing tokens to balance the nesting.
+        3. Whether the cursor is currently inside a string.
+    """
     in_string = False
     escaped = False
-    braces_count = 0
-    brackets_count = 0
+    stack = []
 
     for char in s:
         if escaped:
@@ -25,16 +30,35 @@ def _parse_depth(s: str) -> tuple[int, int, bool]:
             continue
         if not in_string:
             if char == "{":
-                braces_count += 1
-            elif char == "}":
-                if braces_count > 0:
-                    braces_count -= 1
+                stack.append("}")
             elif char == "[":
-                brackets_count += 1
+                stack.append("]")
+            elif char == "}":
+                if stack and stack[-1] == "}":
+                    stack.pop()
+                elif "}" in stack:
+                    for i in range(len(stack) - 1, -1, -1):
+                        if stack[i] == "}":
+                            stack.pop(i)
+                            break
             elif char == "]":
-                if brackets_count > 0:
-                    brackets_count -= 1
-    return braces_count, brackets_count, in_string
+                if stack and stack[-1] == "]":
+                    stack.pop()
+                elif "]" in stack:
+                    for i in range(len(stack) - 1, -1, -1):
+                        if stack[i] == "]":
+                            stack.pop(i)
+                            break
+
+    adjusted_s = s.rstrip()
+    if not in_string:
+        if adjusted_s.endswith(","):
+            adjusted_s = adjusted_s[:-1].rstrip()
+        elif adjusted_s.endswith(":"):
+            adjusted_s += "null"
+
+    closing = "".join(reversed(stack))
+    return adjusted_s, closing, in_string
 
 
 async def repair(ctx: PluginContext):
@@ -49,23 +73,29 @@ async def repair(ctx: PluginContext):
 
     try:
         body_str = ctx.response.body.decode()
+        stripped = body_str.strip()
         # Does it look like truncated JSON?
-        if body_str.strip().startswith("{") and not body_str.strip().endswith("}"):
-            braces_count, brackets_count, in_string = _parse_depth(body_str)
+        if (stripped.startswith("{") or stripped.startswith("[")) and not (
+            stripped.endswith("}") or stripped.endswith("]")
+        ):
+            adjusted_s, closing, in_string = _get_closing_sequence(body_str)
 
-            repaired = body_str.strip()
+            repaired = adjusted_s
             if in_string:
                 repaired += '"'
-
-            repaired += "]" * brackets_count
-            repaired += "}" * braces_count
+            repaired += closing
 
             try:
                 json.loads(repaired)
+                # Copy and preserve response headers (excluding content-length)
+                headers = dict(ctx.response.headers)
+                headers.pop("content-length", None)
+
                 # Response.body is read-only — create new Response
                 ctx.response = Response(
                     content=repaired.encode(),
                     status_code=ctx.response.status_code,
+                    headers=headers,
                     media_type="application/json",
                 )
                 await rotator._add_log(
