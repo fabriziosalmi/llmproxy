@@ -66,7 +66,7 @@ async def test_json_healer_nested_and_list():
     rotator = MockRotator()
     ctx = PluginContext(response=response, metadata={"rotator": rotator})
     await repair(ctx)
-    
+
     assert ctx.response is not None
     data = json.loads(ctx.response.body.decode())
     assert data == [{"a": [1, 2]}]
@@ -85,10 +85,10 @@ async def test_kill_switch_no_mutation_crash():
     )
     rotator = MockRotator()
     ctx = PluginContext(response=response, metadata={"rotator": rotator})
-    
+
     # Run analyzer. It should NOT raise AttributeError: can't set attribute.
     await analyze(ctx)
-    
+
     assert ctx.response.body == b" [LLMPROXY_ERROR: INFINITE_LOOP_DETECTED_SNIPPED]"
     assert ctx.response.headers["x-custom-header"] == "kill-switch-val"
 
@@ -103,5 +103,5 @@ async def test_shield_sanitizer_headers():
     rotator = MockRotator()
     ctx = PluginContext(response=response, metadata={"rotator": rotator})
     await cleanse(ctx)
-    
+
     assert ctx.response.headers["x-custom-header"] == "sanitizer-val"
