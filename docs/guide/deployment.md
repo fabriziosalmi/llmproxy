@@ -54,6 +54,34 @@ All sensitive values are loaded via environment variables (with optional Infisic
 | `SENTRY_DSN` | Sentry error tracking |
 | `SLACK_WEBHOOK_URL` | Slack webhook for alerts |
 
+## Kubernetes / Helm
+
+For orchestrating LLMProxy in high-availability environments, package and install it via the provided Helm chart (which includes a bundled Redis sub-chart).
+
+### Installation
+
+1. Fetch and compile the chart dependencies:
+```bash
+helm dependency update charts/llmproxy
+```
+
+2. Deploy the chart to your Kubernetes cluster:
+```bash
+helm upgrade --install llmproxy charts/llmproxy \
+  --namespace llmproxy --create-namespace \
+  --set ingress.enabled=true \
+  --set ingress.hosts[0].host="llmproxy.example.com"
+```
+
+### Key Values Configuration
+
+Overridable parameters in `values.yaml`:
+- `replicaCount`: Number of gateway pod instances (default: `2`).
+- `autoscaling.enabled`: CPU-driven Horizontal Pod Autoscaling (up to `10` replicas).
+- `config`: Raw string contents of `config.yaml` injected into the configuration ConfigMap.
+- `secrets.inline`: Dictionary of inline credential variables (e.g. `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `LLM_PROXY_API_KEYS`) automatically mapped as secrets.
+- `redis.enabled`: Provision a bundled Redis cache cluster (default: `true`).
+
 ## CI/CD
 
 ### GitHub Actions
@@ -63,10 +91,15 @@ All sensitive values are loaded via environment variables (with optional Infisic
 - **Test**: pytest with plugin/WASM test suite
 - **Syntax**: AST parse of all Python files
 
-**Docker** (`.github/workflows/docker.yml`) — runs on version tags (`v*`):
+**Docker** (`.github/workflows/docker.yml`) — runs on version tags (`v*`) and pushes:
 - Builds Docker image
 - Pushes to GitHub Container Registry (GHCR)
 - Tags: semver, minor, commit SHA
+
+**CD** (`.github/workflows/deploy.yml`) — runs on release publish:
+- Securely connects to the private Tailscale network (Tailnet) via an ephemeral OAUTH key.
+- SSHs into the private host VM (`100.76.251.33`).
+- Executes the atomic `./scripts/deploy.sh --yes` script to run the build, reload systemd, and perform smoke tests (rolling back on failure).
 
 ## Observability Setup
 
