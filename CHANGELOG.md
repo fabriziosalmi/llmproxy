@@ -2,6 +2,15 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.23.1] — 2026-07-01
+
+### Fixed
+- **Light theme stayed dark**: the `theme-light` overrides covered `bg-[#0a0a0c]`
+  and a couple of opacity variants but missed the bare `bg-[#050506]` used by the
+  `<body>`/`<main>` (and the `/70`, `/80`, `/98` shell overlays), so selecting
+  Light left the whole app dark. All near-black surface classes are now mapped to
+  the light substrate (translucent shell overlays keep a frosted hint).
+
 ## [1.23.0] — 2026-07-01
 
 A broad dashboard UX/DX sweep — decoupled client-following theming, a grouped &
