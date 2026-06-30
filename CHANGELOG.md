@@ -14,6 +14,14 @@ All notable changes to LLMProxy are documented here.
   log-like content, leaving natural-language prompts untouched; `safe` mode is
   prose-lossless. Disabled by default; fails open. Covered by `tests/test_l0_compressor.py`.
 
+### Changed — Settings page redesign
+- **Grouped, navigable Settings**: the flat list of 12 cards is reorganised into
+  five labelled sections — **Access & Identity**, **Traffic & Routing**,
+  **Configuration**, **Integrations**, **System & Data** — with a sticky jump-nav
+  at the top and `:target` highlighting. Host IDs are unchanged, so each card
+  still mounts independently. Added a **Revert** action to the config editor to
+  discard unsaved edits.
+
 ### Added — Config editing from the Admin UI
 - **Edit Configuration (Settings)**: a guarded, admin-only YAML editor for the
   on-disk `config.yaml` *source*. Two-step by design — **Validate** runs a pure
