@@ -45,9 +45,20 @@ pytest-asyncio>=0.23.0
 # Optional: Secrets manager (falls back to env vars without this)
 # infisical-sdk>=3.0.0
 
-# Optional: NLP-powered PII detection
+# Optional: NLP-powered PII detection (default masker)
 # presidio-analyzer
 # presidio-anonymizer
+
+# Optional: ONNX PII masking — OpenAI Privacy Filter NER (opt-in plugin,
+# contributed by llmproxy-extended). Enable "ONNX PII Masker" in
+# plugins/manifest.yaml and pre-download the model:
+#   huggingface-cli download openai/privacy-filter
+# onnxruntime>=1.18.0
+# numpy>=1.24.0
+# transformers>=4.40.0
+# huggingface-hub>=0.20.0
+# tokenizers>=0.19.0
+# Optional GPU on AMD/Intel iGPU (Windows only, int8 variant): onnxruntime-directml
 
 # Optional: WASM plugin support
 # extism

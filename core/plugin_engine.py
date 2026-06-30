@@ -127,6 +127,12 @@ ALLOWED_MODULES = {
     "time",
     "core",  # core.plugin_sdk, core.plugin_engine (for PluginContext import)
     "fastapi",
+    # Opt-in ONNX PII masker (plugins/installed/onnx_pii_masker.py) — imported
+    # lazily inside the plugin; only reachable when the operator enables it.
+    "onnxruntime",
+    "numpy",
+    "transformers",
+    "huggingface_hub",
 }
 
 

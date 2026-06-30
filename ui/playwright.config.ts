@@ -26,7 +26,10 @@ export default defineConfig({
     webServer: skipWebServer
         ? undefined
         : {
-              command: 'bash -c "cd .. && . venv/bin/activate && python main.py"',
+              command:
+                  process.platform === 'win32'
+                      ? 'cmd /c "cd .. && .venv\\Scripts\\python.exe main.py"'
+                      : 'bash -c "cd .. && . venv/bin/activate && python main.py"',
               url: `${BASE_URL}/health`,
               reuseExistingServer: !process.env.CI,
               timeout: 60_000,
