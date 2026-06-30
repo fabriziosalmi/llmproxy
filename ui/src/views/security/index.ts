@@ -3,6 +3,7 @@ import { getHashParam, setHashParams } from '../../../services/urlstate.js';
 import { downloadText } from '../../../services/file_actions.js';
 import { renderAuditEmpty, renderAuditError, renderAuditLoading, renderAuditTable } from './AuditResultsTable';
 import {
+    renderChainIdle,
     renderChainStatus,
     renderGdprError,
     renderGdprPending,
@@ -36,6 +37,12 @@ type SecurityTargets = {
 };
 
 export async function renderSecuritySummary(deps: SecurityDeps, targets: SecurityTargets): Promise<void> {
+    // Audit-chain integrity is only known after a manual "Verify Chain"; until
+    // then clear the skeleton shimmer to a neutral idle state (unless a previous
+    // verify already resolved it to VALID/BROKEN — don't clobber that).
+    const chainEl = document.getElementById('sec-chain-status');
+    if (chainEl?.classList.contains('skeleton')) renderChainIdle(chainEl);
+
     await Promise.allSettled([
         loadGuardsStatus(deps, targets),
         loadRetention(deps, targets),
@@ -68,7 +75,10 @@ async function loadGuardsStatus(deps: SecurityDeps, targets: SecurityTargets): P
         renderTrackedIps(targets.trackedIps, ledger.tracked_ips ?? '—');
         renderSigningStatus(targets.signingStatus, !!data?.response_signing?.enabled);
     } catch {
-        // non-critical
+        // Non-critical, but still resolve the skeletons to a neutral state —
+        // otherwise the loading shimmer pulses forever on a fetch failure.
+        renderTrackedIps(targets.trackedIps, '—');
+        renderSigningStatus(targets.signingStatus, false);
     }
 }
 

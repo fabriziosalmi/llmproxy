@@ -126,6 +126,15 @@ async def test_guards_status_contract(app_agent):
         assert "failure_count" in cb
         assert "failure_threshold" in cb
 
+    # Security dashboard KPI cards (ui/src/views/security) read these exact paths:
+    #   data.security_shield.threat_ledger.tracked_ips  → "Tracked IPs" card
+    #   data.response_signing.enabled                   → "Response Signing" card
+    # Missing them silently renders "—" / "OFF" regardless of real state.
+    assert "security_shield" in data, "Security dashboard reads data.security_shield.threat_ledger"
+    assert "threat_ledger" in data["security_shield"]
+    assert "response_signing" in data, "Security dashboard reads data.response_signing.enabled"
+    assert "enabled" in data["response_signing"]
+
 
 # ── /api/v1/registry — drilldown.js endpoint kind + palette jump-to >ep ────
 

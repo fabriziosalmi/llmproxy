@@ -13,6 +13,9 @@ function el(tag: string, className?: string, text?: string): HTMLElement {
 export function renderTrackedIps(elm: HTMLElement | null, value: number | string): void {
     if (!elm) return;
     elm.textContent = String(value ?? '—');
+    // The `.skeleton` class sets `color: transparent !important` — leaving it on
+    // hides the value we just wrote behind the loading shimmer. Clear it.
+    elm.classList.remove('skeleton');
 }
 
 export function renderSigningStatus(elm: HTMLElement | null, enabled: boolean): void {
@@ -31,7 +34,10 @@ export function renderCorpus(
     categoriesElm: HTMLElement | null,
     stats: CorpusStats
 ): void {
-    if (countElm) countElm.textContent = String(stats.total_patterns ?? 0);
+    if (countElm) {
+        countElm.textContent = String(stats.total_patterns ?? 0);
+        countElm.classList.remove('skeleton'); // reveal the value (see renderTrackedIps)
+    }
     if (!categoriesElm) return;
     const categories = stats.categories || {};
     const fragment = document.createDocumentFragment();
