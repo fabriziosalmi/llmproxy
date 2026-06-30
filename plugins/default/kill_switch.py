@@ -1,4 +1,5 @@
 import re
+from fastapi.responses import Response
 from core.plugin_engine import PluginContext
 
 
@@ -11,11 +12,22 @@ async def analyze(ctx: PluginContext):
     try:
         data = ctx.response.body.decode()
 
+        # Helper to create a new response snipping the body
+        def _snip_response(error_message: bytes):
+            headers = dict(ctx.response.headers)
+            headers.pop("content-length", None)
+            return Response(
+                content=error_message,
+                status_code=ctx.response.status_code,
+                headers=headers,
+                media_type="application/json",
+            )
+
         # 1. Detect simple infinite loops (repetitive characters/words)
         # Look for the same word repeating more than 15 times in a row
         if re.search(r"(\b\w+\b)( \1){15,}", data):
             # Loop detected! Snip the body.
-            ctx.response.body = b" [LLMPROXY_ERROR: INFINITE_LOOP_DETECTED_SNIPPED]"
+            ctx.response = _snip_response(b" [LLMPROXY_ERROR: INFINITE_LOOP_DETECTED_SNIPPED]")
             await rotator._add_log(
                 "KILL-SWITCH: Infinite loop detected. Snipping response stream.",
                 level="CRITICAL",
@@ -24,7 +36,7 @@ async def analyze(ctx: PluginContext):
 
         # 2. Detect "empty babbling" (e.g. infinite newlines)
         if data.count("\n\n\n\n\n\n\n\n\n\n") > 2:
-            ctx.response.body = b" [LLMPROXY_ERROR: STUTTERING_DETECTED_SNIPPED]"
+            ctx.response = _snip_response(b" [LLMPROXY_ERROR: STUTTERING_DETECTED_SNIPPED]")
             await rotator._add_log(
                 "KILL-SWITCH: Model stuttering (excessive newlines). Snipping.",
                 level="CRITICAL",

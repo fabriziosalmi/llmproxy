@@ -43,11 +43,16 @@ async def cleanse(ctx: PluginContext):
             if "[SEC_ERR:" in sanitized:
                 any_blocked = True
 
+        # Copy and preserve response headers (excluding content-length)
+        headers = dict(ctx.response.headers)
+        headers.pop("content-length", None)
+
         # JSONResponse.body is a read-only property — create a new Response
         new_body = json.dumps(data, separators=(",", ":")).encode()
         ctx.response = Response(
             content=new_body,
             status_code=ctx.response.status_code,
+            headers=headers,
             media_type="application/json",
         )
 

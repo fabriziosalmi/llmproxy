@@ -3,11 +3,13 @@ from core.cache import CacheBackend
 
 
 @pytest.fixture
-def semantic_cache_backend(tmp_path):
+async def semantic_cache_backend(tmp_path):
     """Create a CacheBackend with semantic caching enabled."""
     db_path = str(tmp_path / "test_semantic_cache.db")
     config = {"semantic_cache": {"enabled": True, "threshold": 0.75}}
-    return CacheBackend(db_path=db_path, ttl=3600, enabled=True, config=config)
+    backend = CacheBackend(db_path=db_path, ttl=3600, enabled=True, config=config)
+    yield backend
+    await backend.close()
 
 
 @pytest.fixture

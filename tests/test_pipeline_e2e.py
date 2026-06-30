@@ -669,3 +669,41 @@ class TestPipelineEdgeCases:
         assert all(r.status_code == 200 for r in results)
         # Both requests should have gone through all 5 rings (10 total)
         assert len(pipeline_agent.rings_executed) == 10
+
+    @pytest.mark.asyncio
+    async def test_idempotency_key_deduplication_bypasses_streaming(
+        self, pipeline_client, pipeline_agent
+    ):
+        """Streaming requests with X-Idempotency-Key bypass deduplication."""
+        pipeline_agent.deduplicator.execute_or_wait = AsyncMock(
+            wraps=pipeline_agent.deduplicator.execute_or_wait
+        )
+
+        # Call with streaming disabled -> should call execute_or_wait
+        resp1 = await pipeline_client.post(
+            "/v1/chat/completions",
+            headers={"X-Idempotency-Key": "test-key-1"},
+            json={
+                "model": "gpt-4",
+                "messages": [{"role": "user", "content": "Hi"}],
+                "stream": False,
+            },
+        )
+        assert resp1.status_code == 200
+        assert pipeline_agent.deduplicator.execute_or_wait.call_count == 1
+
+        # Reset mock
+        pipeline_agent.deduplicator.execute_or_wait.reset_mock()
+
+        # Call with streaming enabled -> should NOT call execute_or_wait
+        resp2 = await pipeline_client.post(
+            "/v1/chat/completions",
+            headers={"X-Idempotency-Key": "test-key-2"},
+            json={
+                "model": "gpt-4",
+                "messages": [{"role": "user", "content": "Hi"}],
+                "stream": True,
+            },
+        )
+        assert resp2.status_code == 200
+        assert pipeline_agent.deduplicator.execute_or_wait.call_count == 0

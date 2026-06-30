@@ -39,3 +39,4 @@ async def test_endpoint_store():
     await store.remove_endpoint(endpoint_id)
     endpoints = await store.get_all()
     assert not any(e.id == endpoint_id for e in endpoints)
+    await store.close()

@@ -5,9 +5,11 @@ from core.rbac import RBACManager
 
 
 @pytest.fixture
-def rbac(tmp_path):
+async def rbac(tmp_path):
     db_path = str(tmp_path / "test_rbac.db")
-    return RBACManager(db_path)
+    manager = RBACManager(db_path)
+    yield manager
+    await manager.close()
 
 
 def test_admin_has_all_permissions(rbac):
