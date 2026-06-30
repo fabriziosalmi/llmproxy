@@ -15,7 +15,7 @@ import { toast } from './services/toast.js';
 import { initExplain } from './src/services/explain';
 import { initDrilldown, drilldown } from './src/services/drilldown';
 import { initTimerange, timerange } from './services/timerange.js';
-import { initTheme, getTheme, setTheme } from './src/services/theme';
+import { initTheme, getTheme, setTheme, onThemeChange } from './src/services/theme';
 
 // Apply persisted theme before any render so we don't flash dark→light.
 initTheme();
@@ -32,6 +32,9 @@ function refreshThemeIcons() {
     moon.classList.toggle('hidden', theme === 'dark');
     sun.classList.toggle('hidden', theme === 'light');
 }
+// Keep the header icon in sync when the theme changes elsewhere (Settings →
+// Appearance, or a live OS change while preference is 'auto').
+onThemeChange(() => refreshThemeIcons());
 window.addEventListener('DOMContentLoaded', () => {
     refreshThemeIcons();
     const btn = document.getElementById('theme-toggle');

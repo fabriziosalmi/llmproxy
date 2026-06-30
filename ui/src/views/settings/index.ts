@@ -9,6 +9,7 @@
  * EmptyState when the backend reports the feature is disabled.
  */
 import { mountApiReference, type ApiReferenceApi } from './ApiReference';
+import { mountAppearance } from './Appearance';
 import { mountConfigEditor, type ConfigEditorApi } from './ConfigEditor';
 import { mountConfigWarnings, type ConfigWarningsApi } from './ConfigWarnings';
 import { mountConfigYaml, type ConfigYamlApi } from './ConfigYaml';
@@ -53,6 +54,8 @@ export interface SettingsHosts {
     configYaml?: HTMLElement | null;
     /** Edit Configuration — admin YAML editor (validate + apply). Optional. */
     configEditor?: HTMLElement | null;
+    /** Appearance — theme preference (auto/dark/light). Optional. */
+    appearance?: HTMLElement | null;
     /** P.1 — Rate-limit preset picker. Optional. */
     rateLimit?: HTMLElement | null;
     /** P.3 — Per-component health panel. Optional. */
@@ -66,6 +69,7 @@ export interface SettingsHosts {
 export function mountSettingsView(hosts: SettingsHosts, opts: MountSettingsOptions): () => Promise<void> {
     const refreshes: Array<() => Promise<void>> = [];
 
+    if (hosts.appearance) refreshes.push(mountAppearance(hosts.appearance).refresh);
     if (hosts.configWarnings) refreshes.push(mountConfigWarnings(hosts.configWarnings, opts.api));
     if (hosts.identity) refreshes.push(mountIdentity(hosts.identity, opts.api));
     if (hosts.rbac) refreshes.push(mountRbacMatrix(hosts.rbac, opts.api));
@@ -103,6 +107,7 @@ export function mountSettingsView(hosts: SettingsHosts, opts: MountSettingsOptio
 }
 
 export { mountApiReference } from './ApiReference';
+export { mountAppearance } from './Appearance';
 export { mountConfigEditor } from './ConfigEditor';
 export { mountConfigWarnings } from './ConfigWarnings';
 export { mountConfigYaml } from './ConfigYaml';

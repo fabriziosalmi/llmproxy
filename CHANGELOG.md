@@ -14,6 +14,16 @@ All notable changes to LLMProxy are documented here.
   log-like content, leaving natural-language prompts untouched; `safe` mode is
   prose-lossless. Disabled by default; fails open. Covered by `tests/test_l0_compressor.py`.
 
+### Added — Decoupled theming (auto + override)
+- **Appearance follows the client by default**: the theme service now tracks a
+  preference (`auto` | `dark` | `light`); **auto** (the new default) resolves
+  from the client's `prefers-color-scheme` and reacts live to OS changes — no
+  backend involvement. A new **Settings → Appearance** control overrides it
+  (Auto / Dark / Light), persisted to `localStorage`; the header toggle and the
+  selector stay in sync via a subscription. Back-compatible with the prior
+  binary `getTheme`/`setTheme` API and with an already-stored explicit theme.
+  Covered by `theme.test.ts` and `Appearance.test.ts`.
+
 ### Added — Documentation page
 - **New Docs view** in the sidebar (`#/docs`): hero + quick-start, core-concepts
   and key-endpoints reference, and icon quick-links to the full documentation,
