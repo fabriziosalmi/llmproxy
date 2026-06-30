@@ -2,7 +2,12 @@
 
 All notable changes to LLMProxy are documented here.
 
-## [Unreleased]
+## [1.23.0] — 2026-07-01
+
+A broad dashboard UX/DX sweep — decoupled client-following theming, a grouped &
+navigable Settings page, a new Documentation page, and fixes across the Security,
+Threats and Logs views — plus admin config-editing from the UI, deploy hardening
+(bootstrap + safer `deploy.sh`), and two in-house ML-free plugins.
 
 ### Added
 - **l0 Compressor (opt-in)**: New `pre_flight` plugin
