@@ -182,6 +182,46 @@ plugins:
         default: "auto"
         options: ["auto", "cpu", "directml"]
 
+  # ── l0 Compressor: deterministic, ML-free context compression (opt-in) ──
+  # Port of l0-cache (github.com/fabriziosalmi/l0-cache). Zero external deps,
+  # no model, no litellm. Strips ANSI, collapses duplicate/diff/log noise and
+  # truncates oversized blocks in messages[]. mode "auto" only applies the lossy
+  # filters to log-like content, so natural-language prompts are never damaged.
+  # Disabled by default.
+
+  - name: "l0 Compressor"
+    hook: "pre_flight"
+    priority: 26
+    enabled: false
+    fail_policy: "open"
+    type: "python"
+    entrypoint: "installed.l0_compressor:L0Compressor"
+    version: "1.0.0"
+    author: "Fabrizio Salmi (l0-cache port)"
+    description: "Deterministic, ML-free context compression. Collapses ANSI/duplicate/diff/log noise and truncates oversized blocks. Port of l0-cache — no external dependencies."
+    timeout_ms: 200
+    config:
+      mode: "auto"
+      min_lines: 40
+      head_lines: 30
+      tail_lines: 30
+      tail_error_lines: 120
+      truncate_threshold: 100
+    ui_schema:
+      - key: "mode"
+        type: "select"
+        label: "Compression Mode"
+        description: "safe = lossless filters only (prose-safe). auto = aggressive on log-like content. aggressive = always."
+        default: "auto"
+        options: ["auto", "safe", "aggressive"]
+      - key: "min_lines"
+        type: "number"
+        label: "Min Lines to Compress"
+        description: "Skip message content with fewer lines than this (usually the real prompt)."
+        default: 40
+        min: 5
+        max: 500
+
   # ── Optional Marketplace Plugins (disabled by default — opt-in) ──
 
   - name: "Prompt Complexity Scorer"
