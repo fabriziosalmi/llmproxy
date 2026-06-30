@@ -333,6 +333,21 @@ def create_router(agent) -> APIRouter:
                 "soft_limit": agent.config.get("budget", {}).get("soft_limit", 0),
                 "budget_date": agent._budget_date,
             },
+            # Surfaced on the Security dashboard KPI cards. Without these the UI
+            # falls back to "—" (tracked IPs) and "OFF" (signing) regardless of
+            # the real state, because it reads exactly these two keys.
+            "security_shield": {
+                "threat_ledger": (
+                    agent.security.threat_ledger.stats
+                    if getattr(agent.security, "threat_ledger", None)
+                    else {}
+                ),
+            },
+            "response_signing": {
+                "enabled": bool(
+                    getattr(getattr(agent, "response_signer", None), "enabled", False)
+                ),
+            },
         }
 
     @router.get("/api/v1/security/corpus")

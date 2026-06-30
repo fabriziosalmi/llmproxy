@@ -14,6 +14,20 @@ All notable changes to LLMProxy are documented here.
   log-like content, leaving natural-language prompts untouched; `safe` mode is
   prose-lossless. Disabled by default; fails open. Covered by `tests/test_l0_compressor.py`.
 
+### Fixed — Security dashboard
+- **Tracked IPs / Response Signing always blank**: `/api/v1/guards/status` never
+  returned the `security_shield.threat_ledger` and `response_signing` objects the
+  Security dashboard reads, so the "Tracked IPs" card showed `—` and "Response
+  Signing" showed `OFF` regardless of real state. The endpoint now surfaces both;
+  pinned by an extended `test_ui_backend_contract`.
+- **Loading shimmer never cleared (KPI cards)**: `renderTrackedIps` and
+  `renderCorpus` set the value but left the `.skeleton` class
+  (`color: transparent`), so loaded data stayed invisible behind the pulsing
+  shimmer. They now clear the skeleton; `loadGuardsStatus` also resolves the
+  cards on fetch failure instead of shimmering forever.
+- **Audit Chain card pulsed indefinitely**: integrity is only known after a
+  manual "Verify Chain", so the card now shows a neutral idle `—` on load.
+
 ### Shipping & DX
 - **`scripts/bootstrap-remote.sh`** (new): one-command recovery for a fresh or
   wiped remote box — creates the runtime state dir, generates internal secrets

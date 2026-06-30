@@ -34,6 +34,15 @@ export function renderChainStatus(el: HTMLElement | null, valid: boolean): void 
     el.className = valid ? 'text-2xl font-black text-emerald-400' : 'text-2xl font-black text-rose-400';
 }
 
+// Neutral resting state for the Audit Chain KPI card. Integrity is only known
+// after the operator clicks "Verify Chain", so on load we clear the skeleton
+// shimmer (which otherwise pulses forever) and show an idle placeholder.
+export function renderChainIdle(el: HTMLElement | null): void {
+    if (!el) return;
+    el.textContent = '—';
+    el.className = 'text-2xl font-black text-slate-500';
+}
+
 export function renderGdprPending(el: HTMLElement | null, text: string): void {
     if (!el) return;
     el.classList.remove('hidden');
