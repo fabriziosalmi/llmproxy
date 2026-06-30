@@ -1,5 +1,27 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { getTheme, setTheme, initTheme } from './theme';
+import {
+    getTheme,
+    setTheme,
+    initTheme,
+    getThemePreference,
+    setThemePreference,
+    resolveTheme,
+} from './theme';
+
+/** Stub matchMedia so 'auto' resolution is deterministic in tests. */
+function stubSystem(prefersLight: boolean): void {
+    Object.defineProperty(globalThis, 'matchMedia', {
+        configurable: true,
+        value: (q: string) => ({
+            matches: q.includes('light') ? prefersLight : !prefersLight,
+            media: q,
+            addEventListener: () => {},
+            removeEventListener: () => {},
+            addListener: () => {},
+            removeListener: () => {},
+        }),
+    });
+}
 
 // happy-dom 20 ships a no-op localStorage shape — stub a real one so tests
 // can exercise the persistence path. Only this file needs it; the rest of
@@ -29,6 +51,7 @@ describe('theme service', () => {
     beforeEach(() => {
         installStorage();
         document.documentElement.className = '';
+        stubSystem(false); // deterministic: system prefers dark unless a test says otherwise
     });
 
     it('defaults to dark when no preference is stored', () => {
@@ -69,5 +92,43 @@ describe('theme service', () => {
         const t = initTheme();
         expect(t).toBe('dark');
         expect(document.documentElement.classList.contains('theme-light')).toBe(false);
+    });
+
+    // ── Appearance preference (auto/dark/light) ──
+    it('defaults the preference to auto when nothing is stored', () => {
+        expect(getThemePreference()).toBe('auto');
+    });
+
+    it('auto follows the client: resolves light when the system prefers light', () => {
+        stubSystem(true);
+        expect(getThemePreference()).toBe('auto');
+        expect(resolveTheme()).toBe('light');
+        expect(getTheme()).toBe('light');
+    });
+
+    it('auto follows the client: resolves dark when the system prefers dark', () => {
+        stubSystem(false);
+        expect(resolveTheme('auto')).toBe('dark');
+    });
+
+    it('an explicit preference overrides the system', () => {
+        stubSystem(true); // system says light…
+        setThemePreference('dark'); // …but the user pinned dark
+        expect(getThemePreference()).toBe('dark');
+        expect(getTheme()).toBe('dark');
+        expect(document.documentElement.classList.contains('theme-light')).toBe(false);
+    });
+
+    it('setThemePreference("auto") applies the system theme and persists auto', () => {
+        stubSystem(true);
+        setThemePreference('auto');
+        expect(localStorage.getItem('llmproxy.theme')).toBe('auto');
+        expect(document.documentElement.classList.contains('theme-light')).toBe(true);
+    });
+
+    it('a legacy explicit "light" preference is still honoured', () => {
+        localStorage.setItem('llmproxy.theme', 'light');
+        expect(getThemePreference()).toBe('light');
+        expect(getTheme()).toBe('light');
     });
 });

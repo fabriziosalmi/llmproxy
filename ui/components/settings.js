@@ -29,6 +29,7 @@ export async function initSettings() {
         .then(({ mountSettingsView }) => {
             const refreshTs = mountSettingsView(
                 {
+                    appearance: document.getElementById('settings-appearance-host'),
                     configWarnings: document.getElementById('settings-config-warnings-host'),
                     identity: document.getElementById('settings-identity-host'),
                     rbac: document.getElementById('settings-rbac-host'),
