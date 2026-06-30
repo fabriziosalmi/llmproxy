@@ -35,9 +35,12 @@
 #   REMOTE_HOST=100.76.251.33
 #   REMOTE_USER=root
 #   REMOTE_DIR=/opt/llmproxy-src       (git checkout / build context)
+#   REMOTE_REPO_URL=https://github.com/fabriziosalmi/llmproxy.git
+#                                      (cloned into REMOTE_DIR if missing)
+#   REMOTE_STATE_DIR=/opt/llmproxy     (must contain keys.env + config.yaml)
 #   REMOTE_UNIT_PATH=/etc/systemd/system/llmproxy.service
 #   REMOTE_UNIT_NAME=llmproxy
-#   REMOTE_PORT=11434
+#   REMOTE_PORT=8090
 #   IMAGE_REPO=llmproxy
 #   IMAGE_TAG_PREFIX=local-
 #   HEALTH_TIMEOUT_S=90
@@ -53,9 +56,11 @@ set -euo pipefail
 REMOTE_HOST="${REMOTE_HOST:-100.76.251.33}"
 REMOTE_USER="${REMOTE_USER:-root}"
 REMOTE_DIR="${REMOTE_DIR:-/opt/llmproxy-src}"
+REMOTE_REPO_URL="${REMOTE_REPO_URL:-https://github.com/fabriziosalmi/llmproxy.git}"
+REMOTE_STATE_DIR="${REMOTE_STATE_DIR:-/opt/llmproxy}"
 REMOTE_UNIT_PATH="${REMOTE_UNIT_PATH:-/etc/systemd/system/llmproxy.service}"
 REMOTE_UNIT_NAME="${REMOTE_UNIT_NAME:-llmproxy}"
-REMOTE_PORT="${REMOTE_PORT:-11434}"
+REMOTE_PORT="${REMOTE_PORT:-8090}"
 IMAGE_REPO="${IMAGE_REPO:-llmproxy}"
 IMAGE_TAG_PREFIX="${IMAGE_TAG_PREFIX:-local-}"
 HEALTH_TIMEOUT_S="${HEALTH_TIMEOUT_S:-90}"
@@ -170,6 +175,7 @@ log "Reading remote state..."
 # All silent-except-the-final-printf, so the captured stdout is one line.
 REMOTE_PREFLIGHT=$(ssh_exec env \
     REMOTE_DIR="$REMOTE_DIR" \
+    REMOTE_STATE_DIR="$REMOTE_STATE_DIR" \
     REMOTE_UNIT_PATH="$REMOTE_UNIT_PATH" \
     REMOTE_UNIT_NAME="$REMOTE_UNIT_NAME" \
     IMAGE_REPO="$IMAGE_REPO" \
@@ -182,6 +188,8 @@ set -euo pipefail
 
 git_sha=$(cd "$REMOTE_DIR" 2>/dev/null && git rev-parse --short HEAD 2>/dev/null || echo "")
 git_dirty=$(cd "$REMOTE_DIR" 2>/dev/null && git status --porcelain 2>/dev/null | head -c1 | tr -d '\n' || echo "")
+# Is REMOTE_DIR an actual git worktree? (A wiped/missing dir → "no" → clone path.)
+src_is_repo=$(git -C "$REMOTE_DIR" rev-parse --git-dir >/dev/null 2>&1 && echo "yes" || echo "no")
 unit_exists=$( [ -f "$REMOTE_UNIT_PATH" ] && echo "yes" || echo "no" )
 tag_re="${IMAGE_REPO}:${IMAGE_TAG_PREFIX}[a-f0-9]+"
 unit_image=$(grep -oE "$tag_re" "$REMOTE_UNIT_PATH" 2>/dev/null | head -1 || echo "")
@@ -190,33 +198,51 @@ unit_enabled=$(systemctl is-enabled "$REMOTE_UNIT_NAME" 2>/dev/null || echo "")
 docker_ok=$(docker info >/dev/null 2>&1 && echo "yes" || echo "no")
 disk_free_mb=$(df -m /var/lib/docker 2>/dev/null | awk 'NR==2 {print $4}' || echo "0")
 running_image=$(docker inspect "$REMOTE_UNIT_NAME" --format '{{.Config.Image}}' 2>/dev/null || echo "")
+# Runtime state files the systemd unit mounts/reads. Missing keys.env is exactly
+# what crash-looped the box (docker: --env-file: no such file). Catch it here.
+keys_present=$( [ -f "$REMOTE_STATE_DIR/keys.env" ] && echo "yes" || echo "no" )
+config_present=$( [ -f "$REMOTE_STATE_DIR/config.yaml" ] && echo "yes" || echo "no" )
 
-printf '%s|%s|%s|%s|%s|%s|%s|%s|%s\n' \
+printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' \
     "$git_sha" "$git_dirty" "$unit_exists" "$unit_image" \
-    "$unit_active" "$unit_enabled" "$docker_ok" "$disk_free_mb" "$running_image"
+    "$unit_active" "$unit_enabled" "$docker_ok" "$disk_free_mb" "$running_image" \
+    "$src_is_repo" "$keys_present" "$config_present"
 REMOTE_PRE
 )
 
-IFS='|' read -r REMOTE_SHA REMOTE_DIRTY UNIT_EXISTS UNIT_IMAGE UNIT_ACTIVE UNIT_ENABLED DOCKER_OK DISK_FREE_MB RUNNING_IMAGE <<<"$REMOTE_PREFLIGHT"
+IFS='|' read -r REMOTE_SHA REMOTE_DIRTY UNIT_EXISTS UNIT_IMAGE UNIT_ACTIVE UNIT_ENABLED DOCKER_OK DISK_FREE_MB RUNNING_IMAGE SRC_IS_REPO KEYS_PRESENT CONFIG_PRESENT <<<"$REMOTE_PREFLIGHT"
 
 if [ "$UNIT_EXISTS" != "yes" ]; then
     err "Remote systemd unit missing: ${REMOTE_UNIT_PATH}"
+    err "Bootstrap a fresh box first:  scripts/bootstrap-remote.sh"
     exit 1
 fi
 if [ "$DOCKER_OK" != "yes" ]; then
     err "Remote docker daemon not responding."
     exit 1
 fi
+# State-dir guard: the unit mounts $REMOTE_STATE_DIR/{keys.env,config.yaml}. If
+# either is missing, `docker run --env-file` exits 125 and systemd crash-loops
+# forever. Refuse to deploy onto a box that would never come up.
+if [ "$KEYS_PRESENT" != "yes" ] || [ "$CONFIG_PRESENT" != "yes" ]; then
+    [ "$KEYS_PRESENT" = "yes" ]   || err "Remote ${REMOTE_STATE_DIR}/keys.env is MISSING — container would crash-loop on --env-file."
+    [ "$CONFIG_PRESENT" = "yes" ] || err "Remote ${REMOTE_STATE_DIR}/config.yaml is MISSING — container has no config to mount."
+    err "Recover the runtime state first:  scripts/bootstrap-remote.sh"
+    exit 1
+fi
 if [ "${DISK_FREE_MB:-0}" -lt 500 ]; then
     err "Remote disk free < 500 MB in /var/lib/docker (${DISK_FREE_MB} MB). Build will likely fail."
     exit 1
 fi
-if [ -n "$REMOTE_DIRTY" ]; then
+if [ "$SRC_IS_REPO" = "yes" ] && [ -n "$REMOTE_DIRTY" ]; then
     err "Remote ${REMOTE_DIR} has uncommitted changes. Refusing to clobber."
     exit 1
 fi
 
-ok "Remote git: ${REMOTE_SHA:-<unknown>}"
+if [ "$SRC_IS_REPO" != "yes" ]; then
+    warn "Remote ${REMOTE_DIR} is not a git checkout — will clone ${REMOTE_REPO_URL} during deploy."
+fi
+ok "Remote git: ${REMOTE_SHA:-<will clone>}"
 ok "Remote unit: image=${UNIT_IMAGE:-<unset>} active=${UNIT_ACTIVE} enabled=${UNIT_ENABLED}"
 ok "Disk free: ${DISK_FREE_MB} MB"
 [ "$UNIT_ENABLED" = "enabled" ] || warn "Unit is not enabled — deploys will survive a restart but not a reboot."
@@ -275,6 +301,8 @@ ssh_exec env \
     IMAGE_REPO="$IMAGE_REPO" \
     IMAGE_TAG_PREFIX="$IMAGE_TAG_PREFIX" \
     REMOTE_DIR="$REMOTE_DIR" \
+    REMOTE_REPO_URL="$REMOTE_REPO_URL" \
+    SRC_IS_REPO="$SRC_IS_REPO" \
     REMOTE_UNIT_PATH="$REMOTE_UNIT_PATH" \
     REMOTE_UNIT_NAME="$REMOTE_UNIT_NAME" \
     LOCK_PATH="$LOCK_PATH" \
@@ -296,7 +324,16 @@ audit() { printf '%s | %s | %s\n' "$(ts)" "$REMOTE_UNIT_NAME" "$*" >>"$DEPLOY_LO
 
 audit "deploy-start sha=$LOCAL_SHA new_tag=$NEW_TAG old_tag=${OLD_TAG:-<none>}"
 
-# 3a. git fetch + reset
+# 3a. git fetch + reset (clone first if the checkout is missing/clobbered)
+if [ "$SRC_IS_REPO" != "yes" ]; then
+    echo "STEP clone: $REMOTE_DIR is not a repo — cloning $REMOTE_REPO_URL"
+    rm -rf "$REMOTE_DIR"
+    if ! git clone --quiet "$REMOTE_REPO_URL" "$REMOTE_DIR"; then
+        echo "ERR: git clone failed for $REMOTE_REPO_URL → $REMOTE_DIR" >&2
+        audit "deploy-fail step=clone url=$REMOTE_REPO_URL"
+        exit 18
+    fi
+fi
 cd "$REMOTE_DIR"
 git fetch origin --quiet
 git reset --hard "$LOCAL_SHA" >/dev/null

@@ -14,6 +14,23 @@ All notable changes to LLMProxy are documented here.
   log-like content, leaving natural-language prompts untouched; `safe` mode is
   prose-lossless. Disabled by default; fails open. Covered by `tests/test_l0_compressor.py`.
 
+### Shipping & DX
+- **`scripts/bootstrap-remote.sh`** (new): one-command recovery for a fresh or
+  wiped remote box — creates the runtime state dir, generates internal secrets
+  (`LLM_PROXY_API_KEYS`/`MASTER_KEY`/`IDENTITY_SECRET`), writes `config.yaml`, and
+  clones the source checkout. Idempotent; never overwrites existing files.
+  `--show-key` reads back the proxy key for Admin UI login.
+- **`scripts/deploy.sh` hardening** (learned from a real incident where a wiped
+  `/opt/llmproxy` crash-looped the unit 770× on a missing `--env-file`):
+  - Pre-flight now verifies the runtime state dir holds `keys.env` + `config.yaml`
+    and **refuses to deploy** with an actionable error instead of letting the
+    container crash-loop.
+  - Clones `REMOTE_DIR` from `REMOTE_REPO_URL` when the build checkout is missing,
+    instead of failing mid-deploy.
+  - Default `REMOTE_PORT` corrected to **8090** (the canonical UI/health port;
+    the old `11434` default would have failed every post-deploy smoke and rolled
+    back spuriously).
+
 ## [1.22.0] — 2026-06-30
 
 ### Community Contributions 🙏
