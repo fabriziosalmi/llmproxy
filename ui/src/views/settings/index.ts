@@ -9,6 +9,7 @@
  * EmptyState when the backend reports the feature is disabled.
  */
 import { mountApiReference, type ApiReferenceApi } from './ApiReference';
+import { mountConfigEditor, type ConfigEditorApi } from './ConfigEditor';
 import { mountConfigWarnings, type ConfigWarningsApi } from './ConfigWarnings';
 import { mountConfigYaml, type ConfigYamlApi } from './ConfigYaml';
 import { mountDataExport, type ExportApi } from './DataExport';
@@ -29,6 +30,7 @@ export interface SettingsApi
         ExportApi,
         ConfigWarningsApi,
         ConfigYamlApi,
+        ConfigEditorApi,
         RateLimitApi,
         HealthApi,
         RoutingConfigApi,
@@ -49,6 +51,8 @@ export interface SettingsHosts {
     system: HTMLElement | null;
     /** O.5 — Active config (YAML) read-only viewer. Optional so older shells still work. */
     configYaml?: HTMLElement | null;
+    /** Edit Configuration — admin YAML editor (validate + apply). Optional. */
+    configEditor?: HTMLElement | null;
     /** P.1 — Rate-limit preset picker. Optional. */
     rateLimit?: HTMLElement | null;
     /** P.3 — Per-component health panel. Optional. */
@@ -72,6 +76,10 @@ export function mountSettingsView(hosts: SettingsHosts, opts: MountSettingsOptio
     if (hosts.export) refreshes.push(mountDataExport(hosts.export, opts.api, { toast: opts.toast }));
     if (hosts.system) refreshes.push(mountSystemInfo(hosts.system, opts.api));
     if (hosts.configYaml) refreshes.push(mountConfigYaml(hosts.configYaml, opts.api));
+    if (hosts.configEditor) {
+        const handle = mountConfigEditor(hosts.configEditor, opts.api, opts.toast);
+        refreshes.push(handle.refresh);
+    }
     if (hosts.rateLimit) {
         const handle = mountRateLimit(hosts.rateLimit, opts.api, opts.toast);
         refreshes.push(handle.refresh);
@@ -95,6 +103,7 @@ export function mountSettingsView(hosts: SettingsHosts, opts: MountSettingsOptio
 }
 
 export { mountApiReference } from './ApiReference';
+export { mountConfigEditor } from './ConfigEditor';
 export { mountConfigWarnings } from './ConfigWarnings';
 export { mountConfigYaml } from './ConfigYaml';
 export { mountHealthPanel } from './HealthPanel';
