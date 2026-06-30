@@ -9,6 +9,7 @@ import json
 import time
 import asyncio
 import logging
+from collections import deque
 from datetime import datetime
 from typing import Dict, Any
 
@@ -18,10 +19,20 @@ logger = logging.getLogger("llmproxy.event_log")
 class EventLogger:
     """Manages log and telemetry queues with bounded capacity and DLQ overflow."""
 
-    def __init__(self, log_maxsize: int = 100, telemetry_maxsize: int = 1000):
+    def __init__(
+        self,
+        log_maxsize: int = 100,
+        telemetry_maxsize: int = 1000,
+        log_history_size: int = 200,
+    ):
         self.log_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(
             maxsize=log_maxsize
         )
+        # Replayable ring of recent log entries. SSE subscribers (Live Logs +
+        # the threat event feed) are live-only: without a backfill the page is
+        # blank until the *next* event arrives. On connect we replay this so the
+        # operator immediately sees recent history.
+        self._log_history: deque[dict[str, Any]] = deque(maxlen=log_history_size)
         self.telemetry_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(
             maxsize=telemetry_maxsize
         )
@@ -86,11 +97,16 @@ class EventLogger:
         }
         if trace_id:
             entry["trace_id"] = trace_id
+        self._log_history.append(entry)
         if self.log_queue.full():
             dropped = self.log_queue.get_nowait()
             self._schedule_dlq_write(dropped)
         await self.log_queue.put(entry)
         self._fanout(self._log_subscribers, entry)
+
+    def recent_logs(self) -> list[dict[str, Any]]:
+        """Snapshot of recent log entries, oldest first — for SSE backfill."""
+        return list(self._log_history)
 
     async def broadcast_event(self, event_type: str, data: Dict[str, Any]):
         event = {

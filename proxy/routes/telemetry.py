@@ -267,6 +267,11 @@ def create_router(agent) -> APIRouter:
             global _active_log_streams
             stream_q = agent._event_logger.subscribe_logs()
             try:
+                # Backfill: replay recent history so the client isn't blank on
+                # connect (the stream is otherwise live-only). A live event that
+                # also sits in history may appear once more — harmless for a tail.
+                for past in agent._event_logger.recent_logs():
+                    yield f"data: {json.dumps(_sanitize_log(past) if isinstance(past, dict) else past)}\n\n"
                 while True:
                     if await request.is_disconnected():
                         break
