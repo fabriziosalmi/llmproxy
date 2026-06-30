@@ -2,6 +2,18 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [Unreleased]
+
+### Added
+- **l0 Compressor (opt-in)**: New `pre_flight` plugin
+  (`plugins/installed/l0_compressor.py`) — a deterministic, **ML-free, zero-dependency**
+  context compressor ported from [l0-cache](https://github.com/fabriziosalmi/l0-cache).
+  Strips ANSI, collapses duplicate/diff/log noise and truncates oversized blocks
+  in `messages[]`. The in-house alternative to external compressors: no model, no
+  network, no `litellm`. `mode: auto` (default) only applies the lossy filters to
+  log-like content, leaving natural-language prompts untouched; `safe` mode is
+  prose-lossless. Disabled by default; fails open. Covered by `tests/test_l0_compressor.py`.
+
 ## [1.22.0] — 2026-06-30
 
 ### Community Contributions 🙏
