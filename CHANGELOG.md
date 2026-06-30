@@ -2,6 +2,17 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.23.2] — 2026-07-01
+
+### Fixed
+- **Light theme contrast — code/console panels**: `bg-black/*` surfaces (config
+  editor, docs quick-start, inputs) stayed dark while their text inverted to
+  dark, making them unreadable in light mode. They now flip to a light tint.
+- **Recent Security Events stayed empty**: rejected API keys weren't logged to
+  the live event feed. An invalid-key auth failure now emits a `SECURITY` event
+  (`AUTH: rejected invalid API key from <ip>`), so the Home/Threats feed shows
+  real activity instead of only populating on a WAF block.
+
 ## [1.23.1] — 2026-07-01
 
 ### Fixed
