@@ -51,10 +51,7 @@ function _analyticsFallback(id, title) {
 
 async function _fetchEfficiency() {
     try {
-        const token = localStorage.getItem('proxy_key') || '';
-        const headers = token ? { Authorization: `Bearer ${token}` } : {};
-        const res = await fetch(`${window.location.origin}/api/v1/analytics/cost-efficiency`, { headers });
-        return res.ok ? await res.json() : null;
+        return await api.fetchCostEfficiency();
     } catch {
         return null;
     }

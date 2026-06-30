@@ -112,7 +112,7 @@ async function loadSystemInfo() {
 
 async function loadIdentity() {
     try {
-        const config = await fetch(`${window.location.origin}/api/v1/identity/config`).then((r) => r.json());
+        const config = await api.fetchIdentityConfig();
         setText('auth-mode', config.enabled ? 'SSO / OIDC' : 'API Key');
         setText('sso-status', config.enabled ? 'Enabled' : 'Disabled');
     } catch {

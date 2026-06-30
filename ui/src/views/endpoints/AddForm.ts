@@ -27,6 +27,7 @@ export interface AddFormHandle {
 }
 
 const ID_PATTERN = /^[a-z0-9][a-z0-9_-]*$/i;
+const BASE_URL = window.location.origin;
 
 export function createAddEndpointForm(deps: AddFormDeps): AddFormHandle {
     const idField = createInput({
@@ -173,7 +174,7 @@ export function createAddEndpointForm(deps: AddFormDeps): AddFormHandle {
         if (labelSpan) labelSpan.textContent = 'Scanning…';
         try {
             const token = typeof localStorage !== 'undefined' ? (localStorage.getItem('proxy_key') ?? '') : '';
-            const res = await fetch(`${window.location.origin}/api/v1/registry/scan`, {
+            const res = await fetch(`${BASE_URL}/api/v1/registry/scan`, {
                 method: 'POST',
                 headers: token ? { Authorization: `Bearer ${token}` } : {},
             });
