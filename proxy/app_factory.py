@@ -333,6 +333,7 @@ def create_app(agent) -> FastAPI:
 
     from .routes import (
         admin_router,
+        config_router,
         registry_router,
         identity_router,
         plugins_router,
@@ -349,6 +350,7 @@ def create_app(agent) -> FastAPI:
     app.include_router(embeddings_router(agent))
     app.include_router(models_router(agent))
     app.include_router(admin_router(agent))
+    app.include_router(config_router(agent))
     app.include_router(registry_router(agent))
     app.include_router(identity_router(agent))
     app.include_router(plugins_router(agent))

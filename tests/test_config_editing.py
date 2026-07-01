@@ -17,9 +17,9 @@ def _app(config_path: str = "config.yaml"):
     agent.store = InMemoryRepository()
     agent.config_path = config_path
     app = FastAPI()
-    from proxy.routes.admin import create_router as admin
+    from proxy.routes.config import create_router as config
 
-    app.include_router(admin(agent))
+    app.include_router(config(agent))
     return app, agent
 
 
