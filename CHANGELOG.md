@@ -12,6 +12,10 @@ All notable changes to LLMProxy are documented here.
   GitHub-Action pins (#82/#83/#84) are merged directly.
 - **README refresh**: tests badge 1287→1333, docker pull example →1.25.5, and the
   local test-count line realigned to 1335 tests (1333 passing, 2 skipped).
+- **Deploy lint gate** (`scripts/deploy.sh`): the mypy step now blocks only on
+  real type errors and treats missing-stub (`import-untyped`) findings as the
+  environment gap they are (CI installs `types-*`; a local checkout often hasn't),
+  so the gate stays honest on machines without the stub packages installed.
 
 ## [1.25.4] — 2026-07-01
 

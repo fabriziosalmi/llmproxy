@@ -188,10 +188,21 @@ else
         if mypy core/ proxy/ >/tmp/llmproxy-mypy.log 2>&1; then
             ok "mypy clean"
         else
-            err "mypy failed — CI would reject this tree:"
-            sed -n '1,40p' /tmp/llmproxy-mypy.log >&2
-            err "Fix the above, or bypass with --skip-lint (not recommended)."
-            exit 1
+            # Missing type stubs (types-cachetools, types-aiofiles, types-PyYAML,
+            # …) are an ENVIRONMENT gap, not a code defect: CI installs them, a
+            # local checkout usually hasn't. Only block on REAL type errors, so
+            # the gate stays honest whether or not stubs are present locally.
+            real_errors=$(grep "error:" /tmp/llmproxy-mypy.log \
+                | grep -vE "import-untyped|Library stubs not installed" || true)
+            if [ -n "$real_errors" ]; then
+                err "mypy failed — CI would reject this tree:"
+                printf '%s\n' "$real_errors" >&2
+                err "Fix the above, or bypass with --skip-lint (not recommended)."
+                exit 1
+            else
+                warn "mypy: only missing-stub (import-untyped) findings — an environment"
+                warn "gap, not a code defect. CI enforces mypy with the stubs installed."
+            fi
         fi
     else
         warn "mypy not found locally — skipping (CI still enforces it). \`pip install mypy\`"
