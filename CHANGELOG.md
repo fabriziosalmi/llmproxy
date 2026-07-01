@@ -2,6 +2,28 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.25.0] — 2026-07-01
+
+### "Diamond" hardening — enterprise & cybersec depth
+
+- **SIEM export** (`core/siem.py`): security events now ship to any SOC in the two
+  formats every SIEM ingests — **ECS** (Elastic Common Schema) JSON over HTTP
+  (Splunk HEC / Datadog / Elastic, via a new `siem` webhook target on the existing
+  SSRF-protected dispatcher) and **CEF** (ArcSight) for syslog. Pure, injection-safe
+  formatters with spec-correct escaping (a crafted event field can't forge a second
+  field). Covered by `tests/test_siem.py`; docs in `docs/security/siem-export.md`.
+- **Threat-model whitepaper** (`docs/threat_model.md`): the STRIDE skeleton is
+  rewritten as a code-grounded document — defense-in-depth layer table (each cited
+  to its module), OWASP LLM Top 10 mapping to the honest scorecard, and a
+  "measurement honesty" section documenting the runtime/harness parity principle.
+- **Cost-of-security benchmark** (`tests/test_benchmarks.py`): quantifies the
+  deterministic per-request security overhead — **~27 µs** on a typical request,
+  sub-millisecond on a 1200-word prompt (well under the < 5 ms P99 target). Docs in
+  `docs/PERFORMANCE.md`. Threat-score now single-passes pure-ASCII prompts
+  (raw == normalized), cutting the long-prompt cost ~35 % with no loss of detection.
+- **Refactor**: config routes extracted from the 1282-LOC `admin.py` into a cohesive
+  `proxy/routes/config.py` (admin.py → 1102 LOC), behavior byte-identical.
+
 ## [1.24.1] — 2026-07-01
 
 ### Fixed — runtime/harness parity (the OWASP scorecard is now honest)
