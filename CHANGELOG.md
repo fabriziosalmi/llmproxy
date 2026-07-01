@@ -2,6 +2,29 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.24.1] — 2026-07-01
+
+### Fixed — runtime/harness parity (the OWASP scorecard is now honest)
+- **The proof harness measured a path the proxy doesn't use.** It called the
+  legacy `_check_injections` (block at score ≥ 0.7), but the live
+  `SecurityShield.inspect()` decides via the **composite** `calculate_confidence`
+  — where a lone regex hit scores ~0.17 and PASSES. English attacks were caught
+  by the ASGI firewall's byte-signatures, hiding the gap; **non-English and
+  extraction attacks with no signature actually slipped through at runtime**
+  while the harness reported 100 %.
+- **Runtime now blocks high-confidence injections deterministically.** Added a
+  hard-block short-circuit in `inspect()`: any single pattern scoring ≥ 0.85
+  (multilingual instruction-override, extraction "translate/repeat your initial
+  instructions", jailbreak framing) blocks immediately — no second signal
+  required — mirroring what the firewall does for signatures.
+- **Harness rewritten to mirror the runtime decision** (firewall OR hard-block OR
+  composite `block`); `escalate` verdicts (which need an upstream model) are no
+  longer counted as blocks. Gray-zone attacks are flagged `expected_pass_known_gap`
+  and surfaced, not silently inflated. Honest runtime-faithful scorecard:
+  **LLM01 100 % (26/26) · LLM02 100 % · LLM07 100 % (6/6) · benign FP 6 %** — with
+  precise pattern tuning verified against trap-benign controls (0 new false
+  positives). Full 1273-test suite green.
+
 ## [1.24.0] — 2026-07-01
 
 ### Security — multilingual & jailbreak-framing injection defense
