@@ -1,11 +1,22 @@
 """
 B.5 — OWASP LLM Top 10 coverage test.
 
-Runs every entry in `tests/corpus/owasp_llm_top10.yaml` through the
-proxy's security entry points and reports per-category coverage:
-  - SecurityShield._check_injections (threat-score path)
-  - SecurityShield._check_pii_leak / mask_pii (PII path)
+Runs every entry in `tests/corpus/owasp_llm_top10.yaml` through the SAME
+decision the live proxy makes in `SecurityShield.inspect()` — this is the
+key to the numbers being honest:
   - ByteLevelFirewallMiddleware._scan_payload (signature + multi-encoding)
+  - high-confidence regex short-circuit (threat_score >= _HARD_BLOCK_SCORE)
+  - composite `calculate_confidence` "block" decision (gray-zone)
+  - SecurityShield._check_pii_leak / mask_pii (PII path)
+
+Earlier this harness called `_check_injections` (a legacy 0.7-threshold helper)
+which DIVERGED from the runtime: it reported attacks as blocked that the live
+composite actually let through (non-English injections carry no firewall
+signature, and a lone regex hit scores too low on the composite). The harness
+now mirrors the runtime, so the scorecard reflects what the proxy really blocks
+deterministically — an "escalate" verdict (needs an upstream model) is NOT
+counted as a block here. Gray-zone attacks that only AI-escalation would catch
+are flagged `expected_pass_known_gap` and reported, not silently inflated.
 
 The test is deterministic — no upstream model, no network — so it locks
 in a regression-guard for the security pipeline. A REPORT per run is
@@ -102,8 +113,23 @@ def _check_one(
         fw_blocked = False
 
     # Threat-score pass — what the SecurityShield does in pre-flight.
-    shield_block_reason = shield._check_injections(payload)
-    shield_blocked = shield_block_reason is not None
+    # Mirror the RUNTIME decision the live proxy makes in SecurityShield.inspect()
+    # — NOT the legacy _check_injections(0.7) helper, which diverged from what the
+    # proxy actually does. Runtime blocks when either:
+    #   (a) a lone high-confidence pattern fires (score >= _HARD_BLOCK_SCORE), or
+    #   (b) the composite confidence decides "block".
+    # An "escalate" verdict is NOT counted as a deterministic block here: it needs
+    # an upstream model, which this offline corpus intentionally runs without.
+    threat_score, threat_patterns = shield._calculate_threat_score(payload)
+    if threat_score >= shield._HARD_BLOCK_SCORE:
+        shield_blocked = True
+    else:
+        from core.confidence import calculate_confidence
+
+        _conf = calculate_confidence(
+            threat_score=threat_score, threat_patterns=threat_patterns, config={}
+        )
+        shield_blocked = _conf.decision == "block"
 
     # PII pass — separate from injection scoring.
     pii_detected = shield._check_pii_leak(payload)
@@ -148,6 +174,12 @@ def _coverage_by_category(results: list[dict[str, Any]]) -> dict[str, dict[str, 
     for r in results:
         cat = r.get("category", "?")
         if r.get("expected_action") == "out_of_scope":
+            continue
+        # Deterministic-gap entries are documented gray-zone attacks (caught in
+        # prod via AI escalation, not by the offline signature/regex path). They
+        # are reported in the "known gaps" table but excluded from the pass-rate
+        # floor so the number reflects what the DETERMINISTIC pipeline guarantees.
+        if r.get("expected_pass_known_gap"):
             continue
         b = by_cat.setdefault(cat, {"total": 0, "passed": 0})
         b["total"] += 1

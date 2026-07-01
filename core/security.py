@@ -374,6 +374,15 @@ class SecurityShield:
 
         return None
 
+    # A single regex pattern this strong is a high-confidence attack on its own
+    # (e.g. "ignore previous instructions" in any language). At/above this score
+    # the runtime blocks deterministically — WITHOUT waiting for the composite
+    # confidence to find a second corroborating signal. This keeps the live
+    # inspect() path in parity with the OWASP corpus harness; before this, a
+    # lone strong regex hit scored ~0.17 composite and PASSED, so non-English
+    # injections (no firewall signature) slipped through at runtime.
+    _HARD_BLOCK_SCORE: float = 0.85
+
     # Pre-compiled threat patterns — avoids per-request re.compile overhead
     # and eliminates ReDoS risk from unbounded backtracking on crafted input.
     # Patterns use possessive-style atomics where possible (no optional
@@ -405,22 +414,28 @@ class SecurityShield:
             re.compile(
                 r"what\s+(?:were|are|was)\s+(?:the\s+|your\s+)?(?:exact\s+|original\s+)?instructions?"
             ),
-            0.75,
+            0.85,
         ),
-        (re.compile(r"what\s+rules\s+(?:were\s+you\s+|are\s+you\s+|do\s+you)"), 0.7),
+        (re.compile(r"what\s+rules\s+(?:were\s+you\s+|are\s+you\s+)"), 0.85),
         # S.3 — extraction tricks that ask for verbatim continuation /
         # repetition of the system prompt content.
+        # Continuation-bait extraction: "continue this exact text: 'You are…'".
+        # Require "exact" (a bare "continue this text" is ordinary writing help).
+        (re.compile(r"continue\s+this\s+exact\s+(?:text|prompt|message)"), 0.85),
+        # Translation-trick extraction: "translate your initial/system instructions".
+        # Qualifier (initial/original/system/base) keeps benign "translate the
+        # instructions for the recipe" out.
         (
             re.compile(
-                r"continue\s+this\s+(?:exact\s+)?(?:text|prompt|message|conversation)"
+                r"translate\s+(?:your\s+|the\s+)?(?:initial|original|system|base|above)\s+(?:instructions?|prompt)"
             ),
-            0.7,
+            0.85,
         ),
         (
             re.compile(
                 r"repeat\s+(?:the\s+)?(?:words?\s+|text\s+)?(?:above|verbatim|exactly)"
             ),
-            0.8,
+            0.85,
         ),
         (re.compile(r"starting\s+with\s+['\"]you\s+are"), 0.85),
         (re.compile(r"```\s*system"), 0.85),
@@ -437,14 +452,17 @@ class SecurityShield:
         (re.compile(r"忽略.{0,12}(?:指令|指示|提示|规则|命令)"), 0.9),                                 # zh
         (re.compile(r"(?:игнорируй|забудь)\b.{0,40}(?:инструкции|правила|указания)"), 0.85),           # ru
         # ── D.2 — Jailbreak framing & refusal-suppression the signature set misses.
-        (re.compile(r"no\s+(?:ethical|content|moral|safety)\s+(?:guideline|policy|filter|restriction|rule)s?"), 0.8),
-        (re.compile(r"(?:do\s+not|don'?t|never)\s+refuse"), 0.75),
-        (re.compile(r"without\s+any\s+(?:warning|restriction|filter|refusal|limitation|censorship)s?"), 0.7),
+        (re.compile(r"no\s+(?:ethical|content|moral|safety)\s+(?:guideline|policy|filter|restriction|rule)s?"), 0.85),
+        # "do not refuse" is a real jailbreak signal but also appears in benign
+        # pleas ("please don't refuse to help me") — keep it gray-zone (needs a
+        # second signal / AI escalation) rather than a lone hard block.
+        (re.compile(r"(?:do\s+not|don'?t|never)\s+refuse"), 0.6),
+        (re.compile(r"without\s+any\s+(?:restriction|filter|refusal|limitation|censorship)s?"), 0.85),
         (
             re.compile(
                 r"act\s+as\s+(?:an?\s+)?[^\n.]{0,30}(?:unrestricted|uncensored|jailbroken|evil|no\s+(?:rules|limits|restrictions))"
             ),
-            0.8,
+            0.85,
         ),
         (
             re.compile(
@@ -452,14 +470,14 @@ class SecurityShield:
                 r"(?:(?:no|without|don'?t)\b[^\n.]{0,20}(?:rules|restrictions|limits|policy|guidelines|filter)"
                 r"|(?:rules|restrictions|limits|policy|guidelines)\b[^\n.]{0,20}(?:do\s*n'?t|don'?t|no\s+longer)\s+apply)"
             ),
-            0.75,
+            0.85,
         ),
         # ── D.3 — Tool/function-call injection (narrow: internal/admin/system/hidden).
         (
             re.compile(
                 r"(?:call|invoke|execute|run)\s+(?:the\s+)?(?:internal|admin|system|hidden|secret)\s+(?:function|command|tool|api)"
             ),
-            0.8,
+            0.85,
         ),
     ]
 
@@ -543,6 +561,19 @@ class SecurityShield:
 
             # 2a. Regex threat scoring (fast, <0.1ms)
             threat_score, threat_patterns = self._calculate_threat_score(prompt)
+
+            # 2a-bis. High-confidence short-circuit. A lone strong pattern
+            # ("ignore previous instructions" in any language, <|im_start|>, …)
+            # is a block on its own — no need to wait for the composite to find
+            # a second signal. Without this, single-signal non-English injections
+            # (which carry no firewall signature) scored too low on the composite
+            # and passed. Keeps the runtime in parity with the OWASP corpus.
+            if threat_score >= self._HARD_BLOCK_SCORE:
+                logger.warning(
+                    f"INJECTION BLOCK (high-confidence regex): "
+                    f"score={threat_score:.2f} patterns={threat_patterns}"
+                )
+                return "Request blocked by content security policy"
 
             # 2b. Semantic scan (trigram Jaccard, delegated to default thread pool)
             semantic_result = None
