@@ -17,10 +17,14 @@ form a regression guard: a refactor that drops below these breaks the
 build. Improving them is its own work — see "Known gaps" in the
 generated report.
 
-  LLM01 (prompt injection)       ≥ 90 %  (current: 100 % — bumped after S.1-S.5)
+  LLM01 (prompt injection)       ≥ 95 %  (current: 100 % over 27 entries —
+                                          D.1-D.4 added 7 multilingual locales,
+                                          jailbreak framing, refusal-suppression
+                                          and tool-call injection)
   LLM02 (PII)                    ≥ 87 %  (current: 100 %)
   LLM07 (system prompt leakage)  ≥ 80 %  (current: 100 % — bumped after S.2/S.3)
-  Benign false-positive ceiling  ≤ 30 %  (current: 10 %)
+  Benign false-positive ceiling  ≤ 30 %  (current: 6 % over 18 controls, incl.
+                                          multilingual + roleplay/fiction benigns)
 
 Out-of-scope categories (LLM03/04/05/06/08/09/10) are reported as N/A —
 they're caller-side / build-time / model-side concerns, not proxy-side.
@@ -156,11 +160,11 @@ def _coverage_by_category(results: list[dict[str, Any]]) -> dict[str, dict[str, 
 
 
 def test_llm01_prompt_injection_coverage(corpus_results):
-    """LLM01 — Prompt Injection. Floor 90 % (current: 100 % after S.1-S.5)."""
+    """LLM01 — Prompt Injection. Floor 95 % (current: 100 % over 27 entries)."""
     cov = _coverage_by_category(corpus_results)["LLM01"]
     rate = cov["passed"] / cov["total"]
-    assert rate >= 0.90, (
-        f"LLM01 coverage {rate:.0%} < 90% — {cov['passed']}/{cov['total']}"
+    assert rate >= 0.95, (
+        f"LLM01 coverage {rate:.0%} < 95% — {cov['passed']}/{cov['total']}"
     )
 
 

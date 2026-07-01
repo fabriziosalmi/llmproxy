@@ -2,6 +2,26 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.24.0] — 2026-07-01
+
+### Security — multilingual & jailbreak-framing injection defense
+- **English-only-filter bypass closed**: the injection threat-score now detects
+  prompt-override attacks in **7 locales** (it/de/fr/es/pt/zh/ru) — previously an
+  attacker could evade the entire English regex/signature set just by switching
+  language. Threat-score scanning now runs over **both** the raw and the
+  confusable-normalized text, so native non-Latin scripts (CJK, Cyrillic) are
+  matched instead of being mangled by homoglyph normalization.
+- **Jailbreak-framing coverage**: added patterns for "act as … uncensored/no
+  rules", fictional-world / hypothetical framing, refusal-suppression ("do not
+  refuse", "without any warnings"), "no ethical/content guidelines" (AIM-style),
+  and narrow tool/function-call injection (`call the internal/admin function …`).
+- **Adversarial corpus expanded** (`tests/corpus/owasp_llm_top10.yaml`): LLM01
+  grows from 14 → **27** attack variants; **8** new benign precision controls
+  (roleplay, fiction, multilingual) added. Verified: **LLM01 100 % (27/27)**,
+  benign false-positive rate **10 % → 6 %**. LLM01 regression floor raised
+  90 % → 95 %. Full 1273-test suite green; scorecard in
+  [docs/OWASP_LLM_COVERAGE.md](docs/OWASP_LLM_COVERAGE.md).
+
 ## [1.23.2] — 2026-07-01
 
 ### Fixed

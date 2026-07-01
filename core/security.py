@@ -426,6 +426,41 @@ class SecurityShield:
         (re.compile(r"```\s*system"), 0.85),
         (re.compile(r"<\|im_start\|>"), 0.95),
         (re.compile(r"assistant:\s"), 0.6),
+        # ── D.1 — Multilingual instruction-override (English-only filters are
+        # trivially bypassed by switching language). "Ignore/forget (previous)
+        # instructions/rules" in the most common locales — almost never benign.
+        (re.compile(r"\b(?:ignora|dimentica)\b.{0,40}\b(?:istruzioni|indicazioni|regole)\b"), 0.85),  # it
+        (re.compile(r"\bignoriere\b.{0,40}\b(?:anweisungen|anleitung|regeln)\b"), 0.85),               # de
+        (re.compile(r"\b(?:oublie|oubliez|ignore|ignorez)\b.{0,40}\binstructions?\b"), 0.85),          # fr
+        (re.compile(r"\bignora\b.{0,40}\b(?:instrucciones|reglas)\b"), 0.85),                          # es
+        (re.compile(r"\bignore\b.{0,40}\binstru[çc][õo]es\b"), 0.85),                                  # pt
+        (re.compile(r"忽略.{0,12}(?:指令|指示|提示|规则|命令)"), 0.9),                                 # zh
+        (re.compile(r"(?:игнорируй|забудь)\b.{0,40}(?:инструкции|правила|указания)"), 0.85),           # ru
+        # ── D.2 — Jailbreak framing & refusal-suppression the signature set misses.
+        (re.compile(r"no\s+(?:ethical|content|moral|safety)\s+(?:guideline|policy|filter|restriction|rule)s?"), 0.8),
+        (re.compile(r"(?:do\s+not|don'?t|never)\s+refuse"), 0.75),
+        (re.compile(r"without\s+any\s+(?:warning|restriction|filter|refusal|limitation|censorship)s?"), 0.7),
+        (
+            re.compile(
+                r"act\s+as\s+(?:an?\s+)?[^\n.]{0,30}(?:unrestricted|uncensored|jailbroken|evil|no\s+(?:rules|limits|restrictions))"
+            ),
+            0.8,
+        ),
+        (
+            re.compile(
+                r"(?:fictional|hypothetical)\b[^\n.]{0,60}"
+                r"(?:(?:no|without|don'?t)\b[^\n.]{0,20}(?:rules|restrictions|limits|policy|guidelines|filter)"
+                r"|(?:rules|restrictions|limits|policy|guidelines)\b[^\n.]{0,20}(?:do\s*n'?t|don'?t|no\s+longer)\s+apply)"
+            ),
+            0.75,
+        ),
+        # ── D.3 — Tool/function-call injection (narrow: internal/admin/system/hidden).
+        (
+            re.compile(
+                r"(?:call|invoke|execute|run)\s+(?:the\s+)?(?:internal|admin|system|hidden|secret)\s+(?:function|command|tool|api)"
+            ),
+            0.8,
+        ),
     ]
 
     def _calculate_threat_score(self, prompt: str) -> tuple[float, List[str]]:
@@ -441,10 +476,15 @@ class SecurityShield:
         from core.semantic_analyzer import normalize_match_chars
 
         normalized = normalize_match_chars(prompt)
+        # D.1 — also scan the raw (lower-cased) text. `normalize_match_chars` maps
+        # Latin-confusable homoglyphs, which de-obfuscates Latin attacks but can
+        # mangle genuine non-Latin scripts (CJK, Cyrillic). Scanning both forms
+        # catches native-script multilingual injections AND Latin obfuscation.
+        raw_lower = prompt.lower()
         score = 0.0
         matched = []
         for compiled, weight in self._THREAT_PATTERNS:
-            if compiled.search(normalized):
+            if compiled.search(normalized) or compiled.search(raw_lower):
                 score += weight
                 matched.append(compiled.pattern)
         return score, matched
