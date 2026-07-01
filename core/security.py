@@ -499,10 +499,14 @@ class SecurityShield:
         # mangle genuine non-Latin scripts (CJK, Cyrillic). Scanning both forms
         # catches native-script multilingual injections AND Latin obfuscation.
         raw_lower = prompt.lower()
+        # Only scan both forms when they actually differ. For pure-ASCII English
+        # (the common case) normalization is a no-op, so `normalized == raw_lower`
+        # and we save a full second regex pass over the whole prompt.
+        forms = (normalized,) if normalized == raw_lower else (normalized, raw_lower)
         score = 0.0
         matched = []
         for compiled, weight in self._THREAT_PATTERNS:
-            if compiled.search(normalized) or compiled.search(raw_lower):
+            if any(compiled.search(f) for f in forms):
                 score += weight
                 matched.append(compiled.pattern)
         return score, matched
