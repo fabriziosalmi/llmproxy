@@ -2,6 +2,29 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.25.4] — 2026-07-01
+
+### Ecosystem convergence — lexical domain reputation
+
+- **FQDN risk scoring** (`core/fqdn_risk.py`): a second ecosystem convergence,
+  this time with [fqdn-model](https://github.com/fabriziosalmi/fqdn-model). Its
+  Random Forest relies mostly on network features (DNS/SSL/HTTP/WHOIS) that can't
+  run on the synchronous request path, so this ports the subset computable from
+  the **domain string alone** — its `analyze_fqdn` network-free features and the
+  exact constant lists from its `settings.py` (risky TLDs, URL shorteners,
+  phishing keywords, length/hyphen/digit/subdomain thresholds) — into a
+  transparent, zero-dependency 0..1 risk score. Wired into the existing link
+  sanitizer on **both** paths: `SecurityShield._check_links` (prompts) and
+  `sanitize_response` (responses), augmenting the static `blocked_domains`
+  deny-list. Risk requires a *combination* of signals (a lone risky TLD scores
+  0.30, below the 0.7 default), so benign hosts like `raw.githubusercontent.com`
+  and `login.microsoftonline.com` stay well under the bar while
+  `secure-login-verify.xyz` clears it. Opt-in (`link_sanitization.risk_scoring`,
+  disabled by default), fail-open, with a `log_only` mode. Covered by
+  `tests/test_fqdn_risk.py` (30 tests); docs in
+  `docs/security/fqdn-risk-scoring.md`. The full behavioral model remains a
+  future opt-in Tier-2 via an fqdn-model sidecar service.
+
 ## [1.25.3] — 2026-07-01
 
 ### Security / dependencies
