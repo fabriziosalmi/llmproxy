@@ -1,8 +1,6 @@
 """SSE log backfill: the Live Logs page and the threat event feed subscribe to a
 live-only stream, so EventLogger keeps a replayable ring of recent entries that
 is sent on connect. Without it the pages render blank until the next event."""
-import asyncio
-
 import pytest
 
 from proxy.event_log import EventLogger
