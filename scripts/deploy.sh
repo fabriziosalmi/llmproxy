@@ -28,6 +28,7 @@
 #   scripts/deploy.sh --no-rollback                  # don't auto-revert
 #   scripts/deploy.sh --force                        # redeploy same SHA
 #   scripts/deploy.sh --yes                          # skip confirmation
+#   scripts/deploy.sh --skip-lint                    # bypass the ruff+mypy CI gate
 #   scripts/deploy.sh --prune-old                    # remove old <repo>:<prefix>* images
 #                                                    # older than 7 days, post-smoke.
 #
@@ -73,6 +74,7 @@ NO_ROLLBACK=0
 FORCE=0
 ASSUME_YES=0
 PRUNE_OLD=0
+SKIP_LINT="${SKIP_LINT:-0}"
 
 # ── Arg parse ───────────────────────────────────────────────────────────────
 usage() { sed -n '2,55p' "$0" | sed 's/^# \{0,1\}//'; }
@@ -84,6 +86,7 @@ while [[ $# -gt 0 ]]; do
         --force)        FORCE=1; shift;;
         --yes|-y)       ASSUME_YES=1; shift;;
         --prune-old)    PRUNE_OLD=1; shift;;
+        --skip-lint)    SKIP_LINT=1; shift;;
         --probe-key)
             printf '\033[1;33m!\033[0m --probe-key on the CLI leaves the key in shell history and `ps`.\n' >&2
             printf '\033[1;33m!\033[0m Prefer:  PROBE_KEY=$(cat ~/.llmproxy-key) scripts/deploy.sh\n' >&2
@@ -157,6 +160,43 @@ NEW_TAG="${IMAGE_REPO}:${IMAGE_TAG_PREFIX}${LOCAL_SHA}"
 
 ok "Local main @ ${LOCAL_SHA} (v${EXPECTED_VERSION})"
 ok "Target image tag: ${NEW_TAG}"
+
+# ── 0b. CI-parity lint gate (ruff + mypy) ───────────────────────────────────
+# The remote build runs the app, not the linters, so lint/type debt used to
+# ship silently — that's exactly how an E741/F401 batch once reached main. We
+# mirror the CI gate here and refuse to deploy a tree CI would reject. Both
+# tools are optional locally: if a linter isn't installed we warn and continue
+# (CI still enforces it). Escape hatch for emergencies: --skip-lint.
+if [ "$SKIP_LINT" -eq 1 ]; then
+    warn "Lint gate skipped (--skip-lint). CI still enforces ruff + mypy."
+else
+    if command -v ruff >/dev/null 2>&1; then
+        log "ruff check . (CI parity)..."
+        if ruff check . >/tmp/llmproxy-ruff.log 2>&1; then
+            ok "ruff clean"
+        else
+            err "ruff failed — CI would reject this tree:"
+            sed -n '1,40p' /tmp/llmproxy-ruff.log >&2
+            err "Fix the above, or bypass with --skip-lint (not recommended)."
+            exit 1
+        fi
+    else
+        warn "ruff not found locally — skipping (CI still enforces it). \`pip install ruff\`"
+    fi
+    if command -v mypy >/dev/null 2>&1; then
+        log "mypy core/ proxy/ (CI parity)..."
+        if mypy core/ proxy/ >/tmp/llmproxy-mypy.log 2>&1; then
+            ok "mypy clean"
+        else
+            err "mypy failed — CI would reject this tree:"
+            sed -n '1,40p' /tmp/llmproxy-mypy.log >&2
+            err "Fix the above, or bypass with --skip-lint (not recommended)."
+            exit 1
+        fi
+    else
+        warn "mypy not found locally — skipping (CI still enforces it). \`pip install mypy\`"
+    fi
+fi
 
 # ── 1. Remote pre-flight (read-only, no state mutation) ─────────────────────
 step "1. Remote pre-flight"
