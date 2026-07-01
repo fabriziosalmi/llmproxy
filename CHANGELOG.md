@@ -2,6 +2,17 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.25.5] — 2026-07-01
+
+### Dependencies / housekeeping
+
+- **Remaining Dependabot sweep**: uvicorn 0.46.0→0.49.0 (validated in CI/Docker on
+  Python 3.12), types-PyYAML floor →6.0.12.20260518 (mypy clean), and vue
+  3.5.35→3.5.39 in the `/docs` toolchain. Supersedes #87/#88/#103. The three CI
+  GitHub-Action pins (#82/#83/#84) are merged directly.
+- **README refresh**: tests badge 1287→1333, docker pull example →1.25.5, and the
+  local test-count line realigned to 1335 tests (1333 passing, 2 skipped).
+
 ## [1.25.4] — 2026-07-01
 
 ### Ecosystem convergence — lexical domain reputation
