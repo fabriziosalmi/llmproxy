@@ -2,6 +2,37 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.25.2] — 2026-07-01
+
+### Ecosystem convergence — slopsquatting defense
+
+- **AI Dependency Guard** (`plugins/installed/ai_dependency_guard.py`): a new
+  opt-in `post_flight` plugin that defends against **slopsquatting** — the attack
+  where a model recommends `pip install`/`npm install` for a package that doesn't
+  exist, an attacker registers that hallucinated name, and the user installs
+  malware. A faithful port of
+  [ai-dependency-guard](https://github.com/fabriziosalmi/ai-dependency-guard),
+  moved from CI manifest scanning to **live inspection of the model's output**.
+  Two-tier detection mirroring upstream: **Tier 1** offline blocklist (catches
+  squatted names that resolve to `200`), **Tier 2** registry existence against the
+  PyPI JSON API / npm registry (strict HTTP `404` → hallucination). **Fail-open**
+  throughout — a registry `200`/`5xx`/timeout is treated as "exists", only a `404`
+  flags. High-precision extraction (install commands + pinned requirement lines
+  only; flags, URLs, git refs and paths are dropped) keeps false positives near
+  zero. Non-blocking by default (enriches `_depguard_*` metadata); set
+  `block_on_hallucination` to `403` the response. Process-wide existence cache and
+  a bounded network time budget keep it off the hot path. Disabled by default.
+  Covered by `tests/test_ai_dependency_guard.py` (16 tests); docs in
+  `docs/security/slopsquatting-guard.md`.
+
+### Tooling
+
+- **Deploy CI-parity gate** (`scripts/deploy.sh`): local pre-flight now runs
+  `ruff check .` and `mypy core/ proxy/` and refuses to deploy a tree CI would
+  reject — closing the gap that let lint/type debt ship silently (the remote
+  build runs the app, not the linters). Both tools are optional locally (warn +
+  continue if absent, since CI still enforces them); escape hatch `--skip-lint`.
+
 ## [1.25.1] — 2026-07-01
 
 ### Docs

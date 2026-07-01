@@ -222,6 +222,59 @@ plugins:
         min: 5
         max: 500
 
+  # ── AI Dependency Guard: slopsquatting defense on LLM output (opt-in) ──
+  # Port of ai-dependency-guard (github.com/fabriziosalmi/ai-dependency-guard).
+  # Post-flight: scans the model's response for pip/npm install recommendations
+  # and flags packages that don't exist on PyPI/npm (registry 404) or are on a
+  # denylist. Fail-open (a registry timeout/5xx is treated as "exists"). Enriches
+  # metadata by default; set block_on_hallucination to reject the response.
+  # Disabled by default.
+
+  - name: "AI Dependency Guard"
+    hook: "post_flight"
+    priority: 80
+    enabled: false
+    fail_policy: "open"
+    type: "python"
+    entrypoint: "installed.ai_dependency_guard:AiDependencyGuard"
+    version: "1.0.0"
+    author: "Fabrizio Salmi (ai-dependency-guard port)"
+    description: "Slopsquatting defense: flags LLM-recommended pip/npm packages that don't exist (registry 404) or are denylisted. Port of ai-dependency-guard."
+    timeout_ms: 2500
+    config:
+      registry_check: true
+      block_on_hallucination: false
+      max_packages_per_response: 20
+      registry_timeout_ms: 1500
+      cache_ttl_s: 3600
+      ecosystems: ["pypi", "npm"]
+      blocklist: []
+    ui_schema:
+      - key: "registry_check"
+        type: "boolean"
+        label: "Registry Existence Check (Tier 2)"
+        description: "Check recommended packages against PyPI/npm; a 404 flags a hallucination. Off = blocklist only."
+        default: true
+      - key: "block_on_hallucination"
+        type: "boolean"
+        label: "Block on Hallucination"
+        description: "Reject the response (403) when a suspicious package is found. Off = enrich metadata only."
+        default: false
+      - key: "registry_timeout_ms"
+        type: "number"
+        label: "Registry Time Budget (ms)"
+        description: "Total time budget for the Tier-2 network sweep. On overrun the check fails open."
+        default: 1500
+        min: 200
+        max: 10000
+      - key: "max_packages_per_response"
+        type: "number"
+        label: "Max Packages Checked"
+        description: "Cap on how many distinct packages are checked per response."
+        default: 20
+        min: 1
+        max: 100
+
   # ── Optional Marketplace Plugins (disabled by default — opt-in) ──
 
   - name: "Prompt Complexity Scorer"
