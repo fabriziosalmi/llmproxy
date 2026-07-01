@@ -2,6 +2,12 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.25.1] — 2026-07-01
+
+### Docs
+- README refresh: tests badge 1236 → 1287, docker pull example → 1.25.0, and the
+  new ECS/CEF SIEM export documented under Observability.
+
 ## [1.25.0] — 2026-07-01
 
 ### "Diamond" hardening — enterprise & cybersec depth

@@ -233,17 +233,17 @@ def _looks_like_logs(lines: list) -> bool:
     structural signal, so natural-language prose is never aggressively collapsed."""
     if len(lines) < 8:
         return False
-    if any(_is_hunk_header(l) for l in lines):
+    if any(_is_hunk_header(ln) for ln in lines):
         return True
-    non_empty = [l for l in lines if l.strip()]
+    non_empty = [ln for ln in lines if ln.strip()]
     if not non_empty:
         return False
     # Only a strong *structural* signal counts. A shared first word is NOT enough:
     # ordinary prose frequently repeats sentence-leading words ("The …", "I …"),
     # which must never trigger the lossy prefix/fuzzy collapse.
     structured = sum(
-        1 for l in non_empty
-        if _LOGLEVEL_RE.search(l) or _has_error_signal(l) or l.lstrip()[:1] in ("[", "{", "+")
+        1 for ln in non_empty
+        if _LOGLEVEL_RE.search(ln) or _has_error_signal(ln) or ln.lstrip()[:1] in ("[", "{", "+")
     )
     return (structured / len(non_empty)) >= 0.30
 
@@ -260,7 +260,7 @@ def _compress_text(text: str, mode: str, head: int, tail: int, tail_error: int,
     lines = _collapse_lines(lines, prefix_mode=aggressive)
     lines = _squeeze_blanks(lines)
     if aggressive:
-        display_tail = tail_error if any(_has_error_signal(l) for l in lines) else tail
+        display_tail = tail_error if any(_has_error_signal(ln) for ln in lines) else tail
         lines = _head_tail(lines, head, display_tail, threshold)
     return "\n".join(lines)
 
