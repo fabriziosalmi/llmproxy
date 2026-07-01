@@ -2,6 +2,25 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.25.3] — 2026-07-01
+
+### Security / dependencies
+
+- **UI toolchain refresh** (`ui/`): one consolidated bump clearing three
+  dev/build-time advisories — vite `server.fs.deny` bypass + launch-editor NTLM
+  disclosure (GHSA-fx2h-pf6j-xcff / GHSA-v6wh-96g9-6wx3, **high**, Windows-only),
+  js-yaml quadratic-complexity DoS (GHSA-h67p-54hq-rp68, moderate), and esbuild
+  dev-server arbitrary file read (GHSA-g7r4-m6w7-qqqr, low). **None are reachable
+  from the deployed Linux gateway** — there is no vite/esbuild dev server at
+  runtime and js-yaml is not on the Python path; they are build-time only. `npm
+  audit` now reports 0 vulnerabilities. vite 7.3.2→7.3.6, esbuild→0.28.1,
+  js-yaml→4.3.0, with @types/node 26, @typescript-eslint 8.62, @playwright/test
+  1.61 and highlight.js 11.11 refreshed in the same lockfile pass. Supersedes
+  Dependabot #68/#91/#92/#93/#94/#95/#97. UI build + 377 unit tests + eslint green.
+- **Runtime pin bumps** (`requirements.txt`): asyncpg ≥0.31.0, pytest ≥9.1.1,
+  opentelemetry-instrumentation ≥0.64b0 — each validated against the full Python
+  suite (1303 passed) on the upgraded versions. Supersedes #102/#104/#105.
+
 ## [1.25.2] — 2026-07-01
 
 ### Ecosystem convergence — slopsquatting defense
