@@ -73,6 +73,10 @@ def _make_admin_app():
 
     app = FastAPI()
     app.include_router(create_router(agent))
+    # Config routes were split out of admin into proxy/routes/config.py.
+    from proxy.routes.config import create_router as config_create_router
+
+    app.include_router(config_create_router(agent))
     return app, agent
 
 

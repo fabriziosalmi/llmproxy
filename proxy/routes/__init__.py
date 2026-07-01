@@ -4,6 +4,7 @@ Split from the original monolithic _setup_routes() in rotator.py (J.6 refactor).
 """
 
 from .admin import create_router as admin_router
+from .config import create_router as config_router
 from .registry import create_router as registry_router
 from .identity import create_router as identity_router
 from .plugins import create_router as plugins_router
@@ -16,6 +17,7 @@ from .gdpr import create_router as gdpr_router
 
 __all__ = [
     "admin_router",
+    "config_router",
     "registry_router",
     "identity_router",
     "plugins_router",
