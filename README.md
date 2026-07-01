@@ -4,7 +4,7 @@ Security gateway for Large Language Models. Routes requests across 24 providers 
 
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-1236%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-1287%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-67%25-yellowgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 [![CI](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml/badge.svg)](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml)
@@ -48,7 +48,7 @@ docker run -d --name llmproxy -p 8090:8090 \
   -e LLM_PROXY_API_KEYS=sk-proxy-test \
   -e OPENAI_API_KEY=$OPENAI_API_KEY \
   -v llmproxy-data:/app/data \
-  ghcr.io/fabriziosalmi/llmproxy:1.21.80
+  ghcr.io/fabriziosalmi/llmproxy:1.25.0
 ```
 
 Each release publishes `:latest`, the full semver (`:X.Y.Z`), the minor (`:X.Y`), plus a per-commit short SHA tag for reproducible deploys.
@@ -323,6 +323,7 @@ Keyboard shortcuts: `Cmd+K` (command palette), `F` (cinema mode). URL hash routi
 - **OpenTelemetry** -- Distributed tracing via OTLP. Graceful degradation when not installed.
 - **Sentry** -- Exception tracking with PII filtering and sampling.
 - **Webhooks** -- Slack, Teams, Discord, Generic (JSON). HMAC-SHA256 signed. SSRF-protected.
+- **SIEM export** -- Security events as **ECS** JSON (Splunk HEC / Datadog / Elastic) and **CEF** (ArcSight / syslog), injection-safe escaping. See [docs/security/siem-export.md](docs/security/siem-export.md).
 - **Dataset Export** -- Async JSONL with PII scrubbing, gzip rotation, optional Parquet conversion.
 
 ---
