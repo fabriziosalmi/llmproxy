@@ -37,6 +37,14 @@ security:
   link_sanitization:
     enabled: true
     blocked_domains: ["malicious-site.com", "phishing.net"]
+    # Opt-in lexical risk scoring (fqdn-model convergence). Scores every host in
+    # prompts/responses on network-free features (risky TLD, phishing keywords,
+    # IP-as-host, excess hyphens/digits/subdomains) and blocks those at/above the
+    # threshold, augmenting the static blocklist. Fail-open. Disabled by default.
+    risk_scoring:
+      enabled: false
+      block_threshold: 0.7   # 0..1; lower = stricter (0.5 also catches risky-TLD DGAs)
+      log_only: false        # true = log the risk but never block/replace the link
 
 # Identity & SSO — Multi-provider OIDC
 identity:

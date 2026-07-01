@@ -763,6 +763,13 @@ class SecurityShield:
             "blocked_domains", []
         )
 
+        # Risk scoring (opt-in): fqdn-model lexical convergence. Score each host
+        # and block/log the ones above threshold, augmenting the static blocklist.
+        risk_cfg = self.config.get("link_sanitization", {}).get("risk_scoring", {})
+        risk_enabled = risk_cfg.get("enabled", False)
+        risk_threshold = float(risk_cfg.get("block_threshold", 0.7))
+        risk_log_only = bool(risk_cfg.get("log_only", False))
+
         for link in links:
             # H1: Extract actual domain via urlparse, then exact or suffix match.
             # Prevents substring false positives (e.g. "not-malicious-site.com"
@@ -775,6 +782,21 @@ class SecurityShield:
                 domain_lower = domain.lower()
                 if netloc == domain_lower or netloc.endswith("." + domain_lower):
                     return f"Unsafe link detected: {link}"
+
+            if risk_enabled and netloc:
+                # Fail-open: a scorer error must never block a legitimate request.
+                try:
+                    from core.fqdn_risk import assess
+
+                    score, reasons = assess(netloc)
+                except Exception:
+                    continue
+                if score >= risk_threshold:
+                    logger.warning(
+                        f"FQDN RISK: {netloc} score={score:.2f} reasons={reasons}"
+                    )
+                    if not risk_log_only:
+                        return f"Unsafe link detected (risk={score:.2f}): {link}"
 
         return None
 
@@ -807,12 +829,15 @@ class SecurityShield:
             )
             return "[SEC_ERR: INVISIBLE_CHAR_DETECTED]"
 
-        # 4. Link Sanitizer — replace blocked URLs with [BLOCKED_LINK]
+        # 4. Link Sanitizer — replace blocked/high-risk URLs with [BLOCKED_LINK]
         # H1: Use urlparse for proper domain extraction instead of substring.
-        blocked_domains = self.config.get("link_sanitization", {}).get(
-            "blocked_domains", []
-        )
-        if blocked_domains:
+        link_cfg = self.config.get("link_sanitization", {})
+        blocked_domains = link_cfg.get("blocked_domains", [])
+        resp_risk_cfg = link_cfg.get("risk_scoring", {})
+        resp_risk_enabled = resp_risk_cfg.get("enabled", False)
+        resp_risk_threshold = float(resp_risk_cfg.get("block_threshold", 0.7))
+        resp_risk_log_only = bool(resp_risk_cfg.get("log_only", False))
+        if blocked_domains or resp_risk_enabled:
             from urllib.parse import urlparse
 
             def _replace_blocked_urls(match):
@@ -822,6 +847,17 @@ class SecurityShield:
                         d_lower = d.lower()
                         if netloc == d_lower or netloc.endswith("." + d_lower):
                             return "[BLOCKED_LINK]"
+                    if resp_risk_enabled and netloc:
+                        from core.fqdn_risk import assess
+
+                        score, reasons = assess(netloc)
+                        if score >= resp_risk_threshold:
+                            logger.warning(
+                                f"FQDN RISK (response): {netloc} "
+                                f"score={score:.2f} reasons={reasons}"
+                            )
+                            if not resp_risk_log_only:
+                                return "[BLOCKED_LINK]"
                 except Exception:
                     pass
                 return match.group(0)
