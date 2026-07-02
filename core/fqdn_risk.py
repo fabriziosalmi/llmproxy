@@ -25,8 +25,8 @@ risk requires a *combination*, which is what keeps false positives low.
 """
 from __future__ import annotations
 
-import re
-from typing import List, Tuple
+import ipaddress
+from typing import List, Optional, Tuple
 
 # ── Constants ported verbatim from fqdn-model/settings.py ─────────────────────
 RISKY_TLDS = frozenset(
@@ -49,15 +49,22 @@ MAX_SUBDOMAINS = 3
 # feature fired. Tuned so benign hosts stay < DEFAULT_BLOCK_THRESHOLD and a
 # realistic phishing/DGA host (risky TLD + keyword + hyphens) clears it.
 WEIGHTS = {
-    "ip_as_host": 0.35,
+    "private_ip": 0.45,   # loopback/private/link-local/reserved IP literal in a link
+    "ip_as_host": 0.35,   # any IP literal used as the host (obfuscation)
     "risky_tld": 0.30,
     "shortener": 0.25,
-    "suspicious_keyword": 0.25,
+    "punycode": 0.25,     # xn-- IDN — classic homograph phishing vector
     "excess_hyphens": 0.20,
     "excess_digits": 0.20,
     "excess_subdomains": 0.20,
     "long_domain": 0.08,
 }
+# Phishing keywords score PER DISTINCT HIT (capped), so a host stuffed with
+# login/verify/account/bank/… escalates rather than counting once. Three hits
+# (0.60) + one more signal clears the threshold — which is what a realistic
+# `paypal-login-verify-account.com` looks like.
+KEYWORD_HIT_WEIGHT = 0.20
+KEYWORD_HIT_CAP = 3
 DEFAULT_BLOCK_THRESHOLD = 0.7
 
 # Common multi-label public suffixes, so subdomain counting doesn't over-count
@@ -71,14 +78,35 @@ _MULTI_LEVEL_TLDS = frozenset(
     )
 )
 
-_IPV4_RE = re.compile(r"^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$")
+def _parse_ip(host: str) -> "Optional[ipaddress.IPv4Address | ipaddress.IPv6Address]":
+    """Return an ipaddress object if `host` is ANY IP literal, else None.
+
+    Covers the forms attackers use to obfuscate a loopback/internal target in a
+    link: dotted IPv4 (127.0.0.1), IPv6 (bracketed or bare, ::1), and integer
+    literals — decimal (2130706433) and hex (0x7f000001). The old dotted-quad
+    regex matched only the first, so the others sailed through as normal hosts.
+    """
+    h = host.strip().strip("[]")
+    try:
+        return ipaddress.ip_address(h)
+    except ValueError:
+        pass
+    try:
+        if h.lower().startswith("0x"):
+            n = int(h, 16)
+        elif h.isdigit():
+            n = int(h)
+        else:
+            return None
+        if 0 <= n <= 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF:
+            return ipaddress.ip_address(n)
+    except (ValueError, ipaddress.AddressValueError):
+        pass
+    return None
 
 
-def _is_ipv4(host: str) -> bool:
-    m = _IPV4_RE.match(host)
-    if not m:
-        return False
-    return all(0 <= int(g) <= 255 for g in m.groups())
+def _keyword_hits(host: str) -> int:
+    return sum(1 for kw in SUSPICIOUS_KEYWORDS if kw in host)
 
 
 def _subdomain_count(host: str) -> int:
@@ -97,49 +125,66 @@ def _subdomain_count(host: str) -> int:
     return len(subs)
 
 
-def features(host: str) -> List[str]:
-    """Return the list of network-free risk features that fire for `host`.
-    `host` should already be a bare hostname (no scheme/port/path)."""
-    host = host.strip().lower().rstrip(".")
-    if not host:
-        return []
-    fired: List[str] = []
+def assess(host: str) -> Tuple[float, List[str]]:
+    """Score a hostname. Returns (risk 0..1, fired-feature reason tags).
 
-    if _is_ipv4(host):
-        fired.append("ip_as_host")
+    Deterministic and total: any input is scored; an empty/garbage host → 0.0.
+    An IP literal is scored on its own (ip_as_host, plus private_ip for
+    loopback/internal targets) and short-circuits the lexical features — a bare
+    address has no meaningful length/digit/hyphen signal."""
+    host = host.strip().lower().rstrip(".")
+    reasons: List[str] = []
+    if not host:
+        return 0.0, reasons
+    score = 0.0
+
+    ip = _parse_ip(host)
+    if ip is not None:
+        reasons.append("ip_as_host")
+        score += WEIGHTS["ip_as_host"]
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+            reasons.append("private_ip")
+            score += WEIGHTS["private_ip"]
+        return min(1.0, score), reasons
 
     if any(host.endswith(tld) for tld in RISKY_TLDS):
-        fired.append("risky_tld")
+        reasons.append("risky_tld")
+        score += WEIGHTS["risky_tld"]
 
     if host in SHORTENER_DOMAINS:
-        fired.append("shortener")
+        reasons.append("shortener")
+        score += WEIGHTS["shortener"]
 
-    if any(kw in host for kw in SUSPICIOUS_KEYWORDS):
-        fired.append("suspicious_keyword")
+    hits = _keyword_hits(host)
+    if hits:
+        reasons.append("suspicious_keyword")
+        score += min(hits, KEYWORD_HIT_CAP) * KEYWORD_HIT_WEIGHT
+
+    if "xn--" in host:
+        reasons.append("punycode")
+        score += WEIGHTS["punycode"]
 
     if host.count("-") > MAX_HYPHENS:
-        fired.append("excess_hyphens")
+        reasons.append("excess_hyphens")
+        score += WEIGHTS["excess_hyphens"]
 
     if sum(c.isdigit() for c in host) > MAX_DIGITS:
-        fired.append("excess_digits")
+        reasons.append("excess_digits")
+        score += WEIGHTS["excess_digits"]
 
     if _subdomain_count(host) > MAX_SUBDOMAINS:
-        fired.append("excess_subdomains")
+        reasons.append("excess_subdomains")
+        score += WEIGHTS["excess_subdomains"]
 
     if len(host) > GOOD_DOMAIN_LENGTH:
-        fired.append("long_domain")
+        reasons.append("long_domain")
+        score += WEIGHTS["long_domain"]
 
-    return fired
+    return min(1.0, score), reasons
 
 
-def assess(host: str) -> Tuple[float, List[str]]:
-    """Score a hostname. Returns (risk 0..1, fired-feature tags).
-
-    Deterministic and total: any input is scored, an empty/garbage host → 0.0.
-    IP-as-host suppresses the noisy `long_domain`/`excess_digits` lexical
-    features (an IPv4 literal is a single distinct signal, not three)."""
-    fired = features(host)
-    if "ip_as_host" in fired:
-        fired = [f for f in fired if f not in ("long_domain", "excess_digits")]
-    score = min(1.0, sum(WEIGHTS.get(f, 0.0) for f in fired))
-    return score, fired
+def features(host: str) -> List[str]:
+    """The list of network-free risk feature tags that fire for `host`
+    (no scheme/port/path). Kept as a thin wrapper over assess() for callers
+    that only want the reasons."""
+    return assess(host)[1]

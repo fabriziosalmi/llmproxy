@@ -65,6 +65,64 @@ def test_urls_paths_and_git_refs_are_not_packages():
     assert adg._extract_packages(text) == []
 
 
+def test_extracts_modern_python_installers():
+    # M5: poetry / pipenv / uv / pdm must be recognized, not just pip.
+    assert ("pypi", "evilpkg") in adg._extract_packages("poetry add evilpkg")
+    assert ("pypi", "evilpkg") in adg._extract_packages("pipenv install evilpkg")
+    assert ("pypi", "evilpkg") in adg._extract_packages("uv pip install evilpkg")
+    assert ("pypi", "evilpkg") in adg._extract_packages("uv add evilpkg")
+    assert ("pypi", "evilpkg") in adg._extract_packages("pdm add evilpkg")
+
+
+class _FakeResp:
+    def __init__(self, status):
+        self.status = status
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+
+class _FakeSession:
+    def __init__(self, status):
+        self._status = status
+
+    def get(self, url):
+        return _FakeResp(self._status)
+
+
+@pytest.mark.asyncio
+async def test_registry_tristate_semantics():
+    # M1: 200=exists (cached True), 404/410=missing (cached False), else=None
+    # (inconclusive — NOT cached, NOT flagged).
+    plugin = adg.AiDependencyGuard({})
+    for status, expected, should_cache in [
+        (200, True, True),
+        (404, False, True),
+        (410, False, True),
+        (429, None, False),  # rate-limited → inconclusive, must NOT become "exists"
+        (503, None, False),
+        (403, None, False),
+    ]:
+        adg._CACHE.clear()
+        res = await plugin._registry_exists(_FakeSession(status), "pypi", "pkg")
+        assert res is expected, f"status {status} → {res}, expected {expected}"
+        assert (("pypi", "pkg") in adg._CACHE) is should_cache
+
+
+def test_cache_is_bounded():
+    # M2: flooding distinct names must not grow the cache without limit.
+    adg._CACHE.clear()
+    for i in range(adg._CACHE_MAX + 500):
+        adg._cache_put(("pypi", f"pkg-{i}"), True, ttl_s=10_000)
+    assert len(adg._CACHE) <= adg._CACHE_MAX
+    # LRU: the earliest keys were evicted, the latest survive.
+    assert ("pypi", f"pkg-{adg._CACHE_MAX + 499}") in adg._CACHE
+    assert ("pypi", "pkg-0") not in adg._CACHE
+
+
 def test_scoped_npm_package_is_preserved():
     text = "npm install @scope/thing yarn-only-noise"
     pkgs = adg._extract_packages(text)

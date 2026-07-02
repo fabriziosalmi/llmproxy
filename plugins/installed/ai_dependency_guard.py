@@ -38,15 +38,21 @@ import asyncio
 import json
 import re
 import time
+from collections import OrderedDict
 from typing import Any, Optional
 
 from core.plugin_sdk import BasePlugin, PluginHook, PluginResponse
 from core.plugin_engine import PluginContext
 
 # ── Package reference extraction ─────────────────────────────────────────────
-# pip / python -m pip install <args...>  (args captured up to a shell break)
+# Python installers that pull from PyPI: pip, python -m pip, uv / uv pip,
+# poetry, pipenv, pdm. (conda/mamba are deliberately excluded — they resolve
+# against conda channels, not PyPI, so a 404 on PyPI would be a false positive.)
+# Verb is install|add to cover all of them; args captured up to a shell break.
 _PIP_RE = re.compile(
-    r"(?:\bpip3?|\bpython3?\s+-m\s+pip)\s+install\s+([^\n`;|&#]+)", re.IGNORECASE
+    r"(?:\bpip3?|\bpython3?\s+-m\s+pip|\buv(?:\s+pip)?|\bpoetry|\bpipenv|\bpdm)"
+    r"\s+(?:install|add)\s+([^\n`;|&#]+)",
+    re.IGNORECASE,
 )
 # npm install|i|add / yarn add / pnpm add <args...>
 _NPM_RE = re.compile(
@@ -145,8 +151,11 @@ def _extract_packages(text: str) -> list:
 
 
 # ── Tier 2 registry existence check (async, cached, fail-open) ───────────────
-# Module-level cache shared across invocations: (ecosystem, name) -> (exists, expiry).
-_CACHE: "dict[tuple[str, str], tuple[bool, float]]" = {}
+# Module-level LRU cache shared across invocations: (ecosystem, name) ->
+# (exists, expiry). Bounded so an attacker who floods the model output with
+# distinct package names can't grow it without limit (memory DoS).
+_CACHE: "OrderedDict[tuple[str, str], tuple[bool, float]]" = OrderedDict()
+_CACHE_MAX = 4096
 
 
 def _cache_get(key) -> Optional[bool]:
@@ -157,11 +166,15 @@ def _cache_get(key) -> Optional[bool]:
     if expiry < time.monotonic():
         _CACHE.pop(key, None)
         return None
+    _CACHE.move_to_end(key)  # mark most-recently-used
     return exists
 
 
 def _cache_put(key, exists: bool, ttl_s: float) -> None:
     _CACHE[key] = (exists, time.monotonic() + ttl_s)
+    _CACHE.move_to_end(key)
+    while len(_CACHE) > _CACHE_MAX:
+        _CACHE.popitem(last=False)  # evict least-recently-used
 
 
 def _registry_url(ecosystem: str, name: str) -> str:
@@ -219,21 +232,36 @@ class AiDependencyGuard(BasePlugin):
             self.logger.debug("ai_dependency_guard response parse skipped: %s", e)
             return ""
 
-    async def _registry_exists(self, session, ecosystem: str, name: str) -> bool:
-        """True = exists or assume-exists (fail-open); False = strict 404."""
+    async def _registry_exists(self, session, ecosystem: str, name: str) -> Optional[bool]:
+        """Tri-state existence check:
+          True  = the registry AFFIRMATIVELY has it (HTTP 200) → cached;
+          False = the registry AFFIRMATIVELY lacks it (404/410) → cached, flagged;
+          None  = inconclusive (429 rate-limit / 5xx / other / timeout / transport
+                  error). NOT cached and NOT flagged — fail-open, retried later.
+
+        Folding a 429/5xx into "exists" (the old `status != 404`) let an attacker
+        force-allow a hallucinated package just by inducing rate-limiting.
+        """
         try:
             async with session.get(_registry_url(ecosystem, name)) as resp:
-                exists = bool(resp.status != 404)
-        except Exception as e:  # timeout, DNS, connreset → fail-open
+                if resp.status == 200:
+                    result = True
+                elif resp.status in (404, 410):
+                    result = False
+                else:
+                    return None  # inconclusive — transport ambiguity ≠ existence
+        except Exception as e:  # timeout, DNS, connreset → inconclusive, fail-open
             self.logger.debug("ai_dependency_guard registry error for %s: %s", name, e)
-            return True
-        _cache_put((ecosystem, name), exists, self._cache_ttl_s)
-        return exists
+            return None
+        _cache_put((ecosystem, name), result, self._cache_ttl_s)
+        return result
 
     async def _tier2_missing(self, candidates: list) -> list:
-        """Return the subset of candidates that the registry reports as 404.
-        Cached results are used directly; the network sweep is bounded by the
-        total time budget and fails open (returns no extra flags) on overrun."""
+        """Return the subset of candidates the registry AFFIRMATIVELY reports as
+        missing (404/410). Cached results are used directly. Each GET carries its
+        own time budget (aiohttp ClientTimeout) so one slow name can't void the
+        404s already confirmed for the others — a single bulk wait_for did exactly
+        that. Inconclusive results fail open (not flagged, not cached)."""
         to_check = []
         missing = []
         for eco, name in candidates:
@@ -242,6 +270,7 @@ class AiDependencyGuard(BasePlugin):
                 missing.append((eco, name))
             elif cached is None:
                 to_check.append((eco, name))
+            # cached True → exists → skip
         if not to_check:
             return missing
         try:
@@ -249,21 +278,20 @@ class AiDependencyGuard(BasePlugin):
         except ImportError:
             return missing  # aiohttp unavailable → Tier-2 disabled, fail-open
 
+        # ClientTimeout(total=) applies PER REQUEST, so concurrent GETs each get
+        # the full budget and complete independently.
         timeout = aiohttp.ClientTimeout(total=self._budget_s)
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:
-                results = await asyncio.wait_for(
-                    asyncio.gather(
-                        *(self._registry_exists(session, e, n) for e, n in to_check),
-                        return_exceptions=True,
-                    ),
-                    timeout=self._budget_s,
+                results = await asyncio.gather(
+                    *(self._registry_exists(session, e, n) for e, n in to_check),
+                    return_exceptions=True,
                 )
-        except Exception as e:  # includes TimeoutError → fail-open
+        except Exception as e:  # fail-open on any sweep-level error
             self.logger.debug("ai_dependency_guard Tier-2 sweep skipped: %s", e)
-            return missing  # fail-open: whatever we couldn't confirm, we allow
-        for (eco, name), exists in zip(to_check, results):
-            if exists is False:  # exceptions (fail-open) are truthy/non-False
+            return missing
+        for (eco, name), res in zip(to_check, results):
+            if res is False:  # only a definitive 404/410 flags; None/True/exc don't
                 missing.append((eco, name))
         return missing
 
