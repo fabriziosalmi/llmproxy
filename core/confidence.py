@@ -133,6 +133,18 @@ def calculate_confidence(
     else:
         decision = "escalate"
 
+    # Mid-tier regex floor. A single weighted regex hit normalizes to
+    # regex_norm = min(score/2, 1) and contributes only regex_norm * 0.4 to the
+    # composite — so one pattern in the [floor, hard-block) band (e.g. a bare
+    # "system prompt" at 0.8 → composite ~0.16) lands at "pass" and slips
+    # through unreviewed unless a semantic/trajectory signal corroborates.
+    # Never let a mid-tier regex signal PASS on its own: floor it to "escalate"
+    # so the second-opinion (AI) path adjudicates. (The hard-block ≥0.85 raw
+    # short-circuit upstream already blocks the strongest single patterns.)
+    regex_escalate_floor = cfg.get("regex_escalate_floor", 0.6)
+    if decision == "pass" and threat_score >= regex_escalate_floor:
+        decision = "escalate"
+
     return ConfidenceResult(
         score=round(composite, 4),
         decision=decision,

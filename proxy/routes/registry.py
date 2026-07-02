@@ -71,9 +71,10 @@ def create_router(agent) -> APIRouter:
         """
         if not agent.config.get("server", {}).get("auth", {}).get("enabled", False):
             return
-        auth_header = request.headers.get("Authorization", "")
-        token = auth_header.replace("Bearer ", "").strip()
-        if not agent._verify_api_key(token):
+        from proxy.auth_helpers import parse_bearer
+
+        token = parse_bearer(request.headers.get("Authorization", ""))
+        if not agent._verify_admin_key(token):
             raise HTTPException(status_code=401, detail="Registry: Unauthorized")
 
     def _models_url(base_url: str) -> str:

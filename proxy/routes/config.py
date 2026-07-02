@@ -24,15 +24,16 @@ def create_router(agent) -> APIRouter:
         """Enforce API key / JWT auth on mutating admin endpoints when auth is on."""
         if not agent.config.get("server", {}).get("auth", {}).get("enabled", False):
             return  # Auth disabled — development mode, allow all
-        auth_header = request.headers.get("Authorization", "")
-        token = auth_header.replace("Bearer ", "").strip()
+        from proxy.auth_helpers import parse_bearer
+
+        token = parse_bearer(request.headers.get("Authorization", ""))
 
         if hasattr(agent, "jwt_authenticator") and agent.jwt_authenticator.enabled:
             if not agent.jwt_authenticator.verify_token(token):
                 raise HTTPException(status_code=401, detail="Admin: Unauthorized (Invalid JWT)")
             return
 
-        if not agent._verify_api_key(token):
+        if not agent._verify_admin_key(token):
             raise HTTPException(status_code=401, detail="Admin: Unauthorized")
 
     def _validate_config_text(text: str):
