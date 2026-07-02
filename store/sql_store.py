@@ -394,6 +394,13 @@ class SQLiteStore:
             params,
         ) as cursor:
             row = await cursor.fetchone()
+            if row is None:
+                return {
+                    "requests": 0,
+                    "total_usd": 0.0,
+                    "total_prompt_tokens": 0,
+                    "total_completion_tokens": 0,
+                }
             return {
                 "requests": row[0] or 0,
                 "total_usd": round(row[1] or 0.0, 6),
@@ -527,7 +534,8 @@ class SQLiteStore:
         conn = await self._get_conn()
         # Count total
         async with conn.execute(f"SELECT COUNT(*) FROM audit_log {where}", params) as c:  # nosec B608
-            total = (await c.fetchone())[0]
+            _count_row = await c.fetchone()
+            total = _count_row[0] if _count_row else 0
 
         # Fetch page
         async with self._row_factory_lock:

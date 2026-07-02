@@ -157,6 +157,42 @@ async def test_oversized_body_rejected_by_flood_guard():
     assert err is not None and "too large" in err.lower()
 
 
+# ── B-tier: JWT admin-role enforcement ───────────────────────────────────────
+def _jwt_auth(required_role=None):
+    from core.auth.oidc import JWTAuthenticator
+
+    cfg = {"server": {"admin_auth": {"oidc_enabled": True, "jwt_secret": "s3cret"}}}
+    if required_role:
+        cfg["server"]["admin_auth"]["required_role"] = required_role
+    return JWTAuthenticator(cfg)
+
+
+def _make_jwt(roles=None):
+    import jwt as _jwt
+
+    payload = {"sub": "u1"}
+    if roles is not None:
+        payload["roles"] = roles
+    return _jwt.encode(payload, "s3cret", algorithm="HS256")
+
+
+def test_jwt_required_role_enforced():
+    auth = _jwt_auth(required_role="admin")
+    assert auth.verify_token(_make_jwt(roles=["admin", "user"])) is True
+    assert auth.verify_token(_make_jwt(roles=["user"])) is False
+    assert auth.verify_token(_make_jwt(roles=None)) is False
+    # space-separated string claim form
+    import jwt as _jwt
+
+    tok = _jwt.encode({"sub": "u1", "roles": "user admin"}, "s3cret", algorithm="HS256")
+    assert auth.verify_token(tok) is True
+
+
+def test_jwt_no_required_role_is_backcompat():
+    auth = _jwt_auth(required_role=None)
+    assert auth.verify_token(_make_jwt(roles=None)) is True  # any valid token
+
+
 def test_strong_composite_still_blocks():
     # Regex (maxed) + corroborating semantic → composite ≥ block threshold.
     r = calculate_confidence(

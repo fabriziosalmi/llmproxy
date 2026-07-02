@@ -111,7 +111,12 @@ class ByteLevelFirewallMiddleware:
     def __init__(
         self,
         app,
-        max_body_bytes: int = 5_000_000,
+        # Default aligned with the app-layer payload guard (security
+        # .max_payload_size_kb, 512 KB). In production app_factory passes the
+        # configured value; this default only applies to direct/test
+        # construction, where the old 5 MB let the middleware buffer 10× the
+        # app limit before a 413.
+        max_body_bytes: int = 512 * 1024,
         signature_store=None,
         enabled: bool = True,
     ):

@@ -21,6 +21,12 @@ class JWTAuthenticator:
         self.algorithms = [auth_config.get("jwt_algorithm", "HS256")]
         self.audience = auth_config.get("jwt_audience", None)
         self.issuer = auth_config.get("jwt_issuer", None)
+        # Optional RBAC: when set, the JWT must carry this role in its `roles`
+        # claim (list or space/comma-separated string) to be accepted for admin
+        # access. Unset (default) → any validly-signed token is accepted
+        # (back-compat). The claim key is configurable for non-standard IdPs.
+        self.required_role = auth_config.get("required_role", None)
+        self.roles_claim = auth_config.get("roles_claim", "roles")
 
     def verify_token(self, token: str) -> bool:
         if not self.enabled:
@@ -35,7 +41,22 @@ class JWTAuthenticator:
                 audience=self.audience,
                 issuer=self.issuer
             )
-            # Future RBAC enhancement: verify payload.get("roles") contains "admin"
+            # RBAC: if a required role is configured, the token must carry it.
+            if self.required_role:
+                raw = payload.get(self.roles_claim, [])
+                if isinstance(raw, str):
+                    roles = raw.replace(",", " ").split()
+                elif isinstance(raw, (list, tuple)):
+                    roles = [str(r) for r in raw]
+                else:
+                    roles = []
+                if self.required_role not in roles:
+                    logger.warning(
+                        "Admin UI auth failed: JWT for subject %s lacks required "
+                        "role %r (has %s)",
+                        payload.get("sub", "unknown"), self.required_role, roles,
+                    )
+                    return False
             logger.debug(f"JWT validated successfully for subject: {payload.get('sub', 'unknown')}")
             return True
         except jwt.ExpiredSignatureError:
