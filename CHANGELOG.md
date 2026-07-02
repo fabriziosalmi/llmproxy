@@ -2,6 +2,19 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.27.2] — 2026-07-02
+
+### Deploy: sync app-shipped `data/` into the runtime volume
+
+The live test that caught the stale signature (1.27.1) also revealed the
+mechanism: the container mounts a persistent volume over `/app/data`, which
+shadows the image's copy — so `data/{signatures,pricing,injection_corpus}.yaml`
+updates baked into the image never took effect. `scripts/deploy.sh` now syncs
+these app-shipped files into the runtime volume on deploy (only when they
+differ, backing up the prior version in-place), before the restart. Skippable
+with `--no-data-sync` / `SYNC_DATA=0`. This is what makes signature fixes
+actually ship.
+
 ## [1.27.1] — 2026-07-02
 
 ### Fix: the detection precision fix now applies in production

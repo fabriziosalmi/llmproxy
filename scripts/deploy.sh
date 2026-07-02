@@ -29,6 +29,7 @@
 #   scripts/deploy.sh --force                        # redeploy same SHA
 #   scripts/deploy.sh --yes                          # skip confirmation
 #   scripts/deploy.sh --skip-lint                    # bypass the ruff+mypy CI gate
+#   scripts/deploy.sh --no-data-sync                 # don't sync data/ into the volume
 #   scripts/deploy.sh --prune-old                    # remove old <repo>:<prefix>* images
 #                                                    # older than 7 days, post-smoke.
 #
@@ -75,6 +76,7 @@ FORCE=0
 ASSUME_YES=0
 PRUNE_OLD=0
 SKIP_LINT="${SKIP_LINT:-0}"
+SYNC_DATA="${SYNC_DATA:-1}"  # sync app-shipped data/ into the runtime volume
 
 # ── Arg parse ───────────────────────────────────────────────────────────────
 usage() { sed -n '2,55p' "$0" | sed 's/^# \{0,1\}//'; }
@@ -87,6 +89,7 @@ while [[ $# -gt 0 ]]; do
         --yes|-y)       ASSUME_YES=1; shift;;
         --prune-old)    PRUNE_OLD=1; shift;;
         --skip-lint)    SKIP_LINT=1; shift;;
+        --no-data-sync) SYNC_DATA=0; shift;;
         --probe-key)
             printf '\033[1;33m!\033[0m --probe-key on the CLI leaves the key in shell history and `ps`.\n' >&2
             printf '\033[1;33m!\033[0m Prefer:  PROBE_KEY=$(cat ~/.llmproxy-key) scripts/deploy.sh\n' >&2
@@ -359,6 +362,7 @@ ssh_exec env \
     LOCK_PATH="$LOCK_PATH" \
     DEPLOY_LOG="$DEPLOY_LOG" \
     FORCE="$FORCE" \
+    SYNC_DATA="$SYNC_DATA" \
     bash -s <<'REMOTE_DEPLOY' || DEPLOY_RC=$?
 set -euo pipefail
 
@@ -439,6 +443,34 @@ else
         exit 16
     fi
     echo "STEP unit: patched $cur_tag → $NEW_TAG"
+fi
+
+# 3c-bis. Sync app-shipped data files into the runtime volume. The container
+# mounts a persistent volume over /app/data, which SHADOWS the image's copy — so
+# signature/pricing updates baked into the image otherwise NEVER take effect
+# (a fixed injection signature can sit dead in the image while the stale volume
+# copy keeps running). Only files that actually differ are touched, and the
+# prior version is backed up in-place. Runs before the restart so the new
+# container starts on the fresh files. Skip with SYNC_DATA=0.
+if [ "${SYNC_DATA:-1}" = "1" ]; then
+    data_vol=$(docker inspect "$REMOTE_UNIT_NAME" \
+        --format '{{range .Mounts}}{{if eq .Destination "/app/data"}}{{.Source}}{{end}}{{end}}' 2>/dev/null || true)
+    if [ -n "$data_vol" ] && [ -d "$data_vol" ]; then
+        for f in signatures.yaml pricing.yaml injection_corpus.yaml; do
+            src="$REMOTE_DIR/data/$f"; dst="$data_vol/$f"
+            [ -f "$src" ] || continue
+            if [ ! -f "$dst" ]; then
+                cp -a "$src" "$dst"
+                echo "STEP data-sync: seeded $f into volume"
+            elif ! cmp -s "$src" "$dst"; then
+                cp -a "$dst" "$dst.bak.$(date +%s)"
+                cp -a "$src" "$dst"
+                echo "STEP data-sync: updated $f in volume (prev backed up)"
+            fi
+        done
+    else
+        echo "STEP data-sync: no /app/data volume mount found — image copy used as-is"
+    fi
 fi
 
 # 3d. daemon-reload + restart
