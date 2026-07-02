@@ -2,6 +2,24 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.25.7] — 2026-07-02
+
+### UI — light theme contrast overhaul
+
+- **Light theme was near-unreadable** (`ui/src/ui/tokens.css`): fixed the
+  foreground/background contrast across the board.
+  - **Surface hierarchy**: the page/app-shell now sits on a soft gray while
+    panels/cards flip to solid **white** with a soft shadow and stronger borders,
+    so cards lift off the page instead of dissolving into it (previously every
+    surface was a ~3–4% black tint on a near-white page — effectively invisible).
+  - **Status accent text**: the emerald/amber/rose/red/sky/cyan 300–500 shades
+    are tuned to glow on the dark substrate and washed out on white (amber-400
+    was ~1.5:1). Remapped each to a darker shade that clears WCAG AA for both the
+    tiny uppercase labels and the big metric values.
+  - **Muted text**: `text-slate-700` was mapped to `#d1d5db` (~1.3:1, invisible
+    as body text) and `slate-600` to `#9ca3af` (~2.5:1); both clamped to readable
+    grays (~4.6:1). Dark theme is untouched (all rules are `html.theme-light`).
+
 ## [1.25.6] — 2026-07-02
 
 ### Security / dependencies
