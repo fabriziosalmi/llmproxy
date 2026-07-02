@@ -75,10 +75,13 @@ export function mountConfigEditor(host: HTMLElement, api: ConfigEditorApi, toast
 
     function renderResult(kind: 'ok' | 'error' | 'warning' | 'info', lines: string[]): void {
         const tone =
-            kind === 'ok' ? 'text-emerald-400'
-            : kind === 'error' ? 'text-rose-400'
-            : kind === 'warning' ? 'text-amber-400'
-            : 'text-slate-400';
+            kind === 'ok'
+                ? 'text-emerald-400'
+                : kind === 'error'
+                  ? 'text-rose-400'
+                  : kind === 'warning'
+                    ? 'text-amber-400'
+                    : 'text-slate-400';
         result.className = `mt-3 font-mono text-[10px] min-h-[1rem] ${tone}`;
         result.replaceChildren();
         for (const line of lines) {
@@ -98,12 +101,12 @@ export function mountConfigEditor(host: HTMLElement, api: ConfigEditorApi, toast
             try {
                 const res = await api.validateConfig(textarea.value);
                 if (res.valid) {
-                    renderResult('ok', [
-                        '✓ Config is valid.',
-                        ...(res.warnings || []).map((w) => `⚠ ${w}`),
-                    ]);
+                    renderResult('ok', ['✓ Config is valid.', ...(res.warnings || []).map((w) => `⚠ ${w}`)]);
                 } else {
-                    renderResult('error', (res.errors || ['Invalid config']).map((e) => `✗ ${e}`));
+                    renderResult(
+                        'error',
+                        (res.errors || ['Invalid config']).map((e) => `✗ ${e}`)
+                    );
                 }
             } catch (e: any) {
                 renderResult('error', [`✗ ${e?.message || 'Validation request failed'}`]);
@@ -127,7 +130,10 @@ export function mountConfigEditor(host: HTMLElement, api: ConfigEditorApi, toast
                 return;
             }
             if (!preflight.valid) {
-                renderResult('error', (preflight.errors || ['Invalid config']).map((e) => `✗ ${e}`));
+                renderResult(
+                    'error',
+                    (preflight.errors || ['Invalid config']).map((e) => `✗ ${e}`)
+                );
                 return;
             }
             const ok = await confirm({
@@ -150,10 +156,7 @@ export function mountConfigEditor(host: HTMLElement, api: ConfigEditorApi, toast
                 await refresh();
             } catch (e: any) {
                 const { errors, warnings } = parseApplyError(e);
-                renderResult('error', [
-                    ...errors.map((x) => `✗ ${x}`),
-                    ...warnings.map((w) => `⚠ ${w}`),
-                ]);
+                renderResult('error', [...errors.map((x) => `✗ ${x}`), ...warnings.map((w) => `⚠ ${w}`)]);
                 toast?.('Config apply failed — nothing changed', 'error');
             }
         },

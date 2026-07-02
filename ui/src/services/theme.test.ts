@@ -1,12 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import {
-    getTheme,
-    setTheme,
-    initTheme,
-    getThemePreference,
-    setThemePreference,
-    resolveTheme,
-} from './theme';
+import { getTheme, setTheme, initTheme, getThemePreference, setThemePreference, resolveTheme } from './theme';
 
 /** Stub matchMedia so 'auto' resolution is deterministic in tests. */
 function stubSystem(prefersLight: boolean): void {

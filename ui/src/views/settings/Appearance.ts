@@ -55,8 +55,7 @@ export function mountAppearance(host: HTMLElement): AppearanceHandle {
         const pref = getThemePreference();
         const resolved = resolveTheme(pref);
         note.textContent = pref === 'auto' ? `auto · currently ${resolved}` : pref;
-        desc.textContent =
-            MODES.find((m) => m.id === pref)?.desc ?? 'Choose how the dashboard looks.';
+        desc.textContent = MODES.find((m) => m.id === pref)?.desc ?? 'Choose how the dashboard looks.';
         row.replaceChildren(
             ...MODES.map((m) =>
                 createButton({
