@@ -84,8 +84,9 @@ def create_router(agent) -> APIRouter:
         """
         if not agent.config.get("server", {}).get("auth", {}).get("enabled", False):
             return
-        auth_header = request.headers.get("Authorization", "")
-        token = auth_header.replace("Bearer ", "").strip()
+        from proxy.auth_helpers import parse_bearer
+
+        token = parse_bearer(request.headers.get("Authorization", ""))
         if token and agent._verify_api_key(token):
             return
         # EventSource cannot set Authorization headers; accept only
@@ -98,8 +99,9 @@ def create_router(agent) -> APIRouter:
         """Require API key/JWT via Authorization header only."""
         if not agent.config.get("server", {}).get("auth", {}).get("enabled", False):
             return
-        auth_header = request.headers.get("Authorization", "")
-        token = auth_header.replace("Bearer ", "").strip()
+        from proxy.auth_helpers import parse_bearer
+
+        token = parse_bearer(request.headers.get("Authorization", ""))
         if not token or not agent._verify_api_key(token):
             raise HTTPException(status_code=401, detail="Telemetry: Unauthorized")
 

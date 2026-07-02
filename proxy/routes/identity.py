@@ -47,7 +47,9 @@ def create_router(agent) -> APIRouter:
     async def get_identity(request: Request, api_key: str = Depends(API_KEY_HEADER)):
         if not api_key:
             return {"authenticated": False}
-        token = api_key.replace("Bearer ", "").strip()
+        from proxy.auth_helpers import parse_bearer
+
+        token = parse_bearer(api_key)
         if not token:
             return {"authenticated": False}
         if agent.identity.enabled:
