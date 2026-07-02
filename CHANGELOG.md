@@ -2,6 +2,30 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.27.1] — 2026-07-02
+
+### Fix: the detection precision fix now applies in production
+
+A **live test on the deployed box** caught that the v1.26.1 firewall precision
+fix was incomplete. The firewall loads its signatures from `data/signatures.yaml`
+via the SignatureStore, which OVERRIDES the hardcoded `_FALLBACK_SIGNATURES` —
+so the box still ran the bare `ignore all previous` signature and blocked
+legitimate English ("ignore all previous warnings"), even though v1.26.1 fixed
+the fallback list and the local corpus (which was also only exercising the
+fallback path).
+
+- `data/signatures.yaml`: `ignore all previous` → `ignore all previous
+  instructions` (plaintext + ROT13 variant), the source the live proxy actually
+  uses.
+- **Corpus harness now loads the real SignatureStore** (`tests/test_owasp_corpus.py`)
+  instead of the built-in fallback, so the scorecard measures what production
+  does — the same "measure the runtime path, not a harness path" principle that
+  the whole detection-efficacy work is built on. Re-verified on the prod path:
+  FP 2.3% (1/44), recall 97% (32/33), BENIGN-025 now allowed, injection blocked.
+
+Lesson logged: signature changes must land in `data/signatures.yaml`, not just
+the fallback constant.
+
 ## [1.27.0] — 2026-07-02
 
 ### Plugin trust model + hardening follow-ups
