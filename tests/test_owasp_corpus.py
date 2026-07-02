@@ -73,15 +73,29 @@ def _make_shield() -> SecurityShield:
 
 
 def _make_firewall() -> ByteLevelFirewallMiddleware:
-    """ASGI middleware needs an `app` callable but we never call it —
-    we only exercise `_scan_payload(raw_bytes)` directly. With no
-    signature_store, the middleware uses its built-in _FALLBACK_SIGNATURES
-    set (the bundled core attack patterns)."""
+    """ASGI middleware needs an `app` callable but we never call it — we only
+    exercise `_scan_payload(raw_bytes)` directly.
+
+    IMPORTANT: production loads its signatures from `data/signatures.yaml` via a
+    SignatureLoader, which OVERRIDES the built-in `_FALLBACK_SIGNATURES`. Wiring
+    the real loaded store here makes the corpus measure what the live proxy
+    actually does — not a fallback path that can silently drift from prod (a live
+    test caught exactly this drift). Falls back to the built-ins if the file is
+    unavailable."""
 
     async def _stub_app(scope, receive, send):
         return None
 
-    return ByteLevelFirewallMiddleware(_stub_app)
+    store = None
+    try:
+        from core.signature_loader import SignatureStore
+
+        loader = SignatureStore(signatures_path="data/signatures.yaml")
+        if loader.load():
+            store = loader
+    except Exception:
+        store = None
+    return ByteLevelFirewallMiddleware(_stub_app, signature_store=store)
 
 
 def _check_one(
