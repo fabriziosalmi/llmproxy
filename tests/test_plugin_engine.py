@@ -361,3 +361,41 @@ async def test_hot_swap_health_check_failure_rolls_back_atomically(tmp_path):
     assert pm._plugin_instances is snap_instances
     assert pm._plugin_stats is snap_stats
     assert any(p["name"] == "p1" for p in pm.rings[PluginHook.PRE_FLIGHT])
+
+
+# ── S1: plugin trust gate (in-process python requires trust or opt-in) ──
+import pytest as _pytest  # noqa: E402
+from core.plugin_engine import PluginManager  # noqa: E402
+
+
+def _pinfo(source, **extra):
+    return {
+        "name": "evil_probe",
+        "hook": "pre_flight",
+        "entrypoint": "installed.nonexistent_evil_probe:Evil",
+        "type": "python",
+        "_source": source,
+        **extra,
+    }
+
+
+@_pytest.mark.asyncio
+async def test_installed_python_plugin_refused_without_optin():
+    pm = PluginManager(plugins_dir="plugins")
+    with _pytest.raises(PluginSecurityError, match="installed manifest"):
+        await pm._load_plugin(_pinfo("installed"))
+
+
+@_pytest.mark.asyncio
+async def test_installed_python_plugin_passes_gate_with_optin():
+    pm = PluginManager(plugins_dir="plugins")
+    # Gate passes → the load then fails on the missing file, NOT on the gate.
+    with _pytest.raises((FileNotFoundError, ImportError)):
+        await pm._load_plugin(_pinfo("installed", allow_inprocess=True))
+
+
+@_pytest.mark.asyncio
+async def test_bundled_python_plugin_passes_gate():
+    pm = PluginManager(plugins_dir="plugins")
+    with _pytest.raises((FileNotFoundError, ImportError)):
+        await pm._load_plugin(_pinfo("bundled"))
