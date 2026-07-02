@@ -399,6 +399,13 @@ class PluginManager:
         with open(self.manifest_path, "r") as f:
             manifest = yaml.safe_load(f) or {}
 
+        # Trust provenance: entries declared in the BUNDLED manifest are
+        # first-party (trusted to run in-process). Entries merged from the
+        # operator/marketplace INSTALLED manifest are untrusted — the S1 gate in
+        # _load_plugin refuses to run them in-process unless they opt in.
+        for bp in manifest.get("plugins", []):
+            bp.setdefault("_source", "bundled")
+
         installed_manifest = os.path.join(self.installed_dir, "manifest.yaml")
         if os.path.exists(installed_manifest):
             with open(installed_manifest, "r") as f:
@@ -407,6 +414,7 @@ class PluginManager:
             if installed_plugins:
                 bundled_names = {p.get("name") for p in manifest.get("plugins", [])}
                 for ip in installed_plugins:
+                    ip["_source"] = "installed"
                     if ip.get("name") not in bundled_names:
                         manifest.setdefault("plugins", []).append(ip)
                     else:
@@ -546,6 +554,24 @@ class PluginManager:
             }
 
         if p_type == "python":
+            # S1 · Plugin trust gate. In-process Python plugins execute with full
+            # proxy privileges and the ast_scan below is a LINT, not a sandbox
+            # (trivially bypassed via getattr/__subclasses__). First-party bundled
+            # plugins are trusted; anything from the operator/marketplace INSTALLED
+            # manifest is refused in-process unless it consciously opts in. The
+            # safe path for untrusted code is a WASM plugin (type: wasm).
+            trusted = p_info.get("_source", "bundled") == "bundled"
+            allow_inprocess = bool(p_info.get("allow_inprocess", False))
+            if not trusted and not allow_inprocess:
+                raise PluginSecurityError(
+                    f"Plugin '{name}': in-process Python plugins from the installed "
+                    "manifest are refused by default — they run with full proxy "
+                    "privileges (the AST scan is a lint, not a sandbox), so a "
+                    "malicious one is arbitrary code execution + secret exfil. "
+                    "Ship it as a WASM plugin (type: wasm), or set "
+                    "`allow_inprocess: true` on its manifest entry to consciously "
+                    "accept that risk for a plugin you fully trust."
+                )
             module_path, target_name = entrypoint.split(":")
             file_path = os.path.join(
                 self.plugins_dir, f"{module_path.replace('.', '/')}.py"
