@@ -533,7 +533,15 @@ class SecurityShield:
         if not self.enabled:
             return None
 
-        # 0. Session Trajectory Check (Olimpo Feature)
+        # 0. Payload Guard (Flooding/Size) — FIRST, before any prompt extraction
+        # or regex/semantic scoring. A multi-MB body would otherwise drive two
+        # full normalize+regex passes and a semantic scan on the event loop
+        # before being rejected (CPU-amplification DoS). Reject on size up front.
+        flood_error = self._check_payload_flooding(body)
+        if flood_error:
+            return flood_error
+
+        # 1. Session Trajectory Check (Olimpo Feature)
         prompt = self._extract_prompt(body)
         if prompt:
             session_error = self.check_session_trajectory(session_id, prompt)
@@ -551,11 +559,6 @@ class SecurityShield:
                     )
                     if ledger_error:
                         return ledger_error
-
-        # 1. Payload Guard (Flooding/Size)
-        flood_error = self._check_payload_flooding(body)
-        if flood_error:
-            return flood_error
 
         # 2. Confidence-based injection detection
         # Collects signals from regex + semantic + trajectory, computes
@@ -653,23 +656,54 @@ class SecurityShield:
         msg[0]="ignore previous", msg[1]="instructions") or in fake
         assistant turns used as few-shot examples.
         """
-        messages = body.get("messages", [])
-        if messages:
-            parts = []
-            for msg in messages:
-                content = msg.get("content", "")
+        parts: list = []
+
+        def _add(content) -> None:
+            """Append text from a str, or the text parts of a multimodal list
+            (``[{"type":"text","text":"…"},{"type":"image_url",…}]``). Falls back
+            to str() for any other non-empty shape so nothing user-controlled is
+            silently skipped."""
+            if isinstance(content, str):
                 if content:
-                    parts.append(str(content))
-                # Also inspect tool_calls if present (W3: tool injection)
-                tool_calls = msg.get("tool_calls", [])
-                for tc in tool_calls:
-                    fn = tc.get("function", {})
-                    if fn.get("name"):
-                        parts.append(str(fn["name"]))
-                    if fn.get("arguments"):
-                        parts.append(str(fn["arguments"]))
-            return " ".join(parts)
-        return str(body.get("prompt", ""))
+                    parts.append(content)
+            elif isinstance(content, list):
+                for p in content:
+                    if isinstance(p, dict):
+                        txt = p.get("text")
+                        if isinstance(txt, str) and txt:
+                            parts.append(txt)
+                    elif isinstance(p, str) and p:
+                        parts.append(p)
+            elif content:
+                parts.append(str(content))
+
+        for msg in body.get("messages", []) or []:
+            if not isinstance(msg, dict):
+                continue
+            _add(msg.get("content", ""))
+            # W3: tool injection — inspect tool_calls arguments/names.
+            for tc in msg.get("tool_calls", []) or []:
+                fn = tc.get("function", {}) if isinstance(tc, dict) else {}
+                if fn.get("name"):
+                    parts.append(str(fn["name"]))
+                if fn.get("arguments"):
+                    parts.append(str(fn["arguments"]))
+
+        # Top-level text-bearing fields across the API shapes we forward
+        # (chat, Responses-style `input`/`instructions`, bare `system`/`prompt`).
+        for key in ("prompt", "system", "instructions", "input"):
+            _add(body.get(key))
+
+        # Tool/function definitions are forwarded to the model, so an injection
+        # hidden in a tool description reaches it just like a prompt.
+        for tool in body.get("tools", []) or []:
+            if isinstance(tool, dict):
+                fn = tool.get("function", {}) or {}
+                for f in ("name", "description"):
+                    if isinstance(fn.get(f), str) and fn[f]:
+                        parts.append(fn[f])
+
+        return " ".join(parts)
 
     def _check_payload_flooding(self, body: Dict[str, Any]) -> Optional[str]:
         max_size = self.config.get("max_payload_size_kb", 512) * 1024
