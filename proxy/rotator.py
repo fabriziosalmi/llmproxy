@@ -250,6 +250,17 @@ class ProxyOrchestrator(BaseAgent):
 
         return verify_api_key(token, self._get_api_keys())
 
+    def _verify_admin_key(self, token: str) -> bool:
+        """Constant-time ADMIN-key check for control-plane routes.
+
+        Prefers the dedicated ``LLM_PROXY_ADMIN_KEYS`` bag; falls back to the
+        inference keys only when no admin keys are configured. See
+        proxy/auth_helpers.verify_admin_key.
+        """
+        from .auth_helpers import verify_admin_key
+
+        return verify_admin_key(token, self.config)
+
     # ── HTTP Session ──
 
     async def _get_session(self) -> aiohttp.ClientSession:
