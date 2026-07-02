@@ -2,6 +2,20 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.27.3] — 2026-07-02
+
+### Docs / config / deploy hygiene (closing pass)
+
+- **Config surfaces documented** (`config.yaml`): the new knobs from the
+  hardening pass now carry inline docs — `server.auth.admin_keys_env`
+  (LLM_PROXY_ADMIN_KEYS control-plane segregation), `server.admin_auth`
+  (JWT `required_role`/`roles_claim` RBAC), `security.confidence
+  .regex_escalate_floor`. Plugin trust model (`allow_inprocess`, WASM-for-
+  untrusted) documented in `plugins/manifest.yaml`.
+- **deploy.sh: `systemctl enable`** the unit on deploy so the proxy survives a
+  reboot (was a persistent "not enabled" warning).
+- **README** refreshed: tests 1333 → 1360, docker pull → 1.27.2.
+
 ## [1.27.2] — 2026-07-02
 
 ### Deploy: sync app-shipped `data/` into the runtime volume

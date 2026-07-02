@@ -473,8 +473,9 @@ if [ "${SYNC_DATA:-1}" = "1" ]; then
     fi
 fi
 
-# 3d. daemon-reload + restart
+# 3d. daemon-reload + enable (survive reboot) + restart
 systemctl daemon-reload
+systemctl enable "$REMOTE_UNIT_NAME" >/dev/null 2>&1 || true
 systemctl restart "$REMOTE_UNIT_NAME"
 
 # Wait for active (up to 30s).
