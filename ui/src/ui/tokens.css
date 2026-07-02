@@ -107,18 +107,21 @@ html.theme-light {
 }
 
 html.theme-light body {
-    background-color: rgb(245 245 247);
+    background-color: rgb(236 237 240);
     color: #1a1a1c;
 }
 
-/* App-shell + card backgrounds. Cover EVERY near-black surface class actually
- * used (both #050506 and #0a0a0c, bare + each opacity variant) — missing the
- * bare `bg-[#050506]` (the <body>/<main> background) left the whole shell dark. */
+/* Two-tier surface hierarchy is what makes a light theme read: the page/app-
+ * shell (deepest dark surface, #050506) becomes a soft gray, and panels/cards
+ * (the next surface up, #0a0a0c) become solid WHITE so they lift off the page
+ * with a clear edge instead of dissolving into it. */
 html.theme-light .bg-\[\#050506\],
+html.theme-light .bg-\[\#050506\]\/98 {
+    background-color: rgb(236 237 240) !important;
+}
 html.theme-light .bg-\[\#0a0a0c\],
-html.theme-light .bg-\[\#050506\]\/98,
 html.theme-light .bg-\[\#0a0a0c\]\/95 {
-    background-color: rgb(245 245 247) !important;
+    background-color: #ffffff !important;
 }
 /* Translucent shell overlays (sticky headers, sidebar, nav) — keep a hint of
  * glass so backdrop-blur still reads as a frosted panel on the light substrate. */
@@ -126,7 +129,7 @@ html.theme-light .bg-\[\#050506\]\/70,
 html.theme-light .bg-\[\#050506\]\/80,
 html.theme-light .bg-\[\#0a0a0c\]\/70,
 html.theme-light .bg-\[\#0a0a0c\]\/80 {
-    background-color: rgb(245 245 247 / 0.8) !important;
+    background-color: rgb(236 237 240 / 0.82) !important;
 }
 /* Code / console surfaces use bg-black/*. In light mode the text is inverted to
  * dark, so flip these panels to a light tint or the text would be unreadable. */
@@ -137,21 +140,18 @@ html.theme-light .bg-black\/60 {
     background-color: rgb(0 0 0 / 0.05) !important;
 }
 
-/* Glassmorphic translucent overlays — flip white-on-dark to dark-on-light */
-html.theme-light .bg-white\/\[0\.02\] {
-    background-color: rgb(0 0 0 / 0.025) !important;
-}
+/* Card/panel surfaces: the light (0.02–0.03) tints are the card level → solid
+ * white + a soft shadow so they lift off the gray page. The heavier (0.04–0.05)
+ * tints are nested/inset surfaces → a faint gray so nesting still reads. */
+html.theme-light .bg-white\/\[0\.02\],
 html.theme-light .bg-white\/\[0\.03\] {
-    background-color: rgb(0 0 0 / 0.04) !important;
+    background-color: #ffffff !important;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04), 0 2px 6px rgb(15 23 42 / 0.06);
 }
-html.theme-light .bg-white\/\[0\.04\] {
-    background-color: rgb(0 0 0 / 0.05) !important;
-}
-html.theme-light .bg-white\/\[0\.05\] {
-    background-color: rgb(0 0 0 / 0.06) !important;
-}
+html.theme-light .bg-white\/\[0\.04\],
+html.theme-light .bg-white\/\[0\.05\],
 html.theme-light .bg-white\/5 {
-    background-color: rgb(0 0 0 / 0.05) !important;
+    background-color: rgb(0 0 0 / 0.04) !important;
 }
 html.theme-light .hover\:bg-white\/\[0\.04\]:hover {
     background-color: rgb(0 0 0 / 0.05) !important;
@@ -166,18 +166,19 @@ html.theme-light .hover\:bg-white\/10:hover {
     background-color: rgb(0 0 0 / 0.08) !important;
 }
 
-/* Borders */
+/* Borders — a touch stronger than the dark-theme equivalents so a white card's
+ * edge actually reads against the gray page. */
 html.theme-light .border-white\/\[0\.04\] {
-    border-color: rgb(0 0 0 / 0.06) !important;
-}
-html.theme-light .border-white\/\[0\.06\] {
     border-color: rgb(0 0 0 / 0.08) !important;
 }
+html.theme-light .border-white\/\[0\.06\] {
+    border-color: rgb(0 0 0 / 0.11) !important;
+}
 html.theme-light .border-white\/\[0\.08\] {
-    border-color: rgb(0 0 0 / 0.1) !important;
+    border-color: rgb(0 0 0 / 0.13) !important;
 }
 html.theme-light .border-white\/10 {
-    border-color: rgb(0 0 0 / 0.1) !important;
+    border-color: rgb(0 0 0 / 0.14) !important;
 }
 
 /* Text — invert the dominant white→dark, slate-200/300/400/500 → cooler grays
@@ -199,13 +200,68 @@ html.theme-light .text-slate-500 {
     color: #6b7280 !important;
 }
 html.theme-light .text-slate-600 {
-    color: #9ca3af !important;
+    color: #64748b !important;
 }
+/* slate-700 was #d1d5db — invisible (~1.3:1) whenever it was used as TEXT on a
+ * light surface. Clamp it to a readable muted gray (~4.6:1). */
 html.theme-light .text-slate-700 {
-    color: #d1d5db !important;
+    color: #6b7280 !important;
 }
 html.theme-light .hover\:text-white:hover {
     color: #1a1a1c !important;
+}
+
+/* Status accent text — the 300/400/500 shades are tuned to glow on the near-
+ * black substrate and wash out on light (amber-400 on white is ~1.5:1). Remap
+ * each status accent to a darker shade that keeps its meaning AND clears WCAG
+ * AA on white, for both the tiny uppercase labels and the big metric values. */
+html.theme-light .text-emerald-300,
+html.theme-light .text-emerald-400,
+html.theme-light .text-emerald-500 {
+    color: #059669 !important;
+}
+html.theme-light .text-amber-300,
+html.theme-light .text-amber-400,
+html.theme-light .text-amber-500 {
+    color: #b45309 !important;
+}
+html.theme-light .text-rose-300,
+html.theme-light .text-rose-400,
+html.theme-light .text-rose-500 {
+    color: #e11d48 !important;
+}
+html.theme-light .text-red-300,
+html.theme-light .text-red-400,
+html.theme-light .text-red-500 {
+    color: #dc2626 !important;
+}
+html.theme-light .text-sky-300,
+html.theme-light .text-sky-400,
+html.theme-light .text-sky-500 {
+    color: #0284c7 !important;
+}
+html.theme-light .text-cyan-300,
+html.theme-light .text-cyan-400,
+html.theme-light .text-cyan-500 {
+    color: #0891b2 !important;
+}
+
+/* Status-tile accent borders — the /20 tints are near-invisible pastels on a
+ * white card; nudge the common ones up so the colored edge reads. */
+html.theme-light .border-rose-500\/20 {
+    border-color: rgb(225 29 72 / 0.32) !important;
+}
+html.theme-light .border-emerald-500\/20 {
+    border-color: rgb(5 150 105 / 0.3) !important;
+}
+html.theme-light .border-amber-500\/20 {
+    border-color: rgb(180 83 9 / 0.3) !important;
+}
+html.theme-light .border-red-500\/20 {
+    border-color: rgb(220 38 38 / 0.3) !important;
+}
+html.theme-light .border-sky-500\/20 {
+    border-color: rgb(2 132 199 / 0.3) !important;
 }
 
 /* Backdrop on the modal / drawer scrim — keep some dimming on a light bg */
