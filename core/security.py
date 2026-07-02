@@ -604,10 +604,14 @@ class SecurityShield:
                         f"Semantic scan timed out (prompt={len(prompt)} chars)"
                     )
 
-            # 2c. Session trajectory score (from step 0)
+            # 2c. Session trajectory score (from step 0). Fetch the entry with a
+            # single atomic .get() rather than an `in` check followed by a
+            # subscript — the eviction sweep can delete the key between the two,
+            # raising KeyError (a real race on free-threaded 3.13+ builds).
             trajectory_score = 0.0
-            if session_id in self.session_memory:
-                recent = self.session_memory[session_id].get("scores", [])[-3:]
+            entry = self.session_memory.get(session_id)
+            if entry:
+                recent = entry.get("scores", [])[-3:]
                 trajectory_score = sum(s for s, _ in recent)
 
             # 2d. Calculate composite confidence
@@ -789,8 +793,12 @@ class SecurityShield:
 
         from urllib.parse import urlparse
 
+        # Match the full URL up to whitespace/quote — the same extractor the
+        # response sanitizer uses. The previous hand-rolled class contained the
+        # range `$-_` (0x24–0x5F), which both over-matched (it swept in A–Z,
+        # digits, and most punctuation) and diverged from the response path.
         links = re.findall(
-            r"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+",
+            r"https?://[^\s<>\"']+",
             prompt,
         )
         blocked_domains = self.config.get("link_sanitization", {}).get(

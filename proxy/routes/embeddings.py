@@ -60,7 +60,9 @@ def create_router(agent) -> APIRouter:
                 raise HTTPException(
                     status_code=401, detail="Unauthorized: Missing API key"
                 )
-            token = api_key.replace("Bearer ", "").strip()
+            from proxy.auth_helpers import parse_bearer
+
+            token = parse_bearer(api_key)
             if not token:
                 raise HTTPException(status_code=401, detail="Unauthorized: Empty token")
 

@@ -108,7 +108,7 @@ def _split_args(arg_str: str) -> list:
 def _norm_pypi(tok: str) -> Optional[str]:
     tok = tok.strip().strip("\"'").lower()
     # strip version specifier / extras / markers: keep the leading name only
-    tok = re.split(r"[=<>~!;\[@ ]", tok, 1)[0].strip()
+    tok = re.split(r"[=<>~!;\[@ ]", tok, maxsplit=1)[0].strip()
     if not tok or "/" in tok or ":" in tok or tok.startswith("."):
         return None  # paths, URLs, git+…, ./local — not a registry package
     return tok if _PYPI_NAME_RE.match(tok) else None

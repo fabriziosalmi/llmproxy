@@ -219,8 +219,9 @@ def create_app(agent) -> FastAPI:
         )
 
         if needs_auth and path not in _PUBLIC_EXACT:
-            auth_header = request.headers.get("Authorization", "")
-            token = auth_header.replace("Bearer ", "").strip()
+            from proxy.auth_helpers import parse_bearer
+
+            token = parse_bearer(request.headers.get("Authorization", ""))
             # Limit query-string token fallback to explicit EventSource paths.
             # Never accept query tokens on generic protected endpoints.
             if not token and path in _QUERY_TOKEN_FALLBACK_PATHS:
