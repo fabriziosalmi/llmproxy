@@ -4,7 +4,7 @@ Security gateway for Large Language Models. Routes requests across 24 providers 
 
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-1333%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-1360%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-67%25-yellowgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 [![CI](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml/badge.svg)](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml)
@@ -48,7 +48,7 @@ docker run -d --name llmproxy -p 8090:8090 \
   -e LLM_PROXY_API_KEYS=sk-proxy-test \
   -e OPENAI_API_KEY=$OPENAI_API_KEY \
   -v llmproxy-data:/app/data \
-  ghcr.io/fabriziosalmi/llmproxy:1.25.5
+  ghcr.io/fabriziosalmi/llmproxy:1.27.2
 ```
 
 Each release publishes `:latest`, the full semver (`:X.Y.Z`), the minor (`:X.Y`), plus a per-commit short SHA tag for reproducible deploys.
@@ -331,13 +331,13 @@ Keyboard shortcuts: `Cmd+K` (command palette), `F` (cinema mode). URL hash routi
 ## Testing
 
 ```bash
-make test       # 1335 tests, ~25s
+make test       # 1362 tests, ~25s
 make bench      # 22 performance benchmarks
 make lint       # ruff
 make typecheck  # mypy
 ```
 
-1335 tests (1333 passing, 2 skipped) across 50+ modules: unit, HTTP integration, pipeline E2E, property-based fuzz (Hypothesis), 31 mathematical invariant proofs, concurrency stress tests, and performance benchmarks.
+1362 tests (1360 passing, 2 skipped) across 50+ modules: unit, HTTP integration, pipeline E2E, property-based fuzz (Hypothesis), 31 mathematical invariant proofs, concurrency stress tests, and performance benchmarks.
 
 The invariant suite proves correctness properties (Jaccard axioms, normalize idempotence, token conservation, budget accounting, adapter determinism) and blocks merge on violation.
 

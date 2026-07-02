@@ -12,8 +12,20 @@ server:
     min_version: "1.2"
   auth:
     enabled: false
-    # API keys loaded from env: LLM_PROXY_API_KEYS (comma-separated)
+    # Inference API keys loaded from env: LLM_PROXY_API_KEYS (comma-separated).
     api_keys_env: "LLM_PROXY_API_KEYS"
+    # Control-plane (admin) keys — separate from inference keys so an inference
+    # key CANNOT drive config apply / plugin install / GDPR purge / registry.
+    # Set env LLM_PROXY_ADMIN_KEYS (comma-separated) to segregate; when unset,
+    # admin routes fall back to the inference keys (back-compat).
+    admin_keys_env: "LLM_PROXY_ADMIN_KEYS"
+  # Optional JWT/OIDC for the admin UI (enterprise). When required_role is set,
+  # the token must carry it in its `roles` claim to be accepted for admin.
+  admin_auth:
+    oidc_enabled: false
+    # jwt_secret / jwt_audience / jwt_issuer / jwt_algorithm: ...
+    # required_role: "admin"     # enforce RBAC on the JWT path (unset = any valid token)
+    # roles_claim: "roles"       # claim key holding the role list
   metrics:
     enabled: false
     port: 9091
@@ -34,6 +46,11 @@ security:
   enabled: true
   max_payload_size_kb: 512
   max_messages: 50
+  # Confidence engine (regex + semantic + trajectory composite). A lone regex
+  # hit in [regex_escalate_floor, hard-block) is floored to "escalate" (AI
+  # adjudication) instead of passing unreviewed. Lower = stricter.
+  confidence:
+    regex_escalate_floor: 0.6
   link_sanitization:
     enabled: true
     blocked_domains: ["malicious-site.com", "phishing.net"]

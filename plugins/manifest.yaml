@@ -1,3 +1,9 @@
+# Plugin trust model (S1): plugins declared here (the bundled manifest) are
+# first-party and may run in-process (type: python). Operator/marketplace plugins
+# added via the installed manifest are UNTRUSTED — an in-process Python one is
+# refused unless it sets `allow_inprocess: true` (conscious accept-the-RCE-risk
+# opt-in), because the AST scan is a lint, not a sandbox. The safe path for
+# untrusted code is a WASM plugin (type: wasm).
 plugins:
   - name: "Ingress Auth & Zero-Trust"
     hook: "ingress"
