@@ -2,6 +2,31 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.27.0] — 2026-07-02
+
+### Plugin trust model + hardening follow-ups
+
+- **S1 · Untrusted in-process Python plugins refused by default.** Python plugins
+  run in-process with full proxy privileges and `ast_scan` is a lint, not a
+  sandbox — a malicious one is RCE + secret exfil. Plugins are now tagged by
+  provenance (`_source`: bundled = first-party/trusted vs installed =
+  operator/marketplace). An installed-manifest Python plugin is refused unless it
+  sets `allow_inprocess: true` (conscious opt-in); the safe path for untrusted
+  code is a WASM plugin (`type: wasm`), already supported. First-party bundled
+  plugins are unaffected.
+- **JWT admin RBAC** (`core/auth/oidc.py`): `verify_token` now enforces an
+  optional `server.admin_auth.required_role` against the token's `roles` claim
+  (list or space/comma-separated; claim key configurable via `roles_claim`).
+  Unset → any validly-signed token accepted (back-compat). Closes the long-
+  standing RBAC TODO.
+- **Firewall body-limit default** aligned with the app payload guard (5 MB →
+  512 KB); production already passed the configured value, this bounds
+  direct/test construction.
+- **Type safety**: fixed the pre-existing `Row | None` indexing errors in
+  `store/sql_store.py` — `mypy core/ proxy/ store/` is now fully clean (75 files).
+
+Tests: +3 plugin-gate, +2 JWT-role. Full suite 1360 passed, ruff + mypy clean.
+
 ## [1.26.1] — 2026-07-02
 
 ### Detection efficacy — measured, not guessed
