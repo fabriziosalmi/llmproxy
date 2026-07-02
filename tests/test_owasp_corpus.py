@@ -188,6 +188,59 @@ def _coverage_by_category(results: list[dict[str, Any]]) -> dict[str, dict[str, 
     return by_cat
 
 
+def _scorecard(results: list[dict[str, Any]]) -> dict[str, float]:
+    """Aggregate confusion-matrix metrics over the RUNTIME path.
+
+    Positives = entries expected to be flagged (block/mask). Negatives = benign
+    (allow). Everything is measured against what the live deterministic pipeline
+    actually does — no harness-only shortcut. `expected_pass_known_gap` entries
+    are counted HONESTLY as false negatives (they are real misses on the
+    deterministic path; prod catches them via AI escalation), not excluded.
+    """
+    attacks = [r for r in results if r.get("expected_action") == "block"]
+    pii = [r for r in results if r.get("expected_action") == "mask"]
+    benign = [r for r in results if r.get("expected_action") == "allow"]
+
+    tp = sum(1 for r in attacks if r.get("effective") == "block")
+    fn = len(attacks) - tp
+    pii_tp = sum(1 for r in pii if r.get("effective") == "mask")
+    fp = sum(1 for r in benign if r.get("effective") != "allow")
+    tn = len(benign) - fp
+
+    recall = tp / len(attacks) if attacks else 1.0
+    precision = tp / (tp + fp) if (tp + fp) else 1.0
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
+    return {
+        "attacks_total": len(attacks),
+        "attacks_caught": tp,
+        "fn": fn,
+        "recall": recall,
+        "benign_total": len(benign),
+        "false_positives": fp,
+        "true_negatives": tn,
+        "fp_rate": fp / len(benign) if benign else 0.0,
+        "specificity": tn / len(benign) if benign else 1.0,
+        "precision": precision,
+        "f1": f1,
+        "pii_total": len(pii),
+        "pii_caught": pii_tp,
+    }
+
+
+def test_detection_scorecard(corpus_results):
+    """Draconian aggregate gate over the deterministic runtime path.
+
+    Floors chosen with margin below the MEASURED numbers so a regression trips
+    the gate. Measured at time of writing: recall 97% (32/33), FP 2.3% (1/44 —
+    the lone residual literally quotes the attack phrase), precision 97%.
+    """
+    sc = _scorecard(corpus_results)
+    assert sc["recall"] >= 0.90, f"injection recall {sc['recall']:.0%} < 90% ({sc['fn']} FN)"
+    assert sc["fp_rate"] <= 0.15, f"false-positive rate {sc['fp_rate']:.0%} > 15% ({sc['false_positives']} FP)"
+    assert sc["precision"] >= 0.90, f"precision {sc['precision']:.0%} < 90%"
+    assert sc["pii_caught"] == sc["pii_total"], "PII masking regressed"
+
+
 # ── Per-category assertion tests ──────────────────────────────────────
 
 
@@ -219,13 +272,16 @@ def test_llm07_system_prompt_leakage_coverage(corpus_results):
 
 
 def test_benign_false_positive_ceiling(corpus_results):
-    """Benign controls. The proxy errs toward false-positive on
-    meta-discussion of attacks; ceiling is 30 % FP rate."""
+    """Benign controls (44, incl. the hard-benign FP stress set: security
+    education, code that mentions dangerous tokens, imperative 'ignore' in
+    normal English, fiction, multilingual). Ceiling tightened 30 % → 15 % after
+    the expanded corpus measured 2.3 % (the residual FP literally quotes the
+    attack phrase — an unavoidable meta-discussion tradeoff)."""
     cov = _coverage_by_category(corpus_results)["BENIGN"]
     rate = cov["passed"] / cov["total"]
     fp = 1 - rate
-    assert fp <= 0.30, (
-        f"Benign false-positive rate {fp:.0%} > 30% — {cov['passed']}/{cov['total']} pass"
+    assert fp <= 0.15, (
+        f"Benign false-positive rate {fp:.0%} > 15% — {cov['passed']}/{cov['total']} pass"
     )
 
 
@@ -243,6 +299,27 @@ def _format_report(results: list[dict[str, Any]]) -> str:
     )
     out.append("")
     out.append("Re-run: `pytest tests/test_owasp_corpus.py -v` (writes this file).")
+    out.append("")
+
+    sc = _scorecard(results)
+    out.append("## Detection scorecard (deterministic runtime path)")
+    out.append("")
+    out.append("| Metric | Value |")
+    out.append("|--------|------:|")
+    out.append(f"| Injection recall | **{sc['recall'] * 100:.1f}%** ({sc['attacks_caught']}/{sc['attacks_total']}) |")
+    out.append(f"| False negatives | {sc['fn']} |")
+    out.append(f"| Precision | **{sc['precision'] * 100:.1f}%** |")
+    out.append(f"| F1 | {sc['f1']:.3f} |")
+    out.append(f"| False-positive rate | **{sc['fp_rate'] * 100:.1f}%** ({sc['false_positives']}/{sc['benign_total']}) |")
+    out.append(f"| Specificity | {sc['specificity'] * 100:.1f}% |")
+    out.append(f"| PII masking | {sc['pii_caught']}/{sc['pii_total']} |")
+    out.append("")
+    out.append(
+        "Measured against the LIVE pipeline (ASGI firewall + SecurityShield "
+        "threat-score/composite + PII), NOT a harness-only path. False negatives "
+        "are counted honestly (known gaps included) — with AI escalation enabled "
+        "in prod, gray-zone misses are additionally adjudicated by a model."
+    )
     out.append("")
 
     out.append("## Summary")

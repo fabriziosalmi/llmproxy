@@ -70,7 +70,12 @@ class ByteLevelFirewallMiddleware:
     _FALLBACK_SIGNATURES = [
         # Original 11 — instruction override & extraction
         b"ignore previous instructions",
-        b"ignore all previous",
+        # Require the instruction object: bare "ignore all previous" also matched
+        # legitimate English ("ignore all previous warnings/emails"). The
+        # SecurityShield regex still catches the "…instructions" attack (and its
+        # singular/multilingual variants) at score 1.75, so precision here costs
+        # no recall — verified against the corpus false-negative set.
+        b"ignore all previous instructions",
         b"disregard previous instructions",
         b"bypass guardrails",
         b"bypass safety",

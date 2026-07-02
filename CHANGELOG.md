@@ -2,6 +2,28 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.26.1] — 2026-07-02
+
+### Detection efficacy — measured, not guessed
+
+- **Aggregate detection scorecard** (`tests/test_owasp_corpus.py`): the corpus
+  harness now emits a confusion-matrix scorecard over the LIVE runtime path
+  (ASGI firewall + SecurityShield composite + PII) — injection **recall 97%**
+  (32/33), **precision 97%**, **false-positive rate 2.3%** (1/44), PII 8/8.
+  A `test_detection_scorecard` gate enforces recall ≥ 90%, FP ≤ 15%,
+  precision ≥ 90%; false negatives are counted honestly (known gaps included).
+- **Hard-benign FP stress set** (+26 controls → 44 total): security education,
+  code that mentions dangerous tokens (`system_prompt`, `role: system`),
+  imperative "ignore" in normal English, fiction about attacks, multilingual
+  benign, credential/security-ops questions — the prompts a naive filter
+  over-blocks. This is what makes the FP number trustworthy.
+- **Data-driven precision fix**: the firewall's bare `ignore all previous`
+  byte-signature also matched legitimate English ("ignore all previous
+  warnings/emails"); tightened to `ignore all previous instructions` — FP rate
+  4.5% → 2.3% with **zero recall regression** (verified against the corpus FN
+  set; the SecurityShield regex still catches the attack + its variants).
+- Benign FP ceiling tightened 30% → 15% now that it's measured.
+
 ## [1.26.0] — 2026-07-02
 
 ### Adversarial security hardening
