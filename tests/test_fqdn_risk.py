@@ -11,7 +11,7 @@ from core.fqdn_risk import (
     DEFAULT_BLOCK_THRESHOLD,
     assess,
     features,
-    _is_ipv4,
+    _parse_ip,
     _subdomain_count,
 )
 from core.security import SecurityShield
@@ -83,24 +83,42 @@ def test_excess_hyphens_and_digits():
     assert "excess_digits" not in features("h0st.com")  # 1 digit ok
 
 
-def test_ipv4_detection():
-    assert _is_ipv4("192.168.1.1")
-    assert _is_ipv4("10.0.0.255")
-    assert not _is_ipv4("256.1.1.1")  # octet out of range
-    assert not _is_ipv4("1.2.3")  # too few octets
-    assert not _is_ipv4("example.com")
+def test_ip_literal_detection_all_forms():
+    # M3: dotted IPv4, IPv6 (bracketed/bare), decimal and hex integer literals.
+    assert _parse_ip("192.168.1.1") is not None
+    assert _parse_ip("[::1]") is not None
+    assert _parse_ip("::1") is not None
+    assert _parse_ip("2130706433") is not None  # decimal for 127.0.0.1
+    assert _parse_ip("0x7f000001") is not None  # hex for 127.0.0.1
+    assert _parse_ip("256.1.1.1") is None  # invalid octet
+    assert _parse_ip("example.com") is None
 
 
-def test_ip_host_suppresses_lexical_noise():
-    # An IPv4 literal is one distinct signal, not also "long"/"many digits".
-    score, reasons = assess("192.168.100.200")
-    assert "ip_as_host" in reasons
-    assert "excess_digits" not in reasons
-    assert "long_domain" not in reasons
-    assert score == pytest.approx(0.35)
-    # ...and on its own it stays below the default threshold (a bare IP link is
-    # only moderately suspicious; blocking needs a combination or a lower bar).
-    assert score < DEFAULT_BLOCK_THRESHOLD
+def test_obfuscated_loopback_ip_literals_are_flagged():
+    # M3: the forms that previously bypassed ip_as_host entirely now flag as
+    # private/loopback and clear the threshold (SSRF/exfil bait in a link).
+    for host in ["127.0.0.1", "2130706433", "0x7f000001", "::1", "192.168.100.200", "169.254.1.1"]:
+        score, reasons = assess(host)
+        assert "ip_as_host" in reasons and "private_ip" in reasons, host
+        assert score >= DEFAULT_BLOCK_THRESHOLD, f"{host} scored {score}"
+
+
+def test_public_ip_literal_is_mild_not_blocked():
+    score, reasons = assess("185.100.50.5")
+    assert reasons == ["ip_as_host"]
+    assert score < DEFAULT_BLOCK_THRESHOLD  # public IP alone is only mildly suspicious
+
+
+def test_keyword_hits_escalate():
+    # M4: multiple phishing keywords accumulate (capped), so realistic .com
+    # phishing clears the threshold where a single keyword does not.
+    assert assess("paypal-login-verify-account.com")[0] >= DEFAULT_BLOCK_THRESHOLD
+    # ...but a lone keyword on a legitimate host stays well below.
+    assert assess("login.microsoftonline.com")[0] < DEFAULT_BLOCK_THRESHOLD
+
+
+def test_punycode_is_a_signal():
+    assert "punycode" in features("xn--pypal-4ve.com")
 
 
 def test_subdomain_count_handles_multilevel_tld():
