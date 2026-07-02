@@ -2,6 +2,60 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.26.0] — 2026-07-02
+
+### Adversarial security hardening
+
+A three-front adversarial review (crown-jewel path, the two convergence plugins,
+and DoS/SSRF/supply-chain/deploy) surfaced findings that were each traced to the
+code and fixed. SSRF (the webhook resolver re-validates the IP at connect,
+defeating DNS rebinding) and ReDoS (all regexes are linear) were verified solid.
+
+**HIGH**
+- **Control-plane auth segregation** — admin routes (config apply, plugin
+  install, GDPR purge, registry) accepted ANY valid inference API key, so one
+  inference key could install a plugin (in-process code) or disable auth via
+  config apply. Admin routes now require a dedicated admin credential
+  (`LLM_PROXY_ADMIN_KEYS`, via `verify_admin_key`); falls back to inference keys
+  only when unset (back-compat). A shared `parse_bearer()` also replaces the
+  `.replace("Bearer ", "")` global-replace across every auth call site.
+- **Response-signature replay** — `ResponseSigner.verify()` never checked the
+  signed timestamp's age, so a captured tuple verified forever despite the
+  docstring's replay-protection claim. Added `verify(max_age_seconds=,
+  clock_skew_seconds=)` freshness enforcement (UTC via `calendar.timegm`).
+- **Single-signal injection dilution** — a lone regex pattern in the
+  [0.6, 0.85) band diluted to a ~0.16 composite and PASSED unreviewed.
+  `calculate_confidence` now floors such a hit to `escalate`
+  (`regex_escalate_floor`, default 0.6).
+
+**MEDIUM**
+- **AI Dependency Guard** — tri-state registry check (200 = exists, 404/410 =
+  missing, everything else including 429/5xx/timeout = inconclusive, not cached,
+  not flagged); a 429 no longer force-allows a hallucinated package. Per-request
+  timeout instead of a bulk `wait_for` that voided confirmed 404s. Bounded LRU
+  cache (memory-DoS). Coverage extended to poetry/pipenv/uv/pdm.
+- **FQDN risk** — IP-literal detection via `ipaddress` (dotted, IPv6, decimal,
+  hex) with private/loopback/link-local/reserved flagged; per-hit phishing
+  keyword scoring (capped) + punycode signal, so realistic `.com` phishing flags
+  while legit single-keyword hosts stay clear.
+- **Prompt extraction** now walks multimodal list content, top-level
+  `system`/`instructions`/`input`, and `tools[].function` name/description.
+- **Flood guard** moved to the top of `inspect()` (before the expensive
+  regex/semantic scan) — CPU-amplification DoS.
+- **Audit hash-chain** — a blank `entry_hash` is tolerated only for leading
+  legacy rows; after any hashed row it's a chain break, not a GENESIS reset
+  (closes truncate-and-re-anchor tamper).
+
+**LOW** — atomic `.get()` on `session_memory` (free-threaded race), the shared
+`parse_bearer()` at all remaining call sites, one shared URL extractor for the
+request and response link paths (dropping the over-broad `$-_` range), and
+`re.split(maxsplit=)` keyword form. Streaming output-guard remains detect-only
+(a buffered-mode enforcement is tracked as a feature, not changed here).
+
+Covered by new tests in `tests/test_security_hardening.py`,
+`tests/test_ai_dependency_guard.py`, `tests/test_fqdn_risk.py`,
+`tests/test_audit_chain.py`. Full suite 1354 passed / 2 skipped, ruff + mypy clean.
+
 ## [1.25.7] — 2026-07-02
 
 ### UI — light theme contrast overhaul
