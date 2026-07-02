@@ -2,6 +2,20 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.25.6] — 2026-07-02
+
+### Security / dependencies
+
+- **Docs toolchain — cleared the last 2 advisories** (`/docs`): the VitePress
+  build pulled a vulnerable transitive vite (`server.fs.deny` bypass, high, +
+  launch-editor NTLM disclosure, moderate — GHSA-fx2h-pf6j-xcff /
+  GHSA-v6wh-96g9-6wx3, both Windows-only, build-time). VitePress 1.6.4 (latest
+  stable) still pins the vulnerable range and its only vite-7 release is a 2.x
+  alpha, so `npm audit` reported "no fix available". Resolved structurally by
+  bumping the existing `overrides.vite` from `^6.4.2` to `^7.1.12`; the docs site
+  still builds cleanly (client + server bundles + page rendering) and `npm audit`
+  now reports 0 vulnerabilities. GitHub Dependabot banner: **2 → 0**.
+
 ## [1.25.5] — 2026-07-01
 
 ### Dependencies / housekeeping
