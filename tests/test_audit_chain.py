@@ -85,6 +85,22 @@ class TestAuditHashChain:
         assert result["verified"] == 5
 
     @pytest.mark.asyncio
+    async def test_blanked_hash_after_hashed_rows_is_a_break(self, db_store):
+        """M8: blanking a row's entry_hash to truncate-and-reanchor the chain
+        must be reported as a break, not silently reset to GENESIS."""
+        for i in range(4):
+            await db_store.log_audit(**_make_audit_entry(req_id=f"r{i}"))
+        # Attacker blanks the last hashed row (as if truncating the tail).
+        async with aiosqlite.connect(db_store.db_path) as conn:
+            await conn.execute(
+                "UPDATE audit_log SET entry_hash='' WHERE id=(SELECT MAX(id) FROM audit_log)"
+            )
+            await conn.commit()
+        result = await db_store.verify_audit_chain()
+        assert result["valid"] is False
+        assert "blank entry_hash" in result.get("error", "")
+
+    @pytest.mark.asyncio
     async def test_first_entry_has_genesis_prev(self, db_store):
         """First entry's prev_hash is 'GENESIS'."""
         await db_store.log_audit(**_make_audit_entry())

@@ -653,10 +653,22 @@ class SQLiteStore:
             stored_hash = row.get("entry_hash", "")
             stored_prev = row.get("prev_hash", "")
 
-            # Skip legacy entries without hashes (pre-migration)
+            # Blank entry_hash: tolerate ONLY for leading legacy rows written
+            # before the hash-chain migration (no hashed row seen yet). A blank
+            # hash AFTER hashed rows is an attacker blanking a row to truncate
+            # the tail and re-anchor the chain to GENESIS — treat it as a break,
+            # not a reset.
             if not stored_hash:
-                expected_prev = "GENESIS"
-                continue
+                if verified == 0:
+                    expected_prev = "GENESIS"
+                    continue
+                return {
+                    "valid": False,
+                    "total": len(rows),
+                    "verified": verified,
+                    "broken_at": row.get("id"),
+                    "error": f"blank entry_hash at id={row.get('id')} after hashed rows (tamper detected)",
+                }
 
             # Verify prev_hash link
             if stored_prev != expected_prev:
