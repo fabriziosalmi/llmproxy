@@ -14,6 +14,7 @@ import { mountConfigEditor, type ConfigEditorApi } from './ConfigEditor';
 import { mountConfigWarnings, type ConfigWarningsApi } from './ConfigWarnings';
 import { mountConfigYaml, type ConfigYamlApi } from './ConfigYaml';
 import { mountDataExport, type ExportApi } from './DataExport';
+import { mountGuidedConfig, type GuidedConfigApi } from './GuidedConfig';
 import { mountHealthPanel, type HealthApi } from './HealthPanel';
 import { mountIdentity, type IdentityApi } from './Identity';
 import { mountRateLimit, type RateLimitApi } from './RateLimit';
@@ -32,6 +33,7 @@ export interface SettingsApi
         ConfigWarningsApi,
         ConfigYamlApi,
         ConfigEditorApi,
+        GuidedConfigApi,
         RateLimitApi,
         HealthApi,
         RoutingConfigApi,
@@ -52,7 +54,9 @@ export interface SettingsHosts {
     system: HTMLElement | null;
     /** O.5 — Active config (YAML) read-only viewer. Optional so older shells still work. */
     configYaml?: HTMLElement | null;
-    /** Edit Configuration — admin YAML editor (validate + apply). Optional. */
+    /** Guided Configuration — field-by-field editor with inline help. Optional. */
+    guidedConfig?: HTMLElement | null;
+    /** Edit Configuration — admin raw-YAML editor (validate + apply). Optional. */
     configEditor?: HTMLElement | null;
     /** Appearance — theme preference (auto/dark/light). Optional. */
     appearance?: HTMLElement | null;
@@ -79,6 +83,10 @@ export function mountSettingsView(hosts: SettingsHosts, opts: MountSettingsOptio
     }
     if (hosts.export) refreshes.push(mountDataExport(hosts.export, opts.api, { toast: opts.toast }));
     if (hosts.system) refreshes.push(mountSystemInfo(hosts.system, opts.api));
+    if (hosts.guidedConfig) {
+        const handle = mountGuidedConfig(hosts.guidedConfig, opts.api, opts.toast);
+        refreshes.push(handle.refresh);
+    }
     if (hosts.configYaml) refreshes.push(mountConfigYaml(hosts.configYaml, opts.api));
     if (hosts.configEditor) {
         const handle = mountConfigEditor(hosts.configEditor, opts.api, opts.toast);
@@ -111,6 +119,7 @@ export { mountAppearance } from './Appearance';
 export { mountConfigEditor } from './ConfigEditor';
 export { mountConfigWarnings } from './ConfigWarnings';
 export { mountConfigYaml } from './ConfigYaml';
+export { mountGuidedConfig } from './GuidedConfig';
 export { mountHealthPanel } from './HealthPanel';
 export { mountIdentity } from './Identity';
 export { mountRateLimit } from './RateLimit';

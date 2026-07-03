@@ -36,6 +36,7 @@ export async function initSettings() {
                     webhooks: document.getElementById('settings-webhooks-host'),
                     export: document.getElementById('settings-export-host'),
                     system: document.getElementById('settings-system-host'),
+                    guidedConfig: document.getElementById('settings-guided-config-host'),
                     configYaml: document.getElementById('settings-config-yaml-host'),
                     configEditor: document.getElementById('settings-config-editor-host'),
                     rateLimit: document.getElementById('settings-rate-limit-host'),
@@ -56,6 +57,11 @@ export async function initSettings() {
                         exportFileUrl: api.exportFileUrl,
                         fetchConfigWarnings: api.fetchConfigWarnings,
                         fetchConfigYaml: api.fetchConfigYaml,
+                        // Config source read/validate/write — used by both the
+                        // Guided form and the raw Edit-Configuration editor.
+                        fetchConfigRaw: api.fetchConfigRaw,
+                        validateConfig: api.validateConfig,
+                        applyConfig: api.applyConfig,
                         fetchRateLimitConfig: api.fetchRateLimitConfig,
                         setRateLimitPreset: api.setRateLimitPreset,
                         fetchHealth: api.fetchHealth,
