@@ -2,6 +2,44 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.28.0] — 2026-07-03
+
+### IDN homograph protection + one confusable table to rule them all
+
+A classic phishing vector — a Punycode/Unicode look-alike of a real brand
+(`xn--bnkofamerica-x9j.com`, or a raw `pаypal.com` with a Cyrillic `а`) — now
+has a first-class defence on the LLM data plane: any such host that appears in a
+**prompt or a model response** and impersonates a configured brand is blocked
+(or logged, in `log_only` mode).
+
+- **New `core/confusables.py`** — the single source of truth for Unicode
+  confusable folding. The Cyrillic/Greek→Latin homoglyph table used to be
+  **hand-rolled and divergent in three places** (`core/semantic_analyzer.py`,
+  `core/firewall_asgi.py`, and the homoglyph logic in
+  `SecurityShield.sanitize_response`); all now import one expanded, tested table
+  (~60 entries vs the old ~15). Zero external deps — NFKC handles math-alnum /
+  fullwidth, this table handles the Cyrillic/Greek letters NFKC leaves alone.
+  Letters with no genuine Latin twin (ж, ш, …) are deliberately excluded so real
+  Cyrillic/Greek prose does not latinise into an accidental signature match.
+- **`homograph_target()` / `skeleton()` / `decode_idna_host()`** — Punycode is
+  decoded (stdlib codec), the registrable label reduced to a UTS #39-style
+  skeleton, and compared against the protected brands' skeletons. The check
+  fires **only** on non-ASCII/Punycode labels, so ordinary ASCII hosts — and
+  legitimate subdomains of the brand — never trip it (false-positive rate near
+  zero). ASCII typosquats remain the lexical risk scorer's job.
+- **Config** (`security.link_sanitization.homograph_protection`): `enabled`
+  (default true, no-op until `brands` is set), `log_only`, and `brands` (e.g.
+  `["bankofamerica.com", "paypal.com"]`). Fail-open on both request and
+  response paths.
+- **Scope, stated honestly**: this defends the LLM data plane (homograph URLs in
+  prompts/responses, and homoglyph-obfuscated prompt injection). It is **not** a
+  browser/email/DNS control — it does not see a user clicking a link in their
+  mail client. This is not the full UTS #39 table either; it is its Latin-target
+  subset for the scripts that actually get weaponised.
+- **Tests**: `tests/test_confusables.py` (29 cases — folding, skeleton, IDNA
+  decode, detection, a false-positive corpus, and SecurityShield
+  request/response wiring). Suite 1360 → 1389 passing (1391 total, 2 skipped).
+
 ## [1.27.3] — 2026-07-02
 
 ### Docs / config / deploy hygiene (closing pass)

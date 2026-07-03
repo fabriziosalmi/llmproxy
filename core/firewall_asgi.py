@@ -125,26 +125,9 @@ class ByteLevelFirewallMiddleware:
         self._signature_store = signature_store
         self.enabled = enabled
 
-    # R2-06: Cyrillic/Greek confusable homoglyphs (NFKC doesn't normalize these)
-    _CONFUSABLE_MAP = str.maketrans(
-        {
-            "\u0430": "a",
-            "\u0435": "e",
-            "\u043e": "o",
-            "\u0440": "p",
-            "\u0441": "c",
-            "\u0443": "y",
-            "\u0456": "i",
-            "\u043d": "h",
-            "\u0445": "x",
-            "\u039f": "o",
-            "\u03bf": "o",
-            "\u0391": "a",
-            "\u03b1": "a",
-            "\u0395": "e",
-            "\u03b5": "e",
-        }
-    )
+    # R2-06: Cyrillic/Greek confusable homoglyphs (NFKC doesn't normalize these).
+    # Shared table \u2014 see core.confusables (was duplicated & divergent here).
+    from core.confusables import CONFUSABLE_MAP as _CONFUSABLE_MAP
 
     @staticmethod
     def _normalize_unicode(data: bytes) -> bytes:

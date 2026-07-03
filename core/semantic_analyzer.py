@@ -33,6 +33,10 @@ import logging
 import unicodedata
 from typing import Optional
 
+# Single source of truth for the Cyrillic/Greek confusable table (was hand-rolled
+# here and in core/firewall_asgi.py with divergent, incomplete copies).
+from core.confusables import CONFUSABLE_MAP as _CONFUSABLE_MAP
+
 logger = logging.getLogger("llmproxy.semantic_analyzer")
 
 # ── Attack Pattern Corpus ──
@@ -155,29 +159,9 @@ _LEET_MAP = str.maketrans(
     }
 )
 
-# R2-06: Cyrillic/Greek confusable homoglyphs that NFKC does NOT normalize.
-# An attacker can write "ignore" with Cyrillic а/е/о to bypass trigram matching.
-_CONFUSABLE_MAP = str.maketrans(
-    {
-        "\u0430": "a",  # Cyrillic а → Latin a
-        "\u0435": "e",  # Cyrillic е → Latin e
-        "\u043e": "o",  # Cyrillic о → Latin o
-        "\u0440": "p",  # Cyrillic р → Latin p
-        "\u0441": "c",  # Cyrillic с → Latin c
-        "\u0443": "y",  # Cyrillic у → Latin y
-        "\u0456": "i",  # Cyrillic і → Latin i
-        "\u043d": "h",  # Cyrillic н → Latin h (visual)
-        "\u0442": "t",  # Cyrillic т → Latin t (visual in some fonts)
-        "\u0445": "x",  # Cyrillic х → Latin x
-        "\u0412": "b",  # Cyrillic В → Latin B
-        "\u039f": "o",  # Greek Ο → Latin O
-        "\u03bf": "o",  # Greek ο → Latin o
-        "\u0391": "a",  # Greek Α → Latin A
-        "\u03b1": "a",  # Greek α → Latin a
-        "\u0395": "e",  # Greek Ε → Latin E
-        "\u03b5": "e",  # Greek ε → Latin e
-    }
-)
+# R2-06: Cyrillic/Greek confusable homoglyphs that NFKC does NOT normalize (an
+# attacker can write "ignore" with Cyrillic а/е/о to bypass trigram matching)
+# are folded via _CONFUSABLE_MAP, imported at the top of this module.
 
 
 def normalize_match_chars(text: str) -> str:

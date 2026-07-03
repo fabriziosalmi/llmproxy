@@ -825,6 +825,16 @@ class SecurityShield:
                 if netloc == domain_lower or netloc.endswith("." + domain_lower):
                     return f"Unsafe link detected: {link}"
 
+            # IDN homograph brand-impersonation (Punycode / Cyrillic-Greek look-alike
+            # of a protected brand). Independent of risk_scoring; fail-open.
+            brand = self._homograph_brand(netloc)
+            if brand is not None:
+                logger.warning(
+                    f"HOMOGRAPH: {netloc} impersonates {brand} (IDN look-alike)"
+                )
+                if not self._homograph_log_only():
+                    return f"Homograph impersonation of {brand}: {link}"
+
             if risk_enabled and netloc:
                 # Fail-open: a scorer error must never block a legitimate request.
                 try:
@@ -841,6 +851,31 @@ class SecurityShield:
                         return f"Unsafe link detected (risk={score:.2f}): {link}"
 
         return None
+
+    def _homograph_cfg(self) -> Dict[str, Any]:
+        link = self.config.get("link_sanitization", {})
+        cfg = link.get("homograph_protection", {}) if isinstance(link, dict) else {}
+        return cfg if isinstance(cfg, dict) else {}
+
+    def _homograph_log_only(self) -> bool:
+        return bool(self._homograph_cfg().get("log_only", False))
+
+    def _homograph_brand(self, netloc: str) -> Optional[str]:
+        """Return the protected brand `netloc` impersonates via an IDN homograph,
+        or None. Opt-in: active only when `homograph_protection.brands` is set.
+        Fail-open — any error yields None (never blocks a legitimate request)."""
+        cfg = self._homograph_cfg()
+        if not cfg.get("enabled", True):
+            return None
+        brands = cfg.get("brands", [])
+        if not brands or not netloc:
+            return None
+        try:
+            from core.confusables import homograph_target
+
+            return homograph_target(netloc, brands)
+        except Exception:
+            return None
 
     def sanitize_response(self, content: str) -> str:
         """Filters and validates the LLM response. Returns '[ERROR]' if guards fail."""
@@ -879,7 +914,8 @@ class SecurityShield:
         resp_risk_enabled = resp_risk_cfg.get("enabled", False)
         resp_risk_threshold = float(resp_risk_cfg.get("block_threshold", 0.7))
         resp_risk_log_only = bool(resp_risk_cfg.get("log_only", False))
-        if blocked_domains or resp_risk_enabled:
+        resp_homograph_on = bool(link_cfg.get("homograph_protection", {}).get("brands"))
+        if blocked_domains or resp_risk_enabled or resp_homograph_on:
             from urllib.parse import urlparse
 
             def _replace_blocked_urls(match):
@@ -888,6 +924,13 @@ class SecurityShield:
                     for d in blocked_domains:
                         d_lower = d.lower()
                         if netloc == d_lower or netloc.endswith("." + d_lower):
+                            return "[BLOCKED_LINK]"
+                    brand = self._homograph_brand(netloc)
+                    if brand is not None:
+                        logger.warning(
+                            f"HOMOGRAPH (response): {netloc} impersonates {brand}"
+                        )
+                        if not self._homograph_log_only():
                             return "[BLOCKED_LINK]"
                     if resp_risk_enabled and netloc:
                         from core.fqdn_risk import assess
