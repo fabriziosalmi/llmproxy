@@ -62,6 +62,16 @@ security:
       enabled: false
       block_threshold: 0.7   # 0..1; lower = stricter (0.5 also catches risky-TLD DGAs)
       log_only: false        # true = log the risk but never block/replace the link
+    # IDN homograph protection — blocks Punycode / Cyrillic-Greek look-alikes of
+    # the brands you list (e.g. xn--bnkofamerica-x9j.com, or a raw-Unicode
+    # pаypal.com with a Cyrillic 'а'). The skeleton of each link's registrable
+    # label is compared to your brands'; a match on a host that is NOT the
+    # legitimate domain is flagged. Only fires on non-ASCII/Punycode labels, so
+    # ordinary ASCII hosts (incl. legitimate subdomains of the brand) never trip.
+    homograph_protection:
+      enabled: true          # master switch; still a no-op until `brands` is set
+      log_only: false        # true = log the impersonation but don't block/replace
+      brands: []             # e.g. ["bankofamerica.com", "paypal.com", "google.com"]
 
 # Identity & SSO — Multi-provider OIDC
 identity:
