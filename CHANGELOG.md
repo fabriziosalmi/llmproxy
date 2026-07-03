@@ -2,6 +2,41 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.29.0] — 2026-07-03
+
+### Guided Configuration — the config UI stops being a raw-YAML wall
+
+The admin config editor was a single raw-YAML `<textarea>` — usable only by
+someone who already knows every knob. The Settings → Configuration panel now
+leads with a **field-by-field Guided Configuration** form: each setting rendered
+as a toggle / number / dropdown / chip-list with a **plain-language description
+of what it does**, grouped into Security Shield, Link & Homograph Protection,
+Threat Ledger, Caching, Budget, Logging & Audit, and Rotation & Failover. The
+raw editor stays below as the "Advanced" surface for structural sections
+(endpoints, model_groups, …).
+
+- **Comment-preserving writes.** A new dependency-free surgical YAML editor
+  (`ui/.../schema/yamlEdit.ts`) edits only the changed leaf lines on the on-disk
+  source, so applying a change keeps config.yaml byte-for-byte intact —
+  comments, ordering, and unmanaged keys — instead of re-serialising and nuking
+  the inline docs. Handles scalars, inline/block string-lists, and inserts
+  missing keys/sections at the correct indentation.
+- **Self-documenting schema registry** (`schema/configSchema.ts`): one place
+  where every surfaced knob carries its label, help sentence, type, default,
+  bounds, and `restartRequired`/`advanced` flags. Doubles as living config docs.
+- **Same hardened write path** as the raw editor: client-side field validation →
+  `POST /config/validate` (dry-run) → typed confirm → `POST /config/apply`
+  (atomic write + timestamped backup + hot-reload + auto-rollback). Dirty-tracking
+  shows an unsaved-change count; only changed leaves are written.
+- **New `createSelect` primitive** (`ui/src/ui/Select.ts`) — the label/help/error/
+  ARIA sibling of `createInput`, extracted from the hand-rolled AddForm select.
+- **Fix (pre-existing):** `fetchConfigRaw`/`validateConfig`/`applyConfig` were
+  never forwarded to the Settings view, so the raw **Edit Configuration** editor
+  silently failed to load its source. Now wired — the raw editor works again too.
+- **Tests:** +41 UI tests (surgical YAML round-trip & comment preservation, schema
+  integrity, Select, and a full GuidedConfig render→edit→validate→apply flow on a
+  real DOM). UI suite 377 → 418 passing. Typecheck + lint clean, build green.
+
 ## [1.28.0] — 2026-07-03
 
 ### IDN homograph protection + one confusable table to rule them all

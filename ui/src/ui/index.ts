@@ -48,6 +48,9 @@ export type { AttachTooltipOptions, TooltipPlacement } from './Tooltip';
 export { createInput } from './Input';
 export type { InputFieldOptions, InputFieldHandle, InputType } from './Input';
 
+export { createSelect } from './Select';
+export type { SelectFieldOptions, SelectFieldHandle, SelectOption } from './Select';
+
 export { createToggle } from './Toggle';
 export type { ToggleOptions, ToggleHandle } from './Toggle';
 
