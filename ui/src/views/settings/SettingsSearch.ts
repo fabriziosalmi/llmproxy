@@ -120,8 +120,14 @@ export function mountSettingsSearch(host: HTMLElement, opts: SettingsSearchOptio
 
     function paintCursor(): void {
         Array.from(results.children).forEach((li, i) => {
-            (li as HTMLElement).classList.toggle('bg-white/[0.06]', i === cursor);
-            (li as HTMLElement).setAttribute('aria-selected', String(i === cursor));
+            const el = li as HTMLElement;
+            const active = i === cursor;
+            el.classList.toggle('bg-white/[0.06]', active);
+            el.setAttribute('aria-selected', String(active));
+            if (active) {
+                el.scrollIntoView({ block: 'nearest' });
+                input.setAttribute('aria-activedescendant', el.id);
+            }
         });
     }
 

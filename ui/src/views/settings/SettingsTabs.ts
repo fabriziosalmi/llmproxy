@@ -28,15 +28,42 @@ export interface SettingsTabsOptions {
     root?: Document | HTMLElement;
     /** Read/write the deep-link hash. Defaults to true; off in tests. */
     useHash?: boolean;
+    /**
+     * Called before leaving `fromId` for `toId`. Return false (or a Promise of
+     * false) to VETO the switch — used to confirm away from unsaved edits. The
+     * hash is restored if a hash-triggered switch is vetoed.
+     */
+    guard?: (fromId: string, toId: string) => boolean | Promise<boolean>;
+}
+
+export interface TabBadge {
+    /** Small count/label pill. Omit (with dot:true) for a bare status dot. */
+    text?: string;
+    intent?: 'warning' | 'danger' | 'info';
+    /** Render a bare dot instead of a text pill (e.g. "unsaved"). */
+    dot?: boolean;
 }
 
 export interface SettingsTabsHandle {
     root: HTMLElement;
     setActive(id: string): void;
     getActive(): string;
+    /** Set or clear a live badge on a tab (unsaved dot, warning count, …). */
+    setBadge(id: string, badge: TabBadge | null): void;
     /** Detach listeners (hashchange). */
     destroy(): void;
 }
+
+const BADGE_TONE: Record<NonNullable<TabBadge['intent']>, string> = {
+    warning: 'text-amber-400 bg-amber-400/15',
+    danger: 'text-rose-400 bg-rose-400/15',
+    info: 'text-cyan-300 bg-cyan-400/15',
+};
+const DOT_COLOR: Record<NonNullable<TabBadge['intent']>, string> = {
+    warning: 'bg-amber-400',
+    danger: 'bg-rose-400',
+    info: 'bg-cyan-400',
+};
 
 const HASH_PREFIX = '#settings/';
 
@@ -78,6 +105,7 @@ export function mountSettingsTabs(
     tabbarHost.replaceChildren(list);
 
     const buttons = new Map<string, HTMLButtonElement>();
+    const badgeSlots = new Map<string, HTMLSpanElement>();
     const valid = tabs.filter((t) => sectionOf(t.id));
 
     for (const tab of valid) {
@@ -87,8 +115,13 @@ export function mountSettingsTabs(
         btn.setAttribute('role', 'tab');
         btn.setAttribute('aria-controls', `settings-sec-${tab.id}`);
         btn.setAttribute('data-testid', `settingstab-${tab.id}`);
-        btn.textContent = tab.label;
-        btn.addEventListener('click', () => activate(tab.id, true));
+        const labelSpan = document.createElement('span');
+        labelSpan.textContent = tab.label;
+        const badgeSlot = document.createElement('span');
+        badgeSlot.setAttribute('data-testid', `settingstab-${tab.id}-badge`);
+        btn.append(labelSpan, badgeSlot);
+        badgeSlots.set(tab.id, badgeSlot);
+        btn.addEventListener('click', () => void activate(tab.id, true));
         btn.addEventListener('keydown', onKeyNav);
         list.appendChild(btn);
         buttons.set(tab.id, btn);
@@ -115,22 +148,29 @@ export function mountSettingsTabs(
         }
     }
 
-    let _suppressHash = false;
-    function activate(id: string, fromUser = false): void {
-        if (!buttons.has(id)) return;
-        const changed = id !== activeId;
+    function setHash(id: string): void {
+        // The `id === activeId` early-return in activate()/onHashChange makes the
+        // resulting async hashchange a harmless no-op, so no suppress flag needed.
+        if (useHash) location.hash = HASH_PREFIX + id;
+    }
+
+    /** Returns true if the tab actually switched (false when vetoed by guard). */
+    async function activate(id: string, fromUser = false): Promise<boolean> {
+        if (!buttons.has(id)) return false;
+        if (id === activeId) {
+            if (fromUser) buttons.get(id)?.focus();
+            return true;
+        }
+        if (opts.guard) {
+            const ok = await opts.guard(activeId, id);
+            if (!ok) return false;
+        }
         activeId = id;
         paint();
         if (fromUser) buttons.get(id)?.focus();
-        if (useHash) {
-            _suppressHash = true;
-            try {
-                location.hash = HASH_PREFIX + id;
-            } finally {
-                _suppressHash = false;
-            }
-        }
-        if (changed) opts.onChange?.(id);
+        setHash(id);
+        opts.onChange?.(id);
+        return true;
     }
 
     function onKeyNav(e: KeyboardEvent): void {
@@ -142,13 +182,16 @@ export function mountSettingsTabs(
         else if (e.key === 'ArrowRight') next = (cur + 1) % ids.length;
         else if (e.key === 'Home') next = 0;
         else if (e.key === 'End') next = ids.length - 1;
-        activate(ids[next]!, true);
+        void activate(ids[next]!, true);
     }
 
     const onHashChange = (): void => {
-        if (_suppressHash) return;
         const id = tabFromHash(location.hash);
-        if (id && buttons.has(id)) activate(id);
+        if (id && buttons.has(id) && id !== activeId) {
+            void activate(id).then((switched) => {
+                if (!switched) setHash(activeId); // vetoed → restore the hash
+            });
+        }
     };
     if (useHash) window.addEventListener('hashchange', onHashChange);
 
@@ -158,10 +201,30 @@ export function mountSettingsTabs(
     activeId = start;
     paint();
 
+    function setBadge(id: string, badge: TabBadge | null): void {
+        const slot = badgeSlots.get(id);
+        if (!slot) return;
+        slot.replaceChildren();
+        if (!badge) return;
+        const intent = badge.intent ?? 'info';
+        const el = document.createElement('span');
+        if (badge.text) {
+            el.className =
+                'ml-0.5 inline-flex items-center justify-center min-w-[1rem] px-1 h-4 rounded-full ' +
+                `text-[9px] font-bold ${BADGE_TONE[intent]}`;
+            el.textContent = badge.text;
+        } else if (badge.dot) {
+            el.className = `ml-0.5 inline-block h-1.5 w-1.5 rounded-full ${DOT_COLOR[intent]}`;
+            el.setAttribute('aria-hidden', 'true');
+        }
+        slot.appendChild(el);
+    }
+
     return {
         root: list,
-        setActive: (id) => activate(id),
+        setActive: (id) => void activate(id),
         getActive: () => activeId,
+        setBadge,
         destroy: () => {
             if (useHash) window.removeEventListener('hashchange', onHashChange);
         },

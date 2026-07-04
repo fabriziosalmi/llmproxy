@@ -2,6 +2,31 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.31.0] — 2026-07-04
+
+### Settings polish — unsaved-changes guard + live tab badges
+
+Follow-up to the 1.30.0 tabbed Settings, closing the two gaps that matter most
+for a config surface.
+
+- **Unsaved-changes guard.** The Guided config form holds edits until you Apply,
+  so switching tabs used to silently discard them. Leaving the Configuration tab
+  with pending edits now asks for confirmation (`SettingsTabs` gained an async
+  `guard` veto hook; a vetoed hash/Cmd+K jump restores the hash). `GuidedConfig`
+  exposes `isDirty()` / `dirtyCount()` / an `onDirty` callback.
+- **Live tab badges.** The Configuration tab shows an amber **unsaved dot** while
+  the Guided form is dirty, otherwise the **count of startup-validation warnings**
+  — status where you'd act on it. `SettingsTabs.setBadge(id, …)` drives it live.
+- **A11y.** Search results scroll the active option into view and expose
+  `aria-activedescendant`; tab focus stays on the tab (ARIA-correct), no forced
+  panel focus.
+- **Deliberately deferred:** per-tab lazy-mount (perf). Net-negative right now —
+  Settings isn't the landing view and switching is already instant, while the
+  change would invert the whole section-mount flow. Tracked as an isolated
+  follow-up, not rushed pre-deploy.
+- **Tests:** +9 UI tests (guard veto + hash restore, badge set/clear, dirty
+  exposure). UI suite 442 → 449 passing. Typecheck + lint clean, build green.
+
 ## [1.30.0] — 2026-07-04
 
 ### Settings: instant navigation — tabs, search, deep-links, one card

@@ -146,6 +146,19 @@ describe('mountGuidedConfig — dirty tracking + save', () => {
         expect(host.textContent).toContain('Fix the highlighted');
     });
 
+    it('exposes isDirty/dirtyCount and fires onDirty on edits', async () => {
+        const onDirty = vi.fn();
+        const h = mountGuidedConfig(host, makeApi(), undefined, { onDirty });
+        await flush();
+        expect(h.isDirty()).toBe(false);
+        expect(h.dirtyCount()).toBe(0);
+        onDirty.mockClear();
+        (host.querySelector('[data-testid="guided-security-enabled"]') as HTMLElement).click();
+        expect(h.isDirty()).toBe(true);
+        expect(h.dirtyCount()).toBe(1);
+        expect(onDirty).toHaveBeenLastCalledWith(1);
+    });
+
     it('surfaces a server validation failure without applying', async () => {
         const api = makeApi({
             validateConfig: vi.fn(async () => ({ valid: false, errors: ['bad port'], warnings: [] })),
