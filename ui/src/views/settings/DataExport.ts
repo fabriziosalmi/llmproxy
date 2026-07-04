@@ -1,5 +1,6 @@
-import { createBadge, createCard, createEmptyState, createErrorState, createSkeleton } from '../../ui';
+import { createBadge, createEmptyState, createErrorState, createSkeleton } from '../../ui';
 import { copyText } from '../../../services/file_actions.js';
+import { settingsPanel } from './panel';
 import type { ExportStatus } from './types';
 
 export interface ExportApi {
@@ -26,18 +27,10 @@ function field(label: string, value: string, testId?: string): HTMLElement {
 }
 
 export function mountDataExport(host: HTMLElement, api: ExportApi, opts: DataExportOptions = {}): () => Promise<void> {
-    const heading = document.createElement('h2');
-    heading.className = 'text-xs font-bold text-white mb-4';
-    heading.textContent = 'Data Export';
-
     const inner = document.createElement('div');
     inner.appendChild(createSkeleton({ shape: 'block', height: '5rem', ariaLabel: '' }));
 
-    const body = document.createElement('div');
-    body.appendChild(heading);
-    body.appendChild(inner);
-
-    host.replaceChildren(createCard({ body, testId: 'settings-export' }));
+    host.replaceChildren(settingsPanel({ title: 'Data Export', body: inner, testId: 'settings-export' }));
 
     async function refresh(): Promise<void> {
         try {
