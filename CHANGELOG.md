@@ -2,6 +2,30 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.32.0] — 2026-07-04
+
+### Release: Settings workspace + LLM homograph defense
+
+Consolidated release of everything since v1.27.3 (all shipped to production
+incrementally; this is the GitHub-release marker). Highlights:
+
+- **IDN homograph protection** (1.28.0): Punycode / Cyrillic-Greek look-alikes of
+  configured brands in prompts and model responses are blocked/logged; the
+  confusable table is now a single shared source.
+- **Guided Configuration** (1.29.0): a field-by-field config editor with
+  plain-language inline help, replacing the raw-YAML wall — comment-preserving
+  surgical writes over the existing hardened validate/apply backend.
+- **Settings instant-navigation workspace** (1.30.0 / 1.31.0): horizontal tabs
+  (one section at a time), global config search, `#/settings/<sub>` deep-links +
+  Cmd+K, unsaved-changes guard, live tab badges, one canonical panel card.
+- **Router + light-theme fixes** (1.31.1): Settings deep-linking conforms to the
+  app's `#/<view>` hash router (cold-open + reload work); light-theme contrast
+  overrides for the pale accent shades that were washing out.
+
+No code change over 1.31.1 — version marker for the consolidated release. See the
+per-version entries below for detail. Gate: UI 454 tests, core `make test` 1177,
+typecheck + lint clean, build green.
+
 ## [1.31.1] — 2026-07-04
 
 ### Fix: Settings deep-linking now conforms to the app's hash router
