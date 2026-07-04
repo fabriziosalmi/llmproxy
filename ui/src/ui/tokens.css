@@ -215,21 +215,36 @@ html.theme-light .hover\:text-white:hover {
  * black substrate and wash out on light (amber-400 on white is ~1.5:1). Remap
  * each status accent to a darker shade that keeps its meaning AND clears WCAG
  * AA on white, for both the tiny uppercase labels and the big metric values. */
+/* Each block also covers the pale -200 shade and the /NN opacity variants:
+ * Tailwind emits those as distinct classes (`.text-amber-400\/70`) that the
+ * base-shade selector never matches, so without them a warning row's
+ * `text-amber-200/90` or a muted `text-cyan-400/70` washes out to ~1.5:1 on
+ * white. Remapping to the solid readable shade (dropping the dark-glow alpha)
+ * is exactly what a light substrate wants. */
+html.theme-light .text-emerald-200,
 html.theme-light .text-emerald-300,
 html.theme-light .text-emerald-400,
-html.theme-light .text-emerald-500 {
+html.theme-light .text-emerald-500,
+html.theme-light .text-emerald-400\/70 {
     color: #059669 !important;
 }
+html.theme-light .text-amber-200,
+html.theme-light .text-amber-200\/90,
 html.theme-light .text-amber-300,
 html.theme-light .text-amber-400,
-html.theme-light .text-amber-500 {
+html.theme-light .text-amber-500,
+html.theme-light .text-amber-400\/70,
+html.theme-light .text-amber-400\/80 {
     color: #b45309 !important;
 }
+html.theme-light .text-rose-200,
 html.theme-light .text-rose-300,
 html.theme-light .text-rose-400,
-html.theme-light .text-rose-500 {
+html.theme-light .text-rose-500,
+html.theme-light .text-rose-400\/80 {
     color: #e11d48 !important;
 }
+html.theme-light .text-red-200,
 html.theme-light .text-red-300,
 html.theme-light .text-red-400,
 html.theme-light .text-red-500 {
@@ -240,9 +255,12 @@ html.theme-light .text-sky-400,
 html.theme-light .text-sky-500 {
     color: #0284c7 !important;
 }
+html.theme-light .text-cyan-200,
 html.theme-light .text-cyan-300,
 html.theme-light .text-cyan-400,
-html.theme-light .text-cyan-500 {
+html.theme-light .text-cyan-500,
+html.theme-light .text-cyan-300\/70,
+html.theme-light .text-cyan-400\/70 {
     color: #0891b2 !important;
 }
 

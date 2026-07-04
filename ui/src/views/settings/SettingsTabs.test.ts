@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { mountSettingsTabs, tabFromHash, type SettingsTabSpec } from './SettingsTabs';
+import { mountSettingsTabs, type SettingsTabSpec } from './SettingsTabs';
 
 const TABS: SettingsTabSpec[] = [
     { id: 'config', label: 'Configuration' },
@@ -25,15 +25,6 @@ beforeEach(() => {
 
 const sec = (id: string) => root.querySelector<HTMLElement>(`#settings-sec-${id}`)!;
 const tabBtn = (id: string) => bar.querySelector<HTMLButtonElement>(`[data-testid="settingstab-${id}"]`)!;
-
-describe('tabFromHash', () => {
-    it('parses #settings/<id> and rejects anything else', () => {
-        expect(tabFromHash('#settings/config')).toBe('config');
-        expect(tabFromHash('#settings/access')).toBe('access');
-        expect(tabFromHash('#other')).toBeNull();
-        expect(tabFromHash('')).toBeNull();
-    });
-});
 
 describe('mountSettingsTabs', () => {
     it('renders a tab per section and shows only the first by default', () => {
@@ -90,12 +81,30 @@ describe('mountSettingsTabs', () => {
         expect(tabBtn('system')).toBeNull();
     });
 
-    it('reads and writes the deep-link hash', () => {
-        location.hash = '#settings/access';
+    it('reads and writes the app-convention deep-link hash (#/settings/<sub>)', () => {
+        location.hash = '#/settings/access';
         const h = mountSettingsTabs(bar, TABS, { root, useHash: true });
         expect(h.getActive()).toBe('access'); // hash wins over default
         h.setActive('system');
-        expect(location.hash).toBe('#settings/system');
+        expect(location.hash).toBe('#/settings/system');
+        h.destroy();
+        location.hash = '';
+    });
+
+    it('canonicalizes a bare #/settings to #/settings/<first-tab> on mount', () => {
+        location.hash = '#/settings';
+        const h = mountSettingsTabs(bar, TABS, { root, useHash: true });
+        expect(h.getActive()).toBe('config'); // first tab
+        expect(location.hash).toBe('#/settings/config');
+        h.destroy();
+        location.hash = '';
+    });
+
+    it('preserves ?params when writing the sub-tab hash', () => {
+        location.hash = '#/settings/config?tr=24h';
+        const h = mountSettingsTabs(bar, TABS, { root, useHash: true });
+        h.setActive('system');
+        expect(location.hash).toBe('#/settings/system?tr=24h');
         h.destroy();
         location.hash = '';
     });
@@ -156,15 +165,15 @@ describe('mountSettingsTabs — guard (unsaved-changes veto)', () => {
     });
 
     it('restores the hash when a hash-triggered switch is vetoed', async () => {
-        location.hash = '#settings/config';
+        location.hash = '#/settings/config';
         const guard = vi.fn(async () => false);
         const h = mountSettingsTabs(bar, TABS, { root, useHash: true, guard });
         expect(h.getActive()).toBe('config');
-        location.hash = '#settings/system'; // deep-link / Cmd+K jump
+        location.hash = '#/settings/system'; // deep-link / Cmd+K jump
         await flush();
         await flush();
         expect(h.getActive()).toBe('config'); // vetoed
-        expect(location.hash).toBe('#settings/config'); // restored
+        expect(location.hash).toBe('#/settings/config'); // restored
         h.destroy();
         location.hash = '';
     });

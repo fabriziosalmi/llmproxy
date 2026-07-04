@@ -29,6 +29,33 @@ export function setHashParams(patch) {
     history.replaceState(null, '', `${view}${qs ? `?${qs}` : ''}`);
 }
 
+/** Path segments of the current view, e.g. `#/settings/traffic` → ['settings','traffic']. */
+function viewSegments() {
+    return hashParts()
+        .view.replace(/^#\//, '')
+        .split('/')
+        .filter(Boolean);
+}
+
+/** The top-level tab (first path segment), e.g. `#/settings/traffic` → 'settings'. */
 export function hashTab() {
-    return hashParts().view.replace('#/', '');
+    return viewSegments()[0] || '';
+}
+
+/** The sub-view (second path segment), e.g. `#/settings/traffic` → 'traffic'; '' if none. */
+export function hashSub() {
+    return viewSegments()[1] || '';
+}
+
+/**
+ * Write `#/<tab>[/<sub>]` while preserving the current `?params`. Uses
+ * replaceState so tab/sub-tab changes don't spam browser history. The single
+ * source of truth for composing the view hash — both the top-level router
+ * (content.js) and the Settings sub-tabs go through here.
+ */
+export function setHashView(tab, sub) {
+    const { params } = hashParts();
+    const path = sub ? `#/${tab}/${sub}` : `#/${tab}`;
+    const qs = params.toString();
+    history.replaceState(null, '', `${path}${qs ? `?${qs}` : ''}`);
 }
