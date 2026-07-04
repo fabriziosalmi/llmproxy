@@ -1,4 +1,5 @@
-import { createBadge, createCard, createEmptyState, createErrorState, createSkeleton } from '../../ui';
+import { createBadge, createEmptyState, createErrorState, createSkeleton } from '../../ui';
+import { settingsPanel } from './panel';
 import type { RbacRoles } from './types';
 
 export interface RbacApi {
@@ -79,18 +80,10 @@ function buildMatrix(roles: RbacRoles): HTMLElement {
 }
 
 export function mountRbacMatrix(host: HTMLElement, api: RbacApi): () => Promise<void> {
-    const heading = document.createElement('h2');
-    heading.className = 'text-xs font-bold text-white mb-4';
-    heading.textContent = 'RBAC Role Matrix';
-
     const inner = document.createElement('div');
     inner.appendChild(createSkeleton({ shape: 'block', height: '8rem', ariaLabel: '' }));
 
-    const body = document.createElement('div');
-    body.appendChild(heading);
-    body.appendChild(inner);
-
-    host.replaceChildren(createCard({ body, testId: 'settings-rbac' }));
+    host.replaceChildren(settingsPanel({ title: 'RBAC Role Matrix', body: inner, testId: 'settings-rbac' }));
 
     async function refresh(): Promise<void> {
         try {

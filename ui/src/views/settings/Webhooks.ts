@@ -1,14 +1,7 @@
-import {
-    createBadge,
-    createButton,
-    createCard,
-    createEmptyState,
-    createErrorState,
-    createSkeleton,
-    cx,
-} from '../../ui';
+import { createBadge, createButton, createEmptyState, createErrorState, createSkeleton, cx } from '../../ui';
 import type { BadgeIntent } from '../../ui';
 import { rum } from '../../services/rum';
+import { settingsPanel } from './panel';
 import type { WebhooksConfig } from './types';
 
 export interface WebhooksApi {
@@ -58,10 +51,6 @@ export function mountWebhooks(
     api: WebhooksApi,
     toast?: (m: string, k?: 'success' | 'error' | 'warning' | 'info') => void
 ): WebhooksHandle {
-    const heading = document.createElement('h2');
-    heading.className = 'text-xs font-bold text-white';
-    heading.textContent = 'Webhooks';
-
     const testBtn = createButton({ label: 'Test Fire', size: 'sm', variant: 'ghost', testId: 'test-webhook-btn' });
     testBtn.classList.add('text-violet-400', 'hover:text-violet-300');
     testBtn.addEventListener('click', async () => {
@@ -82,19 +71,12 @@ export function mountWebhooks(
         }
     });
 
-    const headerRow = document.createElement('div');
-    headerRow.className = 'flex items-center justify-between mb-4';
-    headerRow.appendChild(heading);
-    headerRow.appendChild(testBtn);
-
     const inner = document.createElement('div');
     inner.appendChild(createSkeleton({ shape: 'block', height: '5rem', ariaLabel: '' }));
 
-    const body = document.createElement('div');
-    body.appendChild(headerRow);
-    body.appendChild(inner);
-
-    host.replaceChildren(createCard({ body, testId: 'settings-webhooks' }));
+    host.replaceChildren(
+        settingsPanel({ title: 'Webhooks', titleRight: testBtn, body: inner, testId: 'settings-webhooks' })
+    );
 
     async function refresh(): Promise<void> {
         try {

@@ -1,4 +1,5 @@
-import { createCard, createEmptyState, createSkeleton } from '../../ui';
+import { createEmptyState, createSkeleton } from '../../ui';
+import { settingsPanel } from './panel';
 import type { IdentityConfig, IdentityMe } from './types';
 
 export interface IdentityApi {
@@ -43,10 +44,6 @@ function rolesField(roles: string[]): HTMLElement {
 }
 
 export function mountIdentity(host: HTMLElement, api: IdentityApi): () => Promise<void> {
-    const heading = document.createElement('h2');
-    heading.className = 'text-xs font-bold text-white mb-4';
-    heading.textContent = 'Identity & Access';
-
     const summaryGrid = document.createElement('div');
     summaryGrid.className = 'grid grid-cols-1 md:grid-cols-2 gap-4 mb-4';
     summaryGrid.id = 'settings-identity-summary';
@@ -57,12 +54,9 @@ export function mountIdentity(host: HTMLElement, api: IdentityApi): () => Promis
     meContainer.id = 'settings-identity-me';
     meContainer.appendChild(createSkeleton({ shape: 'block', height: '4rem', ariaLabel: '' }));
 
-    const body = document.createElement('div');
-    body.appendChild(heading);
-    body.appendChild(summaryGrid);
-    body.appendChild(meContainer);
-
-    host.replaceChildren(createCard({ body, testId: 'settings-identity' }));
+    host.replaceChildren(
+        settingsPanel({ title: 'Identity & Access', body: [summaryGrid, meContainer], testId: 'settings-identity' })
+    );
 
     async function refresh(): Promise<void> {
         // Auth mode + SSO status

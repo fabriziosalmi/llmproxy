@@ -26,6 +26,8 @@ export interface GuidedConfigApi {
 
 export interface GuidedConfigHandle {
     refresh: () => Promise<void>;
+    /** Reveal (un-hiding advanced if needed), scroll to, highlight and focus a field. */
+    focusPath: (path: string) => void;
 }
 
 type Toast = (m: string, k?: 'success' | 'error' | 'warning' | 'info') => void;
@@ -443,8 +445,24 @@ export function mountGuidedConfig(host: HTMLElement, api: GuidedConfigApi, toast
         }
     }
 
+    function focusPath(path: string): void {
+        const field = ALL_FIELDS.find((f) => f.path === path);
+        if (!field) return;
+        if (field.advanced && !showAdvanced) {
+            showAdvanced = true;
+            renderForm();
+        }
+        const control = controls.find((c) => c.field.path === path);
+        if (!control) return;
+        control.root.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        const ring = ['ring-2', 'ring-cyan-500/50', 'rounded-lg', 'transition'];
+        control.root.classList.add(...ring);
+        setTimeout(() => control.root.classList.remove(...ring), 1600);
+        (control.root.querySelector('input, select, button') as HTMLElement | null)?.focus();
+    }
+
     void refresh();
-    return { refresh };
+    return { refresh, focusPath };
 }
 
 /** Exposed for tests: the full set of managed paths. */

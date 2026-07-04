@@ -1,4 +1,5 @@
-import { createCard, createSkeleton } from '../../ui';
+import { createSkeleton } from '../../ui';
+import { settingsPanel } from './panel';
 import type { ServiceInfo, VersionInfo } from './types';
 
 export interface SystemInfoApi {
@@ -28,20 +29,12 @@ function setText(host: HTMLElement, valueId: string, text: string): void {
 }
 
 export function mountSystemInfo(host: HTMLElement, api: SystemInfoApi): () => Promise<void> {
-    const heading = document.createElement('h2');
-    heading.className = 'text-xs font-bold text-white mb-2';
-    heading.textContent = 'System Info';
-
     const grid = document.createElement('div');
     grid.className = 'grid grid-cols-1 sm:grid-cols-2 gap-4';
     grid.appendChild(makeField('Version', 'sys-version'));
     grid.appendChild(makeField('Endpoint', 'sys-url'));
 
-    const body = document.createElement('div');
-    body.appendChild(heading);
-    body.appendChild(grid);
-
-    host.replaceChildren(createCard({ body, testId: 'settings-system-info' }));
+    host.replaceChildren(settingsPanel({ title: 'System Info', body: grid, testId: 'settings-system-info' }));
 
     async function refresh(): Promise<void> {
         try {

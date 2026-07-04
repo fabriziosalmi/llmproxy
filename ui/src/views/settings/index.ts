@@ -20,8 +20,24 @@ import { mountIdentity, type IdentityApi } from './Identity';
 import { mountRateLimit, type RateLimitApi } from './RateLimit';
 import { mountRbacMatrix, type RbacApi } from './RbacMatrix';
 import { mountRoutingConfig, type RoutingConfigApi } from './RoutingConfig';
+import { mountSettingsSearch } from './SettingsSearch';
+import { mountSettingsTabs, type SettingsTabSpec } from './SettingsTabs';
 import { mountSystemInfo, type SystemInfoApi } from './SystemInfo';
 import { mountWebhooks, type WebhooksApi } from './Webhooks';
+
+/**
+ * Settings sub-tab order (the section elements are `settings-sec-<id>`).
+ * Configuration leads — it's the star surface (Guided config); Appearance,
+ * the least-used, trails.
+ */
+export const SETTINGS_TABS: SettingsTabSpec[] = [
+    { id: 'config', label: 'Configuration' },
+    { id: 'access', label: 'Access & Identity' },
+    { id: 'traffic', label: 'Traffic & Routing' },
+    { id: 'integrations', label: 'Integrations' },
+    { id: 'system', label: 'System & Data' },
+    { id: 'appearance', label: 'Appearance' },
+];
 
 export interface SettingsApi
     extends
@@ -45,6 +61,10 @@ export interface MountSettingsOptions {
 }
 
 export interface SettingsHosts {
+    /** Horizontal sub-tab bar host — shows one section at a time. Optional. */
+    tabbar?: HTMLElement | null;
+    /** Global settings search host — filters config fields across sections. Optional. */
+    search?: HTMLElement | null;
     /** Optional — when present, mounted above all other sections so config drift is loud. */
     configWarnings?: HTMLElement | null;
     identity: HTMLElement | null;
@@ -72,6 +92,7 @@ export interface SettingsHosts {
 
 export function mountSettingsView(hosts: SettingsHosts, opts: MountSettingsOptions): () => Promise<void> {
     const refreshes: Array<() => Promise<void>> = [];
+    let guidedHandle: ReturnType<typeof mountGuidedConfig> | null = null;
 
     if (hosts.appearance) refreshes.push(mountAppearance(hosts.appearance).refresh);
     if (hosts.configWarnings) refreshes.push(mountConfigWarnings(hosts.configWarnings, opts.api));
@@ -84,8 +105,8 @@ export function mountSettingsView(hosts: SettingsHosts, opts: MountSettingsOptio
     if (hosts.export) refreshes.push(mountDataExport(hosts.export, opts.api, { toast: opts.toast }));
     if (hosts.system) refreshes.push(mountSystemInfo(hosts.system, opts.api));
     if (hosts.guidedConfig) {
-        const handle = mountGuidedConfig(hosts.guidedConfig, opts.api, opts.toast);
-        refreshes.push(handle.refresh);
+        guidedHandle = mountGuidedConfig(hosts.guidedConfig, opts.api, opts.toast);
+        refreshes.push(guidedHandle.refresh);
     }
     if (hosts.configYaml) refreshes.push(mountConfigYaml(hosts.configYaml, opts.api));
     if (hosts.configEditor) {
@@ -109,6 +130,20 @@ export function mountSettingsView(hosts: SettingsHosts, opts: MountSettingsOptio
         refreshes.push(handle.refresh);
     }
 
+    // Sub-tab navigation — mounted after sections so it can find and drive them.
+    const tabs = hosts.tabbar ? mountSettingsTabs(hosts.tabbar, SETTINGS_TABS) : null;
+
+    // Global settings search — filters config fields; jumps to the Configuration
+    // tab and highlights the matched field.
+    if (hosts.search && guidedHandle) {
+        mountSettingsSearch(hosts.search, {
+            openField: (path) => {
+                tabs?.setActive('config');
+                guidedHandle?.focusPath(path);
+            },
+        });
+    }
+
     return async function refreshAll(): Promise<void> {
         await Promise.allSettled(refreshes.map((fn) => fn()));
     };
@@ -120,6 +155,8 @@ export { mountConfigEditor } from './ConfigEditor';
 export { mountConfigWarnings } from './ConfigWarnings';
 export { mountConfigYaml } from './ConfigYaml';
 export { mountGuidedConfig } from './GuidedConfig';
+export { mountSettingsTabs } from './SettingsTabs';
+export { mountSettingsSearch } from './SettingsSearch';
 export { mountHealthPanel } from './HealthPanel';
 export { mountIdentity } from './Identity';
 export { mountRateLimit } from './RateLimit';

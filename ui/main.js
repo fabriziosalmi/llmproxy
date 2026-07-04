@@ -593,7 +593,13 @@ function initHUD() {
                 desc: 'Threat ledger, audit chain, GDPR, semantic corpus',
             },
             { id: 'view-logs', name: 'Nav: Live Logs', desc: 'Real-time SSE log stream' },
-            { id: 'view-settings', name: 'Nav: Settings', desc: 'Identity, rate limits, system info' },
+            { id: 'view-settings', name: 'Nav: Settings', desc: 'Config, access, traffic, integrations, system' },
+            { id: 'settings-config', name: 'Settings: Configuration', desc: 'Guided config editor + raw YAML' },
+            { id: 'settings-access', name: 'Settings: Access & Identity', desc: 'Auth mode, SSO, RBAC matrix' },
+            { id: 'settings-traffic', name: 'Settings: Traffic & Routing', desc: 'Rate limits, routing cost-weight' },
+            { id: 'settings-integrations', name: 'Settings: Integrations', desc: 'Webhooks, API reference' },
+            { id: 'settings-system', name: 'Settings: System & Data', desc: 'Version, health, data export' },
+            { id: 'settings-appearance', name: 'Settings: Appearance', desc: 'Theme preference' },
             { id: 'add-endpoint', name: 'Endpoint: Add Endpoint', desc: 'Open the endpoint registration form' },
             { id: 'scan-local', name: 'Endpoint: Scan Local', desc: 'Find Ollama, LM Studio, vLLM, or LiteLLM' },
             { id: 'reset-open-breakers', name: 'Ops: Reset Open Breakers', desc: 'Reset every OPEN/HALF circuit breaker' },
@@ -909,6 +915,15 @@ function initHUD() {
         };
         if (custom[id]) {
             custom[id]();
+            console.info(`Executed HUD command: ${id}`);
+            return;
+        }
+        // Settings sub-tab: set the deep-link hash, then open Settings. The
+        // SettingsTabs controller activates the matching section from the hash
+        // (on mount for a first visit, or via its hashchange listener).
+        if (id.startsWith('settings-')) {
+            location.hash = `#settings/${id.slice('settings-'.length)}`;
+            document.getElementById('nav-settings')?.click();
             console.info(`Executed HUD command: ${id}`);
             return;
         }

@@ -2,6 +2,36 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.30.0] — 2026-07-04
+
+### Settings: instant navigation — tabs, search, deep-links, one card
+
+Settings was a single long scroll of stacked sections behind a sticky "navpill"
+jump-bar — you still scrolled past everything to reach anything. It is now a
+**tabbed workspace**: one section visible at a time, instant switching, keyboard
+arrows, and no scroll.
+
+- **Horizontal sub-tabs** (`SettingsTabs.ts`): the six groups become an ARIA
+  `tablist` (Configuration first — it's the star; Appearance last). Arrow/Home/End
+  keyboard nav. Each `<section>` is shown/hidden in place, so the existing
+  mount-into-hosts flow is untouched. Replaces the navpill + long scroll.
+- **Deep-links**: every tab has a `#settings/<id>` hash — shareable, and the tab
+  restores on reload. The **Cmd+K palette** gains six "Settings: <section>"
+  commands that jump straight to a sub-tab.
+- **Global settings search** (`SettingsSearch.ts`): a search box over the whole
+  config schema (label / help / path / section). Type "homograph" or "cache TTL"
+  → pick a result → it jumps to the Configuration tab and highlights the field
+  (`GuidedConfig.focusPath`, un-hiding advanced fields as needed). Find any knob
+  without knowing which tab it lives in.
+- **One consistent card** (`panel.ts` → `settingsPanel`): Identity, RBAC,
+  Webhooks, System Info and Data Export used the generic `createCard`
+  (rounded-xl, p-4) while the rest used a hand-rolled rounded-2xl/p-6 card — the
+  radius/padding mismatch read as drift. All five now share one canonical
+  Settings card, so every panel lines up.
+- Retired the dead `.settings-navpill` / `.settings-group-title` CSS.
+- **Tests:** +42 UI tests (tab nav + hash + keyboard, search ranking + keyboard +
+  jump, panel helper). UI suite 400 → 442 passing. Typecheck + lint clean, build green.
+
 ## [1.29.0] — 2026-07-03
 
 ### Guided Configuration — the config UI stops being a raw-YAML wall

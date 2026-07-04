@@ -36,6 +36,8 @@ export async function initSettings() {
                     webhooks: document.getElementById('settings-webhooks-host'),
                     export: document.getElementById('settings-export-host'),
                     system: document.getElementById('settings-system-host'),
+                    tabbar: document.getElementById('settings-tabbar'),
+                    search: document.getElementById('settings-search-host'),
                     guidedConfig: document.getElementById('settings-guided-config-host'),
                     configYaml: document.getElementById('settings-config-yaml-host'),
                     configEditor: document.getElementById('settings-config-editor-host'),
