@@ -100,3 +100,72 @@ describe('mountSettingsTabs', () => {
         location.hash = '';
     });
 });
+
+describe('mountSettingsTabs — live badges', () => {
+    const badge = (id: string) => bar.querySelector<HTMLElement>(`[data-testid="settingstab-${id}-badge"]`)!;
+
+    it('sets a text badge, a dot badge, and clears it', () => {
+        const h = mountSettingsTabs(bar, TABS, { root, useHash: false });
+        expect(badge('config').children.length).toBe(0);
+
+        h.setBadge('config', { text: '3', intent: 'warning' });
+        expect(badge('config').textContent).toBe('3');
+
+        h.setBadge('config', { dot: true, intent: 'warning' });
+        expect(badge('config').textContent).toBe('');
+        expect(badge('config').querySelector('span')).not.toBeNull();
+
+        h.setBadge('config', null);
+        expect(badge('config').children.length).toBe(0);
+    });
+
+    it('ignores a badge for an unknown tab', () => {
+        const h = mountSettingsTabs(bar, TABS, { root, useHash: false });
+        expect(() => h.setBadge('nope', { text: '1' })).not.toThrow();
+    });
+});
+
+describe('mountSettingsTabs — guard (unsaved-changes veto)', () => {
+    const flush = () => new Promise((r) => setTimeout(r, 0));
+
+    it('vetoes a switch when the guard returns false', async () => {
+        const guard = vi.fn(async () => false);
+        const h = mountSettingsTabs(bar, TABS, { root, useHash: false, guard });
+        tabBtn('system').click();
+        await flush();
+        expect(guard).toHaveBeenCalledWith('config', 'system');
+        expect(h.getActive()).toBe('config'); // stayed
+        expect(sec('config').classList.contains('hidden')).toBe(false);
+    });
+
+    it('allows the switch when the guard returns true', async () => {
+        const guard = vi.fn(async () => true);
+        const h = mountSettingsTabs(bar, TABS, { root, useHash: false, guard });
+        tabBtn('system').click();
+        await flush();
+        expect(h.getActive()).toBe('system');
+    });
+
+    it('does not consult the guard when re-selecting the active tab', async () => {
+        const guard = vi.fn(async () => true);
+        const h = mountSettingsTabs(bar, TABS, { root, useHash: false, guard });
+        tabBtn('config').click(); // already active
+        await flush();
+        expect(guard).not.toHaveBeenCalled();
+        expect(h.getActive()).toBe('config');
+    });
+
+    it('restores the hash when a hash-triggered switch is vetoed', async () => {
+        location.hash = '#settings/config';
+        const guard = vi.fn(async () => false);
+        const h = mountSettingsTabs(bar, TABS, { root, useHash: true, guard });
+        expect(h.getActive()).toBe('config');
+        location.hash = '#settings/system'; // deep-link / Cmd+K jump
+        await flush();
+        await flush();
+        expect(h.getActive()).toBe('config'); // vetoed
+        expect(location.hash).toBe('#settings/config'); // restored
+        h.destroy();
+        location.hash = '';
+    });
+});

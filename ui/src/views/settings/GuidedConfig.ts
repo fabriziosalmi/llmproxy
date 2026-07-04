@@ -28,6 +28,15 @@ export interface GuidedConfigHandle {
     refresh: () => Promise<void>;
     /** Reveal (un-hiding advanced if needed), scroll to, highlight and focus a field. */
     focusPath: (path: string) => void;
+    /** Number of fields edited but not yet applied. */
+    dirtyCount: () => number;
+    /** True when there are unsaved edits. */
+    isDirty: () => boolean;
+}
+
+export interface GuidedConfigOptions {
+    /** Fired whenever the unsaved-change count changes (for tab badges, guards). */
+    onDirty?: (count: number) => void;
 }
 
 type Toast = (m: string, k?: 'success' | 'error' | 'warning' | 'info') => void;
@@ -221,7 +230,12 @@ function buildControl(field: ConfigField, current: Scalar, onChange: () => void)
     };
 }
 
-export function mountGuidedConfig(host: HTMLElement, api: GuidedConfigApi, toast?: Toast): GuidedConfigHandle {
+export function mountGuidedConfig(
+    host: HTMLElement,
+    api: GuidedConfigApi,
+    toast?: Toast,
+    guidedOpts: GuidedConfigOptions = {}
+): GuidedConfigHandle {
     const card = document.createElement('div');
     card.className = 'bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06] p-6';
     card.setAttribute('data-testid', 'settings-guided-config');
@@ -297,6 +311,7 @@ export function mountGuidedConfig(host: HTMLElement, api: GuidedConfigApi, toast
         const n = dirtyControls().length;
         dirtyBadge.textContent = n ? `${n} unsaved change${n === 1 ? '' : 's'}` : 'No changes';
         (saveBtn as HTMLButtonElement).disabled = n === 0;
+        guidedOpts.onDirty?.(n);
     }
 
     let originalYaml = '';
@@ -462,7 +477,12 @@ export function mountGuidedConfig(host: HTMLElement, api: GuidedConfigApi, toast
     }
 
     void refresh();
-    return { refresh, focusPath };
+    return {
+        refresh,
+        focusPath,
+        dirtyCount: () => dirtyControls().length,
+        isDirty: () => dirtyControls().length > 0,
+    };
 }
 
 /** Exposed for tests: the full set of managed paths. */

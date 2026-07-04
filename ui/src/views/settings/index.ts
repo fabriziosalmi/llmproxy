@@ -8,6 +8,7 @@
  * skeletons while loading, ErrorState with retry on failure, and
  * EmptyState when the backend reports the feature is disabled.
  */
+import { confirm } from '../../ui';
 import { mountApiReference, type ApiReferenceApi } from './ApiReference';
 import { mountAppearance } from './Appearance';
 import { mountConfigEditor, type ConfigEditorApi } from './ConfigEditor';
@@ -93,6 +94,10 @@ export interface SettingsHosts {
 export function mountSettingsView(hosts: SettingsHosts, opts: MountSettingsOptions): () => Promise<void> {
     const refreshes: Array<() => Promise<void>> = [];
     let guidedHandle: ReturnType<typeof mountGuidedConfig> | null = null;
+    // Live badge on the Configuration tab: an amber "unsaved" dot while the
+    // Guided form is dirty, otherwise the count of startup-validation warnings.
+    let warningsCount = 0;
+    let refreshConfigBadge: () => void = () => {};
 
     if (hosts.appearance) refreshes.push(mountAppearance(hosts.appearance).refresh);
     if (hosts.configWarnings) refreshes.push(mountConfigWarnings(hosts.configWarnings, opts.api));
@@ -105,7 +110,9 @@ export function mountSettingsView(hosts: SettingsHosts, opts: MountSettingsOptio
     if (hosts.export) refreshes.push(mountDataExport(hosts.export, opts.api, { toast: opts.toast }));
     if (hosts.system) refreshes.push(mountSystemInfo(hosts.system, opts.api));
     if (hosts.guidedConfig) {
-        guidedHandle = mountGuidedConfig(hosts.guidedConfig, opts.api, opts.toast);
+        guidedHandle = mountGuidedConfig(hosts.guidedConfig, opts.api, opts.toast, {
+            onDirty: () => refreshConfigBadge(),
+        });
         refreshes.push(guidedHandle.refresh);
     }
     if (hosts.configYaml) refreshes.push(mountConfigYaml(hosts.configYaml, opts.api));
@@ -131,7 +138,43 @@ export function mountSettingsView(hosts: SettingsHosts, opts: MountSettingsOptio
     }
 
     // Sub-tab navigation — mounted after sections so it can find and drive them.
-    const tabs = hosts.tabbar ? mountSettingsTabs(hosts.tabbar, SETTINGS_TABS) : null;
+    // Guard: confirm before leaving Configuration with unsaved Guided edits.
+    const tabs = hosts.tabbar
+        ? mountSettingsTabs(hosts.tabbar, SETTINGS_TABS, {
+              guard: async (fromId) => {
+                  if (fromId === 'config' && guidedHandle?.isDirty()) {
+                      return confirm({
+                          title: 'Discard unsaved changes?',
+                          message:
+                              'You have unsaved configuration edits. Leaving this tab discards them — ' +
+                              'use “Review & apply” first to keep them.',
+                          confirmLabel: 'Discard & leave',
+                          danger: true,
+                      });
+                  }
+                  return true;
+              },
+          })
+        : null;
+
+    // Configuration-tab badge: unsaved dot > warnings count > none. Wired after
+    // tabs exist; driven live by the Guided form's onDirty and a one-shot fetch.
+    if (tabs) {
+        refreshConfigBadge = (): void => {
+            const dirty = guidedHandle?.dirtyCount() ?? 0;
+            if (dirty > 0) tabs.setBadge('config', { dot: true, intent: 'warning' });
+            else if (warningsCount > 0) tabs.setBadge('config', { text: String(warningsCount), intent: 'warning' });
+            else tabs.setBadge('config', null);
+        };
+        void opts.api
+            .fetchConfigWarnings()
+            .then((w) => {
+                warningsCount = w?.warnings?.length ?? 0;
+                refreshConfigBadge();
+            })
+            .catch(() => {});
+        refreshConfigBadge();
+    }
 
     // Global settings search — filters config fields; jumps to the Configuration
     // tab and highlights the matched field.
