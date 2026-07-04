@@ -918,12 +918,11 @@ function initHUD() {
             console.info(`Executed HUD command: ${id}`);
             return;
         }
-        // Settings sub-tab: set the deep-link hash, then open Settings. The
-        // SettingsTabs controller activates the matching section from the hash
-        // (on mount for a first visit, or via its hashchange listener).
+        // Settings sub-tab: navigate via the app's view hash (#/settings/<sub>).
+        // The top-level router (content.js) switches to Settings on the
+        // hashchange; SettingsTabs activates the matching section from the hash.
         if (id.startsWith('settings-')) {
-            location.hash = `#settings/${id.slice('settings-'.length)}`;
-            document.getElementById('nav-settings')?.click();
+            location.hash = `#/settings/${id.slice('settings-'.length)}`;
             console.info(`Executed HUD command: ${id}`);
             return;
         }

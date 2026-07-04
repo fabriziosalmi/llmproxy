@@ -12,7 +12,13 @@
  * owns its panels and lazily renders them, which fights the existing "mount into
  * fixed host divs by id" flow. This controller drives pre-existing external
  * section elements instead.
+ *
+ * Deep-linking conforms to the app's own hash-router convention (services/
+ * urlstate.js): the Settings sub-tab is the second path segment of the view
+ * hash — `#/settings/<sub>` — so it composes with the top-level router in
+ * content.js and its `?params` instead of being a parallel scheme.
  */
+import { hashSub, setHashView } from '../../../services/urlstate.js';
 
 export interface SettingsTabSpec {
     /** Stable id; the section element is `settings-sec-${id}`. */
@@ -65,8 +71,6 @@ const DOT_COLOR: Record<NonNullable<TabBadge['intent']>, string> = {
     info: 'bg-cyan-400',
 };
 
-const HASH_PREFIX = '#settings/';
-
 function tabBtnClass(active: boolean): string {
     return [
         'inline-flex shrink-0 items-center gap-2 px-3.5 py-2 text-[11px] font-semibold border-b-2 -mb-px',
@@ -75,13 +79,6 @@ function tabBtnClass(active: boolean): string {
             ? 'text-white border-cyan-500/60'
             : 'text-slate-500 border-transparent hover:text-slate-200 hover:border-white/10',
     ].join(' ');
-}
-
-/** Parse `#settings/<id>` → id, or null. */
-export function tabFromHash(hash: string): string | null {
-    if (!hash.startsWith(HASH_PREFIX)) return null;
-    const id = hash.slice(HASH_PREFIX.length).replace(/[^a-z0-9_-]/gi, '');
-    return id || null;
 }
 
 export function mountSettingsTabs(
@@ -149,9 +146,10 @@ export function mountSettingsTabs(
     }
 
     function setHash(id: string): void {
-        // The `id === activeId` early-return in activate()/onHashChange makes the
-        // resulting async hashchange a harmless no-op, so no suppress flag needed.
-        if (useHash) location.hash = HASH_PREFIX + id;
+        // Write `#/settings/<id>` via the shared router helper (replaceState —
+        // no hashchange, no history spam; the top-level tab segment + ?params
+        // are preserved).
+        if (useHash) setHashView('settings', id);
     }
 
     /** Returns true if the tab actually switched (false when vetoed by guard). */
@@ -186,7 +184,7 @@ export function mountSettingsTabs(
     }
 
     const onHashChange = (): void => {
-        const id = tabFromHash(location.hash);
+        const id = hashSub();
         if (id && buttons.has(id) && id !== activeId) {
             void activate(id).then((switched) => {
                 if (!switched) setHash(activeId); // vetoed → restore the hash
@@ -195,11 +193,17 @@ export function mountSettingsTabs(
     };
     if (useHash) window.addEventListener('hashchange', onHashChange);
 
-    // Initial selection: valid hash wins, then opts.initial, then first tab.
-    const fromHash = useHash ? tabFromHash(location.hash) : null;
-    const start = (fromHash && buttons.has(fromHash) && fromHash) || (opts.initial && buttons.has(opts.initial) && opts.initial) || ids[0]!;
+    // Initial selection: a valid sub in the hash wins, then opts.initial, then
+    // the first tab. Canonicalize the hash so `#/settings` becomes
+    // `#/settings/<start>` (shareable, and consistent with later switches).
+    const fromHash = useHash ? hashSub() : '';
+    const start =
+        (fromHash && buttons.has(fromHash) && fromHash) ||
+        (opts.initial && buttons.has(opts.initial) && opts.initial) ||
+        ids[0]!;
     activeId = start;
     paint();
+    setHash(start);
 
     function setBadge(id: string, badge: TabBadge | null): void {
         const slot = badgeSlots.get(id);

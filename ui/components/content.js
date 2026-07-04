@@ -2,18 +2,19 @@
  * Main Content Component - Orchestrates views
  */
 import { store } from '../services/store.js';
-import { hashParts, hashTab } from '../services/urlstate.js';
+import { hashTab, setHashView } from '../services/urlstate.js';
 
 const VALID_TABS = ['threats', 'guards', 'plugins', 'endpoints', 'models', 'analytics', 'security', 'logs', 'settings', 'docs'];
 
 export function renderContent() {
     const { currentTab } = store.state;
 
-    // Sync hash without triggering hashchange
-    const { view, params } = hashParts();
-    if (view !== `#/${currentTab}`) {
-        const qs = params.toString();
-        history.replaceState(null, '', `#/${currentTab}${qs ? `?${qs}` : ''}`);
+    // Sync only the TAB segment; preserve any sub-view segment (e.g. the
+    // Settings sub-tab in `#/settings/<sub>`, which SettingsTabs owns) and
+    // the ?params. replaceState → no hashchange. Only rewrite when the tab
+    // actually changed, so we don't clobber the sub on unrelated re-renders.
+    if (hashTab() !== currentTab) {
+        setHashView(currentTab);
     }
 
     document.querySelectorAll('.content-view').forEach((view) => view.classList.add('hidden'));

@@ -2,6 +2,38 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.31.1] — 2026-07-04
+
+### Fix: Settings deep-linking now conforms to the app's hash router
+
+Independent post-deploy verification found the Settings sub-tab deep-link
+(1.30.0) used a parallel `#settings/<id>` hash scheme that collided with the
+app's own `#/<view>` router (`components/content.js`): `renderContent()`
+rewrites the hash to `#/<tab>` on every store update, silently clobbering the
+sub-tab, and a cold `#/settings/<sub>` load didn't open Settings at all.
+
+- Settings sub-tabs now use the **app convention** — the sub-tab is the second
+  path segment, `#/settings/<sub>` — via a single shared setter `setHashView` in
+  `services/urlstate.js` (new `hashSub()`; `hashTab()` now returns the first
+  segment). No more parallel scheme.
+- `renderContent()` syncs only the **tab segment** and preserves the sub-segment
+  and `?params`, so it no longer clobbers the Settings sub-tab.
+- **Cold deep-links + reload now actually work**: `…/ui/#/settings/traffic`
+  boots straight into Settings → Traffic. Cmd+K jumps use the same scheme.
+- Blast radius is minimal: single-segment tabs behave exactly as before.
+- **Tests:** +5 (urlstate `hashSub`/`setHashView`/first-segment, sub-tab hash
+  canonicalization + `?params` preservation). UI suite 449 → 454 passing.
+
+### Fix: light-theme contrast
+
+Post-deploy the light theme showed washed-out text where components used pale
+accent shades the theme didn't remap — the Config Warnings rows
+(`text-amber-200/90` on white, ~1.5:1) most visibly. The `html.theme-light`
+overrides in `tokens.css` now also cover the `-200` accent shades and the
+`/NN` opacity variants (`text-amber-400/70`, `text-cyan-400/70`, `text-rose-400/80`,
+…) for amber/emerald/rose/red/cyan, remapping each to its solid AA-readable
+shade. CSS-only, no component changes.
+
 ## [1.31.0] — 2026-07-04
 
 ### Settings polish — unsaved-changes guard + live tab badges
@@ -40,8 +72,8 @@ arrows, and no scroll.
   `tablist` (Configuration first — it's the star; Appearance last). Arrow/Home/End
   keyboard nav. Each `<section>` is shown/hidden in place, so the existing
   mount-into-hosts flow is untouched. Replaces the navpill + long scroll.
-- **Deep-links**: every tab has a `#settings/<id>` hash — shareable, and the tab
-  restores on reload. The **Cmd+K palette** gains six "Settings: <section>"
+- **Deep-links**: every tab is addressable by a URL hash (see 1.31.1 for the
+  router-conformant `#/settings/<sub>` scheme). The **Cmd+K palette** gains six "Settings: <section>"
   commands that jump straight to a sub-tab.
 - **Global settings search** (`SettingsSearch.ts`): a search box over the whole
   config schema (label / help / path / section). Type "homograph" or "cache TTL"
