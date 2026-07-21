@@ -6,9 +6,8 @@ export default defineConfig({
   title: 'LLMProxy',
   description: 'LLM Security Gateway — Security-first proxy for Large Language Models',
   head: [
-    ['link', { rel: 'preconnect', href: 'https://fonts.googleapis.com' }],
-    ['link', { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' }],
-    ['link', { href: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap', rel: 'stylesheet' }],
+    // Self-hosted fonts (docs/public/fonts) — no request to Google.
+    ['link', { href: '/llmproxy/fonts/fonts.css', rel: 'stylesheet' }],
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/llmproxy/favicon.svg' }],
     ['link', { rel: 'icon', type: 'image/png', sizes: '32x32', href: '/llmproxy/favicon.png' }],
     ['meta', { name: 'theme-color', content: '#f43f5e' }],
