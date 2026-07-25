@@ -46,6 +46,13 @@ function isBlocked(entry: SecurityEvent): boolean {
     return (entry.message || '').toUpperCase().includes('BLOCK');
 }
 
+function getEventHour(entry: SecurityEvent): number {
+    const timestamp = entry.timestamp;
+    if (timestamp == null) return new Date().getHours();
+    const date = new Date(timestamp);
+    return isNaN(date.getHours()) ? new Date().getHours() : date.getHours();
+}
+
 export function mountThreatChart(canvas: HTMLCanvasElement): ThreatChartHandle | null {
     if (typeof Chart === 'undefined') return null;
     const ctx = canvas.getContext('2d');
@@ -102,7 +109,7 @@ export function mountThreatChart(canvas: HTMLCanvasElement): ThreatChartHandle |
     });
 
     function push(entry: SecurityEvent): void {
-        const hour = new Date().getHours();
+        const hour = getEventHour(entry);
         if (isBlocked(entry)) chart.data.datasets[0]!.data[hour]! += 1;
         else chart.data.datasets[1]!.data[hour]! += 1;
         chart.update('none');
