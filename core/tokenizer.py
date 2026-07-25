@@ -98,6 +98,8 @@ def count_messages_tokens(messages: List[Dict[str, Any]], model: str = "") -> in
     for msg in messages:
         total += 4  # per-message overhead (role + structural tokens)
         content = msg.get("content", "")
+        if content is None:
+            content = ""
         if isinstance(content, str):
             total += count_tokens(content, model)
         elif isinstance(content, list):
