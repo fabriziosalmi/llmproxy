@@ -42,7 +42,7 @@ services:
           memory: 512M
 
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     container_name: llmproxy-redis
     restart: unless-stopped
     ports:
