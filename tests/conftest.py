@@ -65,7 +65,7 @@ class InMemoryRepository(BaseRepository):
     ):
         if endpoint_id in self._endpoints:
             self._endpoints[endpoint_id].status = status
-            if metadata:
+            if metadata is not None:
                 self._endpoints[endpoint_id].metadata = metadata
 
     async def update_metrics(
