@@ -10,7 +10,11 @@ describe('settingsPanel', () => {
     });
 
     it('renders a title and forwards the testId', () => {
-        const p = settingsPanel({ title: 'Webhooks', body: document.createElement('div'), testId: 'settings-webhooks' });
+        const p = settingsPanel({
+            title: 'Webhooks',
+            body: document.createElement('div'),
+            testId: 'settings-webhooks',
+        });
         expect(p.getAttribute('data-testid')).toBe('settings-webhooks');
         expect(p.querySelector('h2')?.textContent).toBe('Webhooks');
     });
