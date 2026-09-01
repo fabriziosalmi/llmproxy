@@ -14,7 +14,15 @@
  * sections (endpoints, model_groups, …) that this guided form intentionally
  * does not cover.
  */
-import { confirm, createButton, createErrorState, createInput, createSelect, createSkeleton, createToggle } from '../../ui';
+import {
+    confirm,
+    createButton,
+    createErrorState,
+    createInput,
+    createSelect,
+    createSkeleton,
+    createToggle,
+} from '../../ui';
 import { ALL_FIELDS, CONFIG_SECTIONS, fieldError, type ConfigField } from './schema/configSchema';
 import { getScalar, setScalar, type Scalar } from './schema/yamlEdit';
 
@@ -254,7 +262,8 @@ export function mountGuidedConfig(
 
     const sub = document.createElement('p');
     sub.className = 'text-[10px] text-slate-500 mb-3';
-    sub.textContent = 'Change common settings with plain-language help. Structural sections stay in the Advanced editor below.';
+    sub.textContent =
+        'Change common settings with plain-language help. Structural sections stay in the Advanced editor below.';
     card.appendChild(sub);
 
     const body = document.createElement('div');
@@ -347,7 +356,10 @@ export function mountGuidedConfig(
             return;
         }
         if (!pre.valid) {
-            renderResult('error', (pre.errors || ['Invalid config']).map((x) => `✗ ${x}`));
+            renderResult(
+                'error',
+                (pre.errors || ['Invalid config']).map((x) => `✗ ${x}`)
+            );
             return;
         }
 
