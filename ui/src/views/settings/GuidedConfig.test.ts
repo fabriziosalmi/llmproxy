@@ -78,7 +78,10 @@ describe('mountGuidedConfig — rendering', () => {
         const num = host.querySelector('#guided-security-max_payload_size_kb') as HTMLInputElement;
         expect(num.value).toBe('512');
         // chips reflect the brand list
-        expect(host.querySelector('[data-testid="guided-security-link_sanitization-homograph_protection-brands"]')?.textContent).toContain('paypal.com');
+        expect(
+            host.querySelector('[data-testid="guided-security-link_sanitization-homograph_protection-brands"]')
+                ?.textContent
+        ).toContain('paypal.com');
     });
 
     it('hides advanced fields until the advanced toggle is on', async () => {
@@ -100,7 +103,9 @@ describe('mountGuidedConfig — dirty tracking + save', () => {
         const save = host.querySelector('[data-testid="guided-save-btn"]') as HTMLButtonElement;
         expect(save.disabled).toBe(true);
         // flip homograph log_only false→true
-        const sw = host.querySelector('[data-testid="guided-security-link_sanitization-homograph_protection-log_only"]') as HTMLElement;
+        const sw = host.querySelector(
+            '[data-testid="guided-security-link_sanitization-homograph_protection-log_only"]'
+        ) as HTMLElement;
         sw.click();
         expect(save.disabled).toBe(false);
         expect(host.textContent).toContain('1 unsaved change');

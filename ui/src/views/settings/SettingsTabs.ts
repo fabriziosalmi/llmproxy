@@ -90,8 +90,7 @@ export function mountSettingsTabs(
     const useHash = opts.useHash ?? true;
     if (!tabs.length) throw new Error('mountSettingsTabs requires at least one tab');
 
-    const sectionOf = (id: string): HTMLElement | null =>
-        root.querySelector<HTMLElement>(`#settings-sec-${id}`);
+    const sectionOf = (id: string): HTMLElement | null => root.querySelector<HTMLElement>(`#settings-sec-${id}`);
 
     const list = document.createElement('div');
     list.setAttribute('role', 'tablist');

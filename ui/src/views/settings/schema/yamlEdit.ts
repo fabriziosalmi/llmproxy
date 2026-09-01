@@ -198,7 +198,13 @@ function walk(lines: string[], segments: string[]): Walk {
             };
         }
         if (d === segments.length - 1) {
-            return { leafIdx: loc.lineIdx, matchedDepth: d + 1, rangeStart, rangeEnd, childIndentAtRange: expectedIndent };
+            return {
+                leafIdx: loc.lineIdx,
+                matchedDepth: d + 1,
+                rangeStart,
+                rangeEnd,
+                childIndentAtRange: expectedIndent,
+            };
         }
         const end = blockEnd(lines, loc.lineIdx);
         expectedIndent = childIndent(lines, loc.lineIdx, end);
