@@ -2,6 +2,54 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.32.1] — 2026-09-02
+
+### Fix: CI supply chain + three breakages that had gone unnoticed on main
+
+No functional change to the proxy. This is a CI/dependency release: `main` was
+carrying four independent defects, three of which made unrelated PRs look
+broken, and the branch gated on a single check so none of them blocked anything.
+
+- **Six security advisories closed** (#136): `aiohttp` 3.14.1 → 3.14.3 and
+  `cryptography` 48.0.1 → 50.0.1. Only one is genuinely reachable here —
+  CVE-2026-69244, an out-of-bounds heap read in the C response parser on a
+  malformed chunked response, which `aiohttp` hits as the client for upstream
+  provider responses. The other five (WebSocket smuggling, permessage-deflate,
+  PKCS#7 Bleichenbacher oracle, path-building blowup, `permittedSubtrees`
+  wildcard escape) do not map onto this codebase; bumped to get the audit clean.
+- **CodeQL version mismatch fixed** (#137): Dependabot bumps
+  `codeql-action/init` alone, leaving `autobuild`/`analyze` behind, and CodeQL
+  requires the family at one version — so that PR was red by construction. All
+  four refs (including `upload-sarif` in scorecards) now move together to
+  v4.37.9. The pin comments also read `# v3` while pinning v4.36.2; corrected.
+- **UI formatting restored** (#138): `prettier --check` was failing on five
+  Settings files, which is what failed every UI PR regardless of its contents.
+- **E2E green for the first time since 1.26.0** (#152): since 1.30.0 Settings
+  shows one section at a time, so five specs in `10-settings.spec.ts` resolved
+  their cards and read them as `hidden`. They now activate the owning tab
+  first. Red on `main` for 20 commits / 38 of the last 60 runs.
+- **Dependabot labels fixed** (#139): three of the four labels in
+  `dependabot.yml` (`ci`, `docs`, `frontend`) did not exist, so every npm and
+  github-actions PR was opened unlabelled.
+- **Runtime bumps**: `fastapi` 0.135.2 → 0.141.1 (#114, pulls starlette 1.x),
+  `uvicorn` 0.49.0 → 0.52.4 (#116), `docker/setup-buildx-action` → 4.3.0 (#112).
+
+### Hardening: branch protection now gates on 7 checks, not 1
+
+`main` ran 17 checks and required exactly one, so red was never load-bearing —
+which is why three breakages could live there for two months. Now required:
+`Test + Coverage`, `Lint`, `Type Check`, `Syntax Check`, `Workflow Hardening
+Checks`, `Supply Chain Integrity`, `Dependency Audit`. Deliberately left
+advisory: CodeQL (query sets change server-side), Mathematical Invariants
+(Hypothesis, flaky by design), Docker Image Size (network-dependent), and all
+of `frontend.yml` — that workflow is path-filtered on `ui/**`, so a required
+job there would never start on a non-UI PR and would stall it forever. Closing
+that last gap needs the path filter rethought.
+
+Gate: core suite 1303 passing on the exact shipped pins, +18 OpenAPI contract
+tests (which CI does not run), UI 454 unit tests, E2E 49/49, all workflows green
+on `main`.
+
 ## [1.32.0] — 2026-07-04
 
 ### Release: Settings workspace + LLM homograph defense
