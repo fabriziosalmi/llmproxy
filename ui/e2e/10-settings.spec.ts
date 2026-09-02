@@ -1,4 +1,19 @@
 import { test, expect } from './fixtures/auth';
+import { type Page } from '@playwright/test';
+
+/**
+ * Settings shows ONE section at a time (SettingsTabs, 1.30.0): every
+ * `settings-sec-*` block stays in the DOM, but only the active tab's is
+ * visible. A card outside the active tab therefore resolves and reads as
+ * `hidden`, so activate its owning tab before asserting on it.
+ *
+ * Clicks the tab rather than deep-linking to `#/settings/<id>` so the assertion
+ * covers the path a user actually takes.
+ */
+async function openTab(page: Page, id: string): Promise<void> {
+    await page.locator(`[role="tab"][aria-controls="settings-sec-${id}"]`).click();
+    await expect(page.locator(`#settings-sec-${id}`)).toBeVisible({ timeout: 10_000 });
+}
 
 /**
  * Covers the Settings view:
@@ -86,6 +101,7 @@ test.describe('settings view', () => {
     });
 
     test('Identity card surfaces auth mode, SSO status and the authenticated user', async ({ authedPage }) => {
+        await openTab(authedPage, 'access');
         const card = authedPage.locator('[data-testid="settings-identity"]');
         await expect(card).toBeVisible({ timeout: 10_000 });
         await expect(card).toContainText('SSO / OIDC');
@@ -96,6 +112,7 @@ test.describe('settings view', () => {
     });
 
     test('RBAC matrix renders permissions × roles with check / dash cells', async ({ authedPage }) => {
+        await openTab(authedPage, 'access');
         const matrix = authedPage.locator('[data-testid="rbac-matrix-table"]');
         await expect(matrix).toBeVisible({ timeout: 10_000 });
         await expect(matrix).toContainText('admin');
@@ -105,6 +122,7 @@ test.describe('settings view', () => {
     });
 
     test('Webhooks card surfaces configured endpoints + Test Fire button hits the API', async ({ authedPage }) => {
+        await openTab(authedPage, 'integrations');
         const card = authedPage.locator('[data-testid="settings-webhooks"]');
         await expect(card).toBeVisible({ timeout: 10_000 });
         await expect(card).toContainText('sec-channel');
@@ -122,6 +140,7 @@ test.describe('settings view', () => {
     });
 
     test('Data Export card surfaces output dir + option badges + recent files', async ({ authedPage }) => {
+        await openTab(authedPage, 'system');
         const card = authedPage.locator('[data-testid="settings-export"]');
         await expect(card).toBeVisible({ timeout: 10_000 });
         await expect(card).toContainText('/var/exports');
@@ -131,6 +150,7 @@ test.describe('settings view', () => {
     });
 
     test('System Info card surfaces the proxy version and endpoint URL', async ({ authedPage }) => {
+        await openTab(authedPage, 'system');
         const card = authedPage.locator('[data-testid="settings-system-info"]');
         await expect(card).toBeVisible({ timeout: 10_000 });
         await expect(card).toContainText('1.18.0-test');
