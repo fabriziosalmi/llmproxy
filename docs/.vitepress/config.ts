@@ -2,6 +2,9 @@ import { defineConfig } from 'vitepress'
 
 export default defineConfig({
   base: '/llmproxy/',
+  // The hostname carries the base path on purpose: VitePress joins it with each
+  // page's route, so without it every URL in the sitemap would point at a 404.
+  sitemap: { hostname: 'https://fabriziosalmi.github.io/llmproxy/' },
   srcExclude: ['**/node_modules/**', '**/venv/**', '**/dist/**'],
   title: 'LLMProxy',
   description: 'LLM Security Gateway — Security-first proxy for Large Language Models',
