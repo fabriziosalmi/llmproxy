@@ -443,3 +443,40 @@ class TestTelemetrySanitization:
         result = _sanitize_log(log)
         assert result["count"] == 42
         assert result["flag"] is True
+
+
+# ── the endpoint-pool gauge is written, not just declared ───────────────────
+
+
+@pytest.mark.asyncio
+async def test_metrics_scrape_refreshes_the_endpoint_pool_gauge():
+    """llm_proxy_endpoint_pool_size read zero forever before this.
+
+    The gauge was declared in core/metrics.py and MetricsTracker.set_pool_size
+    existed, but nothing in the proxy called it. It is refreshed on the scrape
+    itself so the value reflects the pool at scrape time rather than at the
+    last /health poll — /health has no fixed cadence and may never be called.
+    """
+    from models import EndpointStatus, LLMEndpoint
+    from proxy.routes.telemetry import create_router
+
+    app, agent = _make_app_with_routes(create_router)
+    for i in range(3):
+        await agent.store.add_endpoint(
+            LLMEndpoint(
+                id=f"e{i}",
+                url=f"http://host{i}.invalid/v1",
+                status=EndpointStatus.VERIFIED,
+            )
+        )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        body = (await client.get("/metrics")).text
+
+    assert 'llm_proxy_endpoint_pool_size{status="healthy"} 3.0' in body, (
+        f"pool gauge not refreshed by the scrape:\n"
+        + "\n".join(l for l in body.splitlines() if "endpoint_pool_size" in l)
+    )
+    assert 'llm_proxy_endpoint_pool_size{status="unhealthy"} 0.0' in body
