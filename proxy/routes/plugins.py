@@ -4,6 +4,8 @@ import yaml  # type: ignore[import-untyped]
 
 from fastapi import APIRouter, Request, HTTPException
 from core.auth_policy import auth_enabled
+import os
+from core.atomic_io import atomic_write
 
 
 def create_router(agent) -> APIRouter:
@@ -67,8 +69,18 @@ def create_router(agent) -> APIRouter:
                 p["enabled"] = enabled
                 break
 
-        with open(agent.plugin_manager.manifest_path, "w") as f:
-            yaml.dump(manifest, f)
+        # Atomic: this file carries the enabled flags and the SHA-256 pins,
+        # and hot_swap() below acts on it immediately. A truncating write
+        # interrupted here leaves a manifest that often still parses, with
+        # plugins or pins missing — and a missing pin is loaded with a warning
+        # rather than refused.
+        _manifest_path = agent.plugin_manager.manifest_path
+        atomic_write(
+            yaml.dump(manifest, default_flow_style=False),
+            _manifest_path,
+            os.path.dirname(os.path.abspath(_manifest_path)) or ".",
+            ".manifest.",
+        )
 
         await agent.plugin_manager.hot_swap()
         return {"name": plugin_name, "enabled": enabled}
