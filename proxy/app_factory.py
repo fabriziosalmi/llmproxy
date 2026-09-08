@@ -398,7 +398,29 @@ def create_app(agent) -> FastAPI:
 
     @app.on_event("shutdown")
     async def _shutdown():
+        import asyncio
+
         from proxy.background import drain_pending_writes
+
+        # 0. Stop the producers before flushing anything.
+        #
+        # setup() spawns ~9 long-running loops (config watch, write flush,
+        # metrics history, smart-router sync, health prober, local discovery,
+        # dedup cleanup, retention purge) and registers them in
+        # _background_tasks. Nothing used to cancel them, so they kept running
+        # across the drain below and across the closes further down: a write
+        # enqueued after drain_pending_writes() was never persisted, and a store
+        # write issued after the WAL checkpoint or after the connection closed
+        # raised inside a task nobody awaits. Because _spawn_task holds strong
+        # references deliberately, those tasks are guaranteed to still be alive.
+        #
+        # Order is stop-producers, then flush, then close.
+        tasks = [t for t in getattr(agent, "_background_tasks", set()) if not t.done()]
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+            logger.info(f"Shutdown: cancelled {len(tasks)} background task(s)")
 
         # 1. Flush plugin state (SmartBudgetGuard persists on_unload)
         for name, instance in agent.plugin_manager._plugin_instances.items():
