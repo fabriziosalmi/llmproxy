@@ -113,7 +113,8 @@ charts/*/charts/*.tgz
 charts/*/charts/
 charts/*/requirements.lock
 
-# Deployment script — kept local, not tracked.
-# It encodes host addresses, remote paths and unit names for a specific
+# Deployment scripts — kept local, not tracked.
+# They encode host addresses, remote paths and unit names for a specific
 # deployment rather than anything a reader of this repository needs.
 scripts/deploy.sh
+scripts/bootstrap-remote.sh
