@@ -152,7 +152,7 @@ class ProxyOrchestrator(BaseAgent):
         # L2: Positive cache backend (WAF-aware exact-match)
         cache_cfg = self.config.get("caching", {})
         self.cache_backend = CacheBackend(
-            db_path=cache_cfg.get("db_path", "cache.db"),
+            db_path=cache_cfg.get("db_path", "data/cache.db"),
             ttl=cache_cfg.get("ttl", 3600),
             enabled=cache_cfg.get("enabled", True),
             config=cache_cfg,

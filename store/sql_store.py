@@ -2,6 +2,7 @@ import aiosqlite
 import asyncio
 import json
 import logging
+import os
 import sqlite3
 from typing import List, Dict, Any, Optional
 from models import LLMEndpoint, EndpointStatus
@@ -19,7 +20,7 @@ class SQLiteStore:
     audit log.
     """
 
-    def __init__(self, db_path: str = "endpoints.db"):
+    def __init__(self, db_path: str = "data/endpoints.db"):
         self.db_path = db_path
         self._conn: Optional[aiosqlite.Connection] = None
         self._conn_lock = asyncio.Lock()
@@ -43,6 +44,9 @@ class SQLiteStore:
             return self._conn
         async with self._conn_lock:
             if self._conn is None:
+                parent = os.path.dirname(self.db_path)
+                if parent:
+                    os.makedirs(parent, exist_ok=True)
                 self._conn = await aiosqlite.connect(self.db_path)
                 await self._conn.execute("PRAGMA journal_mode=WAL")
                 await self._conn.execute("PRAGMA synchronous=NORMAL")

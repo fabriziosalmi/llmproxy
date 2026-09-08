@@ -18,7 +18,16 @@ class StorageFactory:
         storage_type = config.get("server", {}).get("storage", {}).get("type", "sqlite")
 
         if storage_type == "sqlite":
-            return SQLiteRepository()
+            # Default lives under data/ so the directory operators already
+            # mount as a volume actually contains the database. Before this,
+            # the default was a bare "endpoints.db" relative to the working
+            # directory — inside the image layer — so every container restart
+            # silently discarded the registry, audit log and spend ledger.
+            storage_cfg = config.get("server", {}).get("storage", {})
+            db_path = os.environ.get("LLM_PROXY_DB_PATH") or storage_cfg.get(
+                "db_path", "data/endpoints.db"
+            )
+            return SQLiteRepository(db_path)
         elif storage_type == "redis":
             # For future expansion: from .redis_store import RedisRepository
             # return RedisRepository()

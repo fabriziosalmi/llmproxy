@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 class SQLiteRepository(BaseRepository):
     """SQLite implementation of the LLMProxy repository."""
 
-    def __init__(self, db_path: str = "endpoints.db"):
+    def __init__(self, db_path: str = "data/endpoints.db"):
         self.sql = SQLiteStore(db_path)
         self.logger = logger
 
