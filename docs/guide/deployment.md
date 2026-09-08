@@ -76,8 +76,17 @@ helm upgrade --install llmproxy charts/llmproxy \
 ### Key Values Configuration
 
 Overridable parameters in `values.yaml`:
-- `replicaCount`: Number of gateway pod instances (default: `2`).
-- `autoscaling.enabled`: CPU-driven Horizontal Pod Autoscaling (up to `10` replicas).
+- `replicaCount`: Number of gateway pod instances. **Default `1`, and leave it
+  there.** Budget accounting, rate-limit buckets, circuit-breaker verdicts and
+  the multi-turn injection detector's session memory all live in process
+  memory, so a second replica does not share them — it doubles every limit. A
+  daily spend cap of $50 across 10 pods is a $500 cap, with nothing reporting
+  it, and a conversation split across pods is scored independently by each,
+  weakening injection detection.
+- `autoscaling.enabled`: **Not supported.** The chart exposes it, but scaling
+  out multiplies the per-process state described above rather than adding
+  capacity. It becomes safe once that state moves behind shared storage —
+  `core/rate_limiter.py` already has the Redis-backed pattern to follow.
 - `config`: Raw string contents of `config.yaml` injected into the configuration ConfigMap.
 - `secrets.inline`: Dictionary of inline credential variables (e.g. `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `LLM_PROXY_API_KEYS`) automatically mapped as secrets.
 - `redis.enabled`: Provision a bundled Redis cache cluster (default: `true`).
@@ -96,10 +105,35 @@ Overridable parameters in `values.yaml`:
 - Pushes to GitHub Container Registry (GHCR)
 - Tags: semver, minor, commit SHA
 
-**CD** (`.github/workflows/deploy.yml`) — runs on release publish:
-- Securely connects to the private Tailscale network (Tailnet) via an ephemeral OAUTH key.
-- SSHs into the private host VM (`100.76.251.33`).
-- Deployment is performed manually and is not described here: the script that did it is kept outside this repository, because it encodes host addresses and unit names specific to one deployment rather than anything a reader needs. There is no automated deploy.
+**There is no CD.** Deployment is manual and deliberately so.
+
+Wiring it up would mean giving GitHub Actions a credential with root on the
+deployment host, and the script that performed the deploy built the image *on
+that host* — so a compromise of the GitHub account would have been equivalent
+to root on the machine, in exchange for automating something that happens
+about once a month. That trade was declined.
+
+The scripts that did it are kept outside this repository: they encode host
+addresses, remote paths and systemd unit names for one particular deployment
+rather than anything a reader needs. What is published instead is the image —
+`ghcr.io/fabriziosalmi/llmproxy`, built by `docker.yml` with provenance and
+SBOM attestations, tagged by semver and by commit SHA.
+
+To run a release, pull the tag you want and start it with a volume mounted at
+`/app/data`, which is where the database, audit log and spend ledger live:
+
+```bash
+docker run -d --name llmproxy \
+  -p 8090:8090 \
+  -v llmproxy-data:/app/data \
+  --env-file /path/to/keys.env \
+  ghcr.io/fabriziosalmi/llmproxy:1.33.0
+```
+
+Mounting that volume is not optional. Without it the database is written into
+the container's writable layer and is discarded on every restart, taking the
+endpoint registry, the persisted budget, the spend history and the
+tamper-evident audit chain with it. That was a real defect, fixed in 1.33.0.
 
 ## Observability Setup
 
