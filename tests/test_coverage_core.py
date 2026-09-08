@@ -323,11 +323,21 @@ class TestAppFactory:
         assert isinstance(version, str)
         assert len(version) > 0
 
-    def test_read_version_missing_file_returns_default(self):
+    def test_read_version_missing_file_returns_unknown(self):
+        """The fallback used to be "0.0.0" here and "0.1.0-alpha" on the
+        /api/v1/version endpoint. Both looked like releases; neither was one.
+        See tests/test_version_reporting.py for the full contract."""
+        import core.version as v
         from proxy.app_factory import _read_version
 
-        with patch("builtins.open", side_effect=FileNotFoundError):
-            assert _read_version() == "0.0.0"
+        original = v._VERSION_FILE
+        v._VERSION_FILE = "/nonexistent/VERSION"
+        v.get_version.cache_clear()
+        try:
+            assert _read_version() == "unknown"
+        finally:
+            v._VERSION_FILE = original
+            v.get_version.cache_clear()
 
     # ── P0-5: CORS default localhost-only ──────────────────────
 

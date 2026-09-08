@@ -476,7 +476,9 @@ async def test_metrics_scrape_refreshes_the_endpoint_pool_gauge():
         body = (await client.get("/metrics")).text
 
     assert 'llm_proxy_endpoint_pool_size{status="healthy"} 3.0' in body, (
-        f"pool gauge not refreshed by the scrape:\n"
-        + "\n".join(l for l in body.splitlines() if "endpoint_pool_size" in l)
+        "pool gauge not refreshed by the scrape:\n"
+        + "\n".join(
+            line for line in body.splitlines() if "endpoint_pool_size" in line
+        )
     )
     assert 'llm_proxy_endpoint_pool_size{status="unhealthy"} 0.0' in body

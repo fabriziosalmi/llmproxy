@@ -101,7 +101,6 @@ def test_every_tracker_method_is_called_by_the_application():
     never changed. set_pool_size was in the same state until /metrics started
     refreshing the gauge.
     """
-    import inspect
     import pathlib
 
     import core.metrics as m
