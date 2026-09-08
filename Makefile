@@ -1,7 +1,7 @@
 # LLMProxy — Common development tasks
 # Usage: make <target>
 
-.PHONY: setup run test bench lint typecheck docker-up docker-build docs clean help \
+.PHONY: setup run test test-pg bench lint typecheck docker-up docker-build docs clean help \
         build-ui dev-ui lint-ui test-ui e2e-ui ui-deps
 
 # Default target
@@ -31,16 +31,35 @@ run-minimal: ## Start with minimal config (single provider)
 
 # ── Testing ────────────────────────────────────────────────────
 
-test: ## Run test suite
+# `make test` runs what the CI gate runs — no more, no less. It used to ignore
+# seven files while CI (since #167) ignores two, so a green `make test` covered
+# a smaller suite than the one that blocks a merge, and the difference was
+# invisible from the terminal. Keep this exclusion list in step with the
+# `Run tests with coverage` step in .github/workflows/ci.yml.
+#
+# Without TEST_POSTGRES_DSN the four schema-conformance tests skip rather than
+# fail, so a local run can look like coverage it does not have. `make test-pg`
+# starts a throwaway Postgres and sets it.
+test: ## Run test suite (same exclusions as CI)
 	. venv/bin/activate && python -m pytest tests/ \
-		--ignore=tests/test_e2e.py \
 		--ignore=tests/integrated_test.py \
-		--ignore=tests/test_store.py \
-		--ignore=tests/test_openapi_contracts.py \
-		--ignore=tests/test_firewall_fuzz.py \
-		--ignore=tests/test_pii_hypothesis.py \
 		--ignore=tests/test_benchmarks.py \
 		-q --tb=short
+
+test-pg: ## Run test suite against a throwaway Postgres (no skipped schema tests)
+	@docker rm -f llmproxy-test-pg >/dev/null 2>&1 || true
+	docker run -d --rm --name llmproxy-test-pg \
+		-e POSTGRES_PASSWORD=test -e POSTGRES_DB=llmproxy_test \
+		-p 5432:5432 postgres:17-alpine >/dev/null
+	@echo ">>> waiting for postgres..."
+	@until docker exec llmproxy-test-pg pg_isready -q 2>/dev/null; do sleep 1; done
+	- . venv/bin/activate && \
+		TEST_POSTGRES_DSN=postgresql://postgres:test@localhost:5432/llmproxy_test \
+		python -m pytest tests/ \
+			--ignore=tests/integrated_test.py \
+			--ignore=tests/test_benchmarks.py \
+			-q --tb=short
+	@docker rm -f llmproxy-test-pg >/dev/null
 
 test-all: ## Run all tests including optional deps
 	. venv/bin/activate && python -m pytest tests/ -q --tb=short
