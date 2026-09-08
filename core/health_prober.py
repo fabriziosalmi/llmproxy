@@ -110,13 +110,17 @@ class EndpointHealthProber:
             # application itself refused to enable, and it buries genuine probe
             # failures under credentials noise. Reuses startup's own helper so
             # the two cannot disagree about what "missing" means.
-            api_key_env = ep_config.get("api_key_env")
-            if api_key_env and _is_provider_key_missing(api_key_env):
+            # Holds the NAME of an environment variable (e.g. "OPENAI_API_KEY"),
+            # never its value — the value is read inside the helper and never
+            # returned. Named accordingly so neither a reader nor a static
+            # analyser mistakes it for the credential itself.
+            key_env_name = ep_config.get("api_key_env")
+            if key_env_name and _is_provider_key_missing(key_env_name):
                 if ep_name not in self._warned_unprobeable:
                     logger.info(
                         "Probe skip: %s — %s is unset. Set it to enable health probes.",
                         ep_name,
-                        api_key_env,
+                        key_env_name,
                     )
                     self._warned_unprobeable.add(ep_name)
                 continue
