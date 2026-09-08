@@ -123,7 +123,7 @@ def _pick_from_group(
         chosen = min(models, key=lambda m: get_pricing(m["model"])["input"])
     elif strategy == "fastest":
         try:
-            from plugins.default.neural_router import get_endpoint_stats
+            from core.endpoint_stats import get_endpoint_stats
         except ImportError:
             logger.debug(
                 "neural_router not available for 'fastest' strategy, falling back to random"

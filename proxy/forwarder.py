@@ -259,7 +259,16 @@ class RequestForwarder:
         )
         primary_adapter = get_adapter(primary_provider, original_model)
 
-        attempts.append(
+        # Only if routing actually selected one. `target` arrives from
+        # ctx.metadata.get("target_endpoint"), which is None when the ROUTING
+        # ring picked nothing — an empty pool, every endpoint gated, or the
+        # routing plugin disabled. This used to be appended unconditionally,
+        # so the "no routable endpoints" guard below could never fire: the
+        # list always held one entry, the walk reached `a_target.url` and
+        # raised AttributeError, and the caller got a generic 502 "Upstream
+        # request failed" instead of a 503 naming the actual cause.
+        if target is not None:
+            attempts.append(
                 {
                     "target": target,
                     "adapter": primary_adapter,
