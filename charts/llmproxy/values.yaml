@@ -1,7 +1,15 @@
 # Default values for llmproxy.
 # This is a YAML-formatted file.
 
-replicaCount: 2
+# Budget accounting and per-session injection-trajectory scoring are held in
+# process memory, and the daily spend total is persisted by OVERWRITING a single
+# key rather than incrementing it. With more than one replica each pod therefore
+# enforces the full daily_limit against its own float and overwrites the other's
+# total, so the fleet can spend a multiple of the configured budget, and a
+# session split across pods is scored by each pod independently — weakening the
+# multi-turn injection detector. Keep this at 1 until that state is shared
+# (see core/rate_limiter.py for the Redis-backed pattern already used here).
+replicaCount: 1
 
 image:
   repository: ghcr.io/fabriziosalmi/llmproxy
@@ -67,8 +75,11 @@ resources:
     memory: 512Mi
 
 autoscaling:
+  # Autoscaling multiplies the per-process state problem described at
+  # replicaCount above: every added pod enforces the full daily budget against
+  # its own in-memory total. Do not enable until that state is shared.
   enabled: false
-  minReplicas: 2
+  minReplicas: 1
   maxReplicas: 10
   targetCPUUtilizationPercentage: 80
 
