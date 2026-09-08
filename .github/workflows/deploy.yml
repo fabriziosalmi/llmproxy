@@ -1,9 +1,31 @@
 name: CD - Remote Deploy
 
+# This workflow had never once succeeded: 10 runs, 10 failures, from the very
+# first one on the day it was added. Two independent defects, the second hidden
+# behind the first.
+#
+#  1. tailscale/github-action was pinned to e8519e99..., a SHA that does not
+#     exist in that repository (the API answers 422 No commit found), with a
+#     "# v2.0.0" comment beside it. Every run died at "Prepare all required
+#     actions" in 5-8 seconds, before producing a single log line — which is
+#     why nobody noticed that no release had ever reached production.
+#  2. On a `release` event actions/checkout leaves the runner in detached HEAD
+#     on the tag, and shallow. scripts/deploy.sh refuses to run unless it is on
+#     main with HEAD == origin/main, so even with the action resolved the
+#     deploy would have stopped at pre-flight.
+#
+# Both are fixed below. The pin comment on actions/checkout also said v4.2.1
+# while the SHA is v6.0.3.
+
 on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Walk through the deploy without changing anything on the server"
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -14,25 +36,63 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v4.2.1
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          # deploy.sh's pre-flight requires the branch to be main and HEAD to
+          # equal origin/main; the default checkout for a release event is a
+          # shallow, detached checkout of the tag, which satisfies neither.
+          # Full depth so `git rev-parse origin/main` and the tag lookup below
+          # both resolve.
+          ref: main
+          fetch-depth: 0
+
+      - name: Verify main is still the released commit
+        # Checking out main rather than the tag means a push that lands between
+        # the release and this run would be deployed as if it had been
+        # released. Refuse instead of shipping something nobody tagged.
+        if: github.event_name == 'release'
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          tag_sha="$(git rev-list -n1 "refs/tags/${RELEASE_TAG}")"
+          main_sha="$(git rev-parse HEAD)"
+          if [ "$tag_sha" != "$main_sha" ]; then
+            echo "::error::main (${main_sha:0:7}) has moved past ${RELEASE_TAG} (${tag_sha:0:7})."
+            echo "::error::Deploying would ship commits that are not in the release. Deploy by hand."
+            exit 1
+          fi
+          echo "main is at ${RELEASE_TAG} (${tag_sha:0:7})"
 
       - name: Connect to Tailscale
-        uses: tailscale/github-action@e8519e99292ec9c6ca5e003a3d5203028fb9a89d # v2.0.0
+        uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
 
       - name: Setup SSH Key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
+          set -euo pipefail
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H 100.76.251.33 >> ~/.ssh/known_hosts
+          ssh-keyscan -H 100.76.251.33 >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Run Deploy Script
         env:
           PROBE_KEY: ${{ secrets.PROBE_KEY }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          # Executes deploy.sh over SSH tunnel (already configured on runner via Tailscale)
-          ./scripts/deploy.sh --yes
+          set -euo pipefail
+          # deploy.sh runs its own remote pre-flight, smoke suite and automatic
+          # rollback; see the header of scripts/deploy.sh for what each step
+          # does. --dry-run is a full read-only walkthrough, which is how this
+          # workflow can be exercised without touching production.
+          if [ "${DRY_RUN}" = "true" ]; then
+            ./scripts/deploy.sh --yes --dry-run
+          else
+            ./scripts/deploy.sh --yes
+          fi
