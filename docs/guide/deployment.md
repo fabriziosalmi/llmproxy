@@ -99,7 +99,7 @@ Overridable parameters in `values.yaml`:
 **CD** (`.github/workflows/deploy.yml`) — runs on release publish:
 - Securely connects to the private Tailscale network (Tailnet) via an ephemeral OAUTH key.
 - SSHs into the private host VM (`100.76.251.33`).
-- Executes the atomic `./scripts/deploy.sh --yes` script to run the build, reload systemd, and perform smoke tests (rolling back on failure).
+- Deployment is performed manually and is not described here: the script that did it is kept outside this repository, because it encodes host addresses and unit names specific to one deployment rather than anything a reader needs. There is no automated deploy.
 
 ## Observability Setup
 
