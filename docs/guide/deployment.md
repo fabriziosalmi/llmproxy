@@ -135,6 +135,38 @@ the container's writable layer and is discarded on every restart, taking the
 endpoint registry, the persisted budget, the spend history and the
 tamper-evident audit chain with it. That was a real defect, fixed in 1.33.0.
 
+## Backups
+
+`data/` holds the only state that cannot be reconstructed by hand: the endpoint
+registry, `app_state` (including the persisted daily budget), the spend ledger,
+the RBAC subjects, and the tamper-evident audit chain. `cache.db` beside it is
+disposable.
+
+```bash
+python scripts/backup_db.py                    # data/endpoints.db -> data/backups/
+python scripts/backup_db.py --keep 14          # retain the newest 14
+python scripts/backup_db.py --verify-only FILE # check a backup is readable
+```
+
+It uses SQLite's backup API rather than copying the file, so it is safe to run
+against a live proxy — a plain `cp` can capture a torn page or miss a WAL
+segment, producing a file that opens and is subtly wrong. That is the worst
+outcome for an audit chain, which would then verify as *broken* rather than as
+absent. Each backup is integrity-checked immediately, written `0600`, and the
+row counts are printed so you can see it holds what you expect.
+
+Restoring is copying the file back into place:
+
+```bash
+systemctl stop llmproxy        # or: docker stop llmproxy
+cp data/backups/endpoints.db.bak.<timestamp> data/endpoints.db
+systemctl start llmproxy
+```
+
+The round trip is exercised in `tests/test_backup_db.py` — the backup is taken,
+the live database is deleted, the backup is restored and the rows are asserted
+to have survived. An untested restore is not a backup.
+
 ## Observability Setup
 
 ### Prometheus
