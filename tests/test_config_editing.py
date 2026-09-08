@@ -78,6 +78,19 @@ async def test_apply_invalid_does_not_write(tmp_path):
     assert r.status_code == 400
     assert cfg.read_text() == original
 
+    # The error envelope must be shaped like every other one in the package:
+    # `detail` is a human-readable string, never an object. This route used to
+    # be the single exception among 87 raise sites, so no client could parse
+    # errors uniformly. The structured reasons live alongside it, not inside it.
+    body = r.json()
+    assert isinstance(body.get("detail"), str), (
+        f"`detail` must be a string, got {type(body.get('detail')).__name__}"
+    )
+    assert isinstance(body.get("errors"), list) and body["errors"], (
+        "validation reasons must still be returned, at the top level"
+    )
+    assert isinstance(body.get("warnings"), list)
+
 
 @pytest.mark.asyncio
 async def test_raw_returns_on_disk_source(tmp_path):
