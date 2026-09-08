@@ -64,6 +64,36 @@ jobs:
           fi
           echo "main is at ${RELEASE_TAG} (${tag_sha:0:7})"
 
+      - name: Check the deploy credentials exist
+        # Third defect, found only once the first two were fixed: this
+        # repository has no Actions secrets at all — none of the four this
+        # workflow references was ever created. Without this step the run dies
+        # inside the Tailscale action with "Please provide either an auth key,
+        # OAuth secret and tags...", which names neither the missing secret nor
+        # where it goes. Fail here instead, with the fix in the message.
+        env:
+          TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          missing=""
+          for name in TS_OAUTH_CLIENT_ID TS_OAUTH_SECRET SSH_PRIVATE_KEY; do
+            [ -n "${!name:-}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secret(s):$missing"
+            echo "::error::Set them under Settings > Secrets and variables > Actions."
+            echo "::error::TS_OAUTH_CLIENT_ID / TS_OAUTH_SECRET: a Tailscale OAuth client"
+            echo "::error::  with the auth_keys scope and the tag:ci tag."
+            echo "::error::SSH_PRIVATE_KEY: a key whose public half is in root's"
+            echo "::error::  authorized_keys on the deploy host."
+            echo "::error::PROBE_KEY is optional; without it the smoke suite skips"
+            echo "::error::  the authenticated checks."
+            exit 1
+          fi
+          echo "All required deploy secrets are present."
+
       - name: Connect to Tailscale
         uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
         with:
