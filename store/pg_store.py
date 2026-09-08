@@ -7,6 +7,8 @@ import asyncpg
 from models import LLMEndpoint, EndpointStatus
 from .base import BaseRepository
 
+from .schema import MIGRATIONS, POSTGRES, iter_create_statements
+
 logger = logging.getLogger("llmproxy.store.pg")
 
 
@@ -28,138 +30,45 @@ class PostgresStore:
         return self._pool
 
     async def init_db(self):
+        """Build the schema from the single declaration in store/schema.py.
+
+        The CREATE statements used to live here in full, duplicated in
+        store/sql_store.py in SQLite dialect and kept in step by hand. They had
+        already drifted. Rendering both from one declaration means a column
+        added for one backend is added for both.
+        """
         pool = await self.init_pool()
         async with pool.acquire() as conn:
-            await conn.execute("""
-                CREATE TABLE IF NOT EXISTS endpoints (
-                    id VARCHAR(255) PRIMARY KEY,
-                    url VARCHAR(512) UNIQUE,
-                    status INTEGER,
-                    metadata TEXT,
-                    last_verified VARCHAR(50),
-                    latency_ms DOUBLE PRECISION,
-                    success_rate DOUBLE PRECISION
-                )
-            """)
-            await conn.execute("""
-                CREATE TABLE IF NOT EXISTS app_state (
-                    key VARCHAR(255) PRIMARY KEY,
-                    value TEXT NOT NULL
-                )
-            """)
-            # Spend analytics log
-            await conn.execute("""
-                CREATE TABLE IF NOT EXISTS spend_log (
-                    id SERIAL PRIMARY KEY,
-                    ts BIGINT NOT NULL,
-                    date VARCHAR(50) NOT NULL,
-                    key_prefix VARCHAR(50) NOT NULL DEFAULT '',
-                    model VARCHAR(255) NOT NULL DEFAULT '',
-                    provider VARCHAR(100) NOT NULL DEFAULT '',
-                    prompt_tokens INTEGER DEFAULT 0,
-                    completion_tokens INTEGER DEFAULT 0,
-                    cost_usd DOUBLE PRECISION DEFAULT 0.0,
-                    latency_ms DOUBLE PRECISION DEFAULT 0.0,
-                    status INTEGER DEFAULT 200
-                )
-            """)
-            await conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_spend_date ON spend_log(date)"
-            )
-            await conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_spend_model ON spend_log(model, date)"
-            )
+            for stmt in iter_create_statements(POSTGRES):
+                await conn.execute(stmt)
+            await self._run_migrations(conn)
 
-            # Persistent audit log
-            await conn.execute("""
-                CREATE TABLE IF NOT EXISTS audit_log (
-                    id SERIAL PRIMARY KEY,
-                    ts BIGINT NOT NULL,
-                    req_id VARCHAR(100) NOT NULL DEFAULT '',
-                    session_id VARCHAR(100) DEFAULT '',
-                    key_prefix VARCHAR(50) DEFAULT '',
-                    model VARCHAR(255) DEFAULT '',
-                    provider VARCHAR(100) DEFAULT '',
-                    status INTEGER DEFAULT 200,
-                    prompt_tokens INTEGER DEFAULT 0,
-                    completion_tokens INTEGER DEFAULT 0,
-                    cost_usd DOUBLE PRECISION DEFAULT 0.0,
-                    latency_ms DOUBLE PRECISION DEFAULT 0.0,
-                    blocked INTEGER DEFAULT 0,
-                    block_reason TEXT DEFAULT '',
-                    metadata TEXT DEFAULT '{}',
-                    entry_hash VARCHAR(64) DEFAULT '',
-                    prev_hash VARCHAR(64) DEFAULT ''
-                )
-            """)
-            await conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts)"
-            )
-            await conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_audit_model ON audit_log(model)"
-            )
-            await conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_audit_key ON audit_log(key_prefix, ts)"
-            )
-            await conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_audit_session ON audit_log(session_id, ts)"
-            )
-            await conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_spend_key ON spend_log(key_prefix, date)"
-            )
-            await conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_endpoints_status ON endpoints(status)"
-            )
+    async def _run_migrations(self, conn) -> None:
+        """Apply pending migrations, recording only the ones that succeeded.
 
-            # RBAC / GDPR: user_roles table
-            await conn.execute("""
-                CREATE TABLE IF NOT EXISTS user_roles (
-                    id SERIAL PRIMARY KEY,
-                    subject VARCHAR(255) NOT NULL,
-                    email VARCHAR(255) NOT NULL DEFAULT '',
-                    role VARCHAR(100) NOT NULL DEFAULT '',
-                    granted_at BIGINT DEFAULT 0
-                )
-            """)
-            await conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_user_roles_subject ON user_roles(subject)"
+        This used to catch every Exception, log it at debug, and then record
+        the migration as applied anyway — so a migration that failed for any
+        reason was marked done, never retried, and its absence was invisible
+        at the default log level.
+
+        Postgres supports ADD COLUMN IF NOT EXISTS, so re-running a migration
+        is already idempotent and there is nothing legitimate to swallow. A
+        failure now propagates and aborts startup, which is the correct outcome
+        for a database that could not be brought to the expected shape.
+        """
+        for mig_name, per_dialect in MIGRATIONS:
+            row = await conn.fetchrow(
+                "SELECT 1 FROM _migrations WHERE name = $1", mig_name
             )
-
-            # Schema migration tracking
-            await conn.execute("""
-                CREATE TABLE IF NOT EXISTS _migrations (
-                    id SERIAL PRIMARY KEY,
-                    name VARCHAR(255) UNIQUE NOT NULL,
-                    applied_at BIGINT NOT NULL
-                )
-            """)
-
-            # Run migrations (idempotent)
-            _migrations = [
-                (
-                    "001_audit_hash_columns",
-                    [
-                        "ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS entry_hash VARCHAR(64) DEFAULT ''",
-                        "ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS prev_hash VARCHAR(64) DEFAULT ''",
-                    ],
-                ),
-            ]
-            for mig_name, stmts in _migrations:
-                row = await conn.fetchrow(
-                    "SELECT 1 FROM _migrations WHERE name = $1", mig_name
-                )
-                if row:
-                    continue
-                for stmt in stmts:
-                    try:
-                        await conn.execute(stmt)
-                    except Exception as e:
-                        logger.debug(f"Postgres migration stmt skipped: {e}")
-                await conn.execute(
-                    "INSERT INTO _migrations (name, applied_at) VALUES ($1, $2)",
-                    mig_name,
-                    int(_time.time()),
-                )
+            if row:
+                continue
+            for stmt in per_dialect[POSTGRES]:
+                await conn.execute(stmt)
+            await conn.execute(
+                "INSERT INTO _migrations (name, applied_at) VALUES ($1, $2)",
+                mig_name,
+                int(_time.time()),
+            )
 
     async def add_endpoint(self, endpoint: LLMEndpoint):
         pool = await self.init_pool()
