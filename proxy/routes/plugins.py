@@ -29,13 +29,27 @@ def create_router(agent) -> APIRouter:
         import os
 
         plugins = agent.plugin_manager.list_plugins()
-        if not plugins:
-            if os.path.exists(agent.plugin_manager.manifest_path):
+        if plugins:
+            return {"plugins": plugins}
+
+        # Nothing loaded: fall back to the declarations on disk, but normalise
+        # them into the same envelope. This used to `return manifest`, i.e. the
+        # parsed document itself, so the response shape depended on the file's
+        # top-level key rather than on the contract. It matches today only
+        # because the bundled manifest happens to use `plugins:` — an empty,
+        # malformed or differently-keyed file yields a body with no `plugins`
+        # key at all, and a client doing resp.plugins.map(...) fails exactly
+        # when plugin loading has gone wrong, which is when it is being read.
+        if os.path.exists(agent.plugin_manager.manifest_path):
+            try:
                 with open(agent.plugin_manager.manifest_path, "r") as f:
                     manifest = yaml.safe_load(f) or {}
-                return manifest
-            return {"plugins": []}
-        return {"plugins": plugins}
+            except (OSError, yaml.YAMLError):
+                manifest = {}
+            declared = manifest.get("plugins")
+            if isinstance(declared, list):
+                return {"plugins": declared}
+        return {"plugins": []}
 
     @router.post("/api/v1/plugins/toggle")
     async def toggle_plugin(request: Request):
