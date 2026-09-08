@@ -2,6 +2,99 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.33.1] — 2026-09-09
+
+### The audit, worked to the end
+
+Closes the remaining findings from the code-metrics audit of `de78728`
+(59/100, 43 findings). Six were fixed in 1.33.0's follow-ups; these are the
+last four, plus two defects the work itself uncovered.
+
+### Behaviour changes worth reading before upgrading
+
+Both are corrections of code that was wrong, and both are visible to callers.
+
+- **A config that omits `server.auth` now authenticates.** The key was read in
+  thirteen places with two defaults: the startup validator treated an absent
+  section as `True` and refused to boot without `LLM_PROXY_API_KEYS`, while the
+  twelve runtime readers treated it as `False`. So an operator who set the keys
+  the startup check demanded got a proxy serving every request — including the
+  whole admin control plane — unauthenticated. `core/auth_policy.auth_enabled()`
+  is now the single resolver, defaulting to on. A deployment that boots today
+  still boots; what changes is that clients which were being served without
+  credentials now receive 401, which is the point.
+- **`/v1/models` and `/v1/models/{id}` require a credential.** They sat outside
+  the middleware's protected prefixes with no check of their own, so they served
+  the configured provider and model inventory to anyone who could reach the port
+  while every sibling returned 401.
+
+- **Log format gains a request-id field.** The default format is now
+  `... - [<request id>] <message>`. Records outside a request carry `-`.
+
+### Security
+
+- **The response link sanitiser failed open.** Its per-URL handler wrapped
+  domain blocking, brand-impersonation detection and FQDN risk scoring in one
+  try ending in `except Exception: pass` and returning the unmodified URL. The
+  trigger was ordinary: domain matching returns on first match, so one
+  non-string entry before the real ones raised `AttributeError` and aborted the
+  check — and a blank list item in YAML parses as `None`. Measured before the
+  fix, `blocked_domains=[None, "evil.com"]` let `evil.com` through. The list is
+  now filtered once with the dropped entries reported, and the handler fails
+  closed; `security.link_sanitization.fail_open` restores the old behaviour
+  deliberately.
+- **Plugin manifests were rewritten with a truncating `open()`** at four sites,
+  one reachable over HTTP through the toggle endpoint, which hot-swaps
+  immediately after. Those files carry the SHA-256 pins, and a missing pin was
+  a warning rather than a refusal. All four now go through `core/atomic_io.py`,
+  and an *installed* entry without a pin is refused.
+- **The non-streaming budget charge never reached the store.** It incremented
+  the in-memory counter without enqueuing the write, so `/v1/completions`
+  advanced the running total while the persisted row stayed put; on restart the
+  day's spend reset downward while the limit kept being enforced against it.
+
+### Architecture
+
+- **The core-to-plugins cycle is gone.** `proxy/request_pipeline.py` imported
+  `plugins.default.neural_router` at module level, so removing that plugin
+  stopped the dispatch module importing at all — taking down every proxied
+  request rather than degrading a routing heuristic. The endpoint statistics
+  move to `core/endpoint_stats.py` and the plugin re-exports them. Verified by
+  deleting the plugin from disk: `import proxy.request_pipeline` now succeeds.
+- **A dead guard in the fallback walk, found by testing it.**
+  `forward_with_fallback` appended the primary attempt unconditionally,
+  including when routing selected nothing, so the `if not attempts` guard could
+  never fire and the walk raised `AttributeError` — a generic 502 instead of
+  the 503 written for that case.
+
+### Operations
+
+- **`scripts/backup_db.py`** — the database was the one artefact with no backup,
+  while config.yaml, the systemd unit and `.env` all had timestamped ones. Uses
+  SQLite's backup API so it is safe against a live writer, integrity-checks and
+  fsyncs each backup, writes it `0600`, and retains the newest N. The restore is
+  exercised in the test suite, not merely described.
+- **The Helm chart deployed 1.21.81** while declaring 1.33.0, because the
+  version bump moved `appVersion` and not `image.tag`. The tag is now empty and
+  follows the chart, with a guard test.
+- **No CD, and the guide says so.** `deploy.yml` is removed and the deploy
+  scripts are kept outside the repository; the deployment guide documents
+  pulling the published image instead, and states why there is no automated
+  deploy. It also no longer advertises autoscaling to 10 replicas that the
+  chart forbids.
+
+### Testing
+
+- **The middleware's protected/public partition is now a table** of 24 cases,
+  including a route that does not exist, so the control-plane prefix is asserted
+  to close by default. It catches the `/v1/models` regression on its own.
+- Fallback exhaustion, budget saturation ordering, the request-id context under
+  concurrency, and the backup round trip are all exercised for the first time.
+
+Gate: 1475 passed, 4 skipped; coverage 69.53% against a floor of 68; `ruff
+check .` clean; suite green in random order; invariants, determinism and
+concurrency suites green.
+
 ## [1.33.0] — 2026-09-08
 
 ### Release: production data loss fixed, plus a full external audit worked to the end
