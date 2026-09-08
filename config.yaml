@@ -38,6 +38,10 @@ server:
     fallback_threshold: 0.1
   storage:
     type: "sqlite"            # sqlite (default) or postgres
+    # Path to the SQLite database. Keep it under data/ — that is the directory
+    # the Docker image, compose file and systemd unit all mount as a volume.
+    # A path outside it lives in the container layer and is lost on restart.
+    db_path: "data/endpoints.db"
     # dsn_env: "DATABASE_URL"
     # dsn: "postgresql://postgres:postgres@localhost:5432/llmproxy"
 
@@ -303,7 +307,7 @@ logging:
 
 caching:
   enabled: true
-  db_path: "cache.db"
+  db_path: "data/cache.db"
   ttl: 3600
   eviction_interval: 3600
   negative_cache:

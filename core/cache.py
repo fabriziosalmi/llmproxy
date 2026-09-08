@@ -148,7 +148,7 @@ class CacheBackend:
 
     def __init__(
         self,
-        db_path: str = "cache.db",
+        db_path: str = "data/cache.db",
         ttl: int = 3600,
         enabled: bool = True,
         config: Optional[dict] = None,

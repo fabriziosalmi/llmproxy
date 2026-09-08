@@ -202,6 +202,16 @@ def create_router(agent) -> APIRouter:
                     )
                     out_tok = usage.get("completion_tokens", 0)
                     cost_usd = estimate_cost(model_name, in_tok, out_tok)
+                    # Feed the Prometheus token/cost counters. Without this the
+                    # metrics are declared and never written, so a dashboard
+                    # built on llm_proxy_cost_total reads zero forever.
+                    MetricsTracker.track_usage(
+                        endpoint="/v1/chat/completions",
+                        model=model_version or model_name,
+                        prompt_tokens=in_tok,
+                        completion_tokens=out_tok,
+                        cost=cost_usd,
+                    )
             except (json.JSONDecodeError, AttributeError, UnicodeDecodeError) as e:
                 logger.warning("Cost estimate parse skipped: %s", e)
             async with agent._budget_lock:
