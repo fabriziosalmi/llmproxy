@@ -17,9 +17,24 @@ name: CD - Remote Deploy
 # Both are fixed below. The pin comment on actions/checkout also said v4.2.1
 # while the SHA is v6.0.3.
 
+# Deliberately NOT triggered by `release: published`.
+#
+# Wiring this up meant giving GitHub Actions an SSH key with root on the
+# production host, and deploy.sh runs `docker build` there — so the chain would
+# not merely restart a container, it would execute a build of this repository
+# on the production machine. That makes a compromise of the GitHub account
+# equivalent to root on the box, to automate something that happens about once
+# a month. The trade was declined on 2026-09-08; TS_AUTHKEY and
+# SSH_PRIVATE_KEY were removed, as was the deploy key from the host.
+#
+# Left on workflow_dispatch rather than deleted: the workflow is correct now
+# (see #176, #177, #178) and re-arming it is one line plus the secrets. Keeping
+# it off `release` also keeps it from going red on every release, which is how
+# a broken CD stayed invisible here for ten of them.
+#
+# Deploys are manual: scripts/deploy.sh from a checkout of main. It carries its
+# own pre-flight, smoke suite and automatic rollback.
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       dry_run:
@@ -47,9 +62,10 @@ jobs:
           fetch-depth: 0
 
       - name: Verify main is still the released commit
-        # Checking out main rather than the tag means a push that lands between
-        # the release and this run would be deployed as if it had been
-        # released. Refuse instead of shipping something nobody tagged.
+        # Dormant while the workflow is dispatch-only: it exists for the day
+        # `release: published` is put back, where checking out main rather than
+        # the tag would otherwise let a push that landed after the release ship
+        # as if it had been released.
         if: github.event_name == 'release'
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
