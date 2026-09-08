@@ -149,7 +149,7 @@ class EndpointHealthProber:
     async def _probe_one(self, ep_name: str, provider: str, base_url: str, model: str):
         """Probe a single endpoint with a minimal request."""
         from proxy.adapters.registry import get_adapter
-        from plugins.default.neural_router import update_endpoint_stats
+        from core.endpoint_stats import update_endpoint_stats
 
         adapter = get_adapter(provider)
         cb = await self.circuit_manager.get_breaker(ep_name)

@@ -231,7 +231,7 @@ async def smart_router_sync_loop(agent, interval: int = 5):
     while True:
         await asyncio.sleep(interval)
         try:
-            from plugins.default.smart_router import sync_endpoint_stats_from_redis
+            from core.endpoint_stats import sync_endpoint_stats_from_redis
             await sync_endpoint_stats_from_redis(agent.redis_client)
         except Exception as e:
             logger.warning(f"Smart router sync loop error: {e}")

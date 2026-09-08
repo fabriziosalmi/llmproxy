@@ -34,7 +34,8 @@ from core.plugin_engine import PluginContext, PluginHook
 from core.stream_faker import fake_stream
 from core.tracing import TraceManager
 from core.webhooks import EventType
-from plugins.default.neural_router import update_endpoint_stats
+from core.endpoint_stats import update_endpoint_stats
+from core.log_context import reset_request_id, set_request_id
 from proxy.budget import charge_and_persist
 
 logger = logging.getLogger("llmproxy.request_pipeline")
@@ -57,13 +58,21 @@ async def process_proxy_request(
     if body is None:
         body = await request.json()
 
+    # Bind the identifier before anything can log, so every record emitted for
+    # this request — including the security-shield block below, and anything a
+    # plugin logs from inside a ring — carries it. asyncio copies the context
+    # into tasks at creation, so a background task spawned from this request
+    # keeps this request's id rather than whatever ran last.
+    _req_id = uuid.uuid4().hex[:16]
+    _req_id_token = set_request_id(_req_id)
+
     ctx = PluginContext(
         request=request,
         body=body,
         session_id=session_id,
         metadata={
             "rotator": orchestrator,
-            "req_id": uuid.uuid4().hex[:16],
+            "req_id": _req_id,
             "_cache_control": request.headers.get("cache-control", "")
             if request
             else "",
@@ -349,3 +358,9 @@ async def process_proxy_request(
         orchestrator.logger.error(f"Proxy pipeline error: {e}")
         TraceManager.capture_exception(e)
         raise HTTPException(status_code=502, detail="Upstream request failed")
+    finally:
+        # Unbind on every exit path, including the two raises above. Without
+        # this the identifier would leak into whatever the event loop runs
+        # next on the same context and label unrelated records with it, which
+        # is worse than having no identifier at all.
+        reset_request_id(_req_id_token)
