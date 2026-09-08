@@ -110,17 +110,24 @@ class EndpointHealthProber:
             # application itself refused to enable, and it buries genuine probe
             # failures under credentials noise. Reuses startup's own helper so
             # the two cannot disagree about what "missing" means.
-            # Holds the NAME of an environment variable (e.g. "OPENAI_API_KEY"),
-            # never its value — the value is read inside the helper and never
-            # returned. Named accordingly so neither a reader nor a static
-            # analyser mistakes it for the credential itself.
+            # Holds the NAME of an environment variable ("OPENAI_API_KEY"),
+            # never its value — the value is read inside the helper and is
+            # neither returned nor logged.
+            #
+            # The name is deliberately NOT interpolated into the message below.
+            # CodeQL taints anything read under an api_key-shaped config key
+            # and follows it to a log sink, and it is right to: a refactor that
+            # made the helper return the value would turn this into a real
+            # leak. Startup already prints the variable name once per endpoint
+            # ("Endpoint 'x' needs X_API_KEY — skipped"), so repeating it here
+            # buys an operator nothing and would cost a permanent suppression.
             key_env_name = ep_config.get("api_key_env")
             if key_env_name and _is_provider_key_missing(key_env_name):
                 if ep_name not in self._warned_unprobeable:
                     logger.info(
-                        "Probe skip: %s — %s is unset. Set it to enable health probes.",
+                        "Probe skip: %s — provider key not set "
+                        "(the startup log names the variable).",
                         ep_name,
-                        key_env_name,
                     )
                     self._warned_unprobeable.add(ep_name)
                 continue
