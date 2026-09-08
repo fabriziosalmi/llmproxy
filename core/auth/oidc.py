@@ -17,7 +17,19 @@ class JWTAuthenticator:
 
         # In a full IdP setup (Auth0, Okta, Keycloak), this could be a JWKS client.
         # For this integration, we support a provided secret/public key.
-        self.secret = auth_config.get("jwt_secret", "fallback-dev-secret-do-not-use")
+        #
+        # No default. This previously fell back to a constant published in this
+        # repository, so enabling oidc_enabled without setting jwt_secret meant
+        # admin tokens were validated against a value anyone could read — and
+        # anyone could therefore mint one. Fail closed at construction instead:
+        # startup aborts rather than coming up insecure.
+        self.secret = auth_config.get("jwt_secret")
+        if self.enabled and not self.secret:
+            raise ValueError(
+                "server.admin_auth.oidc_enabled is true but jwt_secret is not set. "
+                "Refusing to start: admin JWTs would be unverifiable. "
+                "Set server.admin_auth.jwt_secret (or disable oidc_enabled)."
+            )
         self.algorithms = [auth_config.get("jwt_algorithm", "HS256")]
         self.audience = auth_config.get("jwt_audience", None)
         self.issuer = auth_config.get("jwt_issuer", None)
@@ -27,6 +39,14 @@ class JWTAuthenticator:
         # (back-compat). The claim key is configurable for non-standard IdPs.
         self.required_role = auth_config.get("required_role", None)
         self.roles_claim = auth_config.get("roles_claim", "roles")
+        if self.enabled and not self.required_role:
+            # Back-compat default, but a loud one: without a required role every
+            # validly-signed token from the issuer is an admin token, which in a
+            # real IdP deployment means the whole directory.
+            logger.warning(
+                "admin_auth: oidc_enabled without required_role — ANY validly-signed "
+                "token is accepted for admin access. Set server.admin_auth.required_role."
+            )
 
     def verify_token(self, token: str) -> bool:
         if not self.enabled:
