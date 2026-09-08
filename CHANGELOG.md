@@ -2,6 +2,112 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.33.0] — 2026-09-08
+
+### Release: production data loss fixed, plus a full external audit worked to the end
+
+The headline is a bug that had been silently destroying production state on
+every restart. The rest is the code-metrics audit
+(`llmproxy-20260908-155553-c65e57eb`) taken to zero open findings.
+
+**This release contains breaking changes.** Under strict SemVer several of
+them would justify a major; they are grouped here as a minor because each is
+a correction of behaviour that was wrong, not a redesign. Read the list before
+upgrading.
+
+### Critical: production lost its database on every restart (#165)
+
+The systemd unit mounted `llmproxy-data` at `/app/data`, and the store opened
+`endpoints.db` in the working directory — `/app/endpoints.db`, inside the
+container's writable layer, which `--rm` discards. The file on the running
+production box was 4096 bytes (one empty SQLite page) with an mtime equal to
+the container start time. Every restart wiped the endpoint registry,
+`app_state` (including the persisted budget), `spend_log` and the tamper-
+evident `audit_log`. Nothing logged an error: the schema was recreated on the
+way up and looked healthy.
+
+The path now resolves to `data/endpoints.db`, honours `server.storage.db_path`
+and `LLM_PROXY_DB_PATH`, and creates its parent directory. Verified on a fresh
+host: across a container replacement (`eded9ef` → `7ad8765`) the database kept
+its inode and checksum.
+
+**Upgrading:** if you run the documented systemd unit, your existing
+`/app/endpoints.db` was never persisted, so there is nothing to migrate. If
+you mounted a volume directly at `/app`, move `endpoints.db` into `data/` or
+set `LLM_PROXY_DB_PATH`.
+
+### Breaking changes
+
+- **`POST /api/v1/proxy/toggle` requires a boolean `enabled`** (#171). It used
+  to treat a missing or non-boolean field as "flip whatever the current state
+  is", so a retried request after a timeout could turn the proxy back off. An
+  empty body is now a 400.
+- **Error envelopes are uniform** (#171). `detail` is always a string, on all
+  87 raise sites; the structured `errors` / `warnings` from config validation
+  moved up one level. Previously `/api/v1/config/apply` was the single route
+  where `detail` was an object, so no client could parse errors uniformly.
+- **`GET /api/v1/plugins` always returns `{"plugins": [...]}`** (#171),
+  including on the fallback path, which used to return a differently shaped
+  body under failure.
+- **`aiohttp` total timeout is off by default** (#166). `ClientTimeout.total`
+  covers body reading, so it truncated long streaming responses mid-flight.
+  Connect and read timeouts still apply; re-enable the total budget with
+  `server.total_timeout` if you want it.
+- **Helm `replicaCount` and `minReplicas` default to 1** (#166). The
+  per-process budget, rate-limit and session state are in-process, so multiple
+  replicas silently multiplied every limit.
+- **`/api/v1/version` returns `"unknown"` instead of `"0.1.0-alpha"`** when
+  VERSION is absent (#173).
+- **`llm_proxy_roi_efficiency` and `llm_proxy_active_agents` are removed**
+  (#173). Both were exported and never written, so they read zero forever.
+
+### Correctness and durability
+
+- **One schema declaration for both backends** (#172). `store/schema.py` is now
+  the single source; SQLite and Postgres each render it. The two copies had
+  already drifted — the audit-chain columns were `VARCHAR(64)` on one side and
+  unbounded `TEXT` on the other. CI runs a Postgres 17 service container and a
+  conformance suite that asserts the same tables and columns against both real
+  engines, replacing a Postgres suite whose sharpest assertion was
+  `assert mock_conn.execute.call_count >= 5`.
+- **A failed migration is no longer recorded as applied** (#172). The runner
+  caught every `OperationalError` and inserted the `_migrations` row anyway, so
+  a failure left the schema short of its columns while the table claimed
+  otherwise, and it was never retried.
+- **`config.yaml` and its `.bak` are written atomically and fsynced** (#173).
+  Both used a truncating `open()`, which destroys the file before writing a
+  byte — and a truncated YAML document usually still parses, so restoring a
+  torn backup would silently drop everything after the cut.
+- **The export archive is fsynced before its source is deleted** (#173).
+  `_compress` unlinked the only other copy while the gzip was still in the page
+  cache. The copy is also streamed now, so a day of exports need not fit in
+  memory.
+- **Shutdown drains background tasks in the right order** (#166): the task set
+  is snapshotted and cancelled before the queues are drained, not after.
+- **The mid-stream security scan is no longer quadratic** (#166): each chunk
+  scans a 256-byte overlap plus the new suffix, instead of rescanning the
+  buffer from the start.
+- **The health prober skips endpoints whose provider key is unset** (#170),
+  which was generating a steady stream of outbound 401s.
+
+### Observability
+
+- **`llm_proxy_endpoint_pool_size` is actually written** (#173), refreshed on
+  the `/metrics` scrape from the pool and circuit state. Two guards now fail
+  the build if a collector is declared without a writer, or a `MetricsTracker`
+  method exists that nothing calls.
+- **One version reader** (#173). `VERSION` was read in three places with three
+  different fallbacks; `core/version.get_version()` replaces all of them.
+
+### CI
+
+- **The excluded suites now run and gate** (#167): `test_e2e.py` and
+  `test_openapi_contracts.py` were passed to `--ignore`; the benchmark suite
+  was 27 tests nothing executed. Coverage floor raised to 68, `mypy` extended
+  over `store/`, benchmarks run non-gating.
+
+Gate: 1382 passing, 6 skipped; `ruff check .` clean; all required checks green.
+
 ## [1.32.1] — 2026-09-02
 
 ### Fix: CI supply chain + three breakages that had gone unnoticed on main
