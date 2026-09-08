@@ -185,6 +185,13 @@ def create_router(agent) -> APIRouter:
                     _in_tok = int(_usage.get("prompt_tokens", 0) or 0)
                     _out_tok = int(_usage.get("completion_tokens", 0) or 0)
                     _cost_usd = estimate_cost(_model_name, _in_tok, _out_tok)
+                    MetricsTracker.track_usage(
+                        endpoint="/v1/completions",
+                        model=_model_name,
+                        prompt_tokens=_in_tok,
+                        completion_tokens=_out_tok,
+                        cost=_cost_usd,
+                    )
                 except (
                     json.JSONDecodeError,
                     AttributeError,
