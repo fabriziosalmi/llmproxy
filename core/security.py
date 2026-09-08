@@ -112,6 +112,11 @@ class SecurityShield:
             return
 
         last_length = 0
+        # Characters carried back into each incremental scan so a pattern that
+        # straddles the boundary between two scans is still matched. The widest
+        # threat pattern spans ~40 characters of filler plus its literals, so
+        # 256 is comfortably above the worst case.
+        _SCAN_OVERLAP = 256
         import asyncio
 
         while not kill_event.is_set():
@@ -124,7 +129,14 @@ class SecurityShield:
                 # PII masking is handled in Ring 2 (input) and Ring 4 (output).
                 # The speculative guardrail focuses on injection/prompt-leak only.
 
-                if self._check_response_injections(current_response):
+                # Scan only what is new, plus the overlap. Re-scanning the
+                # whole accumulated response on every tick made total work
+                # quadratic in response length — an N-character completion was
+                # scanned roughly N/20 times over an average of N/2 characters
+                # — on the hot streaming path, with N controlled by the
+                # caller's max_tokens.
+                window = current_response[max(0, last_length - _SCAN_OVERLAP) :]
+                if self._check_response_injections(window):
                     logger.warning(
                         "SPECULATIVE GUARDRAIL: THREAT PATTERN DETECTED MID-STREAM!"
                     )
