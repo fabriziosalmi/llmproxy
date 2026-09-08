@@ -10,6 +10,8 @@ import hashlib
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
+from core.metrics import MetricsTracker
+
 # Strip ANSI escape sequences and control chars to prevent terminal injection via xterm.js
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?\x07")
 _CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
@@ -128,10 +130,7 @@ def create_router(agent) -> APIRouter:
         healthy_count = 0
         circuits_open = 0
         try:
-            pool = await agent.store.get_pool()
-            for e in pool:
-                if await (await agent.circuit_manager.get_breaker(e.id)).can_execute():
-                    healthy_count += 1
+            pool, healthy_count = await _pool_health()
             circuit_states = await agent.circuit_manager.get_all_states()
             circuits_open = sum(
                 1 for s in circuit_states.values() if s.get("state") == "open"
@@ -249,9 +248,33 @@ def create_router(agent) -> APIRouter:
             "components": components,
         }
 
+    async def _pool_health():
+        """(pool, healthy_count) — and refresh the endpoint-pool gauge from it.
+
+        llm_proxy_endpoint_pool_size was declared and never written, so every
+        dashboard built on it read zero and every alert on it was silent. It is
+        refreshed here rather than at the moment endpoints change state,
+        because this is the only place that already knows both the pool and the
+        circuit verdict; /metrics calls it too, so a scrape reflects the pool
+        now, not the pool as of the last /health poll.
+        """
+        pool = await agent.store.get_pool()
+        healthy = 0
+        for e in pool:
+            if await (await agent.circuit_manager.get_breaker(e.id)).can_execute():
+                healthy += 1
+        MetricsTracker.set_pool_size("healthy", healthy)
+        MetricsTracker.set_pool_size("unhealthy", len(pool) - healthy)
+        return pool, healthy
+
     @router.get("/metrics")
     async def metrics():
         from core.metrics import get_metrics_response
+
+        try:
+            await _pool_health()
+        except Exception:  # noqa: BLE001 — a scrape must never fail on this
+            pass
 
         body, content_type = get_metrics_response()
         return Response(content=body, media_type=content_type)

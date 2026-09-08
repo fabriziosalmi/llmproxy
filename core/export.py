@@ -15,6 +15,7 @@ import os
 import re
 import json
 import gzip
+import shutil
 import logging
 import asyncio
 import aiofiles
@@ -173,14 +174,33 @@ class DatasetExporter:
         logger.info(f"Export: Writing to {filepath}")
 
     async def _compress(self, filepath: Path):
-        """Compress a JSONL file with gzip (synchronous, run in executor)."""
+        """Compress a JSONL file with gzip (synchronous, run in executor).
+
+        The uncompressed original is the only copy of that day's export, so it
+        is unlinked only once the archive is durable: the gzip stream is closed
+        (flushing its trailer), the archive fsynced, and the directory fsynced
+        so the new name survives too. Deleting before that trades a crash into
+        permanent data loss — a .gz whose name exists with no bytes behind it,
+        and a source file already gone.
+        """
         gz_path = filepath.with_suffix(".jsonl.gz")
 
         def _do_compress():
             try:
-                with open(filepath, "rb") as f_in:
-                    with gzip.open(gz_path, "wb", compresslevel=6) as f_out:
-                        f_out.write(f_in.read())
+                with open(filepath, "rb") as f_in, open(gz_path, "wb") as raw_out:
+                    # Streamed rather than read() — a day of exports should not
+                    # have to fit in memory to be archived.
+                    with gzip.GzipFile(
+                        fileobj=raw_out, mode="wb", compresslevel=6
+                    ) as f_out:
+                        shutil.copyfileobj(f_in, f_out)
+                    raw_out.flush()
+                    os.fsync(raw_out.fileno())
+                dir_fd = os.open(str(gz_path.parent), os.O_RDONLY)
+                try:
+                    os.fsync(dir_fd)
+                finally:
+                    os.close(dir_fd)
                 filepath.unlink()
                 logger.info(f"Export: Compressed {filepath.name} → {gz_path.name}")
             except Exception as e:

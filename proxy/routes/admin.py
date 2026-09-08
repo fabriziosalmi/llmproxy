@@ -74,11 +74,15 @@ def create_router(agent) -> APIRouter:
         return max(minimum, min(maximum, val))
 
     def _check_admin_auth(request: Request):
-        """Enforce API key auth on mutating admin endpoints when auth is enabled.
+        """Enforce API key / JWT auth on admin endpoints when auth is enabled.
 
-        Read-only endpoints (status, metrics, version) remain open so dashboards
-        can poll without credentials. Mutating / destructive endpoints (panic,
-        toggle, hot-swap) require the same API key used for chat requests.
+        This used to say that read-only endpoints stayed open for dashboards.
+        They do not: the admin surface is fail-closed and every route that
+        calls this helper requires a credential, read-only or not. A dashboard
+        polling /api/v1/status without one gets 401, which is the intended
+        behaviour — the docstring was describing a policy that had been
+        replaced and would have sent a reader looking for a bug that was not
+        there.
         """
         if not agent.config.get("server", {}).get("auth", {}).get("enabled", False):
             return  # Auth disabled — development mode, allow all
@@ -121,14 +125,9 @@ def create_router(agent) -> APIRouter:
 
     @router.get("/api/v1/version")
     async def get_version():
-        version_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "VERSION"
-        )
-        version_path = os.path.normpath(version_path)
-        if os.path.exists(version_path):
-            with open(version_path, "r") as f:
-                return {"version": f.read().strip()}
-        return {"version": "0.1.0-alpha"}
+        from core.version import get_version as _get_version
+
+        return {"version": _get_version()}
 
     @router.get("/api/v1/service-info")
     async def get_service_info(request: Request):
@@ -393,8 +392,6 @@ def create_router(agent) -> APIRouter:
         """Export subsystem status."""
         if not agent.exporter:
             return {"enabled": False}
-        import os
-
         export_dir = str(agent.exporter.output_dir)
         files = []
         if os.path.isdir(export_dir):
@@ -419,8 +416,6 @@ def create_router(agent) -> APIRouter:
         _check_admin_auth(request)
         if not agent.exporter:
             raise HTTPException(status_code=404, detail="Export disabled")
-        import os
-
         export_dir = os.path.abspath(str(agent.exporter.output_dir))
         requested = os.path.abspath(os.path.join(export_dir, filename))
         if os.path.commonpath([export_dir, requested]) != export_dir:

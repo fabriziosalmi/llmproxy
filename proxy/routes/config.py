@@ -5,7 +5,10 @@ security-sensitive (it rewrites config.yaml and hot-reloads the proxy) — lives
 one cohesive, independently-testable module.
 """
 
+import contextlib
 import logging
+import os
+import tempfile
 
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
@@ -16,6 +19,33 @@ logger = logging.getLogger("llmproxy.routes.config")
 # secrets) — NOT the runtime-merged /config/yaml view, which is redacted and
 # would round-trip "***" back over real values.
 _MAX_CONFIG_BYTES = 256 * 1024
+
+
+def _atomic_write(content: str, target: str, directory: str, prefix: str) -> None:
+    """Write `content` to `target` so a reader never sees a partial file.
+
+    Temp file in the same directory — so os.replace is a rename and not a
+    copy across filesystems — flushed and fsynced before the rename, so the
+    data is on disk before anything points at it.
+    """
+    fd, tmp = tempfile.mkstemp(dir=directory, prefix=prefix, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, target)
+        # The rename is metadata: fsyncing the file guarantees the bytes, and
+        # fsyncing the directory guarantees the name that points at them.
+        dir_fd = os.open(directory, os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        raise
 
 
 def create_router(agent) -> APIRouter:
@@ -130,9 +160,7 @@ def create_router(agent) -> APIRouter:
     @router.post("/api/v1/config/apply")
     async def apply_config_endpoint(request: Request):
         """Validate, back up, atomically write, and hot-reload a new config (admin-only)."""
-        import os
         import time as _time
-        import tempfile
 
         _check_admin_auth(request)
         body = await request.json()
@@ -171,16 +199,18 @@ def create_router(agent) -> APIRouter:
             previous = ""
 
         # Timestamped backup so a bad apply is always recoverable on disk.
+        #
+        # The backup itself is written atomically, and fsynced before the rename.
+        # It used to be a plain truncating write: interrupted halfway it left a
+        # .bak holding a prefix of the old config — and a truncated YAML
+        # document frequently still parses, so restoring it would silently drop
+        # whatever came after the cut. The artefact the recovery story depends
+        # on was the one write here that could tear.
         backup_path = f"{abspath}.bak.{int(_time.time())}"
         try:
             if previous:
-                with open(backup_path, "w") as f:
-                    f.write(previous)
-            # Atomic replace via temp file in the same dir (same filesystem).
-            fd, tmp = tempfile.mkstemp(dir=directory, prefix=".config.", suffix=".tmp")
-            with os.fdopen(fd, "w") as f:
-                f.write(text)
-            os.replace(tmp, abspath)
+                _atomic_write(previous, backup_path, directory, ".config.bak.")
+            _atomic_write(text, abspath, directory, ".config.")
         except Exception as e:  # noqa: BLE001
             logger.error(f"Config write failed: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail="Config write failed") from e
@@ -191,8 +221,7 @@ def create_router(agent) -> APIRouter:
         except Exception as e:  # noqa: BLE001
             logger.error(f"Reload after config apply failed, rolling back: {e}", exc_info=True)
             try:
-                with open(abspath, "w") as f:
-                    f.write(previous)
+                _atomic_write(previous, abspath, directory, ".config.rollback.")
                 await _reload_from_disk()
             except Exception:
                 logger.error("Rollback reload also failed", exc_info=True)

@@ -40,7 +40,6 @@ REQUEST_LATENCY = Histogram(
 )
 
 # ─── Infrastructure metrics ───
-ACTIVE_AGENTS = Gauge("llm_proxy_active_agents", "Number of currently running agents")
 ENDPOINT_POOL_SIZE = Gauge(
     "llm_proxy_endpoint_pool_size", "Number of endpoints in pool", ["status"]
 )
@@ -55,7 +54,6 @@ TOKEN_USAGE = Counter(
 ESTIMATED_COST = Counter(
     "llm_proxy_cost_total", "Estimated cost in USD", ["endpoint", "model"]
 )
-ROI_METRIC = Gauge("llm_proxy_roi_efficiency", "Estimated efficiency (Success / Cost)")
 BUDGET_CONSUMED = Gauge("llm_proxy_budget_consumed_usd", "Budget consumed this month")
 BUDGET_LIMIT = Gauge("llm_proxy_budget_limit_usd", "Monthly budget limit")
 
@@ -124,10 +122,6 @@ class MetricsTracker:
         TOKEN_USAGE.labels(endpoint=endpoint, role="prompt").inc(prompt_tokens)
         TOKEN_USAGE.labels(endpoint=endpoint, role="completion").inc(completion_tokens)
         ESTIMATED_COST.labels(endpoint=endpoint, model=model).inc(cost)
-
-    @staticmethod
-    def set_roi(value: float):
-        ROI_METRIC.set(value)
 
     @staticmethod
     def track_ttft(endpoint: str, duration: float):

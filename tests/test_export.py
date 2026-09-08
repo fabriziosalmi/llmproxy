@@ -151,3 +151,66 @@ async def test_record_scrubs_pii(tmp_path):
     assert len(files) >= 1
     content = files[0].read_text()
     assert "secret@corp.com" not in content
+
+
+# ── the archive must be durable before the only other copy is deleted ───────
+
+
+@pytest.mark.asyncio
+async def test_compress_fsyncs_the_archive_before_unlinking_the_source(tmp_path):
+    """The uncompressed file is the only other copy of that day's export.
+
+    _compress used to call filepath.unlink() straight after the gzip context
+    exited: the compressed bytes were then in the page cache and nowhere else,
+    so a power loss in that window left a .gz with no data behind its name and
+    a source file already gone. Unrecoverable, and only on a crash — so it
+    would never show up in a normal run.
+    """
+    import os
+
+    from pathlib import Path
+
+    exporter = DatasetExporter(output_dir=str(tmp_path), scrub=False)
+    src = Path(tmp_path) / "exports_2026-09-08.jsonl"
+    src.write_text('{"model": "gpt-4"}\n')
+
+    order = []
+    real_fsync, real_unlink = os.fsync, os.unlink
+
+    def _fsync(fd):
+        order.append("fsync")
+        return real_fsync(fd)
+
+    def _unlink(path, **kw):
+        order.append("unlink")
+        return real_unlink(path, **kw)
+
+    from unittest.mock import patch
+
+    with patch.object(os, "fsync", _fsync), patch.object(os, "unlink", _unlink):
+        await exporter._compress(src)
+
+    assert "unlink" in order, "the source was never removed — compression failed"
+    assert order.index("fsync") < order.index("unlink"), (
+        "the archive must reach disk before the only other copy is deleted"
+    )
+    assert not src.exists()
+
+
+@pytest.mark.asyncio
+async def test_compress_round_trips_the_content(tmp_path):
+    """Streaming the copy must not change what ends up in the archive."""
+    import gzip
+
+    from pathlib import Path
+
+    exporter = DatasetExporter(output_dir=str(tmp_path), scrub=False)
+    src = Path(tmp_path) / "exports_2026-09-08.jsonl"
+    payload = "".join(f'{{"i": {i}}}\n' for i in range(5000))
+    src.write_text(payload)
+
+    await exporter._compress(src)
+
+    gz = Path(tmp_path) / "exports_2026-09-08.jsonl.gz"
+    with gzip.open(gz, "rt") as f:
+        assert f.read() == payload
