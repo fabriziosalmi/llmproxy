@@ -14,6 +14,8 @@ import asyncio
 import logging
 from typing import Dict, Any
 
+from core.startup_checks import _is_provider_key_missing
+
 logger = logging.getLogger("llmproxy.health_prober")
 
 PROBE_INTERVAL = 60  # seconds between probe rounds
@@ -97,6 +99,26 @@ class EndpointHealthProber:
             # Skip local endpoints unless probe_local is enabled
             probe_local = ep_config.get("probe_local", False)
             if not probe_local and ("localhost" in base_url or "127.0.0.1" in base_url):
+                continue
+
+            # Skip endpoints whose provider key is absent or still a
+            # placeholder. Startup already declines to register these — it logs
+            # "Endpoint 'x' needs X_API_KEY — skipped" — but the prober did not
+            # apply the same test, so every 60s it sent an unauthenticated
+            # request to each of them and collected a 401. That is outbound
+            # traffic to third-party providers on behalf of endpoints the
+            # application itself refused to enable, and it buries genuine probe
+            # failures under credentials noise. Reuses startup's own helper so
+            # the two cannot disagree about what "missing" means.
+            api_key_env = ep_config.get("api_key_env")
+            if api_key_env and _is_provider_key_missing(api_key_env):
+                if ep_name not in self._warned_unprobeable:
+                    logger.info(
+                        "Probe skip: %s — %s is unset. Set it to enable health probes.",
+                        ep_name,
+                        api_key_env,
+                    )
+                    self._warned_unprobeable.add(ep_name)
                 continue
 
             tasks.append(
