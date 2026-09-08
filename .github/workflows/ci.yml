@@ -65,8 +65,13 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install mypy types-PyYAML types-cachetools types-aiofiles
-      - name: mypy (core + proxy)
-        run: python -m mypy core/ proxy/ --ignore-missing-imports --disable-error-code misc --disable-error-code assignment --disable-error-code no-any-return
+      - name: mypy (core + proxy + store)
+        # store/ was outside the gate while holding the hand-written SQL and
+        # both backend implementations. It passes clean, so it is in now.
+        # plugins/ still reports 13 union-attr errors — genuine possible
+        # AttributeErrors on a None rotator — and is left out until those are
+        # fixed rather than silenced.
+        run: python -m mypy core/ proxy/ store/ --ignore-missing-imports --disable-error-code misc --disable-error-code assignment --disable-error-code no-any-return
 
   security:
     name: Dependency Audit
@@ -129,6 +134,23 @@ jobs:
   test:
     name: Test + Coverage
     runs-on: ubuntu-latest
+    # The schema conformance suite needs a real Postgres. Without one it skips,
+    # and skipping is how the two backends drifted unnoticed in the first place:
+    # every Postgres test in the repo asserted against a MagicMock, so none of
+    # its SQL had ever been parsed by a database.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: llmproxy_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     needs: lint
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -157,6 +179,7 @@ jobs:
             --ignore=tests/test_benchmarks.py
         env:
           PYTHONDONTWRITEBYTECODE: 1
+          TEST_POSTGRES_DSN: postgresql://postgres:test@localhost:5432/llmproxy_test
       - name: Benchmarks (non-gating)
         # Timing-sensitive, so a regression here should be visible without
         # failing a merge on a noisy runner. Previously this file ran nowhere:

@@ -46,12 +46,25 @@ async def test_postgres_init_db(mock_pool_and_conn):
         mock_create_pool.return_value = mock_pool
         await store.init_db()
 
-        # Verify tables creation
-        assert mock_conn.execute.call_count >= 5
-        # Verify index creation
-        assert any(
-            "CREATE INDEX" in call[0][0] for call in mock_conn.execute.call_args_list
-        )
+        # Assert on the SQL, not on how many times a mock was called.
+        #
+        # This used to be `assert mock_conn.execute.call_count >= 5`, which
+        # passes with every CREATE TABLE malformed, every column renamed or the
+        # migration list emptied — the connection is a MagicMock, so nothing is
+        # parsed. Checking the statements at least pins that each declared
+        # table and index is issued.
+        #
+        # This remains a mock test: it cannot tell you the SQL is *valid*.
+        # tests/test_schema_conformance.py does that against a real server.
+        from store.schema import INDEXES, TABLES
+
+        issued = " ".join(call[0][0] for call in mock_conn.execute.call_args_list)
+        for table in TABLES:
+            assert f"CREATE TABLE IF NOT EXISTS {table}" in issued, (
+                f"init_db did not create {table}"
+            )
+        for index_name, _table, _cols in INDEXES:
+            assert index_name in issued, f"init_db did not create index {index_name}"
 
 
 @pytest.mark.asyncio
