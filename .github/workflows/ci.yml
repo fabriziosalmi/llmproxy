@@ -139,17 +139,31 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install pytest pytest-asyncio pytest-cov httpx hypothesis
+          pip install pytest pytest-asyncio pytest-cov pytest-benchmark httpx hypothesis
       - name: Run tests with coverage
+        # test_e2e.py and test_openapi_contracts.py used to be excluded here.
+        # Both are hermetic (ASGITransport against an in-process app, no network)
+        # and run in under a second each, so the exclusion only meant the gate
+        # ran a smaller suite than the repository contains — and the OpenAPI
+        # contract tests are the mechanism that keeps the published route
+        # surface honest, so they are exactly the ones worth gating on.
+        # integrated_test.py stays out: it skips without external services.
         run: |
           python -m pytest tests/ -v --tb=short \
             --cov=core --cov=proxy --cov=plugins --cov=store \
             --cov-report=term-missing \
-            --cov-fail-under=65 \
+            --cov-fail-under=68 \
             --ignore=tests/integrated_test.py \
-            --ignore=tests/test_e2e.py \
-            --ignore=tests/test_openapi_contracts.py \
             --ignore=tests/test_benchmarks.py
+        env:
+          PYTHONDONTWRITEBYTECODE: 1
+      - name: Benchmarks (non-gating)
+        # Timing-sensitive, so a regression here should be visible without
+        # failing a merge on a noisy runner. Previously this file ran nowhere:
+        # it was excluded above AND pytest-benchmark was not installed, so the
+        # suite was inert while its dependency kept being proposed for upgrade.
+        continue-on-error: true
+        run: python -m pytest tests/test_benchmarks.py -q --benchmark-min-rounds=3
         env:
           PYTHONDONTWRITEBYTECODE: 1
 
