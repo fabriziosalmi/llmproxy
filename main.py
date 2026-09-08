@@ -10,12 +10,18 @@ from proxy.rotator import ProxyOrchestrator
 from core.metrics import start_metrics_server
 from core.discovery_utils import get_tailscale_ip
 from core.tracing import TraceManager
+from core.log_context import install as install_request_id_filter
 
 load_dotenv()
 
+# The request id is in the format string, so every record carries the key that
+# ties a log line to its audit row and to the X-LLMProxy-Request-Id the caller
+# received. Records emitted outside a request show "-".
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - [%(request_id)s] %(message)s",
 )
+install_request_id_filter()
 logger = logging.getLogger("llmproxy")
 
 
