@@ -30,6 +30,10 @@ type Toast = (m: string, k?: 'success' | 'error' | 'warning' | 'info') => void;
 function parseApplyError(err: any): { errors: string[]; warnings: string[] } {
     try {
         const body = JSON.parse(err?.body ?? '{}');
+        // Structured reasons now sit at the top level; `detail` is always a
+        // string. The nested form is still accepted so a UI built from this
+        // commit keeps working against an older proxy.
+        if (Array.isArray(body?.errors)) return { errors: body.errors, warnings: body.warnings ?? [] };
         const detail = body?.detail ?? {};
         if (Array.isArray(detail?.errors)) {
             return { errors: detail.errors, warnings: detail.warnings ?? [] };

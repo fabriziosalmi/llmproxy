@@ -53,6 +53,10 @@ function parseApplyError(err: unknown): { errors: string[]; warnings: string[] }
     try {
         const e = err as { body?: string; message?: string };
         const body = JSON.parse(e?.body ?? '{}');
+        // Structured reasons now sit at the top level; `detail` is always a
+        // string. The nested form is still accepted so a UI built from this
+        // commit keeps working against an older proxy.
+        if (Array.isArray(body?.errors)) return { errors: body.errors, warnings: body.warnings ?? [] };
         const detail = body?.detail ?? {};
         if (Array.isArray(detail?.errors)) return { errors: detail.errors, warnings: detail.warnings ?? [] };
         if (typeof detail === 'string') return { errors: [detail], warnings: [] };

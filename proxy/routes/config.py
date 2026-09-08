@@ -8,6 +8,7 @@ one cohesive, independently-testable module.
 import logging
 
 from fastapi import APIRouter, Request, HTTPException
+from fastapi.responses import JSONResponse
 
 logger = logging.getLogger("llmproxy.routes.config")
 
@@ -144,7 +145,22 @@ def create_router(agent) -> APIRouter:
         _parsed, errors, warnings = _validate_config_text(text)
         if errors:
             # Never write an invalid config — return the reasons for the editor.
-            raise HTTPException(status_code=400, detail={"errors": errors, "warnings": warnings})
+            #
+            # `detail` is a string here, as it is on the other 86 raise sites in
+            # this package. This was the one place that made it an object, so no
+            # client could parse the error envelope uniformly: rendering
+            # `detail` printed [object Object] here and read correctly
+            # everywhere else, while reading `detail.errors` did the reverse.
+            # The structured reasons move up one level, where they are still
+            # available and no longer change the shape of a shared field.
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "detail": f"Config validation failed: {len(errors)} error(s)",
+                    "errors": errors,
+                    "warnings": warnings,
+                },
+            )
 
         abspath = os.path.abspath(agent.config_path)
         directory = os.path.dirname(abspath) or "."

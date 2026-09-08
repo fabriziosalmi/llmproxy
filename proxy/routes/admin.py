@@ -98,7 +98,18 @@ def create_router(agent) -> APIRouter:
     async def toggle_proxy_service(request: Request):
         _check_admin_auth(request)
         data = await request.json()
-        agent.proxy_enabled = data.get("enabled", not agent.proxy_enabled)
+        # `enabled` is required. It used to default to `not proxy_enabled`, so
+        # a body without it meant "flip" — making the endpoint non-idempotent:
+        # a client retrying after a timeout, not knowing whether the first call
+        # landed, toggled twice and ended where it started, or once more and
+        # disabled a live gateway it meant to enable. One path, one meaning.
+        enabled = data.get("enabled")
+        if not isinstance(enabled, bool):
+            raise HTTPException(
+                status_code=400,
+                detail="`enabled` is required and must be a boolean (true/false)",
+            )
+        agent.proxy_enabled = enabled
         await agent.store.set_state("proxy_enabled", agent.proxy_enabled)
         status = "ACTIVE" if agent.proxy_enabled else "STOPPED"
         await agent._add_log(f"SYSTEM: Proxy service {status}")

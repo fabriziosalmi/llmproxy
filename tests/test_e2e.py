@@ -269,6 +269,24 @@ async def test_proxy_status(client):
 
 
 @pytest.mark.asyncio
+async def test_proxy_toggle_requires_enabled(client, agent):
+    """Omitting `enabled` is a 400, not a flip.
+
+    It used to default to `not proxy_enabled`, so a retried request after a
+    timeout toggled twice and landed back where it started — or once more and
+    disabled a live gateway.
+    """
+    agent.proxy_enabled = True
+    resp = await client.post("/api/v1/proxy/toggle", json={})
+    assert resp.status_code == 400
+    assert agent.proxy_enabled is True, "state must not change on a rejected call"
+
+    resp = await client.post("/api/v1/proxy/toggle", json={"enabled": "yes"})
+    assert resp.status_code == 400, "a non-boolean must be rejected too"
+    assert agent.proxy_enabled is True
+
+
+@pytest.mark.asyncio
 async def test_proxy_toggle_off_and_on(client, agent):
     # Turn off
     resp = await client.post("/api/v1/proxy/toggle", json={"enabled": False})
@@ -485,8 +503,39 @@ async def test_registry_toggle_nonexistent(client):
 
 @pytest.mark.asyncio
 async def test_plugins_list(client):
+    """The envelope is the contract, on every branch.
+
+    This fixture's list_plugins() returns [], so it exercises the manifest
+    fallback — the path that used to return the parsed document itself and
+    therefore let the response shape depend on the file's top-level key.
+    """
     resp = await client.get("/api/v1/plugins")
     assert resp.status_code == 200
+    body = resp.json()
+    assert isinstance(body, dict), f"expected an object, got {type(body).__name__}"
+    assert isinstance(body.get("plugins"), list), (
+        f"`plugins` must always be a list; got {body.keys()}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_plugins_envelope_survives_a_missing_manifest(client, agent):
+    """No loaded plugins AND no manifest still yields {'plugins': []}."""
+    agent.plugin_manager.manifest_path = "/nonexistent/manifest.yaml"
+    resp = await client.get("/api/v1/plugins")
+    assert resp.status_code == 200
+    assert resp.json() == {"plugins": []}
+
+
+@pytest.mark.asyncio
+async def test_plugins_envelope_survives_an_unkeyed_manifest(client, agent, tmp_path):
+    """A manifest without a top-level `plugins:` key must not reshape the body."""
+    bad = tmp_path / "manifest.yaml"
+    bad.write_text("something_else:\n  - name: x\n")
+    agent.plugin_manager.manifest_path = str(bad)
+    resp = await client.get("/api/v1/plugins")
+    assert resp.status_code == 200
+    assert resp.json() == {"plugins": []}
 
 
 @pytest.mark.asyncio
