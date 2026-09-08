@@ -14,8 +14,13 @@ replicaCount: 1
 image:
   repository: ghcr.io/fabriziosalmi/llmproxy
   pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion.
-  tag: "1.21.81"
+  # Empty means "follow the chart's appVersion", which the deployment template
+  # already does via `.Values.image.tag | default .Chart.AppVersion`. It is left
+  # empty on purpose: a pinned literal here silently outlived eleven releases —
+  # the chart declared 1.33.0 while still deploying the 1.21.81 image, including
+  # the database-loss defect that release fixed. Set it only to pin a specific
+  # image deliberately, and remember it will not follow future chart bumps.
+  tag: ""
 
 imagePullSecrets: []
 nameOverride: ""

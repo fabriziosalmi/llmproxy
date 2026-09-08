@@ -9,17 +9,24 @@ Aggregates models from all endpoints configured in config.yaml.
 
 import time
 import logging
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from fastapi.security import APIKeyHeader
+
+from proxy.auth_helpers import require_data_plane_auth
 
 logger = logging.getLogger("llmproxy.routes.models")
+
+
+API_KEY_HEADER = APIKeyHeader(name="Authorization", auto_error=False)
 
 
 def create_router(agent) -> APIRouter:
     router = APIRouter()
 
     @router.get("/v1/models")
-    async def list_models():
+    async def list_models(api_key: str = Depends(API_KEY_HEADER)):
         """Return all available models in OpenAI list format."""
+        await require_data_plane_auth(agent, api_key)
         endpoints_cfg = agent.config.get("endpoints", {})
         created = int(time.time())
         models = []
@@ -48,8 +55,9 @@ def create_router(agent) -> APIRouter:
         return {"object": "list", "data": models}
 
     @router.get("/v1/models/{model_id:path}")
-    async def get_model(model_id: str):
+    async def get_model(model_id: str, api_key: str = Depends(API_KEY_HEADER)):
         """Return a single model's info (required by some clients)."""
+        await require_data_plane_auth(agent, api_key)
         endpoints_cfg = agent.config.get("endpoints", {})
 
         for ep_name, ep_config in endpoints_cfg.items():

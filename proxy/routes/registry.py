@@ -13,6 +13,7 @@ import aiohttp
 from fastapi import APIRouter, Request, HTTPException
 
 from models import EndpointStatus
+from core.auth_policy import auth_enabled
 
 logger = logging.getLogger("llmproxy.routes.registry")
 
@@ -69,7 +70,7 @@ def create_router(agent) -> APIRouter:
         Mirrors the pattern in admin.py and plugins.py — skipped only when
         auth is explicitly disabled (development mode).
         """
-        if not agent.config.get("server", {}).get("auth", {}).get("enabled", False):
+        if not auth_enabled(agent.config):
             return
         from proxy.auth_helpers import parse_bearer
 

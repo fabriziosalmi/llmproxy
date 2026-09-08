@@ -12,6 +12,7 @@ import tempfile
 
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
+from core.auth_policy import auth_enabled
 
 logger = logging.getLogger("llmproxy.routes.config")
 
@@ -53,7 +54,7 @@ def create_router(agent) -> APIRouter:
 
     def _check_admin_auth(request: Request):
         """Enforce API key / JWT auth on mutating admin endpoints when auth is on."""
-        if not agent.config.get("server", {}).get("auth", {}).get("enabled", False):
+        if not auth_enabled(agent.config):
             return  # Auth disabled — development mode, allow all
         from proxy.auth_helpers import parse_bearer
 

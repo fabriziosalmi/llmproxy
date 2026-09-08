@@ -4,6 +4,7 @@ import logging
 
 from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.security import APIKeyHeader
+from core.auth_policy import auth_enabled
 
 logger = logging.getLogger("llmproxy.routes.identity")
 
@@ -20,7 +21,7 @@ def create_router(agent) -> APIRouter:
         # whether ANY credential is required so it can skip the overlay
         # entirely in fully-open dev mode.
         proxy_auth_enabled = (
-            agent.config.get("server", {}).get("auth", {}).get("enabled", False)
+            auth_enabled(agent.config)
         )
         if not agent.identity.enabled:
             return {

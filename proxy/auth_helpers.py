@@ -97,3 +97,50 @@ def verify_api_key(token: str, valid_keys: List[str]) -> bool:
         if hmac.compare_digest(token_b, k.encode("utf-8", errors="replace")):
             matched = True
     return matched
+
+
+async def require_data_plane_auth(agent: Any, api_key: str | None) -> None:
+    """Reject an unauthenticated caller on an OpenAI-compatible /v1/ route.
+
+    The global middleware in proxy/app_factory.py denies /api/v1/ and /admin/
+    by prefix, but deliberately does not cover /v1/: the data plane accepts a
+    JWT as well as an API key, and the middleware only knows how to check the
+    latter, so protecting /v1/ there would reject valid JWT callers.
+
+    That left each /v1/ handler responsible for its own check, and /v1/models
+    was written without one — so it served the configured provider and model
+    inventory to anyone who could reach the port, while its siblings returned
+    401. This helper is that missing check, shaped like the one chat,
+    completions and embeddings already perform inline; those three predate it
+    and could adopt it, which would remove three copies of this logic.
+
+    Raises HTTPException(401) when auth is enabled and the caller has no valid
+    credential. Returns silently when auth is disabled.
+    """
+    from fastapi import HTTPException
+
+    from core.auth_policy import auth_enabled
+
+    if not auth_enabled(agent.config):
+        return
+
+    if not api_key:
+        raise HTTPException(status_code=401, detail="Unauthorized: Missing API key")
+
+    token = parse_bearer(api_key)
+    if not token:
+        raise HTTPException(status_code=401, detail="Unauthorized: Empty token")
+
+    identity = getattr(agent, "identity", None)
+    if identity is not None and getattr(identity, "enabled", False):
+        try:
+            verified = identity.verify_proxy_jwt(token) or await identity.verify_token(
+                token
+            )
+        except ValueError:
+            verified = None
+        if verified and getattr(verified, "verified", False):
+            return
+
+    if not agent._verify_api_key(token):
+        raise HTTPException(status_code=401, detail="Unauthorized: Invalid API key or JWT")

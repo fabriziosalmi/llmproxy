@@ -10,6 +10,7 @@ also stashed at module scope so admin routes can surface it in the UI
 import os
 import sys
 import logging
+from core.auth_policy import auth_enabled
 
 logger = logging.getLogger("llmproxy.startup")
 
@@ -87,8 +88,8 @@ def validate_config(config: dict) -> list[str]:
     warnings = []
 
     # 1. Auth keys (required)
-    auth_cfg = config.get("server", {}).get("auth", {})
-    if auth_cfg.get("enabled", True):
+    auth_cfg = config.get("server", {}).get("auth", {}) or {}
+    if auth_enabled(config):
         keys_env = auth_cfg.get("api_keys_env", "LLM_PROXY_API_KEYS")
         if _has_invalid_keys(keys_env):
             raise StartupError(

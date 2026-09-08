@@ -105,7 +105,15 @@ class GDPRTestStore:
 class GDPRTestAgent:
     def __init__(self, store):
         self.store = store
-        self.config = {"gdpr": {"retention_days": 90, "auto_purge": True}}
+        # Auth off explicitly: these tests exercise the GDPR logic, not the
+        # admin gate. This used to be inherited from a default that treated an
+        # absent server.auth section as "disabled" — the same default that let
+        # a real deployment serve unauthenticated. The premise is stated here
+        # now rather than assumed.
+        self.config = {
+            "server": {"auth": {"enabled": False}},
+            "gdpr": {"retention_days": 90, "auto_purge": True},
+        }
         self.app = FastAPI(title="GDPR-TEST")
         self.app.add_middleware(
             CORSMiddleware,
