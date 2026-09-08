@@ -4,6 +4,8 @@ import json
 import logging
 import os
 import sqlite3
+
+from .schema import MIGRATIONS, SQLITE, iter_create_statements
 from typing import List, Dict, Any, Optional
 from models import LLMEndpoint, EndpointStatus
 
@@ -54,133 +56,56 @@ class SQLiteStore:
             return self._conn
 
     async def init_db(self):
+        """Build the schema from the single declaration in store/schema.py.
+
+        The CREATE statements used to live here in full, duplicated in
+        store/pg_store.py in Postgres dialect and kept in step by hand. They
+        had already drifted. Rendering them from one declaration means a
+        column added for one backend is added for both.
+        """
         conn = await self._get_conn()
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS endpoints (
-                id TEXT PRIMARY KEY,
-                url TEXT UNIQUE,
-                status INTEGER,
-                metadata TEXT,
-                last_verified TEXT,
-                latency_ms REAL,
-                success_rate REAL
-            )
-        """)
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS app_state (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL
-            )
-        """)
-        # Spend analytics log (R2.3)
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS spend_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ts INTEGER NOT NULL,
-                date TEXT NOT NULL,
-                key_prefix TEXT NOT NULL DEFAULT '',
-                model TEXT NOT NULL DEFAULT '',
-                provider TEXT NOT NULL DEFAULT '',
-                prompt_tokens INTEGER DEFAULT 0,
-                completion_tokens INTEGER DEFAULT 0,
-                cost_usd REAL DEFAULT 0.0,
-                latency_ms REAL DEFAULT 0.0,
-                status INTEGER DEFAULT 200
-            )
-        """)
-        await conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_spend_date ON spend_log(date)"
-        )
-        await conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_spend_model ON spend_log(model, date)"
-        )
-        # Persistent audit log (R2.10)
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS audit_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ts INTEGER NOT NULL,
-                req_id TEXT NOT NULL DEFAULT '',
-                session_id TEXT DEFAULT '',
-                key_prefix TEXT DEFAULT '',
-                model TEXT DEFAULT '',
-                provider TEXT DEFAULT '',
-                status INTEGER DEFAULT 200,
-                prompt_tokens INTEGER DEFAULT 0,
-                completion_tokens INTEGER DEFAULT 0,
-                cost_usd REAL DEFAULT 0.0,
-                latency_ms REAL DEFAULT 0.0,
-                blocked INTEGER DEFAULT 0,
-                block_reason TEXT DEFAULT '',
-                metadata TEXT DEFAULT '{}',
-                entry_hash TEXT DEFAULT '',
-                prev_hash TEXT DEFAULT ''
-            )
-        """)
-        await conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts)")
-        await conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_audit_model ON audit_log(model)"
-        )
-        await conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_audit_key ON audit_log(key_prefix, ts)"
-        )
-        await conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_audit_session ON audit_log(session_id, ts)"
-        )
-        await conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_spend_key ON spend_log(key_prefix, date)"
-        )
-        await conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_endpoints_status ON endpoints(status)"
-        )
-        # RBAC / GDPR: user_roles table (referenced by delete_subject_data / export_subject_data)
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS user_roles (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                subject TEXT NOT NULL,
-                email TEXT NOT NULL DEFAULT '',
-                role TEXT NOT NULL DEFAULT '',
-                granted_at INTEGER DEFAULT 0
-            )
-        """)
-        await conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_user_roles_subject ON user_roles(subject)"
-        )
-        # Schema migration tracking
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS _migrations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT UNIQUE NOT NULL,
-                applied_at INTEGER NOT NULL
-            )
-        """)
-        # Run migrations (idempotent — skips already-applied)
+        for stmt in iter_create_statements(SQLITE):
+            await conn.execute(stmt)
+        await self._run_migrations(conn)
+        await conn.commit()
+
+    async def _run_migrations(self, conn) -> None:
+        """Apply pending migrations, recording only the ones that succeeded.
+
+        This used to wrap each statement in `except sqlite3.OperationalError:
+        pass` and then record the migration as applied regardless. That handler
+        was written for one expected cause — the column already exists from the
+        pre-migration era — but OperationalError also covers "database is
+        locked", "disk I/O error" and "database or disk is full". A migration
+        that genuinely failed was marked done and never retried, leaving the
+        database permanently missing the columns while _migrations asserted
+        otherwise.
+
+        Now only the already-exists case is tolerated, everything else
+        propagates, and the row is written only after every statement in the
+        migration has succeeded.
+        """
         import time as _time
 
-        _migrations = [
-            (
-                "001_audit_hash_columns",
-                [
-                    "ALTER TABLE audit_log ADD COLUMN entry_hash TEXT DEFAULT ''",
-                    "ALTER TABLE audit_log ADD COLUMN prev_hash TEXT DEFAULT ''",
-                ],
-            ),
-        ]
-        for mig_name, stmts in _migrations:
+        for mig_name, per_dialect in MIGRATIONS:
             async with conn.execute(
                 "SELECT 1 FROM _migrations WHERE name = ?", (mig_name,)
             ) as cur:
                 if await cur.fetchone():
                     continue
-            for stmt in stmts:
+            for stmt in per_dialect[SQLITE]:
                 try:
                     await conn.execute(stmt)
-                except sqlite3.OperationalError:
-                    pass  # Column/table already exists from pre-migration era
+                except sqlite3.OperationalError as e:
+                    # SQLite has no ADD COLUMN IF NOT EXISTS, so re-running a
+                    # migration against a database that predates the tracking
+                    # table is expected. Anything else is a real failure.
+                    if "duplicate column name" not in str(e).lower():
+                        raise
             await conn.execute(
                 "INSERT INTO _migrations (name, applied_at) VALUES (?, ?)",
                 (mig_name, int(_time.time())),
             )
-        await conn.commit()
 
     async def add_endpoint(self, endpoint: LLMEndpoint):
         conn = await self._get_conn()
