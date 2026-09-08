@@ -11,6 +11,7 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from core.metrics import MetricsTracker
+from core.auth_policy import auth_enabled
 
 # Strip ANSI escape sequences and control chars to prevent terminal injection via xterm.js
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?\x07")
@@ -84,7 +85,7 @@ def create_router(agent) -> APIRouter:
         blocked (to rotate), and user email addresses from IDENTITY log lines.
         Auth is skipped only when explicitly disabled (development mode).
         """
-        if not agent.config.get("server", {}).get("auth", {}).get("enabled", False):
+        if not auth_enabled(agent.config):
             return
         from proxy.auth_helpers import parse_bearer
 
@@ -99,7 +100,7 @@ def create_router(agent) -> APIRouter:
 
     def _check_header_auth_only(request: Request):
         """Require API key/JWT via Authorization header only."""
-        if not agent.config.get("server", {}).get("auth", {}).get("enabled", False):
+        if not auth_enabled(agent.config):
             return
         from proxy.auth_helpers import parse_bearer
 

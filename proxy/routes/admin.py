@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import FileResponse
+from core.auth_policy import auth_enabled
 
 logger = logging.getLogger("llmproxy.routes.admin")
 
@@ -84,7 +85,7 @@ def create_router(agent) -> APIRouter:
         replaced and would have sent a reader looking for a bug that was not
         there.
         """
-        if not agent.config.get("server", {}).get("auth", {}).get("enabled", False):
+        if not auth_enabled(agent.config):
             return  # Auth disabled — development mode, allow all
         from proxy.auth_helpers import parse_bearer
 
@@ -829,7 +830,7 @@ def create_router(agent) -> APIRouter:
             except Exception as e:
                 logger.warning(f"Error querying pool status for summary: {e}")
 
-            auth_enabled = agent.config.get("server", {}).get("auth", {}).get("enabled", False)
+            auth_is_on = auth_enabled(agent.config)
 
             # Coalesce overall health and degradation state
             degradation_state = "nominal"
@@ -848,7 +849,7 @@ def create_router(agent) -> APIRouter:
                 "uptime_seconds": round(uptime),
                 "pool_size": len(pool),
                 "pool_healthy": healthy_count,
-                "auth_mode": "enabled" if auth_enabled else "disabled",
+                "auth_mode": "enabled" if auth_is_on else "disabled",
                 "degradation_state": degradation_state,
                 "throughput_today": total_requests,
             }

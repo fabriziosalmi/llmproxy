@@ -12,6 +12,7 @@ import json
 import time
 import logging
 from fastapi import APIRouter, Request, HTTPException
+from core.auth_policy import auth_enabled
 
 logger = logging.getLogger("llmproxy.routes.gdpr")
 
@@ -26,7 +27,7 @@ def create_router(agent) -> APIRouter:
         exfiltrate all subject data without a trace.  Auth is skipped only when
         explicitly disabled (development mode).
         """
-        if not agent.config.get("server", {}).get("auth", {}).get("enabled", False):
+        if not auth_enabled(agent.config):
             return
         from proxy.auth_helpers import parse_bearer
 

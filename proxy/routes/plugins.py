@@ -3,6 +3,7 @@
 import yaml  # type: ignore[import-untyped]
 
 from fastapi import APIRouter, Request, HTTPException
+from core.auth_policy import auth_enabled
 
 
 def create_router(agent) -> APIRouter:
@@ -16,7 +17,7 @@ def create_router(agent) -> APIRouter:
         attacker can install arbitrary code or disable security plugins.
         Mirrors the pattern in admin.py — skipped only when auth is disabled.
         """
-        if not agent.config.get("server", {}).get("auth", {}).get("enabled", False):
+        if not auth_enabled(agent.config):
             return  # Auth disabled — development mode, allow all
         from proxy.auth_helpers import parse_bearer
 

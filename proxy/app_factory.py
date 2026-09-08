@@ -32,6 +32,7 @@ from fastapi.staticfiles import StaticFiles
 
 from core.tracing import TraceManager
 from core.firewall_asgi import ByteLevelFirewallMiddleware
+from core.auth_policy import auth_enabled
 
 logger = logging.getLogger("llmproxy.app_factory")
 
@@ -171,14 +172,14 @@ def create_app(agent) -> FastAPI:
     from core.rate_limiter import RateLimitMiddleware
 
     _version = _read_version()
-    auth_enabled = agent.config.get("server", {}).get("auth", {}).get("enabled", False)
+    auth_is_on = auth_enabled(agent.config)
 
     # Disable interactive API docs when auth is enabled.
     # /docs, /redoc and /openapi.json hand an attacker a complete map of every
     # endpoint before they authenticate — including ones added in future PRs.
-    _docs_url = None if auth_enabled else "/docs"
-    _redoc_url = None if auth_enabled else "/redoc"
-    _openapi_url = None if auth_enabled else "/openapi.json"
+    _docs_url = None if auth_is_on else "/docs"
+    _redoc_url = None if auth_is_on else "/redoc"
+    _openapi_url = None if auth_is_on else "/openapi.json"
 
     app = FastAPI(
         title="LLMProxy",
@@ -200,7 +201,7 @@ def create_app(agent) -> FastAPI:
     @app.middleware("http")
     async def global_admin_auth(request: Request, call_next):
         auth_enabled_live = (
-            agent.config.get("server", {}).get("auth", {}).get("enabled", False)
+            auth_enabled(agent.config)
         )
         if not auth_enabled_live:
             return await call_next(request)

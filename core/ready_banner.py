@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 import sys
 from typing import Any
+from core.auth_policy import auth_enabled as _auth_enabled
 
 
 _RESET = "\033[0m"
@@ -100,8 +101,8 @@ def print_ready_banner(
 ) -> None:
     # The auth env var lookup honours the configured name so custom deployments
     # still see the correct key location.
-    auth_cfg = config.get("server", {}).get("auth", {})
-    auth_enabled = auth_cfg.get("enabled", False)
+    auth_cfg = config.get("server", {}).get("auth", {}) or {}
+    auth_enabled = _auth_enabled(config)
     key_env = auth_cfg.get("api_keys_env", "LLM_PROXY_API_KEYS")
 
     # Pick a user-reachable display host. "0.0.0.0" in the proxy means
