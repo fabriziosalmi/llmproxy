@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 
 from core.plugin_sdk import BasePlugin, PluginResponse, PluginResponseError
 from core.wasm_runner import WasmRunner
+from core.atomic_io import atomic_write
 
 
 class PluginHook(Enum):
@@ -141,6 +142,25 @@ class PluginSecurityError(Exception):
 
     pass
 
+
+
+def _atomic_manifest_write(manifest: dict, path: str) -> None:
+    """Replace the installed-plugin manifest without a torn-write window.
+
+    This file records which plugins are installed, whether each is enabled,
+    and each one's SHA-256 pin. install_plugin computes those pins and
+    _load_plugin refuses a file whose content no longer matches. But an absent
+    pin is only a warning: the plugin is loaded regardless. So a truncating
+    write interrupted midway could leave a manifest that still parses with a
+    pin missing, and tampering detection for that plugin would be off with
+    nothing reporting it.
+    """
+    atomic_write(
+        yaml.safe_dump(manifest, default_flow_style=False),
+        path,
+        os.path.dirname(os.path.abspath(path)) or ".",
+        ".manifest.",
+    )
 
 def compute_plugin_sha256(source: str) -> str:
     """SHA-256 of the plugin source bytes — UTF-8 encoded.
@@ -610,6 +630,20 @@ class PluginManager:
                         f"(expected {recorded[:12]}…, got {actual[:12]}…). "
                         "File on disk has changed since install."
                     )
+            elif p_info.get("_source") == "installed":
+                # install_plugin records a pin for every Python plugin it
+                # installs, so an installed entry without one is not a plugin
+                # that opted out — it is a manifest that lost the field, which
+                # is exactly what a torn write to the manifest produces.
+                # Loading it anyway would mean tampering detection silently
+                # switched itself off, so refuse and say how to restore it.
+                raise PluginSecurityError(
+                    f"Plugin '{name}': installed manifest entry has no SHA-256 "
+                    f"pin. install_plugin records one for every Python plugin, "
+                    f"so this entry is damaged. Reinstall the plugin, or add "
+                    f"`sha256: {actual}` to its entry after verifying the file "
+                    f"is the one you intend to run."
+                )
             else:
                 self.logger.warning(
                     f"Plugin '{name}' loaded without a SHA-256 pin "
@@ -1034,8 +1068,7 @@ class PluginManager:
         installed_manifest = os.path.join(self.installed_dir, "manifest.yaml")
 
         if not os.path.exists(installed_manifest):
-            with open(installed_manifest, "w") as f:
-                yaml.safe_dump({"plugins": []}, f)
+            _atomic_manifest_write({"plugins": []}, installed_manifest)
 
         with open(installed_manifest, "r") as f:
             manifest = yaml.safe_load(f) or {"plugins": []}
@@ -1081,8 +1114,7 @@ class PluginManager:
 
         manifest["plugins"].append(manifest_entry)
 
-        with open(installed_manifest, "w") as f:
-            yaml.safe_dump(manifest, f, default_flow_style=False)
+        _atomic_manifest_write(manifest, installed_manifest)
 
         await self.hot_swap()
         return True
@@ -1102,8 +1134,7 @@ class PluginManager:
         if len(manifest["plugins"]) == original_count:
             return False
 
-        with open(installed_manifest, "w") as f:
-            yaml.safe_dump(manifest, f, default_flow_style=False)
+        _atomic_manifest_write(manifest, installed_manifest)
 
         self._plugin_meta.pop(name, None)
         await self.hot_swap()

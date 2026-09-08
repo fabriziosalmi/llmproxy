@@ -5,13 +5,13 @@ security-sensitive (it rewrites config.yaml and hot-reloads the proxy) — lives
 one cohesive, independently-testable module.
 """
 
-import contextlib
 import logging
 import os
-import tempfile
 
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
+
+from core.atomic_io import atomic_write as _atomic_write
 from core.auth_policy import auth_enabled
 
 logger = logging.getLogger("llmproxy.routes.config")
@@ -20,33 +20,6 @@ logger = logging.getLogger("llmproxy.routes.config")
 # secrets) — NOT the runtime-merged /config/yaml view, which is redacted and
 # would round-trip "***" back over real values.
 _MAX_CONFIG_BYTES = 256 * 1024
-
-
-def _atomic_write(content: str, target: str, directory: str, prefix: str) -> None:
-    """Write `content` to `target` so a reader never sees a partial file.
-
-    Temp file in the same directory — so os.replace is a rename and not a
-    copy across filesystems — flushed and fsynced before the rename, so the
-    data is on disk before anything points at it.
-    """
-    fd, tmp = tempfile.mkstemp(dir=directory, prefix=prefix, suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w") as f:
-            f.write(content)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp, target)
-        # The rename is metadata: fsyncing the file guarantees the bytes, and
-        # fsyncing the directory guarantees the name that points at them.
-        dir_fd = os.open(directory, os.O_RDONLY)
-        try:
-            os.fsync(dir_fd)
-        finally:
-            os.close(dir_fd)
-    except BaseException:
-        with contextlib.suppress(OSError):
-            os.unlink(tmp)
-        raise
 
 
 def create_router(agent) -> APIRouter:
