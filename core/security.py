@@ -889,6 +889,37 @@ class SecurityShield:
         except Exception:
             return None
 
+    _blocked_domains_warned: bool = False
+
+    def _usable_blocked_domains(self, link_cfg: Dict[str, Any]) -> list:
+        """The configured blocked domains, minus entries that are not strings.
+
+        A blank list item in YAML parses as None and an unquoted number parses
+        as an int; either one raised AttributeError on `d.lower()` inside the
+        per-URL handler, which aborted domain matching for that URL entirely.
+        Because the loop returns on the first match, one bad entry placed
+        before the real ones disabled blocking for every URL in every
+        response, with no log.
+
+        Dropping the unusable entries keeps the rest of the list working and
+        tells the operator once which ones were ignored, rather than failing
+        the whole check or silently passing everything.
+        """
+        raw = link_cfg.get("blocked_domains") or []
+        usable = [d for d in raw if isinstance(d, str) and d.strip()]
+        if len(usable) != len(raw) and not type(self)._blocked_domains_warned:
+            type(self)._blocked_domains_warned = True
+            dropped = [d for d in raw if not (isinstance(d, str) and d.strip())]
+            logger.error(
+                "security.link_sanitization.blocked_domains has %d unusable "
+                "entr%s (%r) — ignored. A blank list item parses as null and "
+                "an unquoted number as an int; quote them or remove them.",
+                len(dropped),
+                "y" if len(dropped) == 1 else "ies",
+                dropped[:5],
+            )
+        return usable
+
     def sanitize_response(self, content: str) -> str:
         """Filters and validates the LLM response. Returns '[ERROR]' if guards fail."""
         if not self.enabled:
@@ -921,12 +952,13 @@ class SecurityShield:
         # 4. Link Sanitizer — replace blocked/high-risk URLs with [BLOCKED_LINK]
         # H1: Use urlparse for proper domain extraction instead of substring.
         link_cfg = self.config.get("link_sanitization", {})
-        blocked_domains = link_cfg.get("blocked_domains", [])
+        blocked_domains = self._usable_blocked_domains(link_cfg)
         resp_risk_cfg = link_cfg.get("risk_scoring", {})
         resp_risk_enabled = resp_risk_cfg.get("enabled", False)
         resp_risk_threshold = float(resp_risk_cfg.get("block_threshold", 0.7))
         resp_risk_log_only = bool(resp_risk_cfg.get("log_only", False))
         resp_homograph_on = bool(link_cfg.get("homograph_protection", {}).get("brands"))
+        link_fail_open = bool(link_cfg.get("fail_open", False))
         if blocked_domains or resp_risk_enabled or resp_homograph_on:
             from urllib.parse import urlparse
 
@@ -955,8 +987,30 @@ class SecurityShield:
                             )
                             if not resp_risk_log_only:
                                 return "[BLOCKED_LINK]"
-                except Exception:
-                    pass
+                except Exception as exc:  # noqa: BLE001
+                    # Fail CLOSED. Everything in this block is a security
+                    # check: domain blocking, brand-impersonation detection
+                    # and FQDN risk scoring. This used to `pass` and return
+                    # the original URL, so any error turned a block into a
+                    # pass — silently, with no log, on the response path. A
+                    # single non-string entry in blocked_domains was enough
+                    # to disable link blocking for every URL in every
+                    # response, and a blank list item in YAML produces one.
+                    #
+                    # Set security.link_sanitization.fail_open to prefer
+                    # availability, which is the trade this used to make
+                    # without asking.
+                    logger.error(
+                        "Link sanitizer failed on %r: %s: %s — %s",
+                        match.group(0)[:120],
+                        type(exc).__name__,
+                        exc,
+                        "passing through (fail_open)"
+                        if link_fail_open
+                        else "blocking (fail-closed)",
+                    )
+                    if not link_fail_open:
+                        return "[BLOCKED_LINK]"
                 return match.group(0)
 
             sanitized = re.sub(
