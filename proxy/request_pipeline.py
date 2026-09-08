@@ -35,6 +35,7 @@ from core.stream_faker import fake_stream
 from core.tracing import TraceManager
 from core.webhooks import EventType
 from plugins.default.neural_router import update_endpoint_stats
+from proxy.budget import charge_and_persist
 
 logger = logging.getLogger("llmproxy.request_pipeline")
 
@@ -220,9 +221,26 @@ async def process_proxy_request(
         # For non-streaming responses, charge budget immediately.
         # For streaming, the charge happens in the stream generator's
         # finally block (see forwarder._handle_streaming).
+        #
+        # Through charge_and_persist, not by incrementing the counter here.
+        # This site used to do the increment inline under the same lock but
+        # without enqueuing the persistence write, so the in-memory total
+        # advanced and the app_state row did not. /v1/chat/completions was
+        # covered by accident — its route enqueues the total separately — but
+        # /v1/completions reaches this path with no route-level enqueue, so a
+        # non-streaming workload there advanced the running total and left the
+        # persisted value where the last chat request had put it. On restart
+        # hydrate_daily_total read that stale row and the day's spend reset
+        # downward, while the daily limit kept being enforced against it.
+        #
+        # charge_and_persist acquires the lock itself, so it must not be held
+        # here. It is also what forwarder._handle_streaming and the embeddings
+        # route call, which makes this the third and last charging site to go
+        # through one helper.
         if not isinstance(ctx.response, StreamingResponse):
-            async with orchestrator._budget_lock:
-                orchestrator.total_cost_today += cost_ref["delta"]
+            await charge_and_persist(
+                orchestrator, orchestrator._budget_lock, cost_ref["delta"]
+            )
 
         ctx.metadata["duration"] = time.time() - start_req
 
