@@ -38,22 +38,11 @@ class WebhookTarget(Enum):
     SIEM = "siem"  # Elastic Common Schema (ECS) JSON — Splunk HEC / Datadog / Elastic
 
 
-_CACHED_VERSION: str | None = None
-
-
 def _proxy_version() -> str:
-    """Best-effort proxy version for SIEM records (cached, VERSION file)."""
-    global _CACHED_VERSION
-    if _CACHED_VERSION is None:
-        try:
-            import os
+    """Proxy version for SIEM records. See core.version for the single reader."""
+    from core.version import get_version
 
-            path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "VERSION")
-            with open(path) as f:
-                _CACHED_VERSION = f.read().strip() or "unknown"
-        except Exception:
-            _CACHED_VERSION = "unknown"
-    return _CACHED_VERSION
+    return get_version()
 
 
 class EventType(Enum):

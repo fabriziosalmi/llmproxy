@@ -76,16 +76,10 @@ _QUERY_TOKEN_FALLBACK_PATHS: frozenset = frozenset(
 
 
 def _read_version() -> str:
-    """Read version from VERSION file."""
-    try:
-        with open(
-            os.path.join(
-                os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "VERSION"
-            )
-        ) as f:
-            return f.read().strip()
-    except FileNotFoundError:
-        return "0.0.0"
+    """Read version from VERSION file. See core.version for the single reader."""
+    from core.version import get_version
+
+    return get_version()
 
 
 def _resolve_cors_origins(config: dict) -> list:
