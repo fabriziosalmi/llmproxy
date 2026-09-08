@@ -14,6 +14,8 @@ import asyncio
 import logging
 from typing import Dict, Any
 
+from core.startup_checks import _is_provider_key_missing
+
 logger = logging.getLogger("llmproxy.health_prober")
 
 PROBE_INTERVAL = 60  # seconds between probe rounds
@@ -97,6 +99,37 @@ class EndpointHealthProber:
             # Skip local endpoints unless probe_local is enabled
             probe_local = ep_config.get("probe_local", False)
             if not probe_local and ("localhost" in base_url or "127.0.0.1" in base_url):
+                continue
+
+            # Skip endpoints whose provider key is absent or still a
+            # placeholder. Startup already declines to register these — it logs
+            # "Endpoint 'x' needs X_API_KEY — skipped" — but the prober did not
+            # apply the same test, so every 60s it sent an unauthenticated
+            # request to each of them and collected a 401. That is outbound
+            # traffic to third-party providers on behalf of endpoints the
+            # application itself refused to enable, and it buries genuine probe
+            # failures under credentials noise. Reuses startup's own helper so
+            # the two cannot disagree about what "missing" means.
+            # Holds the NAME of an environment variable ("OPENAI_API_KEY"),
+            # never its value — the value is read inside the helper and is
+            # neither returned nor logged.
+            #
+            # The name is deliberately NOT interpolated into the message below.
+            # CodeQL taints anything read under an api_key-shaped config key
+            # and follows it to a log sink, and it is right to: a refactor that
+            # made the helper return the value would turn this into a real
+            # leak. Startup already prints the variable name once per endpoint
+            # ("Endpoint 'x' needs X_API_KEY — skipped"), so repeating it here
+            # buys an operator nothing and would cost a permanent suppression.
+            key_env_name = ep_config.get("api_key_env")
+            if key_env_name and _is_provider_key_missing(key_env_name):
+                if ep_name not in self._warned_unprobeable:
+                    logger.info(
+                        "Probe skip: %s — provider key not set "
+                        "(the startup log names the variable).",
+                        ep_name,
+                    )
+                    self._warned_unprobeable.add(ep_name)
                 continue
 
             tasks.append(
