@@ -16,30 +16,76 @@ jobs:
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - name: Enforce SHA-pinned GitHub Actions
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           python - <<'PY'
-          import glob, re, sys
-          bad=[]
-          pat=re.compile(r'^\s*-\s*uses:\s*([^\s#]+)')
+          import glob, json, os, re, sys, urllib.error, urllib.request
+
+          # The old pattern was `^\s*-\s*uses:` — it only matched a `uses:` that
+          # opens a step. A `uses:` written under a `- name:` line has no dash of
+          # its own, so 14 of the 49 action references in this repository were
+          # invisible to the gate that reported "All workflow actions are
+          # SHA-pinned", including the one in deploy.yml that was pinned to a SHA
+          # that does not exist.
+          pat = re.compile(r'^\s*(?:-\s*)?uses:\s*([^\s#]+)')
+
+          bad, refs = [], {}
           for path in sorted(glob.glob('.github/workflows/*.yml')):
-              for i,line in enumerate(open(path, encoding='utf-8'), 1):
-                  m=pat.search(line)
+              for i, line in enumerate(open(path, encoding='utf-8'), 1):
+                  m = pat.search(line)
                   if not m:
                       continue
-                  ref=m.group(1)
-                  if ref.startswith('./'):
+                  ref = m.group(1)
+                  if ref.startswith('./') or ref.startswith('docker://'):
                       continue
                   if '@' not in ref:
-                      bad.append((path,i,ref,'missing @ref'))
+                      bad.append((path, i, ref, 'missing @ref'))
                       continue
-                  _,tag=ref.rsplit('@',1)
+                  name, tag = ref.rsplit('@', 1)
                   if not re.fullmatch(r'[0-9a-f]{40}', tag):
-                      bad.append((path,i,ref,'not SHA-pinned'))
+                      bad.append((path, i, ref, 'not SHA-pinned'))
+                      continue
+                  refs.setdefault((name, tag), []).append((path, i))
+
+          # A 40-hex string is not proof that the commit exists. deploy.yml
+          # carried a well-formed, entirely fictional SHA for ten releases: the
+          # workflow only runs on `release: published`, so the "unable to resolve
+          # action" error surfaced solely at release time, where nobody read it.
+          # Resolving each pin here catches that on the PR that introduces it.
+          # Network and rate-limit failures warn rather than fail — the gate must
+          # stay deterministic — but a definitive 404/422 is an error.
+          token = os.environ.get('GH_TOKEN', '')
+          checked = unverified = 0
+          for (name, sha), where in sorted(refs.items()):
+              owner_repo = '/'.join(name.split('/')[:2])
+              req = urllib.request.Request(
+                  f'https://api.github.com/repos/{owner_repo}/commits/{sha}',
+                  headers={'Accept': 'application/vnd.github+json',
+                           'User-Agent': 'llmproxy-workflow-hardening',
+                           **({'Authorization': f'Bearer {token}'} if token else {})},
+                  method='HEAD')
+              try:
+                  urllib.request.urlopen(req, timeout=15)
+                  checked += 1
+              except urllib.error.HTTPError as e:
+                  if e.code in (404, 422):
+                      for p, i in where:
+                          bad.append((p, i, f'{name}@{sha}',
+                                      f'SHA does not exist in {owner_repo} (HTTP {e.code})'))
+                  else:
+                      unverified += 1
+                      print(f'::warning::could not verify {name}@{sha}: HTTP {e.code}')
+              except Exception as e:
+                  unverified += 1
+                  print(f'::warning::could not verify {name}@{sha}: {e}')
+
           if bad:
-              for p,i,ref,why in bad:
-                  print(f'{p}:{i}: {why}: {ref}')
+              for p, i, ref, why in bad:
+                  print(f'::error file={p},line={i}::{why}: {ref}')
               sys.exit(1)
-          print('All workflow actions are SHA-pinned.')
+          print(f'All {sum(len(v) for v in refs.values())} action references are '
+                f'SHA-pinned; {checked} resolved, {unverified} unverified.')
           PY
 
   lint:
