@@ -46,13 +46,20 @@
             const idToken = params.get('id_token');
             const error = params.get('error');
             const errorDesc = params.get('error_description');
+            // The provider echoes back the `state` we sent. Forward it: the
+            // opener generated that value for CSRF binding and had no way to
+            // check it, because this page never passed it on.
+            const state = params.get('state');
 
             if (window.opener) {
                 if (idToken) {
-                    window.opener.postMessage({ type: 'oauth_callback', id_token: idToken }, window.location.origin);
+                    window.opener.postMessage(
+                        { type: 'oauth_callback', id_token: idToken, state },
+                        window.location.origin
+                    );
                 } else {
                     window.opener.postMessage(
-                        { type: 'oauth_callback', error: errorDesc || error || 'Authentication failed' },
+                        { type: 'oauth_callback', error: errorDesc || error || 'Authentication failed', state },
                         window.location.origin
                     );
                 }
