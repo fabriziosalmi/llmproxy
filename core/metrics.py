@@ -10,6 +10,7 @@ Exposes /metrics endpoint via prometheus_client with:
 """
 
 import logging
+from typing import Container, Optional
 
 from prometheus_client import (
     Counter,
@@ -90,6 +91,21 @@ AUDIT_PERSISTENCE = Counter(
     ["route", "outcome"],  # route: chat|completions|forwarder_stream ; outcome: ok|fail
 )
 
+# ─── Background loop liveness ───
+# Set at the end of every successful iteration. Without this a loop that has
+# stopped doing its work is indistinguishable from one that is working: the
+# eight loops in proxy/background.py each sit in a broad exception handler, so
+# a retention purge that raises every pass logs one warning a day into a stream
+# that also carries every rejected key, and rows simply accumulate — which
+# looks like healthy retention rather than a failure. Staleness alerts write
+# themselves: time() - llm_proxy_background_last_success_timestamp{loop=...}
+# greater than a few intervals means that task is not running.
+BACKGROUND_LAST_SUCCESS = Gauge(
+    "llm_proxy_background_last_success_timestamp",
+    "Unix timestamp of the last successful iteration of a background loop",
+    ["loop"],
+)
+
 
 #: Where the standalone exporter binds when nothing says otherwise.
 #
@@ -152,10 +168,24 @@ class MetricsTracker:
         prompt_tokens: int,
         completion_tokens: int,
         cost: float,
+        known_models: Optional[Container[str]] = None,
     ):
+        """Record tokens and cost.
+
+        `model` reaches this from the upstream response when it names one, and
+        otherwise falls back to the caller's own request body — an unbounded
+        string. prometheus_client never evicts label children, so every distinct
+        value minted a permanent series: a caller sending random model names
+        grew process memory and the scrape payload without limit, and made the
+        cost dashboard unreadable long before that.
+        `known_models`, when supplied, is the set the proxy recognises; anything
+        else is collapsed to "other". The per-request detail is already in the
+        audit row, which is where high-cardinality data belongs.
+        """
         TOKEN_USAGE.labels(endpoint=endpoint, role="prompt").inc(prompt_tokens)
         TOKEN_USAGE.labels(endpoint=endpoint, role="completion").inc(completion_tokens)
-        ESTIMATED_COST.labels(endpoint=endpoint, model=model).inc(cost)
+        label = model if (known_models is None or model in known_models) else "other"
+        ESTIMATED_COST.labels(endpoint=endpoint, model=label).inc(cost)
 
     @staticmethod
     def track_ttft(endpoint: str, duration: float):
@@ -181,6 +211,13 @@ class MetricsTracker:
     @staticmethod
     def track_ring_latency(ring: str, duration: float):
         RING_LATENCY.labels(ring=ring).observe(duration)
+
+    @staticmethod
+    def mark_background_iteration(loop: str):
+        """Record that `loop` completed an iteration successfully, now."""
+        import time as _time
+
+        BACKGROUND_LAST_SUCCESS.labels(loop=loop).set(_time.time())
 
     @staticmethod
     def set_circuit_state(endpoint: str, is_open: bool):

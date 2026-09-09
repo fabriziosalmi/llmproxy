@@ -13,6 +13,24 @@ from typing import Any
 logger = logging.getLogger("llmproxy.background")
 
 
+def _iteration_ok(loop: str) -> None:
+    """Record that `loop` finished an iteration without raising.
+
+    Called at the END of each try block, never in an except: the point is to
+    distinguish "ran and worked" from "ran and swallowed", which is precisely
+    what these loops could not express. Every one of them sits in a broad
+    exception handler, so a retention purge that fails on every pass logged one
+    warning a day and otherwise looked identical to a healthy one — rows simply
+    accumulated, which reads as working retention rather than a failure.
+    """
+    try:
+        from core.metrics import MetricsTracker
+
+        MetricsTracker.mark_background_iteration(loop)
+    except Exception:  # noqa: BLE001 — telemetry must never kill a loop
+        pass
+
+
 async def config_watch_loop(agent, interval: int = 30):
     """Detect config.yaml changes and hot-reload security subsystems."""
     from core.webhooks import WebhookDispatcher
@@ -80,6 +98,7 @@ async def config_watch_loop(agent, interval: int = 30):
                     logger.warning(
                         f"Signature reload error (keeping old sigs): {sig_e}"
                     )
+            _iteration_ok("config_watch")
         except Exception as e:
             logger.warning(f"Config watch error: {e}")
 
@@ -89,6 +108,7 @@ async def write_flush_loop(agent, interval: float = 1.0):
     while True:
         await asyncio.sleep(interval)
         await drain_pending_writes(agent)
+        _iteration_ok("write_flush")
 
 
 async def drain_pending_writes(agent):
@@ -143,6 +163,7 @@ async def metrics_history_loop(agent, interval: int = 3600):
             history.record_gauge(
                 "cost_usd", float(getattr(agent, "total_cost_today", 0.0))
             )
+            _iteration_ok("metrics_history")
         except Exception as e:  # noqa: BLE001 — keep ticking
             logger.warning(f"metrics_history snapshot error: {e}")
 
@@ -155,6 +176,7 @@ async def cache_eviction_loop(cache_backend, interval: int = 3600):
             deleted = await cache_backend.evict_expired()
             if deleted > 0:
                 logger.info(f"Cache eviction: {deleted} entries purged")
+            _iteration_ok("cache_eviction")
         except Exception as e:
             logger.error(f"Cache eviction error: {e}")
 
@@ -165,6 +187,7 @@ async def dedup_cleanup_loop(deduplicator, interval: int = 60):
         await asyncio.sleep(interval)
         try:
             deduplicator.cleanup_expired()
+            _iteration_ok("dedup_cleanup")
         except Exception as e:
             logger.debug(f"Dedup cleanup error: {e}")
 
@@ -198,6 +221,7 @@ async def local_discovery_loop(agent, interval: int = 300):
                         len(new_ids),
                         ", ".join(new_ids),
                     )
+            _iteration_ok("local_discovery")
         except asyncio.CancelledError:
             raise
         except Exception as e:
@@ -220,6 +244,7 @@ async def retention_purge_loop(store, retention_days: int = 90, interval: int = 
                 logger.info(
                     f"GDPR retention purge: {result} (retention={retention_days}d)"
                 )
+            _iteration_ok("retention_purge")
         except Exception as e:
             logger.warning(f"Retention purge error: {e}")
 
@@ -233,5 +258,6 @@ async def smart_router_sync_loop(agent, interval: int = 5):
         try:
             from core.endpoint_stats import sync_endpoint_stats_from_redis
             await sync_endpoint_stats_from_redis(agent.redis_client)
+            _iteration_ok("smart_router_sync")
         except Exception as e:
             logger.warning(f"Smart router sync loop error: {e}")

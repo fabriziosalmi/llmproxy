@@ -169,9 +169,9 @@ def create_router(agent) -> APIRouter:
                     request, body=body, session_id=session_id
                 )
             duration = time.time() - start_time
-            MetricsTracker.track_request(
-                "POST", "/v1/chat/completions", response.status_code, duration
-            )
+            # Request count and latency are recorded by the outermost
+            # middleware in app_factory, which covers every route rather than
+            # the two that remembered to call this.
             if agent.exporter:
                 agent._spawn_task(
                     agent.exporter.record(
@@ -205,12 +205,15 @@ def create_router(agent) -> APIRouter:
                     # Feed the Prometheus token/cost counters. Without this the
                     # metrics are declared and never written, so a dashboard
                     # built on llm_proxy_cost_total reads zero forever.
+                    from core.model_resolver import known_model_names
+
                     MetricsTracker.track_usage(
                         endpoint="/v1/chat/completions",
                         model=model_version or model_name,
                         prompt_tokens=in_tok,
                         completion_tokens=out_tok,
                         cost=cost_usd,
+                        known_models=known_model_names(agent.config),
                     )
             except (json.JSONDecodeError, AttributeError, UnicodeDecodeError) as e:
                 logger.warning("Cost estimate parse skipped: %s", e)
@@ -218,7 +221,10 @@ def create_router(agent) -> APIRouter:
                 budget_cfg = agent.config.get("budget", {})
                 daily_limit = budget_cfg.get("daily_limit", 50.0)
                 soft_limit = budget_cfg.get("soft_limit", 40.0)
-                MetricsTracker.set_budget(agent.total_cost_today, daily_limit)
+                # The gauge is published by proxy.budget.charge_and_persist,
+                # which every charging site funnels through — chat was the only
+                # route that set it, so streaming and embeddings spend moved the
+                # ledger without moving the series the alert rules watch.
                 agent.enqueue_write("budget:daily_total", agent.total_cost_today)
                 if agent.total_cost_today >= soft_limit:
                     agent._spawn_task(
@@ -317,8 +323,6 @@ def create_router(agent) -> APIRouter:
 
             return response
         except Exception as e:
-            duration = time.time() - start_time
-            MetricsTracker.track_request("POST", "/v1/chat/completions", 500, duration)
             TraceManager.capture_exception(e)
             raise e
 

@@ -22,6 +22,33 @@ logger = logging.getLogger("llmproxy.model_resolver")
 _available_providers: set[str] | None = None
 
 
+def known_model_names(config: Dict[str, Any]) -> frozenset:
+    """Every model name this proxy recognises, from all three declarations.
+
+    Used to bound Prometheus label cardinality: the cost counter is labelled by
+    model, and the value falls back to the caller's own request body when the
+    upstream response does not name one. prometheus_client never evicts label
+    children, so an unrecognised name would mint a permanent series per string
+    a caller invents.
+    """
+    names: set[str] = set()
+    for ep_cfg in (config.get("endpoints") or {}).values():
+        for m in ep_cfg.get("models", []) or []:
+            if isinstance(m, str):
+                names.add(m)
+    for alias, target in (config.get("model_aliases") or {}).items():
+        names.add(alias)
+        if isinstance(target, str):
+            names.add(target)
+    for group, gcfg in (config.get("model_groups") or {}).items():
+        names.add(group)
+        for entry in (gcfg or {}).get("models", []) or []:
+            m = (entry or {}).get("model")
+            if isinstance(m, str):
+                names.add(m)
+    return frozenset(names)
+
+
 def _get_available_providers(config: Dict[str, Any]) -> set[str]:
     """Return set of provider names that have valid API keys configured."""
     global _available_providers
