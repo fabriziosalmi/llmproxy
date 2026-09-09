@@ -57,10 +57,16 @@ LLMProxy implements defense-in-depth with 6 layers:
 ## Supported Versions
 
 | Version | Supported |
-|---------|-----------| 
-| 1.21.x  | Yes       |
-| 1.20.x  | Security patches only |
-| < 1.20  | No        |
+|---------|-----------|
+| 1.34.x  | Yes       |
+| 1.33.x  | Security patches only |
+| < 1.33  | No        |
+
+The rule, rather than the table, is what to rely on: the current minor is
+supported, the one before it receives security patches, and anything older is
+not. Update this table with the version bump — it previously named 1.21.x while
+1.33.1 shipped, so a reader on any release in between found their own version
+absent from it.
 
 ## Security Updates
 
