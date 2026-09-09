@@ -87,7 +87,10 @@ class ProxyOrchestrator(BaseAgent):
         if redis_url:
             try:
                 import redis.asyncio as aioredis
-                self.redis_client = aioredis.from_url(redis_url, decode_responses=True)
+
+                from core.redis_client import connect as _redis_connect
+
+                self.redis_client = _redis_connect(aioredis, redis_url, self.config)
                 logger.info(f"Orchestrator shared Redis client initialized: {redis_url}")
             except Exception as e:
                 logger.warning(f"Failed to connect to shared Redis: {e}")
@@ -95,7 +98,8 @@ class ProxyOrchestrator(BaseAgent):
         self.circuit_manager = CircuitManager(
             on_state_change=self._on_circuit_state_change,
             redis_url=redis_url,
-            redis_client=self.redis_client
+            redis_client=self.redis_client,
+            config=self.config,
         )
 
         # Alerting & compliance
