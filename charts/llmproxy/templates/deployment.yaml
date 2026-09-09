@@ -40,9 +40,6 @@ spec:
             - name: metrics
               containerPort: {{ .Values.service.metricsPort }}
               protocol: TCP
-            - name: admin
-              containerPort: {{ .Values.service.adminPort }}
-              protocol: TCP
           livenessProbe:
             httpGet:
               path: /health

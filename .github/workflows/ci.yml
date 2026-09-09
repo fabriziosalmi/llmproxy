@@ -139,9 +139,18 @@ jobs:
         # requirements.txt audited an input manifest whose 27 transitive
         # packages were resolved fresh at build time, so the verdict applied to
         # a resolution nobody recorded rather than to the artefact.
+        # BLOCKING: a security gateway must fail CI on known dependency CVEs.
+        #
+        # Exceptions carry an owner and a review date, because an ignore with
+        # neither is permanent by default: if the affected dependency is later
+        # removed the ignore silently outlives it, and if the advisory is
+        # superseded by a broader one the ignore stops covering the risk it was
+        # added for. One undocumented exception is not a problem; the habit of
+        # adding them without a record is how an audit gate becomes decorative.
+        #
+        #   PYSEC-2024-62 — review by 2026-12-01, @fab. Assessed as not
+        #   applicable to this usage. Re-examine or remove at that date.
         run: pip-audit -r requirements.lock --skip-editable --ignore-vuln PYSEC-2024-62
-        # BLOCKING: A security gateway must fail CI on known dependency CVEs.
-        # Assessed non-risks are explicitly ignored via --ignore-vuln above.
 
   lockfile:
     name: Lockfile In Sync

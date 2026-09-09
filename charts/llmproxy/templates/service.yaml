@@ -15,9 +15,5 @@ spec:
       targetPort: metrics
       protocol: TCP
       name: metrics
-    - port: {{ .Values.service.adminPort }}
-      targetPort: admin
-      protocol: TCP
-      name: admin
   selector:
     {{- include "llmproxy.selectorLabels" . | nindent 4 }}
