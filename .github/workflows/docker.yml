@@ -1,9 +1,19 @@
 name: Docker Build & Push
 
+# Called by CI, never triggered directly on push.
+#
+# It used to fire on `push` to main and on `v*` tags, so the image — and the
+# moving `latest` tag — went to the registry in PARALLEL with the test suite
+# rather than after it. A direct push to main published unverified, and
+# `git push --tags` published a semver-tagged release with no gate at all,
+# because branch protection does not cover tag pushes and semver tags are what
+# consumers pin to.
+#
+# As a reusable workflow the gate is an ordinary `needs:` in ci.yml, which also
+# keeps github.ref pointing at the tag so docker/metadata-action still derives
+# the semver tags — something a workflow_run trigger would have silently lost.
 on:
-  push:
-    tags: ["v*"]
-    branches: ["main"]
+  workflow_call:
   workflow_dispatch:
 
 env:
