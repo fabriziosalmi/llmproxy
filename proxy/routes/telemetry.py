@@ -6,6 +6,7 @@ import asyncio
 import time
 import hmac
 import hashlib
+import secrets
 
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse, Response, StreamingResponse
@@ -21,6 +22,20 @@ _CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _MAX_SSE_CONNECTIONS = 20
 _active_log_streams = 0
 _sse_connections_lock = asyncio.Lock()
+
+# Last-resort signing secret for SSE tokens, generated per process.
+#
+# The fallback used to be the literal "llmproxy-dev-sse-secret", which is in
+# this repository — so anyone holding it could forge a token, and the global
+# middleware admits /api/v1/logs on the strength of an sse_token alone. That
+# is the live event feed: blocked IPs, rejected keys, identity assertions with
+# user email addresses. Reaching it needed the key bag to resolve empty while
+# auth stayed on, which startup validation prevents at boot but the unvalidated
+# config watcher can produce afterwards.
+#
+# A random per-process value costs only that subscribers reconnect after a
+# restart, and tokens live at most 600 seconds anyway.
+_FALLBACK_SSE_SECRET = secrets.token_urlsafe(32)
 
 
 def _sanitize_log(log: dict) -> dict:
@@ -46,7 +61,7 @@ def create_router(agent) -> APIRouter:
         if cfg_secret:
             return str(cfg_secret)
         keys = agent._get_api_keys()
-        return keys[0] if keys else "llmproxy-dev-sse-secret"
+        return keys[0] if keys else _FALLBACK_SSE_SECRET
 
     def _mint_sse_token(ttl_s: int = 120) -> str:
         exp = int(time.time()) + max(10, min(ttl_s, 600))
@@ -84,13 +99,23 @@ def create_router(agent) -> APIRouter:
         that reveals which keys are failing (to time attacks), which IPs are
         blocked (to rotate), and user email addresses from IDENTITY log lines.
         Auth is skipped only when explicitly disabled (development mode).
+
+        Verifies the ADMIN bag, matching the middleware in front of it. These
+        two closures were the last per-route checks left on the inference bag
+        after 1.34.0 moved the control plane to LLM_PROXY_ADMIN_KEYS, and the
+        mismatch made this route unreachable by ANY credential in a correctly
+        segregated deployment: an admin key passed the middleware and was then
+        refused here, an inference key was refused by the middleware. Since
+        minting an SSE token is the only way a browser can subscribe, the live
+        log panel was dark for exactly the operators who followed the hardening
+        advice — and both 401s look identical from outside.
         """
         if not auth_enabled(agent.config):
             return
         from proxy.auth_helpers import parse_bearer
 
         token = parse_bearer(request.headers.get("Authorization", ""))
-        if token and agent._verify_api_key(token):
+        if token and agent._verify_admin_key(token):
             return
         # EventSource cannot set Authorization headers; accept only
         # short-lived, dedicated SSE tokens (not raw API keys in URL).
@@ -99,13 +124,17 @@ def create_router(agent) -> APIRouter:
             raise HTTPException(status_code=401, detail="Telemetry: Unauthorized")
 
     def _check_header_auth_only(request: Request):
-        """Require API key/JWT via Authorization header only."""
+        """Require an ADMIN key via Authorization header only.
+
+        Same bag as the middleware — see _check_auth above for why the
+        inference bag here made the SSE token unmintable.
+        """
         if not auth_enabled(agent.config):
             return
         from proxy.auth_helpers import parse_bearer
 
         token = parse_bearer(request.headers.get("Authorization", ""))
-        if not token or not agent._verify_api_key(token):
+        if not token or not agent._verify_admin_key(token):
             raise HTTPException(status_code=401, detail="Telemetry: Unauthorized")
 
     @router.get("/health")

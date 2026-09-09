@@ -62,6 +62,11 @@ security:
   enabled: true
   max_payload_size_kb: 512
   max_messages: 50
+  # Deepest {/[ nesting a request body may contain. Size alone is not enough:
+  # 100k nested arrays is ~200 KB, well under the cap above, and made the JSON
+  # parser raise RecursionError out of the handler as an unhandled 500. The
+  # firewall counts brackets while it is already walking the body.
+  max_nesting_depth: 64
   # Confidence engine (regex + semantic + trajectory composite). A lone regex
   # hit in [regex_escalate_floor, hard-block) is floored to "escalate" (AI
   # adjudication) instead of passing unreviewed. Lower = stricter.

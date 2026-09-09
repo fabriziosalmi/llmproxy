@@ -1,3 +1,4 @@
+import asyncio
 import ssl
 import logging
 import jwt
@@ -14,6 +15,19 @@ TAILSCALE_SOCKET_LINUX = "/var/run/tailscale/tailscaled.sock"
 TAILSCALE_SOCKET_MACOS = "/Library/Tailscale/tailscaled.sock"
 
 logger = logging.getLogger(__name__)
+
+# How long the Tailscale LocalAPI may take before the lookup is abandoned.
+#
+# This is a request over a unix socket to a daemon on the same host: a round
+# trip that takes longer than a second is not slow, it is broken. The session
+# used to be built with no timeout at all, which meant aiohttp's 300-second
+# default applied — on the chat request path, guarded only by the socket FILE
+# existing, which says nothing about whether tailscaled is answering. A wedged
+# or restarting daemon therefore held every request for up to five minutes,
+# and the `except Exception` below could not help because a hang raises
+# nothing. Same failure class as the Redis and JWKS timeouts added in 1.34.0;
+# this call was missed by that sweep.
+TAILSCALE_API_TIMEOUT_S = 1.0
 
 
 class ZeroTrustManager:
@@ -78,7 +92,10 @@ class ZeroTrustManager:
         try:
             if not self._ts_session or self._ts_session.closed:
                 connector = aiohttp.UnixConnector(path=self.ts_socket)
-                self._ts_session = aiohttp.ClientSession(connector=connector)
+                self._ts_session = aiohttp.ClientSession(
+                    connector=connector,
+                    timeout=aiohttp.ClientTimeout(total=TAILSCALE_API_TIMEOUT_S),
+                )
 
             # Query the LocalAPI for who is at this remote IP
             # Validate IP format before interpolating into URL
@@ -99,6 +116,17 @@ class ZeroTrustManager:
                         "node": node,
                         "caps": data.get("CapMap", {}),
                     }
+        except asyncio.TimeoutError:
+            # Distinguished from a socket error on purpose: "the daemon did not
+            # answer in time" and "the daemon refused" are different operational
+            # problems, and the first one used to be invisible because it could
+            # not occur — the request simply waited.
+            logger.warning(
+                "ZeroTrust: Tailscale LocalAPI did not answer within %.1fs — "
+                "treating the caller as unverified",
+                TAILSCALE_API_TIMEOUT_S,
+            )
+            return {"status": "unverified", "reason": "api_timeout"}
         except Exception as e:
             logger.error(f"ZeroTrust: Tailscale Socket Error: {e}")
 

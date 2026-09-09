@@ -167,6 +167,12 @@ config: |
     metrics:
       enabled: true
       port: 9091
+      # 0.0.0.0 on purpose, and only here: this exporter is opened outside the
+      # ASGI app so nothing authenticates it, but a pod is scraped over the pod
+      # network and loopback would make it unreachable. Restrict it with a
+      # NetworkPolicy — the Service publishes metricsPort to the whole cluster.
+      # The authenticated alternative is GET /metrics on the main port.
+      bind: "0.0.0.0"  # nosec
     admin:
       enabled: true
       port: 8081

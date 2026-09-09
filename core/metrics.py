@@ -9,6 +9,8 @@ Exposes /metrics endpoint via prometheus_client with:
   - TTFT histograms
 """
 
+import logging
+
 from prometheus_client import (
     Counter,
     Histogram,
@@ -17,6 +19,8 @@ from prometheus_client import (
     generate_latest,
     CONTENT_TYPE_LATEST,
 )
+
+logger = logging.getLogger("llmproxy.metrics")
 
 # ─── Latency buckets tuned for LLM workloads (ms → seconds) ───
 LATENCY_BUCKETS = (0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0)
@@ -87,9 +91,39 @@ AUDIT_PERSISTENCE = Counter(
 )
 
 
-def start_metrics_server(port: int = 9091):
-    """Start standalone Prometheus metrics HTTP server."""
-    start_http_server(port)
+#: Where the standalone exporter binds when nothing says otherwise.
+#
+# Loopback, not 0.0.0.0. This listener is opened by prometheus_client outside
+# the ASGI app, so no middleware reaches it: not the auth middleware, not the
+# rate limiter, not the byte-level firewall, not the security headers. It
+# serves the same registry as GET /metrics — which the app deliberately puts in
+# _ALSO_PROTECT because it "exposes token counts, model usage, budget, and
+# timing side-channels that allow traffic-pattern inference across tenants".
+# Binding it to every interface by default published exactly that, with no
+# credential, to anything that could route to the port.
+DEFAULT_METRICS_BIND = "127.0.0.1"
+
+
+def start_metrics_server(port: int = 9091, addr: str = DEFAULT_METRICS_BIND):
+    """Start the standalone Prometheus exporter.
+
+    `addr` defaults to loopback because this endpoint has no authentication of
+    any kind. Widen it only where the network itself restricts who can reach
+    the port — a Kubernetes pod scraped over the pod network is the legitimate
+    case, and charts/llmproxy/values.yaml sets it explicitly for that reason.
+
+    The authenticated alternative is GET /metrics on the main port, which
+    renders the same registry behind the admin credential.
+    """
+    if addr not in ("127.0.0.1", "localhost", "::1"):
+        logger.warning(
+            "Prometheus exporter binding to %s:%s — this listener is OUTSIDE the "
+            "ASGI app and has no authentication. Restrict access at the network "
+            "layer, or scrape the authenticated /metrics on the main port instead.",
+            addr,
+            port,
+        )
+    start_http_server(port, addr=addr)
 
 
 def get_metrics_response():
