@@ -49,9 +49,12 @@ def _cache_ttl() -> float:
     try:
         return float(raw)
     except ValueError:
+        # The value is deliberately not echoed. Everything else this module
+        # reads from the environment is a secret, and a habit of logging env
+        # values verbatim here is how one eventually ends up in a log line —
+        # which is also why CodeQL flags it.
         logger.warning(
-            "LLM_PROXY_SECRET_CACHE_TTL=%r is not a number — using %.0fs",
-            raw,
+            "LLM_PROXY_SECRET_CACHE_TTL is not a number — using %.0fs",
             DEFAULT_CACHE_TTL_S,
         )
         return DEFAULT_CACHE_TTL_S
