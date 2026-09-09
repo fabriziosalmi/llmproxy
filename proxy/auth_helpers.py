@@ -144,3 +144,69 @@ async def require_data_plane_auth(agent: Any, api_key: str | None) -> None:
 
     if not agent._verify_api_key(token):
         raise HTTPException(status_code=401, detail="Unauthorized: Invalid API key or JWT")
+
+
+async def resolve_control_plane_principal(agent: Any, token: str):
+    """Who is making this control-plane call, and with which roles.
+
+    Returns a `(kind, roles)` tuple, or None when the token authenticates as
+    nobody. The middleware used to ask only "is this an admin API key?", which
+    meant a verified SSO identity — and the admin_auth JWT the code implements
+    — could not reach the control plane at all.
+
+    Order matters. The API key is checked first because it is a constant-time
+    string comparison against a small bag, while the JWT paths do signature
+    verification and, for an external OIDC token, potentially a JWKS fetch.
+
+    An API key resolves to the `admin` role deliberately: that is the authority
+    it has had since the two tiers were introduced, and preserving it exactly is
+    what makes adding role checks a no-op for every key-authenticated
+    deployment.
+    """
+    if not token:
+        return None
+
+    if agent._verify_admin_key(token):
+        return ("api_key", ["admin"])
+
+    identity = getattr(agent, "identity", None)
+    if identity is not None and getattr(identity, "enabled", False):
+        try:
+            verified = identity.verify_proxy_jwt(token)
+            if verified is None:
+                verified = await identity.verify_token(token)
+        except ValueError:
+            verified = None
+        if verified is not None and getattr(verified, "verified", False):
+            return ("jwt", list(getattr(verified, "roles", None) or []))
+
+    # The enterprise admin-UI JWT: a separate, symmetric-key path that the
+    # admin routes branch to when server.admin_auth.oidc_enabled is set. It was
+    # unreachable for the same reason — the middleware rejected the token
+    # before dispatch — so its required_role check never ran either.
+    jwt_authenticator = getattr(agent, "jwt_authenticator", None)
+    if jwt_authenticator is not None and getattr(jwt_authenticator, "enabled", False):
+        try:
+            if jwt_authenticator.verify_token(token):
+                return ("admin_jwt", ["admin"])
+        except Exception:  # noqa: BLE001 — a malformed token is just a refusal
+            pass
+
+    return None
+
+
+def principal_already_verified(request: Any) -> bool:
+    """True when the global middleware already authenticated this request.
+
+    The per-route _check_admin_auth() closures are defence in depth: they exist
+    to catch a gap in the middleware's prefix configuration. But they each
+    re-verified the ADMIN KEY specifically, which meant a caller the middleware
+    had just admitted on a JWT was refused one layer later — the same mismatch
+    that made the log stream unreachable in a two-tier deployment, repeated
+    across five route modules.
+
+    Deferring to the middleware's verdict when it ran keeps the defence (a
+    request that never passed the middleware still gets the full check) without
+    the contradiction.
+    """
+    return getattr(getattr(request, "state", None), "principal_kind", None) is not None
