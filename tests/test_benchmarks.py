@@ -411,3 +411,71 @@ class TestSecurityOverheadBenchmarks:
             return fw_blocked or score >= shield._HARD_BLOCK_SCORE
 
         assert benchmark(decide) is True
+
+
+class TestRoutingFanoutBenchmarks:
+    """The cost nobody measured.
+
+    Every other benchmark in this file times an in-process pure function, so
+    the published figure — tens of microseconds of deterministic security
+    overhead — described the cheap half of a request while the expensive half
+    went unrecorded. Routing awaited one circuit-breaker call per endpoint,
+    serially, which with Redis is one network round trip each: on a modest pool
+    that dominates everything else the proxy does.
+
+    These use a fake circuit manager with a fixed per-call latency, so the
+    shape is visible as a number without needing a real Redis in CI.
+    """
+
+    _CALL_LATENCY_S = 0.0002  # stand-in for a round trip
+
+    class _SerialManager:
+        """The old shape: one awaited call per endpoint."""
+
+        def __init__(self, latency):
+            self._latency = latency
+
+        async def filter_executable(self, endpoint_ids):
+            import asyncio
+
+            executable = set()
+            for endpoint_id in endpoint_ids:
+                await asyncio.sleep(self._latency)
+                executable.add(endpoint_id)
+            return executable
+
+    class _BatchedManager:
+        """The new shape: one call for the whole set."""
+
+        def __init__(self, latency):
+            self._latency = latency
+
+        async def filter_executable(self, endpoint_ids):
+            import asyncio
+
+            await asyncio.sleep(self._latency)
+            return set(endpoint_ids)
+
+    @staticmethod
+    def _run(manager, count):
+        import asyncio
+
+        ids = [f"ep-{i}" for i in range(count)]
+
+        def go():
+            return asyncio.run(manager.filter_executable(ids))
+
+        return go
+
+    def test_circuit_filter_serial_20_endpoints(self, benchmark):
+        manager = self._SerialManager(self._CALL_LATENCY_S)
+        assert len(benchmark(self._run(manager, 20))) == 20
+
+    def test_circuit_filter_batched_20_endpoints(self, benchmark):
+        manager = self._BatchedManager(self._CALL_LATENCY_S)
+        assert len(benchmark(self._run(manager, 20))) == 20
+
+    def test_circuit_filter_batched_50_endpoints(self, benchmark):
+        """The batched form must be flat in the pool size, not linear."""
+        manager = self._BatchedManager(self._CALL_LATENCY_S)
+        assert len(benchmark(self._run(manager, 50))) == 50

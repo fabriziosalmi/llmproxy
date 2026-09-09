@@ -53,6 +53,9 @@ def _make_admin_app():
 
     agent.circuit_manager = MagicMock()
     agent.circuit_manager.get_all_states = AsyncMock(return_value={})
+    agent.circuit_manager.filter_executable = AsyncMock(
+        side_effect=lambda ids: set(ids)
+    )
 
     agent.negative_cache = MagicMock()
     agent.negative_cache.stats.return_value = {"size": 0, "hits": 0}

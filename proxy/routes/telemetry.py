@@ -289,10 +289,15 @@ def create_router(agent) -> APIRouter:
         now, not the pool as of the last /health poll.
         """
         pool = await agent.store.get_pool()
-        healthy = 0
-        for e in pool:
-            if await (await agent.circuit_manager.get_breaker(e.id)).can_execute():
-                healthy += 1
+        # Batched, and a read rather than a probe. This loop ran one evalsha
+        # per endpoint on every liveness poll — the Dockerfile schedules one
+        # every 30s and Kubernetes wires both probes here — and each of those
+        # could consume the half-open recovery slot a real request was meant
+        # to use. A health check must not be able to move circuit state.
+        executable = await agent.circuit_manager.filter_executable(
+            [e.id for e in pool]
+        )
+        healthy = len(executable)
         MetricsTracker.set_pool_size("healthy", healthy)
         MetricsTracker.set_pool_size("unhealthy", len(pool) - healthy)
         return pool, healthy

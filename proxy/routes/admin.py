@@ -816,16 +816,23 @@ def create_router(agent) -> APIRouter:
             pool = []
             healthy_count = 0
             circuits_open = 0
+            circuit_states: dict = {}
             try:
+                # Fetch once and pass it down. This handler used to build the
+                # state map twice (here and again for the attention list) and
+                # separately probe every breaker in a loop — three passes over
+                # the same information, roughly 3N round trips with Redis, two
+                # thirds of it recomputing a value it already had. The probe
+                # loop was also a mutation: can_execute sets the half-open key,
+                # so rendering a dashboard could spend an endpoint's recovery
+                # probe.
                 pool = await agent.store.get_pool()
-                for e in pool:
-                    breaker = await agent.circuit_manager.get_breaker(e.id)
-                    if await breaker.can_execute():
-                        healthy_count += 1
-
                 circuit_states = await agent.circuit_manager.get_all_states()
                 circuits_open = sum(
                     1 for s in circuit_states.values() if s.get("state") == "open"
+                )
+                healthy_count = len(
+                    await agent.circuit_manager.filter_executable([e.id for e in pool])
                 )
             except Exception as e:
                 logger.warning(f"Error querying pool status for summary: {e}")
@@ -857,9 +864,8 @@ def create_router(agent) -> APIRouter:
             # 2. ATTENTION: prioritized anomalies (TriageIssue list)
             attention = []
 
-            # 2a. Circuit Breakers open/half_open
+            # 2a. Circuit Breakers open/half_open — reusing the map fetched above.
             try:
-                circuit_states = await agent.circuit_manager.get_all_states()
                 for ep_id, state_info in circuit_states.items():
                     st = state_info.get("state", "closed")
                     if st in ("open", "half_open"):

@@ -59,6 +59,11 @@ def _make_mock_agent():
     agent.circuit_manager = MagicMock()
     agent.circuit_manager.get_breaker = AsyncMock(return_value=breaker)
     agent.circuit_manager.get_all_states = AsyncMock(return_value={})
+    # /health and the dashboard batch the circuit read instead of probing each
+    # endpoint; by default every endpoint in the pool is executable.
+    agent.circuit_manager.filter_executable = AsyncMock(
+        side_effect=lambda ids: set(ids)
+    )
 
     # Plugin manager mock — rings is a real dict so /health's iteration works.
     agent.plugin_manager = MagicMock()
