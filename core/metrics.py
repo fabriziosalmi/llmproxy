@@ -100,6 +100,17 @@ AUDIT_PERSISTENCE = Counter(
 # looks like healthy retention rather than a failure. Staleness alerts write
 # themselves: time() - llm_proxy_background_last_success_timestamp{loop=...}
 # greater than a few intervals means that task is not running.
+INSTANCE_COUNT = Gauge(
+    "llm_proxy_instance_count",
+    "Live instances sharing this Redis. More than 1 means the daily budget is "
+    "enforced independently by each and the fleet can overspend.",
+)
+
+LOAD_SHED = Counter(
+    "llm_proxy_load_shed_total",
+    "Requests refused by admission control because the proxy was at capacity",
+)
+
 BACKGROUND_LAST_SUCCESS = Gauge(
     "llm_proxy_background_last_success_timestamp",
     "Unix timestamp of the last successful iteration of a background loop",
@@ -211,6 +222,14 @@ class MetricsTracker:
     @staticmethod
     def track_ring_latency(ring: str, duration: float):
         RING_LATENCY.labels(ring=ring).observe(duration)
+
+    @staticmethod
+    def set_instance_count(count: int):
+        INSTANCE_COUNT.set(count)
+
+    @staticmethod
+    def track_load_shed():
+        LOAD_SHED.inc()
 
     @staticmethod
     def mark_background_iteration(loop: str):
