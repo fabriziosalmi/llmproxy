@@ -10,6 +10,49 @@ from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
+#: Deepest `{`/`[` nesting a request body may contain.
+#
+# Size was bounded and shape was not, so a body far below the byte limit could
+# still be pathological: 100,000 nested arrays is 200 KB — under half the
+# default 512 KB cap — and made json.loads raise RecursionError straight out of
+# the handler, which is an unhandled 500 with a traceback rather than the 400 a
+# malformed body deserves. Counting brackets while the body is already being
+# walked costs nothing and turns it into a refusal.
+#
+# 64 is generous: a chat completion with tool definitions nests maybe ten deep.
+DEFAULT_MAX_NESTING_DEPTH = 64
+
+
+def max_nesting_depth(body: bytes) -> int:
+    """Deepest bracket nesting in `body`, ignoring brackets inside strings.
+
+    A byte scan rather than a parse — it runs before anything has agreed to
+    parse this, which is the point. String tracking matters because a prompt
+    containing "[[[[" is ordinary content, not structure.
+    """
+    depth = 0
+    deepest = 0
+    in_string = False
+    escaped = False
+    for byte in body:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif byte == 0x5C:  # backslash
+                escaped = True
+            elif byte == 0x22:  # closing quote
+                in_string = False
+            continue
+        if byte == 0x22:  # opening quote
+            in_string = True
+        elif byte in (0x7B, 0x5B):  # { [
+            depth += 1
+            if depth > deepest:
+                deepest = depth
+        elif byte in (0x7D, 0x5D):  # } ]
+            depth -= 1
+    return deepest
+
 # Pre-compiled regex for base64 detection (min 20 chars to avoid false positives)
 # Updated to support URL-Safe base64 (-_) and whitespace padding evasion
 _B64_RE = re.compile(rb"[A-Za-z0-9+/\-_=\s]{20,}")
@@ -119,11 +162,13 @@ class ByteLevelFirewallMiddleware:
         max_body_bytes: int = 512 * 1024,
         signature_store=None,
         enabled: bool = True,
+        max_nesting_depth: int = DEFAULT_MAX_NESTING_DEPTH,
     ):
         self.app = app
         self.max_body_bytes = max_body_bytes
         self._signature_store = signature_store
         self.enabled = enabled
+        self.max_nesting_depth = max_nesting_depth
 
     # R2-06: Cyrillic/Greek confusable homoglyphs (NFKC doesn't normalize these).
     # Shared table \u2014 see core.confusables (was duplicated & divergent here).
@@ -412,6 +457,35 @@ class ByteLevelFirewallMiddleware:
                 break
 
         full_body = b"".join(body_parts)
+
+        # Shape, not just size. A body under the byte cap can still be nested
+        # deeply enough to make the JSON parser raise RecursionError out of the
+        # handler — an unhandled 500 on a path any caller can reach.
+        if self.max_nesting_depth and max_nesting_depth(full_body) > (
+            self.max_nesting_depth
+        ):
+            logger.warning(
+                "FIREWALL: body exceeds max nesting depth %d — rejecting",
+                self.max_nesting_depth,
+            )
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 400,
+                    "headers": [
+                        (b"content-type", b"application/json"),
+                        (b"connection", b"close"),
+                    ],
+                }
+            )
+            await send(
+                {
+                    "type": "http.response.body",
+                    "body": b'{"error": "malformed_body", "message": "Request body nesting exceeds the permitted depth"}',
+                    "more_body": False,
+                }
+            )
+            return
 
         _scan_start = time.perf_counter()
         if self.enabled:

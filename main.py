@@ -90,10 +90,19 @@ async def main():
             sentry_dsn=sentry_dsn,
         )
 
-    # Start metrics server (optional)
+    # Start metrics server (optional).
+    #
+    # `bind` defaults to loopback: this listener lives outside the ASGI app, so
+    # no middleware guards it, while it serves the same registry the app puts
+    # behind admin auth. Widen it only where the network restricts the port.
+    from core.metrics import DEFAULT_METRICS_BIND
+
     metrics_cfg = config.get("server", {}).get("metrics", {})
     if metrics_cfg.get("enabled"):
-        start_metrics_server(port=metrics_cfg.get("port", 9091))
+        start_metrics_server(
+            port=metrics_cfg.get("port", 9091),
+            addr=metrics_cfg.get("bind", DEFAULT_METRICS_BIND),
+        )
 
     # Launch the security gateway
     rotator = ProxyOrchestrator(store)
