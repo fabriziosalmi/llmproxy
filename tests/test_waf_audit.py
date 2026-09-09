@@ -272,25 +272,25 @@ class TestPIIInternational:
     def test_international_phone(self):
         """International phone format (+44 20 7946 0958)."""
         text = "Call me at +44 20 7946 0958 please"
-        masked = self.shield._mask_pii_regex(text)
+        masked = self.shield._mask_pii_regex(text, {})
         assert "[PII_PHONE_INTL_" in masked
 
     def test_ipv4_address(self):
         """IPv4 address (192.168.1.100)."""
         text = "The server is at 192.168.1.100 in the DMZ"
-        masked = self.shield._mask_pii_regex(text)
+        masked = self.shield._mask_pii_regex(text, {})
         assert "[PII_IP_ADDRESS_" in masked
 
     def test_api_key(self):
         """API key pattern (sk-abc123...)."""
         text = "My key is sk-proj-abc123def456ghi789jkl012mno345"
-        masked = self.shield._mask_pii_regex(text)
+        masked = self.shield._mask_pii_regex(text, {})
         assert "[PII_API_KEY_" in masked
 
     def test_amex_credit_card(self):
         """Amex 15-digit card (3782 822463 10005)."""
         text = "Card: 3782 822463 10005"
-        masked = self.shield._mask_pii_regex(text)
+        masked = self.shield._mask_pii_regex(text, {})
         assert "[PII_CREDIT_CARD_" in masked
 
 
@@ -349,5 +349,5 @@ class TestFalsePositives:
         """Version numbers like 1.2.3.4 should not be flagged as IP."""
         shield = SecurityShield({"security": {"enabled": True}})
         text = "We upgraded to version 1.2.3"
-        masked = shield._mask_pii_regex(text)
+        masked = shield._mask_pii_regex(text, {})
         assert masked == text, f"Version number false positive: {masked}"

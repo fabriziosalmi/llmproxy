@@ -142,7 +142,12 @@ class LightweightAgent:
         pass
 
     def _get_api_keys(self):
-        return []
+        # Read the configured bag the way the real orchestrator does, so a
+        # test that enables auth can actually authenticate. Returns [] when
+        # LLM_PROXY_API_KEYS is unset, which is the common case here.
+        from proxy.auth_helpers import resolve_api_keys
+
+        return resolve_api_keys(self.config)
 
     def _verify_api_key(self, token: str) -> bool:
         import hmac as _hmac
@@ -155,6 +160,17 @@ class LightweightAgent:
             if _hmac.compare_digest(tb, k.encode("utf-8", errors="replace")):
                 matched = True
         return matched
+
+    def _verify_admin_key(self, token: str) -> bool:
+        """Mirrors RotatorAgent._verify_admin_key.
+
+        The double lacked this entirely, so any test that enabled auth hit an
+        AttributeError instead of an authorization decision — part of why the
+        control-plane key tier went unexercised for so long.
+        """
+        from proxy.auth_helpers import verify_admin_key
+
+        return verify_admin_key(token, self.config)
 
     async def _add_log(self, message, level="INFO", metadata=None):
         """Lightweight log — mirrors RotatorAgent._add_log."""
