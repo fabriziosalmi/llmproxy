@@ -24,9 +24,22 @@ WORKDIR /app
 # Non-root user
 RUN groupadd -r llmproxy && useradd -r -g llmproxy llmproxy
 
-# Install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies from the hash-pinned lock.
+#
+# requirements.txt is the input manifest — 25 packages, 19 == pinned and six
+# open-ended — and installing from it directly meant the 27 TRANSITIVE packages
+# beneath were resolved fresh on every build, with nothing recording what was
+# chosen. Two builds of the same commit weeks apart contained different code,
+# the pip-audit that passed on Monday said nothing about Friday's image, and
+# there was no artefact anyone could diff to find out what changed.
+#
+# --require-hashes also closes registry substitution: a tampered wheel fails
+# the hash rather than being trusted on TLS alone. Regenerate with
+#   uv pip compile requirements.txt --generate-hashes \
+#     --python-version 3.12 --python-platform linux -o requirements.lock
+# which CI verifies is in sync.
+COPY requirements.txt requirements.lock ./
+RUN pip install --no-cache-dir --require-hashes -r requirements.lock
 
 # Supply chain verification: scan for malicious .pth files post-install
 # Defense against litellm-style attacks (2026-03-24)
