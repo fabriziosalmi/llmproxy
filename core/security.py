@@ -245,12 +245,13 @@ class SecurityShield:
         if not self.enabled:
             return text
 
-        if vault is None:
-            vault = self.pii_vault
+        # Explicit local so the type is Dict rather than Optional[Dict]; the
+        # process-wide vault is a TTLCache, which is dict-like but not a Dict.
+        store: Dict[str, str] = self.pii_vault if vault is None else vault
 
         if _PRESIDIO_AVAILABLE:
-            return self._mask_pii_presidio(text, vault)
-        return self._mask_pii_regex(text, vault)
+            return self._mask_pii_presidio(text, store)
+        return self._mask_pii_regex(text, store)
 
     def _mask_pii_presidio(self, text: str, vault: Dict[str, str]) -> str:
         """NLP-based PII masking via Presidio — detects names, addresses, IBANs, etc."""
@@ -309,11 +310,10 @@ class SecurityShield:
         """
         if not self.enabled:
             return text
-        if vault is None:
-            vault = self.pii_vault
+        store: Dict[str, str] = self.pii_vault if vault is None else vault
         # Snapshot items before iterating — a TTLCache may evict entries during
         # iteration, which raises RuntimeError in some cachetools versions.
-        for token, original in list(vault.items()):
+        for token, original in list(store.items()):
             if token in text:
                 text = text.replace(token, original)
         return text

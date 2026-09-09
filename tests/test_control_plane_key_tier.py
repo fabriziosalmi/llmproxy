@@ -9,8 +9,10 @@ key, as did the webhook configuration, the plugin inventory and the RBAC role
 matrix, in deployments that had correctly segregated the two bags.
 
 The middleware now verifies the admin bag, so the tier is enforced structurally
-rather than per handler. This walks the registered routes instead of listing
-them, so a route added later is covered without anyone remembering to add it.
+rather than per handler. The sweep reads the OpenAPI schema rather than a hand
+list, so a route added later is covered without anyone remembering to add it —
+backed by an explicit list of the most sensitive reads, so the assertion still
+means something if discovery ever breaks.
 """
 
 import httpx
@@ -73,19 +75,42 @@ async def client(agent):
         yield c
 
 
-def _control_plane_get_paths(agent) -> list[str]:
-    """Registered GET routes under /api/v1/ that take no path parameter.
+# Control-plane reads that must never answer an inference key, named
+# explicitly. The sweep below covers more, but these are pinned by hand so the
+# test still asserts something meaningful if route introspection ever changes
+# shape — which is exactly what happened once: reading app.routes worked on
+# fastapi 0.135 and returned nothing on 0.141.
+SENSITIVE_PATHS = [
+    "/api/v1/registry",  # every upstream URL
+    "/api/v1/webhooks",  # alerting configuration
+    "/api/v1/plugins",  # extension inventory
+    "/api/v1/rbac/roles",  # the role matrix
+    "/api/v1/security/corpus",  # detection signatures
+    "/api/v1/audit/verify",  # tamper-evidence state
+    "/api/v1/gdpr/retention",
+    "/api/v1/cache/stats",
+    "/api/v1/metrics/latency",
+    "/api/v1/config/raw",  # the whole config, including endpoint definitions
+]
 
-    Parameterised routes are excluded only because a synthetic id would make
-    the assertion about the handler's 404 rather than about the middleware.
+
+def _control_plane_get_paths(agent) -> list[str]:
+    """GET paths under /api/v1/ that take no path parameter.
+
+    Read from the OpenAPI schema rather than from app.routes: the schema is a
+    documented, version-stable surface, while the internal route objects are
+    not — an earlier version of this helper walked app.routes and silently
+    matched nothing under a newer FastAPI, which the guard test caught.
+
+    Parameterised paths are excluded because a synthetic id would make the
+    assertion about the handler's 404 rather than about the middleware.
     """
     from proxy.app_factory import _PUBLIC_EXACT
 
+    schema = agent.app.openapi()
     paths = []
-    for route in agent.app.routes:
-        path = getattr(route, "path", "")
-        methods = getattr(route, "methods", set()) or set()
-        if not path.startswith("/api/v1/") or "GET" not in methods:
+    for path, operations in schema.get("paths", {}).items():
+        if not path.startswith("/api/v1/") or "get" not in operations:
             continue
         if "{" in path or path in _PUBLIC_EXACT:
             continue
@@ -94,9 +119,20 @@ def _control_plane_get_paths(agent) -> list[str]:
 
 
 @pytest.mark.asyncio
-async def test_there_are_control_plane_routes_to_check(agent):
-    """Guard the guard: an empty sweep would make the next test vacuous."""
-    assert len(_control_plane_get_paths(agent)) >= 10
+async def test_the_sweep_actually_finds_routes(agent):
+    """Guard the guard: an empty sweep would make the next test vacuous.
+
+    This is not hypothetical — the first version of the helper read app.routes
+    and matched nothing under the FastAPI version CI installs, so the sweep
+    passed by testing zero routes.
+    """
+    found = _control_plane_get_paths(agent)
+    assert len(found) >= 10, (
+        f"route discovery found {len(found)} control-plane GET paths; "
+        f"the sweep below would be vacuous. Found: {found}"
+    )
+    missing = [p for p in SENSITIVE_PATHS if p not in found]
+    assert not missing, f"discovery missed known control-plane paths: {missing}"
 
 
 @pytest.mark.asyncio
@@ -117,12 +153,20 @@ async def test_no_control_plane_route_accepts_an_inference_key(client, agent):
 
 
 @pytest.mark.asyncio
-async def test_the_registry_does_not_hand_upstream_urls_to_a_client_key(client):
-    """The sharpest instance, pinned on its own so the reason survives."""
-    resp = await client.get(
-        "/api/v1/registry", headers={"Authorization": f"Bearer {INFERENCE_KEY}"}
+async def test_the_named_sensitive_reads_refuse_an_inference_key(client):
+    """The same claim without relying on discovery at all."""
+    leaked = []
+    for path in SENSITIVE_PATHS:
+        resp = await client.get(
+            path, headers={"Authorization": f"Bearer {INFERENCE_KEY}"}
+        )
+        if resp.status_code not in (401, 403):
+            leaked.append(f"{path} -> {resp.status_code}")
+
+    assert not leaked, (
+        "sensitive control-plane reads answered an inference key:\n  "
+        + "\n  ".join(leaked)
     )
-    assert resp.status_code in (401, 403)
 
 
 @pytest.mark.asyncio
