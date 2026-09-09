@@ -84,11 +84,19 @@ async def select_endpoint(ctx: PluginContext):
         ctx.stop_chain = True
         return
 
-    # Filter to endpoints with CLOSED/HALF_OPEN circuit breakers
-    healthy = []
-    for e in pool:
-        if await (await rotator.circuit_manager.get_breaker(e.id)).can_execute():
-            healthy.append(e)
+    # Filter to endpoints with CLOSED/HALF_OPEN circuit breakers.
+    #
+    # One batched read for the whole pool. This used to await
+    # get_breaker(e.id).can_execute() per endpoint — with Redis, one evalsha
+    # each, serially — so the latency every request paid before the upstream
+    # call was even attempted grew linearly with how many endpoints the
+    # operator had registered. can_execute also MUTATES: its Lua script sets
+    # the half-open probe key, so probing every candidate spent the single
+    # recovery probe on endpoints that were never going to be chosen. The
+    # winner still goes through can_execute in the forwarder, which is where a
+    # probe belongs.
+    executable = await rotator.circuit_manager.filter_executable([e.id for e in pool])
+    healthy = [e for e in pool if e.id in executable]
     if not healthy:
         ctx.error = "All endpoints offline (circuit OPEN)."
         ctx.stop_chain = True

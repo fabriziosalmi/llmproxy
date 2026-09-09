@@ -319,6 +319,15 @@ class CircuitManager:
         self._on_state_change = on_state_change
         self._lock = asyncio.Lock()
 
+        # Thresholds live on the manager as well as on each breaker, for two
+        # reasons: filter_executable needs the recovery timeout to decide
+        # whether an open circuit is due for a probe without opening one, and
+        # a breaker created after startup used to get the hard-coded 5/60
+        # defaults until the config watcher next fired and patched it.
+        cb_cfg = (config or {}).get("circuit_breaker", {}) or {}
+        self.failure_threshold: int = cb_cfg.get("failure_threshold", 5)
+        self.recovery_timeout: int = cb_cfg.get("recovery_timeout", 60)
+
         self.redis_client = redis_client
         self.scripts = {}  # type: ignore
         if self.redis_client is None and redis_url and redis:
@@ -351,14 +360,87 @@ class CircuitManager:
                         self.redis_client,
                         self.scripts,
                         name=endpoint_id,
+                        failure_threshold=self.failure_threshold,
+                        recovery_timeout=self.recovery_timeout,
                         on_state_change=self._on_state_change
                     )
                 else:
                     self._circuits[endpoint_id] = LocalCircuitBreaker(
                         name=endpoint_id,
+                        failure_threshold=self.failure_threshold,
+                        recovery_timeout=self.recovery_timeout,
                         on_state_change=self._on_state_change
                     )
             return self._circuits[endpoint_id]
+
+    async def filter_executable(self, endpoint_ids: list) -> set:
+        """Which of `endpoint_ids` would currently admit a request.
+
+        One round trip for the whole set instead of one per endpoint. The
+        routing ring called `get_breaker(id).can_execute()` in a loop for every
+        request, which with Redis is one evalsha each, awaited serially — so
+        pre-upstream latency scaled linearly with how many endpoints an operator
+        had registered, and the project's own benchmarks put the entire
+        deterministic security pipeline at tens of microseconds against a
+        millisecond-scale round trip performed N times.
+
+        It is also the right call rather than merely the cheaper one.
+        `can_execute` is not a read: its Lua script SETS the half-open probe
+        key when the recovery timeout has elapsed, so probing every candidate
+        consumed the single probe slot for endpoints that were never going to
+        be chosen — and /health and the dashboard did the same on every poll.
+        This reads state and decides locally; the winner still goes through
+        `can_execute` in the forwarder, which is where a probe should be spent.
+        """
+        if not endpoint_ids:
+            return set()
+
+        if not self.redis_client:
+            executable = set()
+            for endpoint_id in endpoint_ids:
+                breaker = await self.get_breaker(endpoint_id)
+                if await breaker.can_execute():
+                    executable.add(endpoint_id)
+            return executable
+
+        now = time.time()
+        keys: list = []
+        for endpoint_id in endpoint_ids:
+            keys.extend(
+                (
+                    f"cb:{endpoint_id}:state",
+                    f"cb:{endpoint_id}:last",
+                )
+            )
+        try:
+            values = await self.redis_client.mget(*keys)
+        except Exception as e:
+            # Same degradation the per-breaker path takes: a Redis problem
+            # must not make every endpoint look unavailable.
+            logger.warning(f"Circuit state batch read failed: {e}. Falling back.")
+            executable = set()
+            for endpoint_id in endpoint_ids:
+                breaker = await self.get_breaker(endpoint_id)
+                if await breaker.can_execute():
+                    executable.add(endpoint_id)
+            return executable
+
+        executable = set()
+        for i, endpoint_id in enumerate(endpoint_ids):
+            state = values[2 * i] or "closed"
+            last_failure = float(values[2 * i + 1] or 0)
+            if state == "closed":
+                executable.add(endpoint_id)
+            elif state == "half_open":
+                # A probe is already in flight or due; let the forwarder's own
+                # can_execute decide whether this request is the probe.
+                executable.add(endpoint_id)
+            elif state == "open" and (now - last_failure) > self.recovery_timeout:
+                # Due to transition. Admitting it here is what makes recovery
+                # happen at all — the transition itself is still performed
+                # atomically by the Lua script in the forwarder.
+                executable.add(endpoint_id)
+        return executable
 
     async def get_all_states(self) -> dict:
         result = {}
