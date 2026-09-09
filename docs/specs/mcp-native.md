@@ -2,7 +2,16 @@
 
 | Status     | Author | Created    | Last review | Target | Owners      |
 | ---------- | ------ | ---------- | ----------- | ------ | ----------- |
-| REVIEWED-1 | fab    | 2026-05-20 | 2026-05-20  | 1.22.0 | @fab (solo) |
+| DEFERRED   | fab    | 2026-05-20 | 2026-09-09  | none   | @fab (solo) |
+
+> **Status, 2026-09-09 — DEFERRED, not shipped.** The target below was 1.22.0.
+> The project is at 1.34.0 and no MCP code exists in `core/`, `proxy/`,
+> `plugins/` or `store/`. Nothing here has been built. The design still stands
+> and the review changelog is worth keeping, but the table said REVIEWED-1
+> against a release that had long since shipped without it, so a reader — or
+> anyone evaluating whether this proxy speaks MCP — would reasonably conclude
+> it had landed. Re-target it before starting work rather than leaving a date
+> in the past.
 
 > **Review 1 changelog (2026-05-20)** — Timeline reframed to 3–4 weeks for a
 > solo dev (was 2 weeks, optimistic). Streaming-tool-call state machine

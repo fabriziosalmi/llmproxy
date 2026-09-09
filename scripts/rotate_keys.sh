@@ -10,10 +10,17 @@
 #   • LLM_PROXY_API_KEYS        (128-bit, client auth token)
 #
 # Usage:
-#   ./scripts/rotate_secrets.sh              # interactive (confirm before write)
-#   ./scripts/rotate_secrets.sh --apply      # non-interactive (CI/cron safe)
-#   ./scripts/rotate_secrets.sh --dry-run    # preview only, no writes
-#   ./scripts/rotate_secrets.sh --env /path  # custom .env location
+#   ./scripts/rotate_secrets.sh                # interactive (confirm before write)
+#   ./scripts/rotate_secrets.sh --apply        # non-interactive (CI/cron safe)
+#   ./scripts/rotate_secrets.sh --dry-run      # preview only, no writes
+#   ./scripts/rotate_secrets.sh --env /path    # custom .env location
+#   ./scripts/rotate_secrets.sh --retire-old   # drop the previous client keys
+#
+# Client-key rotation is TWO steps by default. The first run prepends the new
+# key and keeps the old ones valid, so consumers can move without an outage;
+# --retire-old on a later run drops everything but the newest. Overwriting the
+# bag in one step — which is what this used to do — makes rotation a hard
+# cutover for every SDK consumer at the moment of restart.
 #
 # Safety:
 #   • Atomic write via tmp+mv (no partial .env on crash)
@@ -26,7 +33,8 @@
 #   1. Restart the proxy to pick up new keys
 #   2. If MASTER_KEY changed, delete .llmproxy_salt to force salt regen
 #      (existing Fernet-encrypted values become undecryptable — expected)
-#   3. Distribute new LLM_PROXY_API_KEYS to all SDK consumers
+#   3. Distribute the new LLM_PROXY_API_KEYS entry to SDK consumers, then
+#      re-run with --retire-old once they have all moved
 #   4. If using Infisical, update the vault values instead of .env
 #
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -53,12 +61,14 @@ _fatal() { _err "$@"; exit 1; }
 # ── Argument parsing ────────────────────────────────────────────────────
 MODE="interactive"     # interactive | apply | dry-run
 ENV_FILE=""            # auto-detect if empty
+RETIRE_OLD="false"     # keep previous client keys valid unless asked not to
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --apply)    MODE="apply";   shift ;;
-        --dry-run)  MODE="dry-run"; shift ;;
-        --env)      ENV_FILE="$2";  shift 2 ;;
+        --apply)      MODE="apply";   shift ;;
+        --dry-run)    MODE="dry-run"; shift ;;
+        --env)        ENV_FILE="$2";  shift 2 ;;
+        --retire-old) RETIRE_OLD="true"; shift ;;
         -h|--help)
             sed -n '2,/^$/s/^# \?//p' "$0"
             exit 0
@@ -202,12 +212,32 @@ _update_or_append() {
     fi
 }
 
+# Put the new key at the FRONT of the existing comma-separated bag, keeping
+# the old ones valid. --retire-old drops everything but the newest.
+_prepend_api_key() {
+    local value="$1" file="$2"
+    local existing=""
+    if grep -qE "^LLM_PROXY_API_KEYS=" "$file"; then
+        existing=$(grep -E "^LLM_PROXY_API_KEYS=" "$file" | head -1 | cut -d= -f2-)
+    fi
+    if [[ "$RETIRE_OLD" == "true" || -z "$existing" ]]; then
+        _update_or_append "LLM_PROXY_API_KEYS" "$value" "$file"
+    else
+        _update_or_append "LLM_PROXY_API_KEYS" "${value},${existing}" "$file"
+    fi
+}
+
 cp "$ENV_FILE" "$TMP_ENV"
 
 _update_or_append "LLM_PROXY_MASTER_KEY"        "$NEW_MASTER_KEY"        "$TMP_ENV"
 _update_or_append "LLM_PROXY_IDENTITY_SECRET"   "$NEW_IDENTITY_SECRET"   "$TMP_ENV"
 _update_or_append "LLM_PROXY_FEDERATION_SECRET" "$NEW_FEDERATION_SECRET" "$TMP_ENV"
-_update_or_append "LLM_PROXY_API_KEYS"          "$NEW_API_KEY"           "$TMP_ENV"
+# APPEND, do not replace. The bag is a comma-separated list precisely so a
+# rotation can have an overlap window, and this used to overwrite it with a
+# single key — so every existing client died at the restart and the operator
+# had a hard cutover with no staging. The new key goes first; retire the old
+# one with --retire-old once consumers have moved.
+_prepend_api_key "$NEW_API_KEY" "$TMP_ENV"
 
 # Verify the tmp file has all 4 keys with non-empty values
 _verify_key() {
@@ -235,7 +265,18 @@ _ok "Secrets written to $ENV_FILE"
 echo ""
 
 # ── Salt file warning ────────────────────────────────────────────────────
-SALT_FILE="$PROJECT_ROOT/.llmproxy_salt"
+# Resolve the salt the way core/secrets.py does. This used to hardcode
+# "$PROJECT_ROOT/.llmproxy_salt" — the location the salt moved AWAY from in
+# 1.34.0 — so on any install created since, the file did not exist and the
+# entire warning block below was skipped silently. An operator rotating the
+# master key got a success banner and no mention of the salt at all.
+if [[ -n "${LLM_PROXY_SALT_PATH:-}" ]]; then
+    SALT_FILE="$LLM_PROXY_SALT_PATH"
+elif [[ -f "$PROJECT_ROOT/data/.llmproxy_salt" ]]; then
+    SALT_FILE="$PROJECT_ROOT/data/.llmproxy_salt"
+else
+    SALT_FILE="$PROJECT_ROOT/.llmproxy_salt"   # legacy location, still honoured
+fi
 if [[ -f "$SALT_FILE" ]]; then
     echo -e "${YLW}┌─────────────────────────────────────────────────────────┐${RST}"
     echo -e "${YLW}│  ⚠  MASTER_KEY changed — PBKDF2 salt action needed     │${RST}"

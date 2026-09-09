@@ -33,11 +33,32 @@ docker build -t llmproxy .
 docker run -d \
   --name llmproxy \
   -p 8090:8090 \
+  -v llmproxy-data:/app/data \
   -v ./config.yaml:/app/config.yaml:ro \
-  -v ./plugins:/app/plugins:ro \
+  -v ./plugins:/app/plugins/bundled:ro \
+  -v llmproxy-plugins:/app/plugins/installed \
   --env-file .env \
   llmproxy
 ```
+
+Three of those volumes are not optional, and this recipe used to have none of
+them:
+
+- **`/app/data`** holds the only state that cannot be reconstructed — see
+  [Backups](#backups) below. Without this mount it lives in the container's
+  writable layer and is destroyed by the next `docker rm`, image update or
+  recreate. That is the loss recorded in the 1.33.0 changelog as a production
+  incident, and this command reproduced it.
+- **`/app/plugins/bundled`** read-only, **not** `/app/plugins`. Plugin install
+  writes into `plugins/installed`, so mounting the whole tree read-only makes
+  `POST /api/v1/plugins/install` fail on a read-only filesystem.
+- **`llmproxy-plugins`** is that writable half. `docker-compose.yml` has had
+  this split for some time; this section did not.
+
+Use a **named volume** rather than a host bind mount for `/app/data` unless you
+chown it first: the container runs as uid 999, and a root-owned bind mount
+fails at startup with `sqlite3.OperationalError: unable to open database file`
+rather than a message naming ownership.
 
 ## Environment Variables
 
@@ -45,7 +66,9 @@ All sensitive values are loaded via environment variables (with optional Infisic
 
 | Variable | Description |
 |----------|-------------|
-| `LLM_PROXY_API_KEYS` | Comma-separated proxy API keys |
+| `LLM_PROXY_API_KEYS` | Inference Bearer keys — what `/v1/*` accepts. Required when auth is on. |
+| `LLM_PROXY_ADMIN_KEYS` | Control-plane Bearer keys — the only keys `/api/v1/*` and `/admin/*` accept. **Unset means every inference key can apply configuration, install plugins and purge the audit log**; the proxy warns at startup but still boots. |
+| `LLM_PROXY_DEV_MODE` | `1` disables authentication entirely, with a warning naming itself. Local development only. |
 | `LLM_PROXY_MASTER_KEY` | Encryption master key |
 | `LLM_PROXY_IDENTITY_SECRET` | Internal JWT signing key |
 | `OPENAI_API_KEY` | OpenAI provider key |
@@ -187,6 +210,49 @@ systemctl start llmproxy
 The round trip is exercised in `tests/test_backup_db.py` — the backup is taken,
 the live database is deleted, the backup is restored and the rows are asserted
 to have survived. An untested restore is not a backup.
+
+## Upgrading and rolling back
+
+Upgrade by moving the image tag (`docker compose pull && docker compose up -d`)
+or by `helm upgrade`. Read the CHANGELOG entry for the target release first:
+where a release moves state, it carries an **Upgrading** paragraph naming the
+procedure — 1.34.0's chart PVC is the recent example.
+
+**Rolling back is redeploying the previous tag and keeping the volume.** The
+question that makes this non-obvious is whether an older binary can open a
+database a newer one has migrated, and the answer is yes:
+
+- Migrations are declared once in `store/schema.py` for both SQLite and
+  Postgres, applied at startup, and recorded in a `_migrations` table so a
+  migration is never applied twice.
+- Every one of them is **additive** — new tables and new columns, never a drop
+  or a rename. Readers either name their columns (`SELECT id, url, status, …
+  FROM endpoints`) or select into a row mapping, so a column an older binary
+  has never heard of becomes an unused key rather than an error.
+- The `_migrations` table is likewise unknown to an older binary, which simply
+  does not read it. Re-upgrading later re-applies nothing, because the newer
+  binary finds its migrations already recorded.
+
+So:
+
+```bash
+# Compose
+docker compose down
+# edit the image tag back to the previous release
+docker compose up -d
+
+# Kubernetes — the PVC is retained across a rollback
+helm rollback llmproxy
+```
+
+Do **not** delete the PVC or the `llmproxy-data` volume to "clean up" a bad
+upgrade. That destroys the audit chain and the spend ledger, which no rollback
+restores; if the database itself is the problem, restore a backup instead —
+see [Backups](#backups).
+
+The floor is **1.33.0**: before it the store lived outside `data/` and the
+encryption salt outside the volume, so rolling back past it moves where the
+proxy looks for its own state.
 
 ## Observability Setup
 
