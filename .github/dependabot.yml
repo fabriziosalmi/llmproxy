@@ -32,6 +32,19 @@ updates:
       - dependencies
       - frontend
 
+  # Base images are digest-pinned in the Dockerfile, so patches arrive only
+  # through this. Without it, pinning would trade a moving base for a frozen
+  # one — the worse of the two.
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 2
+    labels:
+      - dependencies
+      - docker
+
   - package-ecosystem: github-actions
     directory: "/"
     schedule:

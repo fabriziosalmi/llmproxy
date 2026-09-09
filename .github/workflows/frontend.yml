@@ -36,6 +36,30 @@ jobs:
       - run: npm run lint
       - run: npm run format:check
 
+  audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ui/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      # Scoped to production dependencies deliberately. The UI has exactly one
+      # (highlight.js), so this is quiet by construction — which is the point:
+      # an unscoped audit against this much dev tooling is permanent noise, and
+      # a noisy gate gets switched off. That is presumably why every npm ci in
+      # this repository passes --no-audit and why nothing scanned JavaScript at
+      # all, leaving 316 packages watched only by Dependabot's advisory PRs.
+      - name: npm audit (production dependencies)
+        run: npm audit --omit=dev --audit-level=high
+      # Dev advisories are signal, not a gate.
+      - name: npm audit (all, informational)
+        continue-on-error: true
+        run: npm audit --audit-level=high
+
   typecheck:
     name: TypeScript
     runs-on: ubuntu-latest
