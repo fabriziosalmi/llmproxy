@@ -28,7 +28,7 @@
     "@typescript-eslint/eslint-plugin": "^8.18.0",
     "@typescript-eslint/parser": "^8.60.1",
     "@vitest/coverage-v8": "^4.1.8",
-    "autoprefixer": "^10.4.20",
+    "autoprefixer": "^10.5.5",
     "eslint": "^9.17.0",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.6.0",
