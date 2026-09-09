@@ -8,14 +8,56 @@ Falls back to environment variables only in development mode.
 import os
 import logging
 import threading
+import time
 from typing import Optional, Dict
 
 logger = logging.getLogger(__name__)
 
 # Lazy-loaded SDK client (thread-safe)
 _client = None
-_secrets_cache: Dict[str, str] = {}
+
+#: Resolved secrets, with the monotonic deadline each entry expires at.
+#
+# This used to be a permanent memo: a value resolved once was returned for the
+# life of the process, with no expiry and no refresh. Every authentication
+# decision reads the key bag through it, so the answer to "how do I take this
+# key away" was "restart the proxy" — deleting the variable did nothing,
+# rotating it in Infisical did nothing, and the config hot-reload did nothing
+# either, because the reload re-reads the same cached name. For a gateway whose
+# keys are handed to application teams, a leaked key stayed live until someone
+# could take an outage.
+#
+# clear_cache() existed and its docstring said it was "useful for rotation",
+# but nothing in the running system called it — only tests.
+_secrets_cache: Dict[str, tuple] = {}
 _lock = threading.Lock()
+
+#: How long a resolved secret is reused before being read again.
+#
+# 30 seconds is invisible against the cost of an os.environ lookup and bounds
+# how long a revoked key keeps working. It exists mainly to avoid hammering the
+# Infisical SDK, which is a network call; the environment fallback would be
+# fine with no cache at all.
+DEFAULT_CACHE_TTL_S = 30.0
+
+
+def _cache_ttl() -> float:
+    """TTL in seconds. 0 or less disables caching entirely."""
+    raw = os.environ.get("LLM_PROXY_SECRET_CACHE_TTL")
+    if raw is None:
+        return DEFAULT_CACHE_TTL_S
+    try:
+        return float(raw)
+    except ValueError:
+        # The value is deliberately not echoed. Everything else this module
+        # reads from the environment is a secret, and a habit of logging env
+        # values verbatim here is how one eventually ends up in a log line —
+        # which is also why CodeQL flags it.
+        logger.warning(
+            "LLM_PROXY_SECRET_CACHE_TTL is not a number — using %.0fs",
+            DEFAULT_CACHE_TTL_S,
+        )
+        return DEFAULT_CACHE_TTL_S
 
 
 def _get_client():
@@ -88,10 +130,15 @@ def get_secret(
     Raises:
         RuntimeError: If required=True and the secret cannot be resolved.
     """
-    # Check cache first (thread-safe read)
-    with _lock:
-        if key in _secrets_cache:
-            return _secrets_cache[key]
+    # Check cache first (thread-safe read). An expired entry is treated as
+    # absent, so the value is re-read below.
+    ttl = _cache_ttl()
+    if ttl > 0:
+        now = time.monotonic()
+        with _lock:
+            entry = _secrets_cache.get(key)
+            if entry is not None and entry[1] > now:
+                return entry[0]
 
     value = None
 
@@ -130,9 +177,9 @@ def get_secret(
         value = default
 
     # Cache resolved value (thread-safe write)
-    if value is not None:
+    if value is not None and ttl > 0:
         with _lock:
-            _secrets_cache[key] = value
+            _secrets_cache[key] = (value, time.monotonic() + ttl)
 
     return value
 

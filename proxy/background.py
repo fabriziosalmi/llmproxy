@@ -85,6 +85,15 @@ async def config_watch_loop(agent, interval: int = 30):
                     invalidate_provider_cache()
                 except ImportError:
                     pass
+                # Re-read secrets on the next request. A config reload that
+                # changes api_keys_env, or an operator who has just rotated a
+                # key, should take effect now rather than at the next restart.
+                try:
+                    from core.infisical import clear_cache as _clear_secret_cache
+
+                    _clear_secret_cache()
+                except ImportError:
+                    pass
                 logger.info("Config hot-reloaded (security, circuits, cache, plugins)")
             # Signature hot-reload (independent of config hash)
             if hasattr(agent, "signature_store") and agent.signature_store:
