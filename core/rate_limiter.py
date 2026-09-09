@@ -157,7 +157,13 @@ class RateLimiter:
 
     _MAX_BUCKETS = 50_000  # Prevent memory exhaustion from IP spray
 
-    def __init__(self, default_capacity: int = 60, default_rate: float = 1.0, redis_url: Optional[str] = None):
+    def __init__(
+        self,
+        default_capacity: int = 60,
+        default_rate: float = 1.0,
+        redis_url: Optional[str] = None,
+        config: Optional[Dict] = None,
+    ):
         self.default_capacity = float(default_capacity)
         self.default_rate = float(default_rate)
         self._buckets: OrderedDict[str, TokenBucket] = OrderedDict()
@@ -168,7 +174,12 @@ class RateLimiter:
         self._redis_script_sha = None
 
         if redis_url and redis:
-            self.redis_client = redis.from_url(redis_url, decode_responses=True)
+            from core.redis_client import connect as _redis_connect
+
+            # Timeouts, so a slow Redis raises instead of hanging the bucket
+            # acquire in the outermost middleware. The local-RAM fallback below
+            # catches the resulting TimeoutError; it never caught a hang.
+            self.redis_client = _redis_connect(redis, redis_url, config)
             logger.info(f"RateLimiter configured with Redis backend: {redis_url}")
         elif redis_url and not redis:
             logger.warning("Redis URL provided for rate limiting but 'redis' package is not installed. Falling back to local RAM.")
@@ -257,7 +268,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         capacity = rpm + burst
         rate = rpm / 60.0  # tokens per second
         redis_url = cfg.get("redis_url")
-        self.limiter = RateLimiter(default_capacity=capacity, default_rate=rate, redis_url=redis_url)
+        self.limiter = RateLimiter(
+            default_capacity=capacity,
+            default_rate=rate,
+            redis_url=redis_url,
+            config=config,
+        )
         self.exempt_paths = set(cfg.get("exempt_paths", ["/health", "/metrics"]))
         # Active preset name — None means "raw config values, no preset applied".
         self.preset: Optional[str] = None

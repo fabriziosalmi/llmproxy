@@ -7,9 +7,16 @@ security headers, and graceful shutdown hook.
 Auth model — Fail-Closed (Secure by Default)
 ─────────────────────────────────────────────
 When auth is enabled, the global_admin_auth middleware enforces
-authentication on ALL paths under /api/v1/* and /admin/* PLUS the
+ADMIN authentication on ALL paths under /api/v1/* and /admin/* PLUS the
 sensitive root-level paths listed in _ALSO_PROTECT, BEFORE any route
 handler runs.
+
+Admin, not merely authenticated: the middleware verifies the token
+against LLM_PROXY_ADMIN_KEYS, falling back to the inference bag only
+when no admin keys are configured. So the control plane is closed to an
+ordinary client key by default rather than by each handler remembering
+to close it — the gap that left seventeen routes readable with any
+inference key while the two-tier design looked intact.
 
 Only paths in _PUBLIC_EXACT are reachable without credentials.  Any
 new route added under a protected prefix is automatically denied unless
@@ -195,9 +202,22 @@ def create_app(agent) -> FastAPI:
 
     # ── Global fail-closed auth middleware ──────────────────────────────────
     # Runs BEFORE any route handler. Rejects requests to protected paths that
-    # lack a valid API key. New routes under /api/v1/ or /admin/ are denied
-    # automatically — no per-route _check_admin_auth() needed for protection
-    # (those closures remain as defence-in-depth only).
+    # lack a valid ADMIN credential. New routes under /api/v1/ or /admin/ are
+    # denied automatically — no per-route _check_admin_auth() needed for
+    # protection (those closures remain as defence-in-depth only).
+    #
+    # The tier matters as much as the check. This used to call
+    # _verify_api_key, i.e. the *inference* key bag, so the middleware proved
+    # only that the caller held some valid key — and the inference/admin
+    # separation existed solely in the per-route _check_admin_auth() closures.
+    # Seventeen control-plane routes never called one, so an ordinary client
+    # key read the endpoint registry with every upstream URL, the webhook
+    # configuration, the plugin inventory and the RBAC role matrix, even in a
+    # deployment that had correctly set LLM_PROXY_ADMIN_KEYS. Verifying the
+    # admin bag here inverts the default: a new control-plane route is
+    # admin-only unless someone deliberately opts it down by adding it to
+    # _PUBLIC_EXACT. verify_admin_key falls back to the inference bag when no
+    # admin keys are configured, so single-tier deployments are unaffected.
     @app.middleware("http")
     async def global_admin_auth(request: Request, call_next):
         auth_enabled_live = (
@@ -228,7 +248,7 @@ def create_app(agent) -> FastAPI:
                 if request.query_params.get("sse_token"):
                     return await call_next(request)
                 token = request.query_params.get("token", "")
-            if not agent._verify_api_key(token):
+            if not agent._verify_admin_key(token):
                 from fastapi.responses import JSONResponse
 
                 logger.warning(

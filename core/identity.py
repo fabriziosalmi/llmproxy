@@ -16,6 +16,7 @@ Architecture:
   - RBAC integration maps JWT claims to internal roles
 """
 
+import asyncio
 import time
 import logging
 import aiohttp
@@ -31,6 +32,12 @@ logger = logging.getLogger(__name__)
 
 # JWKS cache TTL (seconds)
 JWKS_CACHE_TTL = 3600
+
+# How long a JWKS fetch may take before it is abandoned. PyJWT's own default is
+# 30 s; the fetch runs off the event loop (verify_token hands it to a thread)
+# but the caller still waits, so this bounds how long one request can hang on a
+# stalled identity provider.
+JWKS_FETCH_TIMEOUT_S = 5
 
 
 @dataclass
@@ -160,6 +167,11 @@ class IdentityManager:
                 provider.jwks_uri,
                 cache_keys=True,
                 lifespan=JWKS_CACHE_TTL,
+                # PyJWT defaults this to 30 seconds. The fetch is synchronous
+                # urllib on the event loop (see verify_token), so that default
+                # is thirty seconds of every in-flight request stalling, not
+                # just this one. Bound it to something a request path can wear.
+                timeout=JWKS_FETCH_TIMEOUT_S,
             )
             self._jwks_cache_ts[provider.name] = now
 
@@ -200,7 +212,16 @@ class IdentityManager:
         # Validate signature via JWKS
         try:
             jwks_client = self._get_jwks_client(provider)
-            signing_key = jwks_client.get_signing_key_from_jwt(token)
+            # get_signing_key_from_jwt fetches over synchronous urllib on a
+            # cache miss — which happens at least once per provider per
+            # JWKS_CACHE_TTL. Called directly it blocked the single event loop
+            # for the whole fetch, so a slow identity provider stalled every
+            # in-flight request rather than only the one authenticating.
+            # asyncio.to_thread keeps the wait on this coroutine, where it
+            # belongs; the timeout passed to PyJWKClient bounds it.
+            signing_key = await asyncio.to_thread(
+                jwks_client.get_signing_key_from_jwt, token
+            )
 
             claims = jwt.decode(
                 token,

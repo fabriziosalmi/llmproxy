@@ -140,7 +140,20 @@ caching:
   negative_cache:
     maxsize: 50000           # Max negative cache entries
     ttl: 300                 # Negative cache TTL
+  redis_socket_timeout: 2.0  # Seconds to wait for a Redis reply
+  redis_connect_timeout: 2.0 # Seconds to wait for the Redis connection
 ```
+
+`redis_socket_timeout` and `redis_connect_timeout` apply to every Redis client
+in the proxy — the rate limiter, the circuit breakers and the shared
+orchestrator client. Without them redis-py waits indefinitely, so a Redis that
+is *slow* rather than down hangs the request path: the fallbacks to local
+in-memory state are triggered by exceptions, and a hang raises nothing. Each of
+these operations is a single Lua invocation or one `HGETALL`, so the two-second
+default is already generous; raise it only on a heavily shared Redis. A value of
+zero or below is ignored rather than honoured, because to redis-py it means
+"wait forever". `LLM_PROXY_REDIS_TIMEOUT` sets both where no config file is in
+reach.
 
 ## Observability
 

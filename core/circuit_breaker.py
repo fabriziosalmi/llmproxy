@@ -313,6 +313,7 @@ class CircuitManager:
         on_state_change: Optional[Callable[[str, str, str], None]] = None,
         redis_url: Optional[str] = None,
         redis_client: Optional[Any] = None,
+        config: Optional[Dict[str, Any]] = None,
     ):
         self._circuits: Dict[str, BaseCircuitBreaker] = {}
         self._on_state_change = on_state_change
@@ -322,7 +323,11 @@ class CircuitManager:
         self.scripts = {}  # type: ignore
         if self.redis_client is None and redis_url and redis:
             try:
-                self.redis_client = redis.from_url(redis_url, decode_responses=True)
+                from core.redis_client import connect as _redis_connect
+
+                # Timeouts: can_execute() issues one evalsha per endpoint on
+                # the routing ring, so an untimed client stalls every request.
+                self.redis_client = _redis_connect(redis, redis_url, config)
                 logger.info(f"CircuitManager using Redis: {redis_url}")
             except Exception as e:
                 logger.error(f"Failed to connect to Redis for CB: {e}")

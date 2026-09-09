@@ -21,6 +21,12 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - REDIS_URL=redis://redis:6379/0
+      # LLM_PROXY_SALT_PATH is deliberately NOT pinned here. The encryption salt
+      # now defaults to /app/data/.llmproxy_salt — inside the volume below,
+      # alongside the ciphertext it decrypts — and when an older stack still has
+      # one at /app/.llmproxy_salt the code keeps using it and logs where to move
+      # it. Setting the variable here would skip that fallback and generate a
+      # fresh salt on upgrade, orphaning every stored credential.
     depends_on:
       - redis
     # Make the Docker host reachable as `host.docker.internal` from inside the
