@@ -344,13 +344,13 @@ Keyboard shortcuts: `Cmd+K` (command palette), `F` (cinema mode). URL hash routi
 ## Testing
 
 ```bash
-make test       # 1391 tests, ~25s
+make test       # full suite, ~25s
 make bench      # 22 performance benchmarks
 make lint       # ruff
 make typecheck  # mypy
 ```
 
-1391 tests (1389 passing, 2 skipped) across 50+ modules: unit, HTTP integration, pipeline E2E, property-based fuzz (Hypothesis), 31 mathematical invariant proofs, concurrency stress tests, and performance benchmarks.
+The suite spans 50+ modules: unit, HTTP integration, pipeline E2E, property-based fuzz (Hypothesis), 31 mathematical invariant proofs, concurrency stress tests, and performance benchmarks. The count and coverage are in the badges at the top of this file, which CI updates — this paragraph used to carry its own copy of the number and drifted two releases behind them.
 
 The invariant suite proves correctness properties (Jaccard axioms, normalize idempotence, token conservation, budget accounting, adapter determinism) and blocks merge on violation.
 
