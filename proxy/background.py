@@ -33,6 +33,7 @@ def _iteration_ok(loop: str) -> None:
 
 async def config_watch_loop(agent, interval: int = 30):
     """Detect config.yaml changes and hot-reload security subsystems."""
+    from core.startup_checks import StartupError, validate_config
     from core.webhooks import WebhookDispatcher
     from core.security import SecurityShield
 
@@ -41,8 +42,40 @@ async def config_watch_loop(agent, interval: int = 30):
         try:
             new_hash = await asyncio.to_thread(agent._compute_config_hash_sync)
             if new_hash and new_hash != agent._config_hash:
+                # Validate BEFORE installing.
+                #
+                # This loop assigned the parsed file straight onto the agent and
+                # then rebuilt the shield, the webhook dispatcher, the
+                # circuit-breaker thresholds, the cache settings and the plugin
+                # set from it — with no validation at all, while POST
+                # /api/v1/config/apply parses, validates, backs up atomically
+                # and rolls back on failure. Identical content, two completely
+                # different levels of care, and the unguarded path is the one an
+                # operator editing a file actually takes.
+                #
+                # So a config whose api_keys_env named an unset variable left
+                # auth enabled with zero valid keys and every request 401ing,
+                # where the same content at startup would have refused to boot
+                # with a three-step fix; a port outside 1-65535 was accepted
+                # because nothing rechecked it; a malformed fallback_chains
+                # entry was installed and failed later as a KeyError inside the
+                # forwarder.
+                candidate = agent._load_config()
+                try:
+                    validate_config(candidate)
+                except StartupError as e:
+                    # Keep running what works. Record the hash so a broken file
+                    # does not re-log this every interval — the next EDIT has a
+                    # different hash and gets re-examined.
+                    logger.error(
+                        "Config reload REJECTED, keeping the previous config: %s", e
+                    )
+                    agent._config_hash = new_hash
+                    _iteration_ok("config_watch")
+                    continue
+
                 old_webhooks = getattr(agent, "webhooks", None)
-                agent.config = agent._load_config()
+                agent.config = candidate
                 agent._config_hash = new_hash
                 agent.webhooks = WebhookDispatcher(agent.config)
                 if old_webhooks and old_webhooks is not agent.webhooks:

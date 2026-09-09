@@ -632,6 +632,12 @@ def create_app(agent) -> FastAPI:
         except Exception as e:
             logger.error(f"HTTP session close failed on shutdown: {e}")
         try:
+            from core.wasm_runner import shutdown_executor
+
+            shutdown_executor()
+        except Exception as e:
+            logger.error(f"WASM executor shutdown failed: {e}")
+        try:
             # Drop this instance's registration so a clean shutdown does not
             # leave a key that makes the next start look like a second
             # instance for its TTL.

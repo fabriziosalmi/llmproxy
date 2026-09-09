@@ -58,6 +58,17 @@ _WASM_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
 )
 
 
+def shutdown_executor(wait: bool = False) -> None:
+    """Release the WASM worker threads.
+
+    They were never shut down, so they were reclaimed by process exit rather
+    than deliberately — and non-daemon pool threads can delay interpreter
+    teardown. `wait=False` because shutdown already has a budget and a WASM
+    plugin still running at that point has lost its request anyway.
+    """
+    _WASM_EXECUTOR.shutdown(wait=wait, cancel_futures=True)
+
+
 def _check_extism() -> bool:
     """Lazy-check if extism is installed. Cached after first call."""
     global _extism_available

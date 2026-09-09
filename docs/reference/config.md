@@ -47,9 +47,9 @@ server:
                               # credential. Widen it only where the network
                               # restricts the port (a scraped pod), and prefer
                               # the authenticated /metrics on the main port.
-  admin:
-    enabled: true             # Enable admin API
-    port: 8081                # Admin port
+  # No admin section: the admin API is served on the main port and is gated by
+  # the admin credential tier, not by a separate listener. `server.admin.port`
+  # existed in the config and was read by nothing.
   vllm:
     enabled: false            # Enable local vLLM integration
     model_path: ""            # Local model path
