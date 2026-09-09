@@ -9,12 +9,16 @@ Anthropic has no embeddings API — requests for Anthropic models return 400.
 
 import json
 import logging
-import hashlib
 
 from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.security import APIKeyHeader
 
 from proxy.adapters.registry import get_adapter, detect_provider
+from core.session_id import (
+    from_fingerprint as session_id_from_fingerprint,
+    from_token as session_id_from_token,
+)
+from proxy.schemas import EmbeddingsRequest
 
 logger = logging.getLogger("llmproxy.routes.embeddings")
 
@@ -48,7 +52,11 @@ def create_router(agent) -> APIRouter:
     router = APIRouter()
 
     @router.post("/v1/embeddings")
-    async def embeddings(request: Request, api_key: str = Depends(API_KEY_HEADER)):
+    async def embeddings(
+        request: Request,
+        payload: EmbeddingsRequest,
+        api_key: str = Depends(API_KEY_HEADER),
+    ):
         from core.metrics import MetricsTracker
         from core.pricing import estimate_cost
 
@@ -98,7 +106,8 @@ def create_router(agent) -> APIRouter:
                 if not await agent.rbac.check_quota(token):
                     request.state.quota_exceeded = True
 
-        body = await request.json()
+        # See proxy/schemas.py: validated at the boundary, forwarded unchanged.
+        body = payload.to_body()
         model = body.get("model", "text-embedding-3-small")
         text_input = body.get("input", "")
 
@@ -110,14 +119,13 @@ def create_router(agent) -> APIRouter:
             inspect_text = str(text_input)
 
         if token:
-            session_id = hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
+            session_id = session_id_from_token(token)
         else:
-            ip = request.client.host if request.client else "anon"
-            ua = request.headers.get("user-agent", "")
-            lang = request.headers.get("accept-language", "")
-            session_id = hashlib.sha256(
-                f"{ip}:{ua}:{lang}".encode("utf-8")
-            ).hexdigest()[:16]
+            session_id = session_id_from_fingerprint(
+                request.client.host if request.client else "anon",
+                request.headers.get("user-agent", ""),
+                request.headers.get("accept-language", ""),
+            )
         security_error = await agent.security.inspect(
             {"messages": [{"role": "user", "content": inspect_text}]},
             session_id,

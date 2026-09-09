@@ -424,8 +424,13 @@ def create_router(agent) -> APIRouter:
         _check_admin_auth(request)
         if not agent.exporter:
             raise HTTPException(status_code=404, detail="Export disabled")
-        export_dir = os.path.abspath(str(agent.exporter.output_dir))
-        requested = os.path.abspath(os.path.join(export_dir, filename))
+        # realpath, not abspath: abspath normalises ".." but does not resolve
+        # symlinks, so a link planted inside the export directory pointing at
+        # /etc/passwd or .env satisfied commonpath and was then handed to
+        # FileResponse. Resolving both sides makes containment mean what it
+        # looks like it means.
+        export_dir = os.path.realpath(str(agent.exporter.output_dir))
+        requested = os.path.realpath(os.path.join(export_dir, filename))
         if os.path.commonpath([export_dir, requested]) != export_dir:
             raise HTTPException(status_code=400, detail="Invalid export filename")
         if not os.path.isfile(requested):
