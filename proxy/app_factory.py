@@ -426,6 +426,63 @@ def create_app(agent) -> FastAPI:
     )
     app.add_middleware(RateLimitMiddleware, config=agent.config, agent=agent)
 
+    # ── Admission control ───────────────────────────────────────────────────
+    # Bounds how many data-plane requests are in flight, because nothing did.
+    # The connector's limit was the only ceiling and it queues rather than
+    # refuses, with no deadline on the wait — so overload became unbounded
+    # latency and memory instead of a 503 a client can back off from.
+    #
+    # Applied to /v1/ only: the control plane is low-volume, operator-driven,
+    # and shedding an operator's config-apply because inference is busy would
+    # be the wrong trade.
+    from core.admission import AdmissionController
+
+    agent.admission = AdmissionController.from_config(agent.config)
+    if agent.admission.enabled:
+        logger.info(
+            "Admission control: %d in flight, %d queued, then 503",
+            agent.admission.max_in_flight,
+            agent.admission.max_queued,
+        )
+
+    @app.middleware("http")
+    async def admission_control(request: Request, call_next):
+        if not request.url.path.startswith("/v1/"):
+            return await call_next(request)
+
+        controller = agent.admission
+        if not controller.enabled:
+            return await call_next(request)
+
+        if not await controller.acquire():
+            from fastapi.responses import JSONResponse
+
+            from core.metrics import MetricsTracker
+
+            MetricsTracker.track_load_shed()
+            logger.warning(
+                "Admission control: shed %s %s — %d in flight, %d queued",
+                request.method,
+                request.url.path,
+                controller.in_flight,
+                controller.queued,
+            )
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "error": "overloaded",
+                    "message": (
+                        "The proxy is at capacity. Retry shortly, or raise "
+                        "connection_pool.max_connections."
+                    ),
+                },
+                headers={"Retry-After": str(controller.retry_after_s)},
+            )
+        try:
+            return await call_next(request)
+        finally:
+            controller.release()
+
     # ── Request accounting ──────────────────────────────────────────────────
     # Added last, so it is the OUTERMOST middleware and measures the whole
     # handling — including time spent in the firewall, the rate limiter and the
@@ -574,6 +631,14 @@ def create_app(agent) -> FastAPI:
                 await agent._session.close()
         except Exception as e:
             logger.error(f"HTTP session close failed on shutdown: {e}")
+        try:
+            # Drop this instance's registration so a clean shutdown does not
+            # leave a key that makes the next start look like a second
+            # instance for its TTL.
+            if getattr(agent, "instance_guard", None):
+                await agent.instance_guard.deregister()
+        except Exception as e:
+            logger.error(f"Instance deregistration failed on shutdown: {e}")
         try:
             if getattr(agent, "webhooks", None):
                 await agent.webhooks.close()

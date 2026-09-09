@@ -242,6 +242,31 @@ connection_pool:
   dns_cache_ttl: 300          # Seconds a resolved host is cached
 ```
 
+## Admission Control
+
+The ceiling on how many data-plane requests are in flight at once. Without it
+the only bound was the connector's `max_connections`, and past that requests
+waited in aiohttp's unbounded internal queue with no deadline — so overload
+became latency and memory growth rather than a refusal a client could act on.
+The rate limiter does not cover this: it is per-IP and per-key, so many
+well-behaved callers can saturate the proxy without any of them being
+throttled.
+
+Applied to `/v1/*` only. Shedding an operator's config-apply because inference
+is busy would be the wrong trade.
+
+```yaml
+admission:
+  max_in_flight: 100          # Defaults to connection_pool.max_connections —
+                              # admitting more than the connector can serve
+                              # just moves the queue back into aiohttp
+  queue_factor: 2.0           # Waiting room = max_in_flight × this
+  max_queued: 200             # Or set it directly; beyond it, 503
+  retry_after_s: 1            # Retry-After header on a shed request
+```
+
+Set `max_in_flight: 0` to disable. `llm_proxy_load_shed_total` counts refusals.
+
 ## Circuit Breaker
 
 Per-endpoint failure isolation. Backed by Redis when `caching.redis_url` is
