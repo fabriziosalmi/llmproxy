@@ -638,6 +638,12 @@ def create_app(agent) -> FastAPI:
         except Exception as e:
             logger.error(f"WASM executor shutdown failed: {e}")
         try:
+            from core.identity import shutdown_jwks_executor
+
+            shutdown_jwks_executor()
+        except Exception as e:
+            logger.error(f"JWKS executor shutdown failed: {e}")
+        try:
             # Drop this instance's registration so a clean shutdown does not
             # leave a key that makes the next start look like a second
             # instance for its TTL.
