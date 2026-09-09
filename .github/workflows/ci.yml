@@ -151,6 +151,17 @@ jobs:
         #   PYSEC-2024-62 — review by 2026-12-01, @fab. Assessed as not
         #   applicable to this usage. Re-examine or remove at that date.
         run: pip-audit -r requirements.lock --skip-editable --ignore-vuln PYSEC-2024-62
+      - name: Install the lock (as the image does)
+        # Also a second signal that the lock is installable with its hashes on
+        # a clean machine, which until now only the Docker build proved.
+        run: pip install --require-hashes -r requirements.lock
+      - name: Licence gate
+        # BLOCKING on strong/network copyleft only. llmproxy is MIT and ships
+        # as an image users run as a network service, so an AGPL or SSPL
+        # transitive arriving in a Dependabot patch bump silently changes what
+        # downstream users may do with that image. The script explains what is
+        # denied, what is merely reported, and the one hole it does not close.
+        run: python scripts/check_licences.py
 
   lockfile:
     name: Lockfile In Sync
