@@ -132,11 +132,23 @@ class TestTelemetryRoutes:
 
     @pytest.mark.asyncio
     async def test_health_session_down_marks_overall_down(self):
-        """Session is critical — losing it must propagate to overall status."""
+        """Session is critical — losing it must propagate to overall status.
+
+        This used to set `_session = None` and expect "down". That state is
+        not a loss: the session is created lazily on the first forward, so
+        None is every freshly started process, and calling it down reported a
+        working proxy as dead (see tests/test_health_told_the_truth.py). The
+        real loss — a session that EXISTS and is CLOSED — is what this asserts
+        now, and it still propagates.
+        """
         from proxy.routes.telemetry import create_router
 
         app, agent = _make_app_with_routes(create_router)
-        agent._session = None  # aiohttp not initialized / closed
+
+        class _ClosedSession:
+            closed = True
+
+        agent._session = _ClosedSession()
 
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
