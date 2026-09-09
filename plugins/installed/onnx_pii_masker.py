@@ -12,12 +12,14 @@ Detects 8 PII categories:
   PRIVATE_PERSON, PRIVATE_EMAIL, PRIVATE_PHONE, PRIVATE_ADDRESS,
   PRIVATE_URL, PRIVATE_DATE, ACCOUNT_NUMBER, SECRET
 
-Stores placeholder→value in rotator.security.pii_vault so Ring 4
+Stores placeholder→value in a per-request vault on ctx.metadata so Ring 4
 (shield_sanitizer / demask_pii) restores originals automatically.
 
 Placeholder format: [GROUP_N]  e.g. [PRIVATE_PERSON_1], [PRIVATE_EMAIL_2]
 Consistency: within a single request, the same value always gets the same
-placeholder (reverse_index). Across requests the vault handles re-mapping.
+placeholder (reverse_index). The numbering restarts at 1 for every request, so
+the vault MUST be per-request — a shared one would let [PRIVATE_PERSON_1] from
+one caller be restored into another caller's response.
 
 Requirements: onnxruntime>=1.18.0  transformers>=4.40.0  huggingface-hub>=0.20.0
 Model must be pre-downloaded locally: huggingface-cli download openai/privacy-filter
@@ -132,7 +134,7 @@ def _mask_text(
     """
     Replace detected entity spans with placeholders.
 
-    vault:         rotator.security.pii_vault — TTLCache(token → original)
+    vault:         per-request dict (token → original), from ctx.metadata
     reverse_index: (group, value_lower) → placeholder, shared across all
                    messages in the same request for consistency.
     counters:      group → current highest N, also shared per request.
@@ -245,7 +247,14 @@ class OnnxPiiMasker(BasePlugin):
         if not messages:
             return PluginResponse.passthrough()
 
-        vault = rotator.security.pii_vault
+        # Per-request vault, shared with shield_sanitizer via ctx.metadata.
+        # This must not be the shield's process-wide vault: the placeholders
+        # here are deterministic and restart at 1 for every request, so
+        # [PERSON_1] from one caller collides with [PERSON_1] from the next by
+        # construction — a global store would let Ring 4 restore one caller's
+        # name into another caller's response. Scoping the dict to the request
+        # makes the collision harmless, because only this request can resolve it.
+        vault = ctx.metadata.setdefault("_pii_vault", {})
         reverse_index: dict = {}  # (group, value_lower) → placeholder
         counters: dict = {}       # group → current max N
 

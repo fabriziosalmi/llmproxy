@@ -31,6 +31,14 @@ async def cleanse(ctx: PluginContext):
         if not choices:
             return
 
+        # The vault a pre-flight masker filled, scoped to this request. Passing
+        # it means only placeholders this request minted are restored; a token
+        # belonging to a concurrent caller is left in place rather than
+        # resolved into someone else's response. `or {}` rather than None:
+        # when no masker ran there is nothing to restore, and None would fall
+        # back to the process-wide vault, which is the exposure being closed.
+        vault = ctx.metadata.get("_pii_vault") or {}
+
         # H3: Sanitize ALL choices, not just choices[0]. When n>1 is
         # requested, alternative completions bypass sanitization.
         any_blocked = False
@@ -38,7 +46,7 @@ async def cleanse(ctx: PluginContext):
             raw_content = choice.get("message", {}).get("content", "")
             if not raw_content:
                 continue
-            sanitized = rotator.security.sanitize_response(raw_content)
+            sanitized = rotator.security.sanitize_response(raw_content, vault=vault)
             choice.setdefault("message", {})["content"] = sanitized
             if "[SEC_ERR:" in sanitized:
                 any_blocked = True

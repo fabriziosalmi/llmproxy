@@ -15,7 +15,9 @@ class MockRotator:
         self.logs.append((msg, level))
 
 class MockSecurity:
-    def sanitize_response(self, text):
+    def sanitize_response(self, text, vault=None):
+        # `vault` is the per-request PII store threaded through by
+        # shield_sanitizer; this double ignores it but must accept it.
         if "forbidden" in text:
             return "[SEC_ERR: Blocked]"
         return text

@@ -231,16 +231,29 @@ class SecurityShield:
                 return True
         return False
 
-    def mask_pii(self, text: str) -> str:
-        """Masks PII with vault tokens. Uses Presidio NLP when available, regex fallback otherwise."""
+    def mask_pii(self, text: str, vault: Optional[Dict[str, str]] = None) -> str:
+        """Masks PII with vault tokens. Uses Presidio NLP when available, regex fallback otherwise.
+
+        `vault` is where the token → original mapping is recorded. Callers that
+        have a request scope MUST pass one (the pii_masker plugin passes the
+        per-request dict it keeps on PluginContext.metadata), so a token minted
+        for one caller is not resolvable in another caller's response. Omitting
+        it falls back to the process-wide vault, which is retained only so that
+        an out-of-band caller keeps working; that path is cross-request by
+        construction and should not be used on the request path.
+        """
         if not self.enabled:
             return text
 
-        if _PRESIDIO_AVAILABLE:
-            return self._mask_pii_presidio(text)
-        return self._mask_pii_regex(text)
+        # Explicit local so the type is Dict rather than Optional[Dict]; the
+        # process-wide vault is a TTLCache, which is dict-like but not a Dict.
+        store: Dict[str, str] = self.pii_vault if vault is None else vault
 
-    def _mask_pii_presidio(self, text: str) -> str:
+        if _PRESIDIO_AVAILABLE:
+            return self._mask_pii_presidio(text, store)
+        return self._mask_pii_regex(text, store)
+
+    def _mask_pii_presidio(self, text: str, vault: Dict[str, str]) -> str:
         """NLP-based PII masking via Presidio — detects names, addresses, IBANs, etc."""
         results = _presidio_analyzer.analyze(
             text=text,
@@ -257,12 +270,12 @@ class SecurityShield:
         for result in results:
             original = text[result.start : result.end]
             label = result.entity_type.replace("_ADDRESS", "").replace("US_", "")
-            token = f"[PII_{label}_{uuid.uuid4().hex[:8]}]"
-            self.pii_vault[token] = original
+            token = f"[PII_{label}_{uuid.uuid4().hex}]"
+            vault[token] = original
             masked = masked[: result.start] + token + masked[result.end :]
         return masked
 
-    def _mask_pii_regex(self, text: str) -> str:
+    def _mask_pii_regex(self, text: str, vault: Dict[str, str]) -> str:
         """Regex-based PII masking — fast fallback when Presidio is not installed."""
         masked = text
         for pattern, label in self._REGEX_PII_PATTERNS:
@@ -271,21 +284,36 @@ class SecurityShield:
                 original = match.group()
                 if _label == "CREDIT_CARD" and not _luhn_check(original):
                     return original
-                token = f"[PII_{_label}_{uuid.uuid4().hex[:8]}]"
-                self.pii_vault[token] = original
+                token = f"[PII_{_label}_{uuid.uuid4().hex}]"
+                vault[token] = original
                 return token
 
             masked = re.sub(pattern, _replacer, masked)
         return masked
 
-    def demask_pii(self, text: str) -> str:
-        """Restores original PII from the vault into the response."""
+    def demask_pii(self, text: str, vault: Optional[Dict[str, str]] = None) -> str:
+        """Restores original PII from `vault` into the response.
+
+        `vault` scopes the restoration, and that scope is the point. The
+        maskers now record placeholders in a per-request dict carried on
+        PluginContext.metadata, so this walks only the handful of entries this
+        request created. Previously it walked the process-wide vault — up to
+        10,000 live entries fed by every concurrent caller — which made the
+        placeholders of one caller resolvable inside another caller's response,
+        and cost ~15 ms per 10 KB response at capacity, synchronously on the
+        event loop. Scoping fixes both: a token belonging to another request is
+        simply not in this dict, so it cannot be substituted.
+
+        Omitting `vault` falls back to the process-wide store for out-of-band
+        callers. That fallback is cross-request by construction; nothing on the
+        request path should use it.
+        """
         if not self.enabled:
             return text
-        # Snapshot items before iterating — TTLCache may evict entries during
-        # iteration which would raise RuntimeError in some cachetools versions.
-        vault_items = list(self.pii_vault.items())
-        for token, original in vault_items:
+        store: Dict[str, str] = self.pii_vault if vault is None else vault
+        # Snapshot items before iterating — a TTLCache may evict entries during
+        # iteration, which raises RuntimeError in some cachetools versions.
+        for token, original in list(store.items()):
             if token in text:
                 text = text.replace(token, original)
         return text
@@ -920,8 +948,14 @@ class SecurityShield:
             )
         return usable
 
-    def sanitize_response(self, content: str) -> str:
-        """Filters and validates the LLM response. Returns '[ERROR]' if guards fail."""
+    def sanitize_response(
+        self, content: str, vault: Optional[Dict[str, str]] = None
+    ) -> str:
+        """Filters and validates the LLM response. Returns '[ERROR]' if guards fail.
+
+        `vault` is threaded to demask_pii so the placeholders restored here are
+        only the ones this request masked. See demask_pii for why that matters.
+        """
         if not self.enabled:
             return content
 
@@ -1020,7 +1054,7 @@ class SecurityShield:
             )
 
         # 5. Bidirectional De-masking
-        sanitized = self.demask_pii(sanitized)
+        sanitized = self.demask_pii(sanitized, vault)
 
         # 6. Watermark (DEPRECATED — now a no-op, HMAC signing handles provenance)
         sanitized = self.apply_watermark(sanitized)
