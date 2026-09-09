@@ -2,6 +2,149 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.34.0] — 2026-09-09
+
+### Seven findings from the second audit
+
+A second code-metrics audit of `1791d5c` (54.6/100, 87 findings across all
+20 categories) surfaced seven defects that the first pass had not reached.
+Two of them let one caller's data reach another; three let a slow dependency
+stall the whole process; two let a redeploy destroy state the documentation
+promised was safe.
+
+**This release contains breaking changes** — one, and it is a tightening of
+authorization. Read the section below before upgrading.
+
+### Breaking changes
+
+- **`/api/v1/` and `/admin/` now require an ADMIN key** (#185). The global
+  auth middleware verified the token against `LLM_PROXY_API_KEYS`, so it
+  proved the caller held *some* valid key and nothing more; it now verifies
+  `LLM_PROXY_ADMIN_KEYS`. If you have set that variable, the admin UI and any
+  script against the control plane need an admin key. If you never segregated
+  the two bags, nothing changes: `verify_admin_key` still falls back to the
+  inference keys when no admin bag is configured.
+
+### One caller's data reached another
+
+- **PII placeholders were resolvable across requests** (#185). The vault lived
+  on the `SecurityShield` instance — one `TTLCache` of 10,000 entries shared by
+  every concurrent caller — and `demask_pii` walked all of it against every
+  response, substituting any token it recognised. A placeholder minted for
+  caller A was therefore restored inside caller B's response if it appeared
+  there, with 32 bits of truncated `uuid4` as the only thing making that
+  unlikely: at the cache's capacity the birthday probability is ~1.2%, and a
+  collision needs no attacker, only traffic. The optional ONNX masker was worse
+  than unlikely — its placeholders are `[GROUP_N]` with N restarting at 1 for
+  every request, so a shared vault collided by construction.
+
+  Both maskers now record into a per-request dict on `PluginContext.metadata`,
+  and `shield_sanitizer` restores from that same dict. A token belonging to
+  another request is simply absent, so it cannot be substituted. That also
+  removes the cost: demasking walked the shared vault per response — measured
+  at 15.1 ms for a 10 KB response at capacity against 0.15 ms at 100 entries,
+  synchronously on the event loop — and now walks the handful this request
+  created. Placeholders carry the full `uuid4` hex.
+
+- **Seventeen control-plane routes answered an inference key** (#185). The
+  inference/admin separation existed only in the per-route `_check_admin_auth()`
+  closures, and seventeen routes never called one. `GET /api/v1/registry`
+  returned every upstream URL; the webhook configuration, plugin inventory and
+  RBAC role matrix were likewise readable — in deployments that had correctly
+  set `LLM_PROXY_ADMIN_KEYS`, because the middleware never consulted that bag.
+  Verifying the admin bag in the middleware inverts the default: a new
+  control-plane route is admin-only unless it is added to `_PUBLIC_EXACT`.
+
+  Why the suite missed it: `LightweightAgent` builds a bare FastAPI and includes
+  the routers, so its app had no `global_admin_auth` at all — the per-route
+  closures were the only thing under test. The new test builds through
+  `create_app` and sweeps the OpenAPI schema, covering all 34 control-plane
+  GETs, backed by an explicit list of ten sensitive reads so the assertion
+  survives a change in route introspection.
+
+### A slow dependency stalled the process
+
+- **Redis had no timeout on any client** (#186). All three were built as
+  `from_url(url, decode_responses=True)`; redis-py applies no socket timeout by
+  default and no call site wrapped its awaits in `wait_for`. A Redis that
+  accepted the connection and then stalled never returned — and the
+  `except Exception` fallbacks to local RAM buckets could not help, because a
+  hang is not an exception. Three request-path operations go through those
+  clients: the rate limiter's bucket acquire in the outermost middleware, one
+  `evalsha` per endpoint in the routing ring, and the endpoint-stats update
+  after every request. `core/redis_client.py` now applies socket and connect
+  timeouts (2 s default), configurable via `caching.redis_socket_timeout` /
+  `caching.redis_connect_timeout` or `LLM_PROXY_REDIS_TIMEOUT`. A configured
+  zero or negative value is ignored rather than honoured — to redis-py it means
+  wait forever.
+
+- **A JWKS refresh blocked the event loop** (#186). `verify_token` is async but
+  called `PyJWKClient.get_signing_key_from_jwt` directly, and that is
+  synchronous `urllib`. On a cache miss — at least hourly per provider — it
+  blocked the loop for the whole fetch, with PyJWT's 30-second default as the
+  only bound, so a stalled identity provider froze every in-flight request, not
+  just the one presenting a JWT. The fetch now goes through
+  `asyncio.to_thread` with an explicit 5-second timeout.
+
+### State a redeploy destroyed
+
+- **The Helm chart mounted no volume** (#187). Its deployment mounted only the
+  config ConfigMap: no PVC template, no persistence values, no volumeMount for
+  `/app/data`. A pod therefore wrote the endpoint registry, `app_state`
+  (including the persisted daily budget), the spend ledger, the RBAC subjects
+  and the tamper-evident audit chain to its ephemeral filesystem and lost all of
+  it on every restart, rescheduling or `helm upgrade`. This is the same failure
+  1.33.0 records as a production incident, fixed then for the systemd and
+  Compose paths and never for the chart. `persistence.enabled` defaults to
+  `true`; `persistence.existingClaim` binds a restored snapshot;
+  `ReadWriteOnce` is correct while `replicaCount` stays at 1.
+
+  **Upgrading:** a `helm upgrade` will now create a PVC and mount it, so the pod
+  starts with an empty `data/`. Anything a running pod holds is already
+  ephemeral and will be lost on its next restart regardless — but if the current
+  pod has state worth keeping, copy `/app/data` out before upgrading and back in
+  afterwards. Set `persistence.enabled=false` to keep the old behaviour.
+
+- **The encryption salt sat outside the volume holding what it decrypts**
+  (#187). docker-compose mounts `/app/data`; the PBKDF2 salt defaulted to
+  `/app/.llmproxy_salt`, which is image content. A rebuild preserved the
+  ciphertext and discarded the key — and because `decrypt()` returns its input
+  on `InvalidToken`, the proxy then carried Fernet tokens where credentials
+  should be, so the symptom was 401s from every provider rather than an error
+  naming the cause. The default is now `data/.llmproxy_salt`.
+
+  **Upgrading:** nothing to do. An existing `/app/.llmproxy_salt` still wins,
+  with a warning naming where to move it, and the new location takes over once
+  it has been moved — move it while the proxy is stopped. Compose deliberately
+  does not pin `LLM_PROXY_SALT_PATH`, because that would skip the fallback and
+  cause the loss being prevented. A truncated or zero-length salt now refuses to
+  boot instead of silently deriving a wrong key.
+
+- **The README recommended the scaling the chart forbids** (#187). Under a
+  heading reading "Honest read" it described the proxy as stateless except for
+  the store and the rate-limit state — omitting the budget total and the
+  per-session trajectory state, which are exactly the two the chart names as the
+  reason `replicaCount` must stay at 1 — and then recommended scaling
+  horizontally, and running multiple uvicorn workers, for which no `workers`
+  setting exists anywhere. It now states the constraint, the mechanism and what
+  would lift it, and links to `values.yaml` rather than restating it.
+
+### Also
+
+- The throughput table's headline was `/health`, which is in the auth
+  middleware's public allowlist *and* the rate limiter's `exempt_paths`, while
+  the text credited the figure to the auth middleware. `/api/v1/registry` is now
+  the headline as the row that traverses the chain; the `/health` rows stay,
+  labelled as the floor (#187).
+- `docs/reference/config.md` documents the two new Redis timeout keys, and
+  `docs/guide/deployment.md` documents `persistence.*` and says to back up the
+  salt alongside the database — the backup captured the state and not the key
+  (#186, #187).
+- `LightweightAgent` gained `_verify_admin_key` and now resolves API keys the
+  way the orchestrator does; it lacked the former entirely, so any test that
+  enabled auth hit an `AttributeError` instead of an authorization decision
+  (#185).
+
 ## [1.33.1] — 2026-09-09
 
 ### The audit, worked to the end
