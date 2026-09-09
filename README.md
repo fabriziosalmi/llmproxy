@@ -30,7 +30,9 @@ docker run --rm -p 8090:8090 \
   ghcr.io/fabriziosalmi/llmproxy:latest
 ```
 
-That's it. Open `http://localhost:8090/ui` and the first-run wizard walks you through adding a provider (OpenAI, Anthropic, Ollama, etc.). The proxy boots in **onboarding mode** with zero endpoints — inference returns 503 until you add one.
+Open `http://localhost:8090/ui`, sign in with the key you just passed, and the first-run wizard walks you through adding a provider (OpenAI, Anthropic, Ollama, etc.). The proxy boots in **onboarding mode** with zero endpoints — inference returns 503 until you add one.
+
+`LLM_PROXY_API_KEYS` is required, not decorative: the shipped configuration authenticates every route, so without it the proxy refuses to start rather than coming up open. Until 1.34.0 it *was* decorative — the image shipped `server.auth.enabled: false`, so this exact command served the registry, the raw configuration and the model list to anyone who could reach the port. For local work where you want none of that, `-e LLM_PROXY_DEV_MODE=1` turns auth off and says so in the log.
 
 Drop-in OpenAI replacement, once an endpoint is configured:
 
@@ -46,12 +48,15 @@ curl http://localhost:8090/v1/chat/completions \
 ```bash
 docker run -d --name llmproxy -p 8090:8090 \
   -e LLM_PROXY_API_KEYS=sk-proxy-test \
+  -e LLM_PROXY_ADMIN_KEYS=sk-admin-test \
   -e OPENAI_API_KEY=$OPENAI_API_KEY \
   -v llmproxy-data:/app/data \
-  ghcr.io/fabriziosalmi/llmproxy:1.32.0
+  ghcr.io/fabriziosalmi/llmproxy:1.35.0
 ```
 
-Each release publishes `:latest`, the full semver (`:X.Y.Z`), the minor (`:X.Y`), plus a per-commit short SHA tag for reproducible deploys.
+Each release publishes `:latest`, the full semver (`:X.Y.Z`), the minor (`:X.Y`), plus a per-commit short SHA tag for reproducible deploys. Pin the newest release rather than copying the number above — it ages, and this example pinned `1.32.0` for two releases, which meant anyone following it literally deployed the version *before* the control-plane key tier, the salt relocation and the Redis timeouts landed.
+
+`LLM_PROXY_ADMIN_KEYS` is what separates the two tiers. With it set, `sk-proxy-test` reaches `/v1/*` and gets 401 on `/api/v1/*` and `/admin/*`; without it, every inference key can apply configuration, install plugins and purge the audit log.
 
 ### Or, build from source
 

@@ -11,7 +11,19 @@ server:
     key_file: "/etc/llmproxy/certs/server.key"
     min_version: "1.2"
   auth:
-    enabled: false
+    # ON. This file is baked into the published image by `COPY . .`, so its
+    # value is the default every `docker run` gets — and `false` here meant the
+    # README's own quickstart produced a proxy answering /api/v1/registry,
+    # /api/v1/config/raw and /v1/models with no credential at all. Passing
+    # LLM_PROXY_API_KEYS did not help: the middleware short-circuits on
+    # auth_enabled() before it ever looks at a key, so the entire control-plane
+    # key tier was inert in the default deployment.
+    #
+    # core/auth_policy.py already defaults a MISSING key to True for exactly
+    # this reason; an explicit `false` was the one thing that could defeat it.
+    # For local development set LLM_PROXY_DEV_MODE=1, which turns auth off with
+    # a warning naming itself — visible, deliberate, and not what ships.
+    enabled: true
     # Inference API keys loaded from env: LLM_PROXY_API_KEYS (comma-separated).
     api_keys_env: "LLM_PROXY_API_KEYS"
     # Control-plane (admin) keys — separate from inference keys so an inference

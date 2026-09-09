@@ -20,6 +20,40 @@ import yaml
 logger = logging.getLogger("llmproxy.config_loader")
 
 
+def dev_mode_enabled() -> bool:
+    """True when the operator asked to run open, via LLM_PROXY_DEV_MODE."""
+    return os.environ.get("LLM_PROXY_DEV_MODE", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def apply_dev_mode(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """Turn authentication off when LLM_PROXY_DEV_MODE is set, loudly.
+
+    This used to apply only when config.yaml was ABSENT, which made it useless
+    in the case it exists for: the published image always has a config file, so
+    the only way to run open was to edit the shipped YAML — and the shipped YAML
+    did it for you. Now the file says `enabled: true` and this is the documented
+    way to opt out, so running open is a decision someone made rather than a
+    default they inherited.
+
+    Applied after the YAML parse so the env wins, mirroring the firewall
+    override below. Mutates and returns `cfg`.
+    """
+    if not dev_mode_enabled():
+        return cfg
+    cfg.setdefault("server", {}).setdefault("auth", {})["enabled"] = False
+    logger.warning(
+        "LLM_PROXY_DEV_MODE=1 — authentication is DISABLED. Every route, "
+        "including the control plane and /api/v1/config/raw, answers without a "
+        "credential. Do not use this outside local development.",
+    )
+    return cfg
+
+
 def load_config(config_path: str) -> Dict[str, Any]:
     """Load YAML config + apply env overlays.
 
@@ -32,24 +66,13 @@ def load_config(config_path: str) -> Dict[str, Any]:
         with open(config_path, "r") as f:
             cfg = yaml.safe_load(f) or {}
     else:
-        dev_mode = os.environ.get("LLM_PROXY_DEV_MODE", "").strip().lower() in (
-            "1",
-            "true",
-            "yes",
-            "on",
+        cfg = {"server": {"auth": {"enabled": True}}}
+        logger.warning(
+            "Config file '%s' not found — fail-closed defaults applied (auth enabled).",
+            config_path,
         )
-        cfg = {"server": {"auth": {"enabled": not dev_mode}}}
-        if dev_mode:
-            logger.warning(
-                "Config file '%s' not found — running in DEV MODE with auth disabled "
-                "(LLM_PROXY_DEV_MODE=1). Do not use in production.",
-                config_path,
-            )
-        else:
-            logger.warning(
-                "Config file '%s' not found — fail-closed defaults applied (auth enabled).",
-                config_path,
-            )
+
+    apply_dev_mode(cfg)
 
     # Env-based endpoint overlay — runs on every config reload (boot + hot
     # reload watcher). Keeps LLM_PROXY_ENDPOINT_<NAME>_* declarations in
