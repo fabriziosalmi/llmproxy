@@ -13,7 +13,6 @@ batch processing scripts, and any pre-2023 code.
 
 import json
 import logging
-import hashlib
 import time
 import datetime as _dt
 
@@ -22,6 +21,10 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import APIKeyHeader
 
 from core.metrics import MetricsTracker
+from core.session_id import (
+    from_fingerprint as session_id_from_fingerprint,
+    from_token as session_id_from_token,
+)
 from proxy.schemas import CompletionRequest
 from core.pricing import estimate_cost
 
@@ -144,14 +147,13 @@ def create_router(agent) -> APIRouter:
 
         # Session ID for security pipeline
         if token:
-            session_id = hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
+            session_id = session_id_from_token(token)
         else:
-            ip = request.client.host if request.client else "anon"
-            ua = request.headers.get("user-agent", "")
-            lang = request.headers.get("accept-language", "")
-            session_id = hashlib.sha256(
-                f"{ip}:{ua}:{lang}".encode("utf-8")
-            ).hexdigest()[:16]
+            session_id = session_id_from_fingerprint(
+                request.client.host if request.client else "anon",
+                request.headers.get("user-agent", ""),
+                request.headers.get("accept-language", ""),
+            )
 
         # Run through full proxy pipeline
         _start = time.time()

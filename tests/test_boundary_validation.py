@@ -251,3 +251,81 @@ def test_the_coverage_floor_is_not_far_below_reality():
 
     floor = int(re.search(r"--cov-fail-under=(\d+)", ci).group(1))
     assert floor >= 71, f"floor is {floor}; raise it when coverage rises"
+
+
+# ── session ids are derived, not hashed ─────────────────────────────────────
+
+
+def test_a_session_id_is_not_a_bare_hash_of_the_token():
+    """CodeQL's py/weak-sensitive-data-hashing, and it is right in principle.
+
+    A session_id is not private — it is written into every audit row and shows
+    up in log lines — so a bare hash of a credential lets anyone who sees one
+    test candidate tokens offline. With 128-bit random keys that is infeasible,
+    but the safety rested on an assumption about key entropy that the code
+    cannot enforce, and operators choose their own keys.
+    """
+    import hashlib
+
+    from core.session_id import from_token
+
+    token = "sk-proxy-0123456789abcdef"
+    assert from_token(token) != hashlib.sha256(token.encode()).hexdigest()[:16]
+
+
+def test_the_same_token_gives_the_same_id():
+    """It doubles as the semantic cache's tenant key, so it must be stable."""
+    from core.session_id import from_token
+
+    assert from_token("sk-a") == from_token("sk-a")
+    assert from_token("sk-a") != from_token("sk-b")
+
+
+def test_the_identity_secret_makes_it_stable_across_processes(monkeypatch):
+    from core.infisical import clear_cache
+    from core.session_id import from_token, reset_for_tests
+
+    monkeypatch.setenv("LLM_PROXY_IDENTITYSECRET_UNUSED", "x")
+    monkeypatch.setenv("LLM_PROXY_IDENTITY_SECRET", "a-stable-server-side-secret")
+    clear_cache()
+    reset_for_tests()
+    first = from_token("sk-a")
+
+    reset_for_tests()  # simulate a restart
+    clear_cache()
+    assert from_token("sk-a") == first
+
+
+def test_without_the_identity_secret_it_still_works(monkeypatch):
+    """Unguessable either way; the cost is a cold cache after a restart."""
+    from core.infisical import clear_cache
+    from core.session_id import from_token, reset_for_tests
+
+    monkeypatch.delenv("LLM_PROXY_IDENTITY_SECRET", raising=False)
+    clear_cache()
+    reset_for_tests()
+
+    assert len(from_token("sk-a")) == 16
+
+
+def test_the_fingerprint_branch_separates_callers_behind_one_nat():
+    """Collapsing them would make the multi-turn detector score unrelated
+    callers together."""
+    from core.session_id import from_fingerprint
+
+    a = from_fingerprint("10.0.0.1", "curl/8", "en")
+    b = from_fingerprint("10.0.0.1", "python-httpx/0.27", "en")
+
+    assert a != b
+
+
+def test_no_route_derives_a_session_id_by_hand():
+    """The same block was transcribed in three modules."""
+    import inspect
+
+    from proxy.routes import chat, completions, embeddings
+
+    for module in (chat, completions, embeddings):
+        source = inspect.getsource(module)
+        assert "sha256(token" not in source, f"{module.__name__} still hashes directly"
+        assert "session_id_from_token" in source

@@ -1,6 +1,5 @@
 """Chat completion route: /v1/chat/completions — the core proxy endpoint."""
 
-import hashlib
 import json
 import time
 import asyncio
@@ -11,6 +10,10 @@ from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.security import APIKeyHeader
 
 from core.metrics import MetricsTracker
+from core.session_id import (
+    from_fingerprint as session_id_from_fingerprint,
+    from_token as session_id_from_token,
+)
 from proxy.schemas import ChatCompletionRequest
 from core.tracing import TraceManager
 from core.webhooks import EventType
@@ -149,14 +152,13 @@ def create_router(agent) -> APIRouter:
             # same NAT into one session. Hash IP + User-Agent + Accept-Language
             # as a rough client fingerprint to disambiguate.
             if "token" in locals() and token:
-                session_id = hashlib.sha256(token.encode()).hexdigest()[:16]
+                session_id = session_id_from_token(token)
             else:
-                ip = request.client.host if request.client else "anon"
-                ua = request.headers.get("user-agent", "")
-                lang = request.headers.get("accept-language", "")
-                session_id = hashlib.sha256(f"{ip}:{ua}:{lang}".encode()).hexdigest()[
-                    :16
-                ]
+                session_id = session_id_from_fingerprint(
+                    request.client.host if request.client else "anon",
+                    request.headers.get("user-agent", ""),
+                    request.headers.get("accept-language", ""),
+                )
             # Validated at the boundary rather than discovered several layers
             # in. exclude_unset keeps this identical to forwarding the raw
             # parsed body: only what the caller sent goes upstream.
