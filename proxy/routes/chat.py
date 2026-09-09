@@ -11,6 +11,7 @@ from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.security import APIKeyHeader
 
 from core.metrics import MetricsTracker
+from proxy.schemas import ChatCompletionRequest
 from core.tracing import TraceManager
 from core.webhooks import EventType
 from core.pricing import estimate_cost
@@ -26,7 +27,9 @@ def create_router(agent) -> APIRouter:
 
     @router.post("/v1/chat/completions")
     async def chat_completions(
-        request: Request, api_key: str = Depends(API_KEY_HEADER)
+        request: Request,
+        payload: ChatCompletionRequest,
+        api_key: str = Depends(API_KEY_HEADER),
     ):
         if agent.config["server"]["auth"]["enabled"]:
             if not api_key:
@@ -154,7 +157,10 @@ def create_router(agent) -> APIRouter:
                 session_id = hashlib.sha256(f"{ip}:{ua}:{lang}".encode()).hexdigest()[
                     :16
                 ]
-            body = await request.json()
+            # Validated at the boundary rather than discovered several layers
+            # in. exclude_unset keeps this identical to forwarding the raw
+            # parsed body: only what the caller sent goes upstream.
+            body = payload.to_body()
 
             # Request deduplication via X-Idempotency-Key header (only for non-streaming)
             idempotency_key = request.headers.get("X-Idempotency-Key")

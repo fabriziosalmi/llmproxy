@@ -15,6 +15,7 @@ from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.security import APIKeyHeader
 
 from proxy.adapters.registry import get_adapter, detect_provider
+from proxy.schemas import EmbeddingsRequest
 
 logger = logging.getLogger("llmproxy.routes.embeddings")
 
@@ -48,7 +49,11 @@ def create_router(agent) -> APIRouter:
     router = APIRouter()
 
     @router.post("/v1/embeddings")
-    async def embeddings(request: Request, api_key: str = Depends(API_KEY_HEADER)):
+    async def embeddings(
+        request: Request,
+        payload: EmbeddingsRequest,
+        api_key: str = Depends(API_KEY_HEADER),
+    ):
         from core.metrics import MetricsTracker
         from core.pricing import estimate_cost
 
@@ -98,7 +103,8 @@ def create_router(agent) -> APIRouter:
                 if not await agent.rbac.check_quota(token):
                     request.state.quota_exceeded = True
 
-        body = await request.json()
+        # See proxy/schemas.py: validated at the boundary, forwarded unchanged.
+        body = payload.to_body()
         model = body.get("model", "text-embedding-3-small")
         text_input = body.get("input", "")
 

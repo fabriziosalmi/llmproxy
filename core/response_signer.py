@@ -43,6 +43,31 @@ import logging
 logger = logging.getLogger("llmproxy.response_signer")
 
 
+def _canonical_message(
+    model: str, provider: str, timestamp: str, request_id: str
+) -> bytes:
+    """Length-prefix the metadata fields so the encoding is unambiguous.
+
+    These used to be joined with a bare "|", justified in a comment as safe
+    because "|" is "not present in base64/hex". But model and provider are
+    free-form strings that arrive from the request body and the endpoint
+    configuration, not from base64 or hex — so model "a|b" with provider "c"
+    signed the same message as model "a" with provider "b|c", and the signature
+    did not uniquely commit to the field split it advertises in
+    X-LLMProxy-Signed-Fields.
+
+    The response body is fully covered either way, so tamper detection on the
+    content — the point of the feature — always held; what was ambiguous was
+    the metadata attribution. Length prefixes remove the ambiguity regardless
+    of what the fields contain, and cost nothing.
+    """
+    parts = []
+    for field in (model, provider, timestamp, request_id):
+        raw = (field or "").encode("utf-8")
+        parts.append(f"{len(raw)}:".encode("ascii") + raw)
+    return b"".join(parts)
+
+
 class ResponseSigner:
     """Signs proxy responses with HMAC-SHA256 for tamper detection (proxy→client)."""
 
@@ -76,9 +101,7 @@ class ResponseSigner:
 
         timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
-        # Build the message to sign: deterministic concatenation
-        # Using | as separator (not present in base64/hex)
-        message = f"{model}|{provider}|{timestamp}|{request_id}|".encode("utf-8")
+        message = _canonical_message(model, provider, timestamp, request_id)
         message += response_body
 
         sig = hmac.new(self._key, message, hashlib.sha256).hexdigest()
@@ -119,7 +142,7 @@ class ResponseSigner:
         Returns True if signature matches (and, when max_age_seconds is set, the
         timestamp is fresh); False otherwise.
         """
-        message = f"{model}|{provider}|{timestamp}|{request_id}|".encode("utf-8")
+        message = _canonical_message(model, provider, timestamp, request_id)
         message += response_body
 
         computed = hmac.new(secret.encode("utf-8"), message, hashlib.sha256).hexdigest()

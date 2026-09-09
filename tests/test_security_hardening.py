@@ -58,7 +58,13 @@ def test_admin_falls_back_to_inference_keys_when_unset(monkeypatch):
 
 # ── H2: response-signature replay window ─────────────────────────────────────
 def _sign(secret, body, model, provider, ts, rid):
-    msg = f"{model}|{provider}|{ts}|{rid}|".encode("utf-8") + body
+    # Uses the signer's own canonicalisation rather than re-spelling the wire
+    # format here. The fields were joined with a bare "|" and are now
+    # length-prefixed, so a hand-written copy would be asserting against a
+    # format that no longer exists.
+    from core.response_signer import _canonical_message
+
+    msg = _canonical_message(model, provider, ts, rid) + body
     return hmac.new(secret.encode("utf-8"), msg, hashlib.sha256).hexdigest()
 
 

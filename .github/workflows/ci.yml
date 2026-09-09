@@ -234,6 +234,10 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-asyncio pytest-cov pytest-benchmark httpx hypothesis
       - name: Run tests with coverage
+        # The floor tracks the measurement rather than trailing it. It sat at
+        # 68 against a measured 70.1, so roughly 220 statements of coverage
+        # could drain away unnoticed — and the modules with room to fall are
+        # the consequential ones. Raise it when it rises.
         # test_e2e.py and test_openapi_contracts.py used to be excluded here.
         # Both are hermetic (ASGITransport against an in-process app, no network)
         # and run in under a second each, so the exclusion only meant the gate
@@ -245,7 +249,7 @@ jobs:
           python -m pytest tests/ -v --tb=short \
             --cov=core --cov=proxy --cov=plugins --cov=store \
             --cov-report=term-missing \
-            --cov-fail-under=68 \
+            --cov-fail-under=71 \
             --ignore=tests/integrated_test.py \
             --ignore=tests/test_benchmarks.py
         env:
