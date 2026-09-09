@@ -49,6 +49,15 @@ async def main():
             _enabled
         )
 
+    # Same dev-mode override the orchestrator's loader applies, so the startup
+    # validator sees the config the request path will see. Without it,
+    # LLM_PROXY_DEV_MODE=1 would still fail the "auth requires API keys" check
+    # below and refuse to boot — demanding a credential for a mode whose whole
+    # purpose is not needing one.
+    from proxy.config_loader import apply_dev_mode
+
+    apply_dev_mode(config)
+
     # Validate configuration before proceeding
     from core.startup_checks import run_startup_checks
 

@@ -99,6 +99,27 @@ def validate_config(config: dict) -> list[str]:
                 f"  3. Restart the proxy"
             )
 
+        # 1b. Control-plane key segregation — warn, do not block.
+        #
+        # verify_admin_key falls back to the inference bag when no admin keys
+        # are configured, so with this unset every key handed to an application
+        # team also authorises config apply, plugin install, registry writes and
+        # GDPR purge. That fallback is defensible for a single-operator install
+        # and indefensible silently: the variable appeared in no .env template
+        # and in no configuration document, so an operator who did exactly what
+        # the check above demanded got an unsegregated control plane and no hint
+        # that a second bag existed.
+        admin_env = auth_cfg.get("admin_keys_env", "LLM_PROXY_ADMIN_KEYS")
+        if _has_invalid_keys(admin_env):
+            warnings.append(
+                f"{admin_env} is not set — the control plane is NOT segregated.\n"
+                f"  Every key in {keys_env} can drive config apply, plugin\n"
+                f"  install, registry writes and GDPR purge.\n"
+                f"  1. Generate a key: python -c \"import secrets; print(f'sk-admin-{{secrets.token_hex(16)}}')\"\n"
+                f"  2. Set in .env: {admin_env}=sk-admin-<your-key>\n"
+                f"  3. Restart. Inference keys then get 401 on /api/v1/ and /admin/."
+            )
+
     # 2. At least one endpoint configured — soft requirement.
     #
     # Zero endpoints is a legitimate first-run state: the user runs the

@@ -152,8 +152,18 @@ config: |
     tls:
       enabled: false
     auth:
-      enabled: false
+      # ON, matching the shipped config.yaml. This block becomes the pod's
+      # config via the ConfigMap, so `false` here would reopen the control
+      # plane for every chart install regardless of what the image ships.
+      # Set secrets.existingSecret (or secrets.inline) to supply
+      # LLM_PROXY_API_KEYS and LLM_PROXY_ADMIN_KEYS before installing.
+      enabled: true
       api_keys_env: "LLM_PROXY_API_KEYS"
+      # Control-plane keys, separate from the inference bag. Leave the name
+      # here and set the value through secrets; when the variable is unset the
+      # proxy falls back to the inference keys and every client key can drive
+      # config apply, plugin install and GDPR purge.
+      admin_keys_env: "LLM_PROXY_ADMIN_KEYS"
     metrics:
       enabled: true
       port: 9091
