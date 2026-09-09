@@ -69,7 +69,7 @@ All sensitive values are loaded via environment variables (with optional Infisic
 | `LLM_PROXY_API_KEYS` | Inference Bearer keys — what `/v1/*` accepts. Required when auth is on. |
 | `LLM_PROXY_ADMIN_KEYS` | Control-plane Bearer keys — the only keys `/api/v1/*` and `/admin/*` accept. **Unset means every inference key can apply configuration, install plugins and purge the audit log**; the proxy warns at startup but still boots. |
 | `LLM_PROXY_DEV_MODE` | `1` disables authentication entirely, with a warning naming itself. Local development only. |
-| `LLM_PROXY_MASTER_KEY` | Encryption master key |
+| `LLM_PROXY_MASTER_KEY` | At-rest encryption master key. **Optional and currently unused** — nothing calls `SecretManager.encrypt`/`.decrypt`, because provider credentials are referenced by environment-variable name and never written to disk. |
 | `LLM_PROXY_IDENTITY_SECRET` | Internal JWT signing key |
 | `OPENAI_API_KEY` | OpenAI provider key |
 | `ANTHROPIC_API_KEY` | Anthropic provider key |
