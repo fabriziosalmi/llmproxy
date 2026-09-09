@@ -58,6 +58,25 @@ async def charge_and_persist(
         except Exception as e:  # noqa: BLE001 — never let persistence kill the request
             logger.debug(f"Budget enqueue skipped: {e}")
 
+        # Publish the gauge here, where every charging site already funnels.
+        #
+        # It used to be set in the chat route alone, so a deployment whose
+        # clients use /v1/completions, /v1/embeddings or streaming spent real
+        # money while llm_proxy_budget_consumed_usd sat at whatever the last
+        # non-streaming chat request left it — and the shipped alert rules
+        # (monitoring/prometheus-rules.yml warns at 40 and pages at 50) watch
+        # exactly that series. The ledger recorded the spend; the signal an
+        # operator would page on did not.
+        try:
+            from core.metrics import MetricsTracker
+
+            daily_limit = (getattr(rotator, "config", None) or {}).get(
+                "budget", {}
+            ).get("daily_limit", 0.0)
+            MetricsTracker.set_budget(rotator.total_cost_today, daily_limit)
+        except Exception as e:  # noqa: BLE001 — a gauge must never fail a request
+            logger.debug(f"Budget gauge update skipped: {e}")
+
 
 async def hydrate_daily_total(store: Any) -> Tuple[float, str]:
     """Restore today's budget on startup, applying the daily-rollover

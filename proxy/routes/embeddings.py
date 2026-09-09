@@ -8,7 +8,6 @@ Anthropic has no embeddings API — requests for Anthropic models return 400.
 """
 
 import json
-import time
 import logging
 import hashlib
 
@@ -176,7 +175,6 @@ def create_router(agent) -> APIRouter:
         )
 
         # Forward request
-        start = time.time()
         session = await agent._get_session()
 
         try:
@@ -189,10 +187,6 @@ def create_router(agent) -> APIRouter:
                 status_code=502, detail="Embedding upstream request failed"
             )
 
-        duration = time.time() - start
-        MetricsTracker.track_request(
-            "POST", "/v1/embeddings", response.status_code, duration
-        )
 
         # Translate response if needed (Google Gemini format → OpenAI)
         if response.status_code == 200 and hasattr(response, "body"):
@@ -218,12 +212,15 @@ def create_router(agent) -> APIRouter:
                 usage = json.loads(response.body.decode()).get("usage", {})
                 tokens = usage.get("total_tokens", 0) or usage.get("prompt_tokens", 0)
                 cost_usd = estimate_cost(model, tokens, 0)
+                from core.model_resolver import known_model_names
+
                 MetricsTracker.track_usage(
                     endpoint="/v1/embeddings",
                     model=model,
                     prompt_tokens=tokens,
                     completion_tokens=0,
                     cost=cost_usd,
+                    known_models=known_model_names(agent.config),
                 )
                 from proxy.budget import charge_and_persist
 

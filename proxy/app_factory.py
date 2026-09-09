@@ -251,6 +251,19 @@ def create_app(agent) -> FastAPI:
             if not agent._verify_admin_key(token):
                 from fastapi.responses import JSONResponse
 
+                from core.metrics import MetricsTracker
+
+                # Count it here, at the chokepoint every control-plane
+                # rejection already passes through. track_auth_failure was
+                # called only from two data-plane handlers, so
+                # llm_proxy_auth_failures_total measured two of five /v1/
+                # routes and none of the 65 control-plane ones: an attacker
+                # enumerating admin keys against /api/v1/registry produced a
+                # log line and moved no counter, which is exactly the signal a
+                # brute-force alert would be built on.
+                MetricsTracker.track_auth_failure(
+                    "control_plane_no_key" if not token else "control_plane_bad_key"
+                )
                 logger.warning(
                     f"Global auth: rejected {request.method} {path} "
                     f"from {request.client.host if request.client else 'unknown'}"
@@ -355,6 +368,41 @@ def create_app(agent) -> FastAPI:
         ),
     )
     app.add_middleware(RateLimitMiddleware, config=agent.config, agent=agent)
+
+    # ── Request accounting ──────────────────────────────────────────────────
+    # Added last, so it is the OUTERMOST middleware and measures the whole
+    # handling — including time spent in the firewall, the rate limiter and the
+    # auth check, and including requests those reject.
+    #
+    # This used to be three hand-placed calls inside chat and embeddings, which
+    # meant llm_proxy_requests_total and the latency histogram described a
+    # subset of traffic without saying so: /v1/completions served requests that
+    # appeared in neither, the dashboard's throughput figure (a sum over
+    # REQUEST_COUNT) under-reported against the spend ledger, and a latency
+    # regression confined to an uninstrumented route stayed invisible. Counting
+    # at the chokepoint also means the next route added is counted by default
+    # rather than by someone remembering.
+    @app.middleware("http")
+    async def request_accounting(request: Request, call_next):
+        import time as _time
+
+        from core.metrics import MetricsTracker
+
+        started = _time.perf_counter()
+        status = 500
+        try:
+            response = await call_next(request)
+            status = response.status_code
+            return response
+        finally:
+            # Label with the matched route TEMPLATE, not the raw path:
+            # /v1/models/{model_id:path} would otherwise mint a Prometheus
+            # series per model anyone ever asks for.
+            route = request.scope.get("route")
+            label = getattr(route, "path", None) or "unmatched"
+            MetricsTracker.track_request(
+                request.method, label, status, _time.perf_counter() - started
+            )
 
     from .routes import (
         admin_router,
