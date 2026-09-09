@@ -11,6 +11,30 @@
 # (see core/rate_limiter.py for the Redis-backed pattern already used here).
 replicaCount: 1
 
+# data/ is the only state that cannot be reconstructed: the endpoint registry,
+# app_state (including the persisted daily budget), the spend ledger, the RBAC
+# subjects, the tamper-evident audit chain and the PBKDF2 salt that decrypts
+# every stored credential. With no volume it lives in the pod's ephemeral
+# filesystem and is lost on every restart, rescheduling or `helm upgrade` —
+# which is what happened in production before the store was moved under data/,
+# and what this chart still did afterwards because it never received a volume.
+#
+# An audit chain that restarts empty on every deploy evidences nothing, so this
+# defaults to enabled. Set persistence.enabled=false only for a throwaway
+# evaluation where losing the database on restart is acceptable.
+persistence:
+  enabled: true
+  # ReadWriteOnce is correct here: replicaCount is pinned to 1 for the reasons
+  # given above, so there is never a second pod contending for this claim.
+  accessModes:
+    - ReadWriteOnce
+  size: 2Gi
+  # "" uses the cluster default StorageClass; "-" disables dynamic provisioning.
+  storageClass: ""
+  # Bind an existing claim instead of creating one (e.g. a restored snapshot).
+  existingClaim: ""
+  annotations: {}
+
 image:
   repository: ghcr.io/fabriziosalmi/llmproxy
   pullPolicy: IfNotPresent

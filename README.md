@@ -168,15 +168,23 @@ The corpus deliberately includes the AI-judgment-bypass path: deterministic chec
 
 Single-process throughput on Apple Silicon (M-series, dev mode, no upstream call — proxy stack only):
 
-| Endpoint                           |     Req/s | p50 latency | p99 latency | Conditions            |
-| ---------------------------------- | --------: | ----------: | ----------: | --------------------- |
-| `/health` (cold path, no upstream) | **1,313** |        7 ms |       28 ms | wrk · 2t · 10c · 20s  |
-| `/health` (saturated)              |     1,176 |       82 ms |      149 ms | wrk · 4t · 100c · 30s |
-| `/api/v1/registry` (light DB read) |     1,158 |       81 ms |      188 ms | wrk · 4t · 100c · 30s |
+| Endpoint                           |     Req/s | p50 latency | p99 latency | Conditions            | Traverses            |
+| ---------------------------------- | --------: | ----------: | ----------: | --------------------- | -------------------- |
+| `/api/v1/registry` (light DB read) | **1,158** |       81 ms |      188 ms | wrk · 4t · 100c · 30s | full middleware chain |
+| `/health` (cold path, no upstream) |     1,313 |        7 ms |       28 ms | wrk · 2t · 10c · 20s  | dispatch only        |
+| `/health` (saturated)              |     1,176 |       82 ms |      149 ms | wrk · 4t · 100c · 30s | dispatch only        |
 
-These numbers measure the proxy stack overhead — the auth middleware, ASGI firewall, route dispatch, and JSON serialization — not the cost of a real LLM call (which is dominated by upstream provider latency).
+`/api/v1/registry` is the representative figure: it traverses the ASGI firewall, the auth middleware, route dispatch and JSON serialization. `/health` is listed as the floor — it is in the auth middleware's public allowlist and in the rate limiter's `exempt_paths`, so those two rows skip both checks, and the gap between them and the registry row is roughly what auth plus rate limiting costs.
 
-Honest read: ~1.2k req/s on a single process is a **moderate-load** number. For higher throughput, run multiple uvicorn workers behind a load balancer or scale horizontally. The proxy is stateless except for the SQLite store (which can be swapped for Postgres) and the in-memory rate-limit/circuit-breaker state (which is per-process by design).
+None of these measure a real LLM call, which is dominated by upstream provider latency.
+
+Honest read: ~1.2k req/s on a single process is a **moderate-load** number, and single-process is currently the supported shape — scale vertically, not out.
+
+**Do not run more than one instance yet.** The daily spend total is held in process memory and persisted by *overwriting* a single key rather than incrementing it, so each replica enforces the full `daily_limit` against its own counter and overwrites the other's total: the fleet can spend a multiple of the configured budget. Per-session injection-trajectory scoring is also per-process, so a session split across instances is scored independently and the multi-turn detector weakens. Nothing detects a second instance — the failure is silent, and arrives as a provider invoice. This is why `replicaCount` is pinned to `1` in [`charts/llmproxy/values.yaml`](charts/llmproxy/values.yaml), where the mechanism is spelled out, and why autoscaling defaults to off.
+
+Multiple uvicorn workers would not help either, for the same reason: each forked worker carries its own budget counter. There is deliberately no `workers` setting in the entrypoint.
+
+Rate limiting and circuit breaking *are* shareable across processes today, via Redis Lua scripts. Horizontal scaling becomes available once the budget and session state move to that same Redis.
 
 Reproduce: `python main.py` then `wrk -t4 -c100 -d30s --latency http://localhost:8090/health`.
 

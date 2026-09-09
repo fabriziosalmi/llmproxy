@@ -75,10 +75,26 @@ spec:
               mountPath: /app/config.yaml
               subPath: config.yaml
               readOnly: true
+            {{- if .Values.persistence.enabled }}
+            # data/ holds the endpoint registry, app_state (including the
+            # persisted daily budget), the spend ledger, the RBAC subjects, the
+            # tamper-evident audit chain and the encryption salt. Without this
+            # mount all of it lives in the pod's ephemeral filesystem and is
+            # destroyed on every restart, rescheduling or helm upgrade — the
+            # same loss that hit production before the store was moved under
+            # data/, reproduced here because the chart never got a volume.
+            - name: data
+              mountPath: /app/data
+            {{- end }}
       volumes:
         - name: config-volume
           configMap:
             name: {{ include "llmproxy.fullname" . }}-config
+        {{- if .Values.persistence.enabled }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim | default (printf "%s-data" (include "llmproxy.fullname" .)) }}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

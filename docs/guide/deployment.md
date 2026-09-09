@@ -90,6 +90,14 @@ Overridable parameters in `values.yaml`:
 - `config`: Raw string contents of `config.yaml` injected into the configuration ConfigMap.
 - `secrets.inline`: Dictionary of inline credential variables (e.g. `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `LLM_PROXY_API_KEYS`) automatically mapped as secrets.
 - `redis.enabled`: Provision a bundled Redis cache cluster (default: `true`).
+- `persistence.enabled`: Claim a PersistentVolume for `/app/data` (default:
+  `true`, and leave it there). Without it the endpoint registry, budget, spend
+  ledger, audit chain and encryption salt live on the pod's ephemeral filesystem
+  and are destroyed on every restart, rescheduling and `helm upgrade`. Set it to
+  `false` only for a throwaway evaluation. `persistence.size` (default `2Gi`),
+  `persistence.storageClass` (`""` = cluster default, `"-"` = no dynamic
+  provisioning) and `persistence.existingClaim` (bind a claim you already have,
+  e.g. a restored snapshot) tune it.
 
 ## CI/CD
 
@@ -139,8 +147,21 @@ tamper-evident audit chain with it. That was a real defect, fixed in 1.33.0.
 
 `data/` holds the only state that cannot be reconstructed by hand: the endpoint
 registry, `app_state` (including the persisted daily budget), the spend ledger,
-the RBAC subjects, and the tamper-evident audit chain. `cache.db` beside it is
-disposable.
+the RBAC subjects, the tamper-evident audit chain, and `.llmproxy_salt`.
+`cache.db` beside it is disposable.
+
+**Back up the salt with the database.** `.llmproxy_salt` is one half of the key
+that decrypts every stored credential; the database is the other half. Restoring
+`endpoints.db` onto a host that lost the salt gives you back every row and no way
+to read any encrypted value in it — and the proxy will not report that clearly,
+because a value that fails to decrypt is returned as-is, so the symptom is 401s
+from every provider. `scripts/backup_db.py` captures the database only; copy the
+salt alongside it, with the same `0600` mode.
+
+If you are upgrading from a release where the salt sat in the working directory
+(`/app/.llmproxy_salt` rather than `/app/data/.llmproxy_salt`), the proxy keeps
+using the old file and logs a warning naming the new location. Move it while the
+proxy is stopped — do not delete it and do not let a rebuild discard it.
 
 ```bash
 python scripts/backup_db.py                    # data/endpoints.db -> data/backups/
