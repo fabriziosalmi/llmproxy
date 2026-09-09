@@ -6,6 +6,8 @@
  * the API DOM-first means tests run in happy-dom without a renderer and
  * existing innerHTML callsites can adopt primitives one at a time.
  */
+export { escapeHtml, html } from './escape';
+
 export { cx } from './classnames';
 export type { ClassValue } from './classnames';
 

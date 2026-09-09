@@ -65,6 +65,27 @@ const _storage = {
     },
 };
 
+/**
+ * A 128-bit random token, hex-encoded, for the OAuth `state` and OIDC `nonce`.
+ *
+ * These used to fall back to `Math.random().toString(36).slice(2)` when
+ * `crypto.randomUUID` was unavailable — and it is unavailable in exactly the
+ * case this project ships by default. randomUUID requires a SECURE CONTEXT, so
+ * a UI served over plain HTTP (config.yaml has server.tls.enabled false,
+ * docker-compose publishes 8090 unencrypted, the chart's ingress has tls: [])
+ * took the fallback every time. That is roughly eleven base-36 characters from
+ * a 52-bit double produced by xorshift128+, whose entire future output is
+ * recoverable from a handful of prior samples the same page hands out freely.
+ *
+ * crypto.getRandomValues has no secure-context requirement, so there is no
+ * fallback to take.
+ */
+function _randomToken() {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 // ─── Public API ───
 
 export const auth = {
@@ -276,8 +297,8 @@ function _startOAuthPopup(provider) {
     }
 
     const redirectUri = `${window.location.origin}/ui/oauth-callback.html`;
-    const nonce = crypto.randomUUID?.() || Math.random().toString(36).slice(2);
-    const state = crypto.randomUUID?.() || Math.random().toString(36).slice(2);
+    const nonce = _randomToken();
+    const state = _randomToken();
 
     const params = new URLSearchParams({
         client_id: cfg.client_id,
@@ -307,7 +328,18 @@ function _startOAuthPopup(provider) {
         window.removeEventListener('message', handler);
         if (popup && !popup.closed) popup.close();
 
+        // A token is accepted only when the state comes back exactly as sent.
+        // The value was generated and then never checked, which made it
+        // decoration — the origin check above was doing all the work, and a
+        // value that exists for CSRF binding should be the thing that binds.
+        // Error payloads are still shown, so a provider's own message is not
+        // swallowed by a state that never arrived on that path.
         if (event.data.id_token) {
+            if (event.data.state !== state) {
+                console.error('OAuth state mismatch — discarding callback');
+                _showLoginError('Sign-in could not be verified. Please try again.');
+                return;
+            }
             await _exchangeToken(event.data.id_token);
         } else if (event.data.error) {
             _showLoginError(event.data.error);
