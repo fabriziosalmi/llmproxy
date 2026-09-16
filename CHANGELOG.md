@@ -2,6 +2,14 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.35.1] — 2026-09-16
+
+### Quality & Reliability Improvements
+
+- **Plugin & security frontend typing narrowed**: `fail_policy` and `hook` union types in `ui/src/views/plugins/types.ts` are strictly typed without string widening, and security summary dependency signatures in `ui/src/views/security/index.ts` use dedicated `SecurityGuardsStatus` and `SecurityCorpusStats` interfaces.
+- **Threats SSE event parsing observability**: Added diagnostic warning log in `ui/components/threats.js` when SSE log data payload parsing fails, avoiding silent error swallowing.
+- **State write queue saturation metrics**: Added Prometheus load-shed tracking (`MetricsTracker.track_load_shed()`) in `proxy/rotator.py` when the pending writes queue reaches capacity.
+
 ## [1.35.0] — 2026-09-09
 
 ### The audit that scored 39/100, and the sixteen pull requests that answered it

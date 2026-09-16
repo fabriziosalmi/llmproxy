@@ -566,7 +566,9 @@ function initEventFeed() {
                     const entry = JSON.parse(e.data);
                     if (!isSecurityEvent(entry)) return;
                     addEventToFeed(feed, entry);
-                } catch {}
+                } catch (err) {
+                    console.warn("Failed to parse SSE event data:", err);
+                }
             };
             eventSource.onerror = () => {
                 errorCount++;

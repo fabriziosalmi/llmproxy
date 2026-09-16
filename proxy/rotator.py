@@ -229,6 +229,12 @@ class ProxyOrchestrator(BaseAgent):
             self._pending_writes.put_nowait((key, value))
         except asyncio.QueueFull:
             self.logger.error("Pending writes queue full — budget state write DROPPED")
+            try:
+                from core.metrics import MetricsTracker
+
+                MetricsTracker.track_load_shed()
+            except Exception:
+                pass
 
     async def _seed_endpoints_from_config(self):
         """Register config.yaml endpoints into the persistence store.
