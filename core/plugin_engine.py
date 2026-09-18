@@ -601,8 +601,10 @@ class PluginManager:
             # base directory when the second argument is an absolute path
             # (e.g. os.path.join("plugins", "/tmp/evil.py") → "/tmp/evil.py").
             # Resolve both paths and verify containment before proceeding.
-            safe_base = os.path.abspath(self.plugins_dir) + os.sep
-            if not os.path.abspath(file_path).startswith(safe_base):
+            # realpath: abspath normalises traversal but follows symlinks, so a link
+            # inside plugins/ pointed anywhere and every check passed.
+            safe_base = os.path.realpath(self.plugins_dir) + os.sep
+            if not os.path.realpath(file_path).startswith(safe_base):
                 raise ValueError(
                     f"Plugin path traversal detected: '{file_path}' escapes plugins_dir"
                 )
@@ -702,8 +704,10 @@ class PluginManager:
             file_path = os.path.join(
                 self.plugins_dir, f"{entrypoint.replace('.', '/')}.wasm"
             )
-            safe_base = os.path.abspath(self.plugins_dir) + os.sep
-            if not os.path.abspath(file_path).startswith(safe_base):
+            # realpath: abspath normalises traversal but follows symlinks, so a link
+            # inside plugins/ pointed anywhere and every check passed.
+            safe_base = os.path.realpath(self.plugins_dir) + os.sep
+            if not os.path.realpath(file_path).startswith(safe_base):
                 raise ValueError(
                     f"Plugin path traversal detected: '{file_path}' escapes plugins_dir"
                 )
@@ -1102,9 +1106,11 @@ class PluginManager:
                 src_path = os.path.join(
                     self.plugins_dir, f"{module_path.replace('.', '/')}.py"
                 )
-                # Same containment guard as _load_plugin — never read outside plugins_dir.
-                safe_base = os.path.abspath(self.plugins_dir) + os.sep
-                if os.path.abspath(src_path).startswith(safe_base) and os.path.exists(
+                # Same containment guard as _load_plugin — never read outside
+                # plugins_dir, and realpath rather than abspath so a symlink
+                # inside plugins/ cannot point out of it.
+                safe_base = os.path.realpath(self.plugins_dir) + os.sep
+                if os.path.realpath(src_path).startswith(safe_base) and os.path.exists(
                     src_path
                 ):
                     with open(src_path, "r") as src_file:

@@ -77,7 +77,12 @@ service:
   type: ClusterIP
   port: 8090
   metricsPort: 9091
-  adminPort: 8081
+  # No adminPort. `server.admin.port: 8081` is read by nothing — main.py binds
+  # one listener on server.port plus, optionally, the Prometheus exporter — so
+  # the Service published an endpoint that refused every connection, and a
+  # port named "admin" in a manifest implies a separate administrative surface
+  # with its own exposure decision. The admin API is on 8090 alongside the data
+  # plane and is separated by credential tier, not by port.
 
 ingress:
   enabled: false
@@ -173,9 +178,6 @@ config: |
       # NetworkPolicy — the Service publishes metricsPort to the whole cluster.
       # The authenticated alternative is GET /metrics on the main port.
       bind: "0.0.0.0"  # nosec
-    admin:
-      enabled: true
-      port: 8081
     storage:
       type: "sqlite"
   security:

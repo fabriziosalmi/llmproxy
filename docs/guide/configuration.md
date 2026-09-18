@@ -18,7 +18,46 @@ server:
   auth:
     enabled: true
     api_keys_env: "LLM_PROXY_API_KEYS"
+    admin_keys_env: "LLM_PROXY_ADMIN_KEYS"
 ```
+
+### The two key tiers
+
+`api_keys_env` names the variable holding **inference** keys — what `/v1/*`
+accepts. `admin_keys_env` names the **control-plane** keys, and those are the
+only ones `/api/v1/*` and `/admin/*` accept: config apply, plugin install,
+registry writes, RBAC, GDPR purge.
+
+Leave `LLM_PROXY_ADMIN_KEYS` unset and the proxy falls back to the inference
+bag for the control plane too, so every key you hand an application team can
+also rewrite the configuration and purge the audit log. That fallback exists
+because single-operator installs are legitimate; the proxy warns about it at
+startup rather than refusing to boot.
+
+`enabled` defaults to **true** when the key is absent — for a security gateway
+an omitted auth section must mean "authenticate, and tell me if you cannot".
+For local work, `LLM_PROXY_DEV_MODE=1` disables authentication with a warning
+naming itself, which is the supported way to run open.
+
+### Precedence
+
+Values resolve in this order, later winning:
+
+1. `config.yaml` — in a container, the image's copy unless you mount over it.
+2. Environment overlays applied after the parse: `LLM_PROXY_ENDPOINT_<NAME>_*`
+   declarations are merged into the endpoint map, `LLM_PROXY_FIREWALL_ENABLED`
+   overwrites `security.firewall.enabled`, and `LLM_PROXY_DEV_MODE` overwrites
+   `server.auth.enabled`. These re-apply on every hot reload, so an env value
+   cannot be edited away in YAML.
+3. Variables read directly where they are used and never merged into the config
+   — `LLM_PROXY_DB_PATH`, `LLM_PROXY_SALT_PATH`, `LLM_PROXY_REDIS_TIMEOUT`, the
+   two key bags, and each endpoint's `api_key_env`.
+4. Runtime changes through the admin API (`/api/v1/routing/cost-weight`,
+   `/api/v1/features/toggle`), which readers prefer over the config value and
+   which are lost on restart.
+
+`GET /api/v1/config/raw` returns layer 1 — the file — so it can differ from
+what the process is running.
 
 ## Endpoints
 

@@ -115,6 +115,41 @@ def test_base_images_are_digest_pinned(image):
     )
 
 
+def test_the_python_lock_exists_and_is_hash_pinned():
+    """requirements.txt is an input manifest: 25 packages, six open-ended, with
+    27 transitive packages resolved fresh at every build and nothing recording
+    what was chosen."""
+    lock = _read("requirements.lock")
+
+    assert "--hash=sha256:" in lock
+    pinned = len([ln for ln in lock.splitlines() if "==" in ln and not ln.startswith("#")])
+    assert pinned > 50, f"only {pinned} packages locked"
+
+
+def test_the_image_installs_from_the_lock_with_hashes():
+    dockerfile = _read("Dockerfile")
+
+    assert "--require-hashes -r requirements.lock" in dockerfile
+    assert "pip install --no-cache-dir -r requirements.txt" not in dockerfile
+
+
+def test_ci_audits_the_lock_not_the_manifest():
+    """Auditing requirements.txt audited a resolution nobody recorded."""
+    ci = _read(".github/workflows/ci.yml")
+
+    assert "pip-audit -r requirements.lock" in ci
+
+
+def test_ci_fails_when_the_lock_drifts():
+    """A lock out of sync with its manifest is worse than no lock."""
+    ci = yaml.safe_load(_read(".github/workflows/ci.yml"))
+    job = ci["jobs"]["lockfile"]
+    runs = " ".join(str(s.get("run", "")) for s in job["steps"])
+
+    assert "uv pip compile" in runs
+    assert "git diff --exit-code" in runs
+
+
 def test_dependabot_updates_the_digests():
     """Pinning without this trades a moving base for a frozen one."""
     dependabot = _load_yaml(".github/dependabot.yml")

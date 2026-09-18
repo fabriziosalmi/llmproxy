@@ -19,7 +19,7 @@ import { api } from '../../services/api.js';
 import { store } from '../../services/store.js';
 import { toast } from '../../services/toast.js';
 import { timerange } from '../../services/timerange.js';
-import { createSnippet } from '../ui';
+import { createSnippet, escapeHtml } from '../ui';
 
 const BASE_URL = window.location.origin;
 
@@ -121,11 +121,17 @@ function _kv(label: string, value: unknown): string {
     // R.2: stack label-over-value on phones (label column is 110px which
     // squeezes the value to ~150px on a 320-360px viewport). At sm:+ the
     // original 110/1fr grid takes over.
-    const v = value == null || value === '' ? '—' : String(value);
+    //
+    // Both halves are escaped. The value carries backend data an inference
+    // caller can choose — `model` comes straight from the request body, is
+    // written to audit_log and rendered back here — and this file assigns the
+    // result to innerHTML in 31 places. Script execution is blocked by the UI
+    // CSP, but that is a second layer, not a substitute for this one.
+    const v = value == null || value === '' ? '—' : value;
     return `
         <div class="grid grid-cols-1 sm:grid-cols-[110px_1fr] gap-y-0.5 sm:gap-2 py-1.5 border-b border-white/[0.04] last:border-0">
-            <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wide">${label}</span>
-            <span class="text-[11px] text-white font-mono break-all">${v}</span>
+            <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wide">${escapeHtml(label)}</span>
+            <span class="text-[11px] text-white font-mono break-all">${escapeHtml(v)}</span>
         </div>`;
 }
 
@@ -440,7 +446,9 @@ function _requestConfig(r: AuditRow): HTMLElement {
             .join('');
         el.innerHTML = rows || '<p class="text-[11px] text-slate-600 font-mono">No metadata recorded.</p>';
     } catch {
-        el.innerHTML = `<pre class="text-[10px] text-slate-400 font-mono whitespace-pre-wrap">${r.metadata ?? '—'}</pre>`;
+        // The raw audit metadata blob, which is request-derived — it does not
+        // go through _kv, so it needs escaping of its own.
+        el.innerHTML = `<pre class="text-[10px] text-slate-400 font-mono whitespace-pre-wrap">${escapeHtml(r.metadata ?? '—')}</pre>`;
     }
     return el;
 }

@@ -29,7 +29,12 @@ def create_router(agent) -> APIRouter:
         """
         if not auth_enabled(agent.config):
             return
-        from proxy.auth_helpers import parse_bearer
+        from proxy.auth_helpers import parse_bearer, principal_already_verified
+
+        # The middleware ran and admitted this caller — possibly on a JWT,
+        # which this closure's key check would refuse. Defer to its verdict.
+        if principal_already_verified(request):
+            return
 
         token = parse_bearer(request.headers.get("Authorization", ""))
         if not agent._verify_admin_key(token):

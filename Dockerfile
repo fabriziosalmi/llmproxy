@@ -24,9 +24,22 @@ WORKDIR /app
 # Non-root user
 RUN groupadd -r llmproxy && useradd -r -g llmproxy llmproxy
 
-# Install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies from the hash-pinned lock.
+#
+# requirements.txt is the input manifest — 25 packages, 19 == pinned and six
+# open-ended — and installing from it directly meant the 27 TRANSITIVE packages
+# beneath were resolved fresh on every build, with nothing recording what was
+# chosen. Two builds of the same commit weeks apart contained different code,
+# the pip-audit that passed on Monday said nothing about Friday's image, and
+# there was no artefact anyone could diff to find out what changed.
+#
+# --require-hashes also closes registry substitution: a tampered wheel fails
+# the hash rather than being trusted on TLS alone. Regenerate with
+#   uv pip compile requirements.txt --generate-hashes \
+#     --python-version 3.12 --python-platform linux -o requirements.lock
+# which CI verifies is in sync.
+COPY requirements.txt requirements.lock ./
+RUN pip install --no-cache-dir --require-hashes -r requirements.lock
 
 # Supply chain verification: scan for malicious .pth files post-install
 # Defense against litellm-style attacks (2026-03-24)
@@ -68,7 +81,15 @@ USER llmproxy
 
 EXPOSE 8090
 
+# Reads the VERDICT, not just the status line. urlopen() alone reported the
+# container healthy whenever the endpoint answered at all — /health returns 200
+# regardless of what it found, so the check passed with every component down.
+# A health check that cannot fail is not a health check.
+#
+# "degraded" deliberately still passes: it means serving with something
+# reduced, and restarting the container would not fix it.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8090/health')"
+    CMD python -c "import json, sys, urllib.request; \
+sys.exit(1) if json.load(urllib.request.urlopen('http://localhost:8090/health', timeout=4)).get('status') == 'down' else sys.exit(0)"
 
 CMD ["python", "-u", "main.py"]

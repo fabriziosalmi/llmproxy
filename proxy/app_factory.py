@@ -26,6 +26,26 @@ of the previous per-route opt-in pattern that guaranteed future CVEs.
 The per-route _check_admin_auth() closures in individual route modules
 are retained as defence-in-depth: they catch any gap in the middleware
 config (e.g. a misconfigured prefix) and produce a descriptive error.
+They defer to the middleware's verdict when it ran, because each of them
+re-verified the ADMIN KEY specifically and would otherwise refuse a
+caller the middleware had just admitted on a JWT.
+
+Credential, then permission
+───────────────────────────
+The middleware resolves a *principal* rather than checking one kind of
+token: an admin API key, a proxy or OIDC JWT, or the enterprise
+admin_auth JWT. Verifying only the key meant both JWT paths this
+codebase implements produced a verified identity that opened nothing —
+an SSO user with roles ["admin"] got authenticated:true from
+/api/v1/identity/me and 401 everywhere else.
+
+Admitting them required checking their roles, or any user of a
+configured directory would have become an administrator. So the route
+names a permission (core/control_plane_policy.py) and the principal must
+hold it. An API key resolves to the `admin` role, which holds every
+permission, so key-authenticated deployments are unchanged and the check
+can only ever refuse a JWT caller whose roles are genuinely
+insufficient.
 """
 
 import os
@@ -40,6 +60,7 @@ from fastapi.staticfiles import StaticFiles
 from core.tracing import TraceManager
 from core.firewall_asgi import ByteLevelFirewallMiddleware
 from core.auth_policy import auth_enabled
+from core.control_plane_policy import required_permission
 
 logger = logging.getLogger("llmproxy.app_factory")
 
@@ -248,11 +269,13 @@ def create_app(agent) -> FastAPI:
                 if request.query_params.get("sse_token"):
                     return await call_next(request)
                 token = request.query_params.get("token", "")
-            if not agent._verify_admin_key(token):
-                from fastapi.responses import JSONResponse
+            from fastapi.responses import JSONResponse
 
-                from core.metrics import MetricsTracker
+            from core.metrics import MetricsTracker
+            from proxy.auth_helpers import resolve_control_plane_principal
 
+            principal = await resolve_control_plane_principal(agent, token)
+            if principal is None:
                 # Count it here, at the chokepoint every control-plane
                 # rejection already passes through. track_auth_failure was
                 # called only from two data-plane handlers, so
@@ -272,6 +295,40 @@ def create_app(agent) -> FastAPI:
                     status_code=401,
                     content={"detail": "Unauthorized"},
                 )
+
+            kind, roles = principal
+
+            # Authenticated is not authorised. The RBAC matrix declared
+            # fourteen permissions and exactly one was ever consulted, so an
+            # operator could assign someone `viewer` and reasonably believe
+            # they could not install a plugin — nothing made that true. Now
+            # the route names a permission and the caller must hold it.
+            #
+            # An API key resolves to the `admin` role, which holds every
+            # permission, so this can only ever refuse a JWT-authenticated
+            # caller whose roles are genuinely insufficient. Key-authenticated
+            # deployments are unchanged.
+            needed = required_permission(request.method, path)
+            if not agent.rbac.check_permission(roles, needed):
+                MetricsTracker.track_auth_failure("control_plane_forbidden")
+                logger.warning(
+                    "Global auth: %s %s refused for roles=%s — needs '%s'",
+                    request.method,
+                    path,
+                    roles,
+                    needed,
+                )
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "detail": f"Insufficient permissions: '{needed}' required"
+                    },
+                )
+
+            # Downstream handlers (and the audit trail) should know who this
+            # is rather than re-deriving it from the header.
+            request.state.principal_kind = kind
+            request.state.roles = roles
 
         return await call_next(request)
 
@@ -368,6 +425,63 @@ def create_app(agent) -> FastAPI:
         ),
     )
     app.add_middleware(RateLimitMiddleware, config=agent.config, agent=agent)
+
+    # ── Admission control ───────────────────────────────────────────────────
+    # Bounds how many data-plane requests are in flight, because nothing did.
+    # The connector's limit was the only ceiling and it queues rather than
+    # refuses, with no deadline on the wait — so overload became unbounded
+    # latency and memory instead of a 503 a client can back off from.
+    #
+    # Applied to /v1/ only: the control plane is low-volume, operator-driven,
+    # and shedding an operator's config-apply because inference is busy would
+    # be the wrong trade.
+    from core.admission import AdmissionController
+
+    agent.admission = AdmissionController.from_config(agent.config)
+    if agent.admission.enabled:
+        logger.info(
+            "Admission control: %d in flight, %d queued, then 503",
+            agent.admission.max_in_flight,
+            agent.admission.max_queued,
+        )
+
+    @app.middleware("http")
+    async def admission_control(request: Request, call_next):
+        if not request.url.path.startswith("/v1/"):
+            return await call_next(request)
+
+        controller = agent.admission
+        if not controller.enabled:
+            return await call_next(request)
+
+        if not await controller.acquire():
+            from fastapi.responses import JSONResponse
+
+            from core.metrics import MetricsTracker
+
+            MetricsTracker.track_load_shed()
+            logger.warning(
+                "Admission control: shed %s %s — %d in flight, %d queued",
+                request.method,
+                request.url.path,
+                controller.in_flight,
+                controller.queued,
+            )
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "error": "overloaded",
+                    "message": (
+                        "The proxy is at capacity. Retry shortly, or raise "
+                        "connection_pool.max_connections."
+                    ),
+                },
+                headers={"Retry-After": str(controller.retry_after_s)},
+            )
+        try:
+            return await call_next(request)
+        finally:
+            controller.release()
 
     # ── Request accounting ──────────────────────────────────────────────────
     # Added last, so it is the OUTERMOST middleware and measures the whole
@@ -517,6 +631,26 @@ def create_app(agent) -> FastAPI:
                 await agent._session.close()
         except Exception as e:
             logger.error(f"HTTP session close failed on shutdown: {e}")
+        try:
+            from core.wasm_runner import shutdown_executor
+
+            shutdown_executor()
+        except Exception as e:
+            logger.error(f"WASM executor shutdown failed: {e}")
+        try:
+            from core.identity import shutdown_jwks_executor
+
+            shutdown_jwks_executor()
+        except Exception as e:
+            logger.error(f"JWKS executor shutdown failed: {e}")
+        try:
+            # Drop this instance's registration so a clean shutdown does not
+            # leave a key that makes the next start look like a second
+            # instance for its TTL.
+            if getattr(agent, "instance_guard", None):
+                await agent.instance_guard.deregister()
+        except Exception as e:
+            logger.error(f"Instance deregistration failed on shutdown: {e}")
         try:
             if getattr(agent, "webhooks", None):
                 await agent.webhooks.close()

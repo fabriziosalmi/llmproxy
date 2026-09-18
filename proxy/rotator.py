@@ -229,6 +229,12 @@ class ProxyOrchestrator(BaseAgent):
             self._pending_writes.put_nowait((key, value))
         except asyncio.QueueFull:
             self.logger.error("Pending writes queue full — budget state write DROPPED")
+            try:
+                from core.metrics import MetricsTracker
+
+                MetricsTracker.track_load_shed()
+            except Exception:
+                pass
 
     async def _seed_endpoints_from_config(self):
         """Register config.yaml endpoints into the persistence store.
@@ -381,6 +387,15 @@ class ProxyOrchestrator(BaseAgent):
         )
         if self.cache_backend._enabled:
             self._spawn_task(cache_eviction_loop(self.cache_backend, eviction_interval))
+        # Notice a second instance rather than learning about it from the
+        # invoice. Reports and measures; deliberately does not refuse to
+        # start, because a rolling update legitimately runs two for a few
+        # seconds and a stale key after a crash must not block a restart.
+        from core.instance_guard import InstanceGuard
+
+        self.instance_guard = InstanceGuard(getattr(self, "redis_client", None))
+        self._spawn_task(self.instance_guard.run())
+
         self._spawn_task(config_watch_loop(self, 30))
         self._spawn_task(write_flush_loop(self, 0.25))
         # Q.3 — hourly snapshot loop; interval configurable for ops who want

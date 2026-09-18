@@ -171,6 +171,18 @@ def validate_config(config: dict) -> list[str]:
     # 5. Security config
     security_cfg = config.get("security", {})
     max_payload = security_cfg.get("max_payload_size_kb", 512)
+    # Type-checked before comparing, like the port check three lines above.
+    # `max_payload_size_kb: "512"` is a natural thing to write and parses as a
+    # string, so this raised TypeError — unhandled by run_startup_checks, which
+    # catches only StartupError — and the process died with a traceback
+    # pointing at this file rather than at the operator's config. Precisely the
+    # outcome this module's docstring says it exists to prevent.
+    if not isinstance(max_payload, (int, float)) or isinstance(max_payload, bool):
+        raise StartupError(
+            f"security.max_payload_size_kb must be a number, got "
+            f"{type(max_payload).__name__} ({max_payload!r}). "
+            "Remove the quotes if you wrote it as a string."
+        )
     if max_payload < 1:
         warnings.append(
             "security.max_payload_size_kb < 1 KB — most requests will be rejected"
@@ -199,4 +211,21 @@ def run_startup_checks(config: dict):
     except StartupError as e:
         _LAST_WARNINGS = ["Startup configuration error: Please check server logs."]
         logger.critical(f"\n{'=' * 60}\n  STARTUP FAILED\n{'=' * 60}\n\n{e}\n")
+        sys.exit(1)
+    except Exception as e:  # noqa: BLE001
+        # The validator must not be the one component that fails cryptically.
+        # It caught only StartupError, so anything it did not anticipate — a
+        # type it compared without checking, a structure shaped unexpectedly —
+        # escaped as a raw traceback naming this file instead of the config.
+        _LAST_WARNINGS = ["Startup configuration error: Please check server logs."]
+        logger.critical(
+            "\n%s\n  STARTUP FAILED\n%s\n\n"
+            "Could not validate the configuration file: %s: %s\n"
+            "This is a defect in the validator rather than a rule you broke — "
+            "please report it with the config section you changed.\n",
+            "=" * 60,
+            "=" * 60,
+            type(e).__name__,
+            e,
+        )
         sys.exit(1)

@@ -58,9 +58,9 @@ LLMProxy implements defense-in-depth with 6 layers:
 
 | Version | Supported |
 |---------|-----------|
-| 1.34.x  | Yes       |
-| 1.33.x  | Security patches only |
-| < 1.33  | No        |
+| 1.35.x  | Yes       |
+| 1.34.x  | Security patches only |
+| < 1.34  | No        |
 
 The rule, rather than the table, is what to rely on: the current minor is
 supported, the one before it receives security patches, and anything older is

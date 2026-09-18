@@ -20,6 +20,7 @@
 // Legacy services remain JS — typed loosely via allowJs.
 import { api } from '../../services/api.js';
 import { store } from '../../services/store.js';
+import { escapeHtml } from '../ui';
 
 interface EndpointLike {
     id: string;
@@ -51,18 +52,24 @@ interface GuardsStatus {
 
 function _kvRow(label: string, value: unknown): string {
     // R.2: stack label-over-value on phones (mirror of drilldown._kv).
-    const safeVal = value == null || value === '' ? '—' : String(value);
+    //
+    // The local used to be called `safeVal` while being a bare String() — a
+    // name asserting a property it did not have, which is how this survived
+    // review. It is escaped now, and named for what it holds.
+    const raw = value == null || value === '' ? '—' : value;
     return `
         <div class="grid grid-cols-1 sm:grid-cols-[110px_1fr] gap-y-0.5 sm:gap-2 py-1.5 border-b border-white/[0.04] last:border-0">
-            <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wide">${label}</span>
-            <span class="text-[11px] text-white font-mono break-all">${safeVal}</span>
+            <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wide">${escapeHtml(label)}</span>
+            <span class="text-[11px] text-white font-mono break-all">${escapeHtml(raw)}</span>
         </div>`;
 }
 
 function _section(title: string, bodyHtml: string): string {
+    // `bodyHtml` is markup the callers compose and is deliberately NOT escaped;
+    // `title` is a caption and is.
     return `
         <section class="mt-4 first:mt-0">
-            <h3 class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">${title}</h3>
+            <h3 class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">${escapeHtml(title)}</h3>
             ${bodyHtml}
         </section>`;
 }
@@ -76,7 +83,8 @@ function _loading(): HTMLElement {
 
 function _errorNode(msg: string): HTMLElement {
     const el = document.createElement('div');
-    el.innerHTML = _section('Error', `<p class="text-[11px] text-rose-400 font-mono">${msg}</p>`);
+    // Error text often carries a backend message, so it is data, not markup.
+    el.innerHTML = _section('Error', `<p class="text-[11px] text-rose-400 font-mono">${escapeHtml(msg)}</p>`);
     return el;
 }
 
@@ -108,8 +116,8 @@ async function _renderFirewall(): Promise<HTMLElement> {
               .map(
                   ([s, n]) => `
             <div class="flex justify-between py-1 text-[11px] font-mono">
-                <span class="text-slate-400 truncate max-w-[280px]">${s}</span>
-                <span class="text-rose-400 font-bold">${n}</span>
+                <span class="text-slate-400 truncate max-w-[280px]">${escapeHtml(s)}</span>
+                <span class="text-rose-400 font-bold">${escapeHtml(n)}</span>
             </div>`
               )
               .join('')

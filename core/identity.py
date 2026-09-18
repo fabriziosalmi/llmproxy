@@ -17,6 +17,7 @@ Architecture:
 """
 
 import asyncio
+import concurrent.futures
 import time
 import logging
 import aiohttp
@@ -38,6 +39,35 @@ JWKS_CACHE_TTL = 3600
 # but the caller still waits, so this bounds how long one request can hang on a
 # stalled identity provider.
 JWKS_FETCH_TIMEOUT_S = 5
+
+# Total budget one request may spend obtaining a signing key: the wait for
+# another request's in-flight fetch, plus its own. Bounded because the
+# coalescing lock below turns concurrent misses into a queue, and a queue with
+# no ceiling in front of a stalled provider is the hang the fetch timeout was
+# added to prevent, moved one level out.
+JWKS_TOTAL_BUDGET_S = 2 * JWKS_FETCH_TIMEOUT_S
+
+# JWKS fetches run on their own small pool, not on the loop's default executor.
+#
+# asyncio.to_thread() submits to the default executor — min(32, cpu_count + 4)
+# threads — which this process also uses for the event-log DLQ writes, the
+# config-file hashing in the watcher, the semantic-cache lookups and the
+# security shield's regex scans. Handing a synchronous urllib fetch against a
+# third party to that pool means a stalled identity provider occupies threads
+# that unrelated blocking work needs: the fix for "one slow IdP stalls the
+# event loop" became "one slow IdP starves everything that offloads".
+#
+# Four workers, because with the coalescing lock at most one fetch per provider
+# is ever in flight, and core/wasm_runner.py sets the same precedent for the
+# same reason.
+_JWKS_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=4, thread_name_prefix="jwks"
+)
+
+
+def shutdown_jwks_executor(wait: bool = False) -> None:
+    """Release the JWKS fetch threads on shutdown."""
+    _JWKS_EXECUTOR.shutdown(wait=wait, cancel_futures=True)
 
 
 @dataclass
@@ -97,6 +127,9 @@ class IdentityManager:
         self.providers: Dict[str, OIDCProvider] = {}
         self._jwks_clients: Dict[str, PyJWKClient] = {}
         self._jwks_cache_ts: Dict[str, float] = {}
+        # One lock per provider, so concurrent cache misses coalesce into a
+        # single fetch instead of a thundering herd of identical ones.
+        self._jwks_locks: Dict[str, asyncio.Lock] = {}
         self._session: Optional[aiohttp.ClientSession] = None
 
         # Default role for authenticated users
@@ -177,6 +210,54 @@ class IdentityManager:
 
         return self._jwks_clients[provider.name]
 
+    async def _signing_key(self, provider: OIDCProvider, token: str):
+        """Resolve the signing key for `token`, off the event loop.
+
+        get_signing_key_from_jwt fetches over synchronous urllib on a cache
+        miss — at least once per provider per JWKS_CACHE_TTL, and again for any
+        kid the cached set does not contain. Called directly it blocked the
+        single event loop for the whole fetch, so a slow identity provider
+        stalled every in-flight request rather than only the one
+        authenticating.
+
+        Moving it to a thread fixed that but left two things:
+
+          * asyncio.to_thread submits to the loop's DEFAULT executor, shared
+            with every other blocking offload in the process, so a stalled
+            provider starved them instead;
+          * nothing coalesced concurrent misses, so N simultaneous logins after
+            a restart or a key rotation fired N identical fetches, each holding
+            a thread for up to JWKS_FETCH_TIMEOUT_S.
+
+        So: a dedicated pool, one fetch per provider at a time, and a ceiling
+        on how long any one request waits for the result.
+        """
+        lock = self._jwks_locks.setdefault(provider.name, asyncio.Lock())
+        loop = asyncio.get_running_loop()
+
+        async def _resolve():
+            async with lock:
+                # Re-read the client inside the lock: the fetch we queued
+                # behind may have refreshed a stale one.
+                jwks_client = self._get_jwks_client(provider)
+                return await loop.run_in_executor(
+                    _JWKS_EXECUTOR, jwks_client.get_signing_key_from_jwt, token
+                )
+
+        try:
+            return await asyncio.wait_for(_resolve(), timeout=JWKS_TOTAL_BUDGET_S)
+        except asyncio.TimeoutError:
+            # Fail closed. The abandoned fetch keeps running on its thread and
+            # populates the client cache, so the next caller is likely to be
+            # served from it rather than repeating this wait.
+            logger.warning(
+                "Identity: JWKS key lookup for provider '%s' exceeded %ss; "
+                "refusing the token rather than holding the request.",
+                provider.name,
+                JWKS_TOTAL_BUDGET_S,
+            )
+            raise ValueError("Identity provider unavailable")
+
     async def verify_token(self, token: str) -> Optional[IdentityContext]:
         """
         Verify a JWT token against all configured OIDC providers.
@@ -211,17 +292,7 @@ class IdentityManager:
 
         # Validate signature via JWKS
         try:
-            jwks_client = self._get_jwks_client(provider)
-            # get_signing_key_from_jwt fetches over synchronous urllib on a
-            # cache miss — which happens at least once per provider per
-            # JWKS_CACHE_TTL. Called directly it blocked the single event loop
-            # for the whole fetch, so a slow identity provider stalled every
-            # in-flight request rather than only the one authenticating.
-            # asyncio.to_thread keeps the wait on this coroutine, where it
-            # belongs; the timeout passed to PyJWKClient bounds it.
-            signing_key = await asyncio.to_thread(
-                jwks_client.get_signing_key_from_jwt, token
-            )
+            signing_key = await self._signing_key(provider, token)
 
             claims = jwt.decode(
                 token,

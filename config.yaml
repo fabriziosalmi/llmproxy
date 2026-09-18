@@ -41,9 +41,10 @@ server:
   metrics:
     enabled: false
     port: 9091
-  admin:
-    enabled: true
-    port: 8081
+  # No admin section. `server.admin.port` was read by nothing: main.py binds
+  # one listener on server.port plus, optionally, the Prometheus exporter. The
+  # admin API lives on the main port and is separated by credential tier
+  # (LLM_PROXY_ADMIN_KEYS), not by port.
   vllm:
     enabled: true
     model_path: "smollm-360m-instruct-mlx"
