@@ -4,8 +4,8 @@ Security gateway for Large Language Models. Routes requests across 24 providers 
 
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-1510%20passing-brightgreen)
-![Coverage](https://img.shields.io/badge/coverage-70%25-yellowgreen)
+![Tests](https://img.shields.io/badge/tests-1755%20passing-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-72%25-yellowgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 [![CI](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml/badge.svg)](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml)
 

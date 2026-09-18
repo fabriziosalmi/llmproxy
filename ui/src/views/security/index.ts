@@ -15,9 +15,27 @@ import {
     renderVerifyValid,
 } from './SecurityFeedback';
 
+export interface SecurityGuardsStatus {
+    security_shield?: {
+        threat_ledger?: {
+            tracked_ips?: number | string;
+        };
+    };
+    response_signing?: {
+        enabled?: boolean;
+    };
+    features?: Record<string, boolean | undefined>;
+    firewall?: { enabled?: boolean; disabled_reason?: string | null };
+}
+
+export interface SecurityCorpusStats {
+    total_patterns?: number;
+    categories?: Record<string, number>;
+}
+
 type SecurityDeps = {
-    fetchGuardsStatus: () => Promise<any>;
-    fetchSecurityCorpus: () => Promise<any>;
+    fetchGuardsStatus: () => Promise<SecurityGuardsStatus | null>;
+    fetchSecurityCorpus: () => Promise<SecurityCorpusStats>;
     getToken: () => string;
     origin: string;
     toast: (msg: string, type?: 'success' | 'error' | 'warning' | 'info', duration?: number) => void;
