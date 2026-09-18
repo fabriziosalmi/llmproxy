@@ -234,10 +234,28 @@ def create_router(agent) -> APIRouter:
         except Exception as exc:
             components["plugins"] = {"status": "down", "detail": str(exc)[:120]}
 
-        # Upstream HTTP session (aiohttp) — required for any forward.
+        # Upstream HTTP session (aiohttp) — required for any forward, and
+        # created LAZILY on the first one (RotatorAgent._get_session).
+        #
+        # "not created yet" is not "broken". Treating it as down reported a
+        # fully working proxy as dead for as long as it had served no forward:
+        # /health returned {"status": "down"} on a process that was enforcing
+        # auth, answering /v1/models and passing every other component check.
+        # For a readiness gate that is a deadlock — no traffic means no
+        # session, no session means never ready, never ready means no traffic —
+        # and for anything keyed on the field it is simply wrong.
+        #
+        # A session that EXISTS and is CLOSED is a different thing: something
+        # closed it under a running process, and that is a real failure.
         sess = getattr(agent, "_session", None)
         session_active = sess is not None and not getattr(sess, "closed", True)
-        components["session"] = {"status": "ok" if session_active else "down"}
+        if sess is None:
+            components["session"] = {
+                "status": "idle",
+                "detail": "created on the first upstream forward",
+            }
+        else:
+            components["session"] = {"status": "ok" if session_active else "down"}
 
         # Log queue — high saturation means we're about to start dropping
         # to DLQ on the hot path.
@@ -262,7 +280,9 @@ def create_router(agent) -> APIRouter:
         except Exception as exc:
             components["log_queue"] = {"status": "down", "detail": str(exc)[:120]}
 
-        # Compute overall — store + session are critical (no proxy without them).
+        # Compute overall — store + session are critical (no proxy without
+        # them). "idle" is neither down nor degraded, so it passes through
+        # here without affecting the verdict, which is the point.
         critical = {"store", "session"}
         overall = "ok"
         for name, comp in components.items():

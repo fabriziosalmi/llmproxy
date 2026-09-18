@@ -81,7 +81,15 @@ USER llmproxy
 
 EXPOSE 8090
 
+# Reads the VERDICT, not just the status line. urlopen() alone reported the
+# container healthy whenever the endpoint answered at all — /health returns 200
+# regardless of what it found, so the check passed with every component down.
+# A health check that cannot fail is not a health check.
+#
+# "degraded" deliberately still passes: it means serving with something
+# reduced, and restarting the container would not fix it.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8090/health')"
+    CMD python -c "import json, sys, urllib.request; \
+sys.exit(1) if json.load(urllib.request.urlopen('http://localhost:8090/health', timeout=4)).get('status') == 'down' else sys.exit(0)"
 
 CMD ["python", "-u", "main.py"]
