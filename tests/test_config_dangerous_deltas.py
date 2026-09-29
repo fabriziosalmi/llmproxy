@@ -130,9 +130,6 @@ class TestDangerousDeltaDetectors:
         assert _dangerous_deltas(_strict_config(), new) == ["blocklist-cleared"]
 
     def test_blocklist_shrunk_but_not_empty_is_not_a_delta(self):
-        assert "malicious-site.com" in _strict_config()["security"][
-            "link_sanitization"
-        ]["blocked_domains"]
         new = _strict_config()
         new["security"]["link_sanitization"]["blocked_domains"] = ["other.example"]
         assert _dangerous_deltas(_strict_config(), new) == []

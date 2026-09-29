@@ -142,7 +142,15 @@ def create_router(agent) -> APIRouter:
         try:
             parsed = _yaml.safe_load(text)
         except _yaml.YAMLError as exc:
-            return None, [f"YAML parse error: {exc}"], []
+            # Never echo raw exception text to the client: CodeQL
+            # py/stack-trace-exposure (and good hygiene) — the admin just sent
+            # this text, so they can locate the break; the detail goes to logs.
+            logger.error("Config YAML parse failed: %s", exc, exc_info=True)
+            return (
+                None,
+                ["YAML parse error: the proposed text is not valid YAML."],
+                [],
+            )
         if not isinstance(parsed, dict):
             return None, ["Config root must be a mapping (key: value), not a list or scalar."], []
         from core.startup_checks import StartupError, validate_config
@@ -154,7 +162,8 @@ def create_router(agent) -> APIRouter:
         except StartupError as exc:
             errors.append(str(exc))
         except Exception as exc:  # noqa: BLE001 — a validator bug must not 500 the editor
-            errors.append(f"Validation error: {exc}")
+            logger.error("Config validator bug: %s", exc, exc_info=True)
+            errors.append("Validation error: internal validator failure — see server logs.")
         return parsed, errors, warnings
 
     # Single-use confirm tokens, bound to a proposed config hash. Kept in
