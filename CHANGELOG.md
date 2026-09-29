@@ -2,6 +2,29 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.37.0] — 2026-09-29
+
+### Dangerous config deltas need a confirm token (minor, closes #108)
+
+- **The one-request disarm is gone**: `POST /api/v1/config/apply` with an
+  ordinary admin bearer could flip `server.auth.enabled`/`security.firewall.enabled`
+  to `false`, clear the domain blocklist, or widen the payload cap — with only
+  non-blocking warnings. Posture-lowering transitions (`auth-disabled`,
+  `firewall-disabled`, `blocklist-cleared`, `payload-widened` beyond 4x) now
+  return `403 confirm_required` unless the apply carries a single-use token.
+- **Two-step flow**: `POST /api/v1/config/confirm-token` mints an
+  HMAC token bound to the SHA-256 of the exact proposed text (~120s TTL,
+  single-use); rejections and confirmed applies are audit-logged with the
+  acting principal (key prefix or SSO identity).
+- **Honest scope**: confirmation-of-intent, not a second privilege tier — a
+  stolen admin bearer can still mint. `MASTER_KEY` deliberately NOT used as
+  the credential (it is documented as never-a-Bearer). `validate` reports
+  `dangerous_deltas` so editors warn pre-apply.
+- **Tests/docs**: `tests/test_config_dangerous_deltas.py` (18 tests:
+  detectors incl. 4x boundary, 403+untouched disk, mint→apply, hash binding,
+  single-use, TTL, audit entries); `docs/guide/configuration.md` documents
+  the flow.
+
 ## [1.36.2] — 2026-09-29
 
 ### Security fix: quota enforcement on /v1/embeddings (patch)

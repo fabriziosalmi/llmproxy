@@ -25,6 +25,9 @@ server:
     # this reason; an explicit `false` was the one thing that could defeat it.
     # For local development set LLM_PROXY_DEV_MODE=1, which turns auth off with
     # a warning naming itself — visible, deliberate, and not what ships.
+    #
+    # Flipping this to `false` via POST /api/v1/config/apply is a dangerous
+    # delta: it needs a confirm token (POST /api/v1/config/confirm-token).
     enabled: true
     # Inference API keys loaded from env: LLM_PROXY_API_KEYS (comma-separated).
     api_keys_env: "LLM_PROXY_API_KEYS"
