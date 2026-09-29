@@ -1,11 +1,11 @@
-import os
 import base64
 import logging
+import os
 import secrets as stdlib_secrets
+
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from typing import Optional
 
 from core.infisical import get_secret
 
@@ -179,9 +179,9 @@ class SecretManager:
     def get_secret(
         cls,
         key_name: str,
-        default: Optional[str] = None,
+        default: str | None = None,
         *,
         required: bool = False,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Retrieves a secret from Infisical, then env vars."""
         return get_secret(key_name, default, required=required)

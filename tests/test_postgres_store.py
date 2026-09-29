@@ -1,7 +1,9 @@
-import pytest
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
-from models import LLMEndpoint, EndpointStatus
+
+import pytest
+
+from models import EndpointStatus, LLMEndpoint
 from store.pg_store import PostgresStore
 
 

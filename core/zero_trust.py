@@ -1,12 +1,12 @@
-import asyncio
-import ssl
 import logging
-import jwt
-import time
 import os
-import aiohttp
+import ssl
+import time
+from typing import Any
 from urllib.parse import quote
-from typing import Dict, Any, Optional
+
+import aiohttp
+import jwt
 
 from core.infisical import get_secret
 
@@ -33,7 +33,7 @@ TAILSCALE_API_TIMEOUT_S = 1.0
 class ZeroTrustManager:
     """Manages mTLS and Identity headers for Zero-Trust upstream communication."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         self.config = config.get("security", {}).get("zero_trust", {})
         self.enabled = self.config.get("enabled", False)
         self.secret = get_secret("LLM_PROXY_IDENTITY_SECRET", required=self.enabled)
@@ -46,9 +46,9 @@ class ZeroTrustManager:
             if os.path.exists(TAILSCALE_SOCKET_MACOS)
             else TAILSCALE_SOCKET_LINUX
         )
-        self._ts_session: Optional[aiohttp.ClientSession] = None
+        self._ts_session: aiohttp.ClientSession | None = None
 
-    def get_ssl_context(self) -> Optional[ssl.SSLContext]:
+    def get_ssl_context(self) -> ssl.SSLContext | None:
         """Returns an SSLContext for mTLS if configured."""
         if not self.enabled or not self.cert_path:
             return None
@@ -61,7 +61,7 @@ class ZeroTrustManager:
             logger.error(f"ZeroTrust: Failed to load mTLS certificates: {e}")
             return None
 
-    def get_identity_headers(self) -> Dict[str, str]:
+    def get_identity_headers(self) -> dict[str, str]:
         """Generates identity headers (e.g., JWT) for upstream identification."""
         if not self.enabled:
             return {}
@@ -81,7 +81,7 @@ class ZeroTrustManager:
 
     async def verify_tailscale_identity(
         self, remote_ip: str
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         11.5: Queries Tailscale LocalAPI via Unix Socket to verify the machine/user associated with the IP.
         This provides a zero-latency, spoof-proof identity check for the Federated Swarm.
@@ -116,7 +116,7 @@ class ZeroTrustManager:
                         "node": node,
                         "caps": data.get("CapMap", {}),
                     }
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # Distinguished from a socket error on purpose: "the daemon did not
             # answer in time" and "the daemon refused" are different operational
             # problems, and the first one used to be invisible because it could

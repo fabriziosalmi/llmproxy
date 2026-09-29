@@ -7,10 +7,11 @@ release number, so an operator or a fleet inventory reading that endpoint on
 a deployment without a VERSION file is told something specific and false.
 """
 
+from unittest.mock import MagicMock
+
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from unittest.mock import MagicMock
 
 from tests.conftest import InMemoryRepository, minimal_config
 

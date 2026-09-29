@@ -9,9 +9,11 @@ Endpoints:
 """
 
 import json
-import time
 import logging
-from fastapi import APIRouter, Request, HTTPException
+import time
+
+from fastapi import APIRouter, HTTPException, Request
+
 from core.auth_policy import auth_enabled
 
 logger = logging.getLogger("llmproxy.routes.gdpr")
@@ -98,7 +100,7 @@ def create_router(agent) -> APIRouter:
             raise HTTPException(
                 status_code=503,
                 detail="Audit log unavailable; erasure refused (fail-closed)",
-            )
+            ) from audit_err
 
         # 2. Execute the deletion.
         try:
@@ -112,7 +114,7 @@ def create_router(agent) -> APIRouter:
             raise HTTPException(
                 status_code=500,
                 detail="Erasure failed after audit; check server logs",
-            )
+            ) from delete_err
         total_deleted = sum(result.values())
 
         if total_deleted == 0:

@@ -5,13 +5,13 @@ Resolves a provider name or model string to the correct adapter instance.
 """
 
 import logging
-from typing import Optional
-from .base import BaseModelAdapter
-from .openai import OpenAIAdapter
+
 from .anthropic import AnthropicAdapter
-from .google import GoogleAdapter
 from .azure import AzureAdapter
+from .base import BaseModelAdapter
+from .google import GoogleAdapter
 from .ollama import OllamaAdapter
+from .openai import OpenAIAdapter
 from .openai_compat import OpenAICompatAdapter
 
 logger = logging.getLogger("llmproxy.adapters.registry")
@@ -98,7 +98,7 @@ def detect_provider(model: str) -> str:
 
 
 def get_adapter(
-    provider_type: Optional[str] = None, model: str = ""
+    provider_type: str | None = None, model: str = ""
 ) -> BaseModelAdapter:
     """Resolve adapter by provider type or model name.
 

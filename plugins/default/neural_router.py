@@ -5,11 +5,11 @@ All public symbols re-exported so existing imports keep working:
 """
 
 from plugins.default.smart_router import (  # noqa: F401
-    update_endpoint_stats,
-    get_endpoint_stats,
-    select_endpoint,
     _compute_score,
     _endpoint_stats,
-    _stats_lock,
     _rr_index,
+    _stats_lock,
+    get_endpoint_stats,
+    select_endpoint,
+    update_endpoint_stats,
 )

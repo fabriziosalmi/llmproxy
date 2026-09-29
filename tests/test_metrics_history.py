@@ -94,7 +94,7 @@ class TestSumPrometheusCounter:
 
     def test_sums_real_counter_across_labels(self):
         """End-to-end against a fresh prometheus_client.Counter."""
-        from prometheus_client import Counter, CollectorRegistry
+        from prometheus_client import CollectorRegistry, Counter
 
         registry = CollectorRegistry()
         c = Counter(

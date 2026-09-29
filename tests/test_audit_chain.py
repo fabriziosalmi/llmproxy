@@ -9,12 +9,13 @@ Verifies that:
   - Legacy entries (no hashes) are skipped gracefully
 """
 
-import time
 import os
 import tempfile
+import time
+
+import aiosqlite
 import pytest
 import pytest_asyncio
-import aiosqlite
 
 # Import the real SQLStore to test hash chain logic
 from store.sql_store import SQLiteStore as SQLStore

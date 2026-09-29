@@ -24,7 +24,7 @@ from __future__ import annotations
 import asyncio
 import datetime as _dt
 import logging
-from typing import Any, Tuple
+from typing import Any
 
 logger = logging.getLogger("llmproxy.budget")
 
@@ -78,7 +78,7 @@ async def charge_and_persist(
             logger.debug(f"Budget gauge update skipped: {e}")
 
 
-async def hydrate_daily_total(store: Any) -> Tuple[float, str]:
+async def hydrate_daily_total(store: Any) -> tuple[float, str]:
     """Restore today's budget on startup, applying the daily-rollover
     policy.
 

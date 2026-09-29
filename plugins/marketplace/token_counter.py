@@ -19,10 +19,10 @@ Uses core.pricing for per-model cost calculation instead of flat rates.
 
 import json
 import logging
-from typing import Dict, Any
+from typing import Any
 
-from core.plugin_sdk import BasePlugin, PluginResponse, PluginHook
 from core.plugin_engine import PluginContext
+from core.plugin_sdk import BasePlugin, PluginHook, PluginResponse
 
 logger = logging.getLogger("plugin.token_counter")
 
@@ -37,7 +37,7 @@ class TokenCounter(BasePlugin):
     )
     timeout_ms = 5  # JSON parse only
 
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: dict[str, Any] = None):
         super().__init__(config)
         # Lifetime counters
         self._total_input_tokens: int = 0
@@ -45,7 +45,7 @@ class TokenCounter(BasePlugin):
         self._total_cost_usd: float = 0.0
         self._requests_counted: int = 0
 
-    def _extract_usage(self, ctx: PluginContext) -> Dict[str, int] | None:
+    def _extract_usage(self, ctx: PluginContext) -> dict[str, int] | None:
         """Extract usage dict from response body."""
         if not ctx.response or not hasattr(ctx.response, "body"):
             return None
@@ -64,7 +64,7 @@ class TokenCounter(BasePlugin):
 
         return estimate_cost(model, input_tokens, output_tokens)
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Public stats for SOC dashboard / admin API."""
         return {
             "requests_counted": self._requests_counted,

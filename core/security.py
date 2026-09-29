@@ -1,12 +1,12 @@
 import asyncio
-import re
-import time
 import logging
+import re
 import threading
+import time
 import unicodedata
 import uuid
 from collections import OrderedDict
-from typing import Dict, List, Any, Optional
+from typing import Any
 
 from cachetools import TTLCache as _TTLCache
 
@@ -53,7 +53,7 @@ class SecurityShield:
     _SESSION_TTL = 3600  # Evict sessions idle for 1 hour
     _SESSION_SCORE_TTL = 300  # Only count scores from the last 5 minutes
 
-    def __init__(self, config: Dict[str, Any], assistant: Optional[Any] = None):
+    def __init__(self, config: dict[str, Any], assistant: Any | None = None):
         self.config = config.get("security", {})
         self.enabled = self.config.get("enabled", True)
         self.assistant = assistant
@@ -81,7 +81,7 @@ class SecurityShield:
         from core.threat_ledger import ThreatLedger
 
         ledger_cfg = self.config.get("threat_ledger", {})
-        self.threat_ledger: Optional[ThreatLedger] = (
+        self.threat_ledger: ThreatLedger | None = (
             ThreatLedger(
                 max_actors=ledger_cfg.get("max_actors", 50_000),
                 window_seconds=ledger_cfg.get("window_seconds", 600),
@@ -93,7 +93,7 @@ class SecurityShield:
         )
 
     async def analyze_speculative(
-        self, prompt: str, stream_chunks: List[str], kill_event: Any
+        self, prompt: str, stream_chunks: list[str], kill_event: Any
     ):
         """Asynchronously monitors a response stream for security violations.
 
@@ -231,7 +231,7 @@ class SecurityShield:
                 return True
         return False
 
-    def mask_pii(self, text: str, vault: Optional[Dict[str, str]] = None) -> str:
+    def mask_pii(self, text: str, vault: dict[str, str] | None = None) -> str:
         """Masks PII with vault tokens. Uses Presidio NLP when available, regex fallback otherwise.
 
         `vault` is where the token → original mapping is recorded. Callers that
@@ -247,13 +247,13 @@ class SecurityShield:
 
         # Explicit local so the type is Dict rather than Optional[Dict]; the
         # process-wide vault is a TTLCache, which is dict-like but not a Dict.
-        store: Dict[str, str] = self.pii_vault if vault is None else vault
+        store: dict[str, str] = self.pii_vault if vault is None else vault
 
         if _PRESIDIO_AVAILABLE:
             return self._mask_pii_presidio(text, store)
         return self._mask_pii_regex(text, store)
 
-    def _mask_pii_presidio(self, text: str, vault: Dict[str, str]) -> str:
+    def _mask_pii_presidio(self, text: str, vault: dict[str, str]) -> str:
         """NLP-based PII masking via Presidio — detects names, addresses, IBANs, etc."""
         results = _presidio_analyzer.analyze(
             text=text,
@@ -275,7 +275,7 @@ class SecurityShield:
             masked = masked[: result.start] + token + masked[result.end :]
         return masked
 
-    def _mask_pii_regex(self, text: str, vault: Dict[str, str]) -> str:
+    def _mask_pii_regex(self, text: str, vault: dict[str, str]) -> str:
         """Regex-based PII masking — fast fallback when Presidio is not installed."""
         masked = text
         for pattern, label in self._REGEX_PII_PATTERNS:
@@ -291,7 +291,7 @@ class SecurityShield:
             masked = re.sub(pattern, _replacer, masked)
         return masked
 
-    def demask_pii(self, text: str, vault: Optional[Dict[str, str]] = None) -> str:
+    def demask_pii(self, text: str, vault: dict[str, str] | None = None) -> str:
         """Restores original PII from `vault` into the response.
 
         `vault` scopes the restoration, and that scope is the point. The
@@ -310,7 +310,7 @@ class SecurityShield:
         """
         if not self.enabled:
             return text
-        store: Dict[str, str] = self.pii_vault if vault is None else vault
+        store: dict[str, str] = self.pii_vault if vault is None else vault
         # Snapshot items before iterating — a TTLCache may evict entries during
         # iteration, which raises RuntimeError in some cachetools versions.
         for token, original in list(store.items()):
@@ -334,7 +334,7 @@ class SecurityShield:
         try:
             judgment = await self.assistant.generate(check_prompt)
             return "SAFE" in judgment.upper()
-        except (RuntimeError, asyncio.TimeoutError, OSError, ValueError) as e:
+        except (TimeoutError, RuntimeError, OSError, ValueError) as e:
             logger.error(f"AI Guard Error (fail-closed): {e}")
             return False  # Fail-closed: block on error rather than silently allow
 
@@ -347,7 +347,7 @@ class SecurityShield:
 
     def check_session_trajectory(
         self, session_id: str, current_prompt: str
-    ) -> Optional[str]:
+    ) -> str | None:
         """Analyzes the 'threat trajectory' of a session to detect multi-turn jailbreaks.
 
         Uses time-windowed scoring: only threat scores from the last
@@ -521,7 +521,7 @@ class SecurityShield:
         ),
     ]
 
-    def _calculate_threat_score(self, prompt: str) -> tuple[float, List[str]]:
+    def _calculate_threat_score(self, prompt: str) -> tuple[float, list[str]]:
         """Internal helper to calculate injection threat score.
 
         S.5 — Uses `semantic_analyzer.normalize_match_chars` for normalisation
@@ -553,11 +553,11 @@ class SecurityShield:
 
     async def inspect(
         self,
-        body: Dict[str, Any],
+        body: dict[str, Any],
         session_id: str = "default",
         ip: str = "",
         key_prefix: str = "",
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Inspects the request body and session context for security violations.
 
@@ -639,7 +639,7 @@ class SecurityShield:
                         ),
                         timeout=5.0,
                     )
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     logger.warning(
                         f"Semantic scan timed out (prompt={len(prompt)} chars)"
                     )
@@ -692,7 +692,7 @@ class SecurityShield:
 
         return None
 
-    def _extract_prompt(self, body: Dict[str, Any]) -> str:
+    def _extract_prompt(self, body: dict[str, Any]) -> str:
         """Extract ALL user-controlled text from the request body.
 
         W3: Few-shot injection defense — inspects all messages, not just the
@@ -749,7 +749,7 @@ class SecurityShield:
 
         return " ".join(parts)
 
-    def _check_payload_flooding(self, body: Dict[str, Any]) -> Optional[str]:
+    def _check_payload_flooding(self, body: dict[str, Any]) -> str | None:
         max_size = self.config.get("max_payload_size_kb", 512) * 1024
         if len(str(body)) > max_size:
             return "Payload too large (potential body flooding attack)"
@@ -766,7 +766,7 @@ class SecurityShield:
 
         return None
 
-    def _check_injections(self, prompt: str) -> Optional[str]:
+    def _check_injections(self, prompt: str) -> str | None:
         """Legacy wrapper — kept for backward compatibility with direct callers."""
         score, matched = self._calculate_threat_score(prompt)
         if score >= 0.7:
@@ -820,14 +820,14 @@ class SecurityShield:
                 timeout=float(timeout),
             )
             return "block" if "BLOCK" in judgment.upper() else "pass"
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(f"AI threat analysis timed out ({timeout}s)")
             return fail_policy
         except Exception as e:
             logger.warning(f"AI threat analysis failed: {e}")
             return fail_policy
 
-    def _check_links(self, prompt: str) -> Optional[str]:
+    def _check_links(self, prompt: str) -> str | None:
         if not self.config.get("link_sanitization", {}).get("enabled", True):
             return None
 
@@ -892,7 +892,7 @@ class SecurityShield:
 
         return None
 
-    def _homograph_cfg(self) -> Dict[str, Any]:
+    def _homograph_cfg(self) -> dict[str, Any]:
         link = self.config.get("link_sanitization", {})
         cfg = link.get("homograph_protection", {}) if isinstance(link, dict) else {}
         return cfg if isinstance(cfg, dict) else {}
@@ -900,7 +900,7 @@ class SecurityShield:
     def _homograph_log_only(self) -> bool:
         return bool(self._homograph_cfg().get("log_only", False))
 
-    def _homograph_brand(self, netloc: str) -> Optional[str]:
+    def _homograph_brand(self, netloc: str) -> str | None:
         """Return the protected brand `netloc` impersonates via an IDN homograph,
         or None. Opt-in: active only when `homograph_protection.brands` is set.
         Fail-open — any error yields None (never blocks a legitimate request)."""
@@ -919,7 +919,7 @@ class SecurityShield:
 
     _blocked_domains_warned: bool = False
 
-    def _usable_blocked_domains(self, link_cfg: Dict[str, Any]) -> list:
+    def _usable_blocked_domains(self, link_cfg: dict[str, Any]) -> list:
         """The configured blocked domains, minus entries that are not strings.
 
         A blank list item in YAML parses as None and an unquoted number parses
@@ -949,7 +949,7 @@ class SecurityShield:
         return usable
 
     def sanitize_response(
-        self, content: str, vault: Optional[Dict[str, str]] = None
+        self, content: str, vault: dict[str, str] | None = None
     ) -> str:
         """Filters and validates the LLM response. Returns '[ERROR]' if guards fail.
 
@@ -1137,7 +1137,7 @@ class SecurityShield:
         try:
             judgment = await self.assistant.generate(anomaly_prompt)
             return "YES" in judgment.upper()
-        except (RuntimeError, asyncio.TimeoutError, OSError, ValueError) as e:
+        except (TimeoutError, RuntimeError, OSError, ValueError) as e:
             logger.error(f"Anomaly Detection Error: {e}")
             return False
 

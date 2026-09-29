@@ -8,15 +8,15 @@ Targets: telemetry.py, models.py, completions.py, embeddings.py,
          admin.py (partial), plugins.py (partial), registry.py (partial).
 """
 
-import time
 import asyncio
+import time
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock
-from httpx import AsyncClient, ASGITransport
 from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 
 from tests.conftest import InMemoryRepository, minimal_config
-
 
 # ── Fixtures ──────────────────────────────────────────────────
 

@@ -17,13 +17,13 @@ Config (via manifest ui_schema):
 Ring: BACKGROUND (runs after response is returned to user)
 """
 
+import asyncio
 import random
 import time
-import asyncio
-from typing import Dict, Any
+from typing import Any
 
-from core.plugin_sdk import BasePlugin, PluginResponse, PluginHook
 from core.plugin_engine import PluginContext
+from core.plugin_sdk import BasePlugin, PluginHook, PluginResponse
 
 
 class ShadowTraffic(BasePlugin):
@@ -34,7 +34,7 @@ class ShadowTraffic(BasePlugin):
     description = "Sends sampled traffic to a shadow model for A/B comparison (post-response, async)"
     timeout_ms = 50  # Higher timeout -- background ring, non-blocking
 
-    def __init__(self, config: Dict[str, Any] | None = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         super().__init__(config)
         self.shadow_model: str = self.config.get("shadow_model", "")
         self.shadow_provider: str = self.config.get("shadow_provider", "")

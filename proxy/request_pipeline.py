@@ -23,19 +23,19 @@ import json
 import logging
 import time
 import uuid
-from typing import Any, Dict
+from typing import Any
 
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from core.endpoint_stats import update_endpoint_stats
+from core.log_context import reset_request_id, set_request_id
 from core.metrics import MetricsTracker
 from core.model_resolver import resolve_model
 from core.plugin_engine import PluginContext, PluginHook
 from core.stream_faker import fake_stream
 from core.tracing import TraceManager
 from core.webhooks import EventType
-from core.endpoint_stats import update_endpoint_stats
-from core.log_context import reset_request_id, set_request_id
 from proxy.budget import charge_and_persist
 
 logger = logging.getLogger("llmproxy.request_pipeline")
@@ -44,7 +44,7 @@ logger = logging.getLogger("llmproxy.request_pipeline")
 async def process_proxy_request(
     orchestrator: Any,
     request: Any,
-    body: Dict[str, Any] | None = None,
+    body: dict[str, Any] | None = None,
     session_id: str = "default",
 ):
     """Run a request through the 5-ring pipeline.
@@ -357,7 +357,7 @@ async def process_proxy_request(
     except Exception as e:
         orchestrator.logger.error(f"Proxy pipeline error: {e}")
         TraceManager.capture_exception(e)
-        raise HTTPException(status_code=502, detail="Upstream request failed")
+        raise HTTPException(status_code=502, detail="Upstream request failed") from e
     finally:
         # Unbind on every exit path, including the two raises above. Without
         # this the identifier would leak into whatever the event loop runs

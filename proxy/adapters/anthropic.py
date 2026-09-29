@@ -13,9 +13,12 @@ Key differences:
 
 import json
 import time
+from collections.abc import AsyncGenerator
+from typing import Any
+
 import aiohttp
-from typing import Dict, Any, AsyncGenerator, Tuple
 from starlette.responses import Response
+
 from .base import BaseModelAdapter
 
 
@@ -29,9 +32,9 @@ class AnthropicAdapter(BaseModelAdapter):
     def translate_request(
         self,
         base_url: str,
-        body: Dict[str, Any],
-        headers: Dict[str, str],
-    ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
+        body: dict[str, Any],
+        headers: dict[str, str],
+    ) -> tuple[str, dict[str, Any], dict[str, str]]:
         url = f"{base_url.rstrip('/')}/messages"
 
         # Extract system message and translate multimodal content
@@ -98,7 +101,7 @@ class AnthropicAdapter(BaseModelAdapter):
 
         return url, anthropic_body, anthropic_headers
 
-    def translate_response(self, response_data: Dict[str, Any]) -> Dict[str, Any]:
+    def translate_response(self, response_data: dict[str, Any]) -> dict[str, Any]:
         """Anthropic response → OpenAI format."""
         if "error" in response_data:
             return response_data
@@ -123,7 +126,7 @@ class AnthropicAdapter(BaseModelAdapter):
                     }
                 )
 
-        message: Dict[str, Any] = {
+        message: dict[str, Any] = {
             "role": "assistant",
             "content": "\n".join(text_parts) if text_parts else None,
         }
@@ -236,8 +239,8 @@ class AnthropicAdapter(BaseModelAdapter):
     async def request(
         self,
         url: str,
-        body: Dict[str, Any],
-        headers: Dict[str, str],
+        body: dict[str, Any],
+        headers: dict[str, str],
         session: aiohttp.ClientSession,
     ) -> Response:
         async with session.post(
@@ -262,8 +265,8 @@ class AnthropicAdapter(BaseModelAdapter):
     async def stream(
         self,
         url: str,
-        body: Dict[str, Any],
-        headers: Dict[str, str],
+        body: dict[str, Any],
+        headers: dict[str, str],
         session: aiohttp.ClientSession,
     ) -> AsyncGenerator[bytes, None]:
         async with session.post(

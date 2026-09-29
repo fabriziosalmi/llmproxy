@@ -1,11 +1,12 @@
 """Plugin routes: list, toggle, install, uninstall, hot-swap, rollback."""
 
-import yaml  # type: ignore[import-untyped]
-
-from fastapi import APIRouter, Request, HTTPException
-from core.auth_policy import auth_enabled
 import os
+
+import yaml  # type: ignore[import-untyped]
+from fastapi import APIRouter, HTTPException, Request
+
 from core.atomic_io import atomic_write
+from core.auth_policy import auth_enabled
 
 
 def create_router(agent) -> APIRouter:
@@ -50,7 +51,7 @@ def create_router(agent) -> APIRouter:
         # when plugin loading has gone wrong, which is when it is being read.
         if os.path.exists(agent.plugin_manager.manifest_path):
             try:
-                with open(agent.plugin_manager.manifest_path, "r") as f:
+                with open(agent.plugin_manager.manifest_path) as f:
                     manifest = yaml.safe_load(f) or {}
             except (OSError, yaml.YAMLError):
                 manifest = {}
@@ -66,7 +67,7 @@ def create_router(agent) -> APIRouter:
         plugin_name = data.get("name")
         enabled = data.get("enabled")
 
-        with open(agent.plugin_manager.manifest_path, "r") as f:
+        with open(agent.plugin_manager.manifest_path) as f:
             manifest = yaml.safe_load(f) or {}
 
         for p in manifest.get("plugins", []):
@@ -106,7 +107,7 @@ def create_router(agent) -> APIRouter:
             )
             return {"status": "installed", "name": data["name"]}
         except Exception as e:
-            raise HTTPException(status_code=422, detail=str(e))
+            raise HTTPException(status_code=422, detail=str(e)) from e
 
     @router.delete("/api/v1/plugins/{plugin_name}")
     async def uninstall_plugin(plugin_name: str, request: Request):

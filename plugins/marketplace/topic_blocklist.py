@@ -17,12 +17,12 @@ Use case: Enterprise compliance ("no crypto trading advice"),
   or GDPR topic restrictions.
 """
 
-import re
 import logging
-from typing import Dict, Any, List, Optional
+import re
+from typing import Any
 
-from core.plugin_sdk import BasePlugin, PluginResponse, PluginHook
 from core.plugin_engine import PluginContext
+from core.plugin_sdk import BasePlugin, PluginHook, PluginResponse
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ _DEFAULT_TOPICS = [
 ]
 
 
-def _extract_text(messages: List[Dict[str, Any]], scan_roles: List[str]) -> str:
+def _extract_text(messages: list[dict[str, Any]], scan_roles: list[str]) -> str:
     """Extract plain text from messages for the given roles."""
     parts = []
     for msg in messages:
@@ -52,8 +52,8 @@ def _extract_text(messages: List[Dict[str, Any]], scan_roles: List[str]) -> str:
 
 
 def _compile_patterns(
-    topics: List[str], match_mode: str, case_sensitive: bool
-) -> List[tuple]:
+    topics: list[str], match_mode: str, case_sensitive: bool
+) -> list[tuple]:
     """Pre-compile patterns for efficient matching. Returns list of (pattern, topic_str)."""
     flags = 0 if case_sensitive else re.IGNORECASE
     compiled = []
@@ -84,18 +84,18 @@ class TopicBlocklist(BasePlugin):
     )
     timeout_ms = 5
 
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: dict[str, Any] = None):
         super().__init__(config)
-        self.topics: List[str] = self.config.get("topics", _DEFAULT_TOPICS)
+        self.topics: list[str] = self.config.get("topics", _DEFAULT_TOPICS)
         self.action: str = self.config.get("action", "block")
         self.match_mode: str = self.config.get("match_mode", "keyword")
         self.case_sensitive: bool = self.config.get("case_sensitive", False)
-        self.scan_roles: List[str] = self.config.get("scan_roles", ["user"])
+        self.scan_roles: list[str] = self.config.get("scan_roles", ["user"])
         self._patterns = _compile_patterns(
             self.topics, self.match_mode, self.case_sensitive
         )
 
-    def _find_match(self, text: str) -> Optional[str]:
+    def _find_match(self, text: str) -> str | None:
         """Return the first matched topic string, or None."""
         for pattern, topic in self._patterns:
             if pattern.search(text):
