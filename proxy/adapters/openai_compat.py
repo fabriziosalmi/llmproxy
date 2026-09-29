@@ -5,9 +5,9 @@ For providers that expose an OpenAI-compatible API with just a different
 base URL and API key: Groq, Together, Mistral, Perplexity, xAI, DeepSeek, etc.
 """
 
-from typing import Dict, Any, Tuple
-from .openai import OpenAIAdapter
+from typing import Any
 
+from .openai import OpenAIAdapter
 
 # Provider-specific base URLs (used when endpoint config doesn't specify one)
 PROVIDER_DEFAULTS = {
@@ -34,9 +34,9 @@ class OpenAICompatAdapter(OpenAIAdapter):
     def translate_request(
         self,
         base_url: str,
-        body: Dict[str, Any],
-        headers: Dict[str, str],
-    ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
+        body: dict[str, Any],
+        headers: dict[str, str],
+    ) -> tuple[str, dict[str, Any], dict[str, str]]:
         # Use provider default URL if base_url looks like a placeholder
         if not base_url or base_url in ("", "http://localhost"):
             base_url = PROVIDER_DEFAULTS.get(self._provider_hint, base_url)

@@ -18,7 +18,6 @@ import asyncio
 
 import httpx
 import pytest
-
 from conftest import InMemoryRepository, minimal_config
 from test_e2e import LightweightAgent
 
@@ -105,7 +104,7 @@ def test_a_stalled_tailscale_daemon_returns_unverified(monkeypatch, tmp_path):
             pass
 
         def get(self, *args, **kwargs):
-            raise asyncio.TimeoutError()
+            raise TimeoutError()
 
     socket = tmp_path / "tailscaled.sock"
     socket.write_text("")

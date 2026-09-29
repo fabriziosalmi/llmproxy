@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional, Any, Dict, Protocol, runtime_checkable
-from models import LLMEndpoint, EndpointStatus
+from typing import Any, Protocol, runtime_checkable
+
+from models import EndpointStatus, LLMEndpoint
 
 
 @runtime_checkable
@@ -35,23 +36,23 @@ class BaseRepository(ABC):
         pass
 
     @abstractmethod
-    async def get_all(self) -> List[LLMEndpoint]:
+    async def get_all(self) -> list[LLMEndpoint]:
         """Returns all registered endpoints."""
         pass
 
     @abstractmethod
-    async def get_pool(self) -> List[LLMEndpoint]:
+    async def get_pool(self) -> list[LLMEndpoint]:
         """Returns only 'VERIFIED' and 'Live' endpoints."""
         pass
 
     @abstractmethod
-    async def get_by_status(self, status: EndpointStatus) -> List[LLMEndpoint]:
+    async def get_by_status(self, status: EndpointStatus) -> list[LLMEndpoint]:
         """Returns endpoints filtered by their status."""
         pass
 
     @abstractmethod
     async def update_status(
-        self, endpoint_id: str, status: EndpointStatus, metadata: Optional[Dict] = None
+        self, endpoint_id: str, status: EndpointStatus, metadata: dict | None = None
     ):
         """Updates the status and metadata of an endpoint."""
         pass
@@ -76,10 +77,12 @@ class BaseRepository(ABC):
     # ── Spend & Audit Logging ──
     # Default no-op implementations — subclasses with SQLite override these.
 
+    @abstractmethod
     async def log_spend(self, **kwargs):
         """Record a spend entry. No-op without persistent storage."""
         pass
 
+    @abstractmethod
     async def log_audit(self, **kwargs):
         """Record an audit entry. No-op without persistent storage."""
         pass

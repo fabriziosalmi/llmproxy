@@ -11,13 +11,12 @@ Validates that:
 """
 
 from core.semantic_analyzer import (
-    semantic_scan,
-    get_corpus_stats,
-    set_corpus,
-    _to_trigrams,
     _jaccard,
+    _to_trigrams,
+    get_corpus_stats,
+    semantic_scan,
+    set_corpus,
 )
-
 
 # ══════════════════════════════════════════════════════════
 # Core Engine

@@ -5,12 +5,13 @@ Lightweight ASGI middleware with no external dependencies.
 Configurable via config.yaml `rate_limiting` section.
 """
 
-import time
 import asyncio
-import logging
 import hashlib
+import logging
+import time
 from collections import OrderedDict
-from typing import Dict, Optional, Tuple, Any
+from typing import Any
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -69,7 +70,7 @@ class TokenBucket:
         throttle_factor: float = 1.0,
         default_capacity: float = 0.0,
         default_rate: float = 0.0,
-    ) -> Tuple[bool, float]:
+    ) -> tuple[bool, float]:
         """Atomic check-and-take. Returns (allowed, retry_after_seconds).
 
         retry_after is computed under the same lock as the token mutation, so
@@ -126,7 +127,7 @@ class RedisTokenBucket:
         self.key = key
         self._script_sha = script_sha
 
-    async def acquire(self, capacity: float, rate: float) -> Tuple[bool, float]:
+    async def acquire(self, capacity: float, rate: float) -> tuple[bool, float]:
         now = time.time()
         try:
             res = await self.redis_client.evalsha(
@@ -161,8 +162,8 @@ class RateLimiter:
         self,
         default_capacity: int = 60,
         default_rate: float = 1.0,
-        redis_url: Optional[str] = None,
-        config: Optional[Dict] = None,
+        redis_url: str | None = None,
+        config: dict | None = None,
     ):
         self.default_capacity = float(default_capacity)
         self.default_rate = float(default_rate)
@@ -191,7 +192,7 @@ class RateLimiter:
             except Exception as e:
                 logger.error(f"Failed to load Redis Lua script: {e}")
 
-    async def check(self, key: str, throttle_factor: float = 1.0) -> Tuple[bool, float]:
+    async def check(self, key: str, throttle_factor: float = 1.0) -> tuple[bool, float]:
         """Returns (allowed, retry_after_seconds).
 
         R2-01: bucket.acquire() OUTSIDE the global lock to avoid serializing
@@ -234,7 +235,7 @@ class RateLimiter:
 # default_rate and flushes existing buckets so the new caps take effect on
 # the very next request. config.yaml still wins at boot — preset is applied
 # on top after the orchestrator hydrates `rate_limit:preset` from the store.
-RATE_LIMIT_PRESETS: Dict[str, Dict[str, int]] = {
+RATE_LIMIT_PRESETS: dict[str, dict[str, int]] = {
     "strict": {"requests_per_minute": 30, "burst": 5},
     "normal": {"requests_per_minute": 60, "burst": 10},
     "relaxed": {"requests_per_minute": 240, "burst": 60},
@@ -257,9 +258,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     # Singleton reference: Starlette instantiates this once per app, and the
     # admin route uses the reference to mutate limits at runtime. Less ugly
     # than carrying the instance around through agent.app.middleware_stack.
-    instance: "Optional[RateLimitMiddleware]" = None
+    instance: "RateLimitMiddleware | None" = None
 
-    def __init__(self, app, config: Optional[Dict] = None, agent: Optional[Any] = None):
+    def __init__(self, app, config: dict | None = None, agent: Any | None = None):
         super().__init__(app)
         cfg = (config or {}).get("rate_limiting", {})
         self.enabled = cfg.get("enabled", False)
@@ -276,13 +277,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         )
         self.exempt_paths = set(cfg.get("exempt_paths", ["/health", "/metrics"]))
         # Active preset name — None means "raw config values, no preset applied".
-        self.preset: Optional[str] = None
+        self.preset: str | None = None
         self.agent = agent
         RateLimitMiddleware.instance = self
         if self.enabled:
             logger.info(f"Rate limiter active: {rpm} req/min, burst={burst}")
 
-    async def apply_preset(self, name: str) -> Dict[str, int]:
+    async def apply_preset(self, name: str) -> dict[str, int]:
         """Swap the active rpm/burst to the named preset and flush buckets.
 
         Existing buckets are dropped so the new caps apply immediately. New
@@ -304,7 +305,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         logger.info(f"Rate limit preset applied: {name} ({rpm}/min, burst={burst})")
         return {"requests_per_minute": rpm, "burst": burst}
 
-    def current_config(self) -> Dict[str, object]:
+    def current_config(self) -> dict[str, object]:
         """Expose the live tuning numbers to /api/v1/rate-limit/config."""
         cap = self.limiter.default_capacity
         rate = self.limiter.default_rate

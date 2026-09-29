@@ -29,7 +29,7 @@ Two design constraints, both load-bearing:
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -46,17 +46,17 @@ class ChatMessage(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     role: str
-    content: Optional[Union[str, List[Dict[str, Any]]]] = None
+    content: str | list[dict[str, Any]] | None = None
 
 
 class ChatCompletionRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     model: str
-    messages: List[ChatMessage]
-    stream: Optional[bool] = None
+    messages: list[ChatMessage]
+    stream: bool | None = None
 
-    def to_body(self) -> Dict[str, Any]:
+    def to_body(self) -> dict[str, Any]:
         """The dict the pipeline expects, carrying only what the caller sent."""
         return self.model_dump(exclude_unset=True, exclude_none=False)
 
@@ -67,10 +67,10 @@ class CompletionRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     model: str
-    prompt: Optional[Union[str, List[str]]] = None
-    stream: Optional[bool] = None
+    prompt: str | list[str] | None = None
+    stream: bool | None = None
 
-    def to_body(self) -> Dict[str, Any]:
+    def to_body(self) -> dict[str, Any]:
         return self.model_dump(exclude_unset=True, exclude_none=False)
 
 
@@ -80,7 +80,7 @@ class EmbeddingsRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     model: str
-    input: Union[str, List[str], List[int], List[List[int]]] = Field(...)
+    input: str | list[str] | list[int] | list[list[int]] = Field(...)
 
-    def to_body(self) -> Dict[str, Any]:
+    def to_body(self) -> dict[str, Any]:
         return self.model_dump(exclude_unset=True, exclude_none=False)

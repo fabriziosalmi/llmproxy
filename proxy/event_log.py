@@ -5,13 +5,13 @@ Bounded async queues for log entries and telemetry events,
 with dead-letter queue (DLQ) fallback for back-pressure.
 """
 
-import json
-import time
 import asyncio
+import json
 import logging
+import time
 from collections import deque
 from datetime import datetime
-from typing import Dict, Any
+from typing import Any
 
 logger = logging.getLogger("llmproxy.event_log")
 
@@ -89,7 +89,7 @@ class EventLogger:
         metadata: dict | None = None,
         trace_id: str | None = None,
     ):
-        entry: Dict[str, Any] = {
+        entry: dict[str, Any] = {
             "timestamp": time.strftime("%H:%M:%S"),
             "level": level,
             "message": message,
@@ -108,7 +108,7 @@ class EventLogger:
         """Snapshot of recent log entries, oldest first — for SSE backfill."""
         return list(self._log_history)
 
-    async def broadcast_event(self, event_type: str, data: Dict[str, Any]):
+    async def broadcast_event(self, event_type: str, data: dict[str, Any]):
         event = {
             "type": event_type,
             "timestamp": datetime.now().isoformat(),

@@ -26,7 +26,6 @@ risk requires a *combination*, which is what keeps false positives low.
 from __future__ import annotations
 
 import ipaddress
-from typing import List, Optional, Tuple
 
 # ── Constants ported verbatim from fqdn-model/settings.py ─────────────────────
 RISKY_TLDS = frozenset(
@@ -78,7 +77,7 @@ _MULTI_LEVEL_TLDS = frozenset(
     )
 )
 
-def _parse_ip(host: str) -> "Optional[ipaddress.IPv4Address | ipaddress.IPv6Address]":
+def _parse_ip(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
     """Return an ipaddress object if `host` is ANY IP literal, else None.
 
     Covers the forms attackers use to obfuscate a loopback/internal target in a
@@ -125,7 +124,7 @@ def _subdomain_count(host: str) -> int:
     return len(subs)
 
 
-def assess(host: str) -> Tuple[float, List[str]]:
+def assess(host: str) -> tuple[float, list[str]]:
     """Score a hostname. Returns (risk 0..1, fired-feature reason tags).
 
     Deterministic and total: any input is scored; an empty/garbage host → 0.0.
@@ -133,7 +132,7 @@ def assess(host: str) -> Tuple[float, List[str]]:
     loopback/internal targets) and short-circuits the lexical features — a bare
     address has no meaningful length/digit/hyphen signal."""
     host = host.strip().lower().rstrip(".")
-    reasons: List[str] = []
+    reasons: list[str] = []
     if not host:
         return 0.0, reasons
     score = 0.0
@@ -183,7 +182,7 @@ def assess(host: str) -> Tuple[float, List[str]]:
     return min(1.0, score), reasons
 
 
-def features(host: str) -> List[str]:
+def features(host: str) -> list[str]:
     """The list of network-free risk feature tags that fire for `host`
     (no scheme/port/path). Kept as a thin wrapper over assess() for callers
     that only want the reasons."""

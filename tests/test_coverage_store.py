@@ -5,8 +5,8 @@ Targets: store/factory.py, store/sql_store.py (partial).
 """
 
 import os
-import pytest
 
+import pytest
 
 # ── StorageFactory ────────────────────────────────────────────
 
@@ -94,8 +94,8 @@ class TestSQLiteStore:
 
     @pytest.mark.asyncio
     async def test_endpoint_crud(self, tmp_path):
+        from models import EndpointStatus, LLMEndpoint
         from store.sql_store import SQLiteStore
-        from models import LLMEndpoint, EndpointStatus
 
         db_path = str(tmp_path / "test.db")
         repo = SQLiteStore(db_path=db_path)
@@ -124,8 +124,8 @@ class TestSQLiteStore:
 
     @pytest.mark.asyncio
     async def test_update_status(self, tmp_path):
+        from models import EndpointStatus, LLMEndpoint
         from store.sql_store import SQLiteStore
-        from models import LLMEndpoint, EndpointStatus
 
         db_path = str(tmp_path / "test.db")
         repo = SQLiteStore(db_path=db_path)
@@ -148,8 +148,8 @@ class TestSQLiteStore:
 
     @pytest.mark.asyncio
     async def test_get_by_status(self, tmp_path):
+        from models import EndpointStatus, LLMEndpoint
         from store.sql_store import SQLiteStore
-        from models import LLMEndpoint, EndpointStatus
 
         db_path = str(tmp_path / "test.db")
         repo = SQLiteStore(db_path=db_path)

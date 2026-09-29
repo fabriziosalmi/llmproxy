@@ -22,10 +22,10 @@ import os
 
 import httpx
 import pytest
-
 from conftest import InMemoryRepository, minimal_config
-from core.control_plane_policy import DEFAULT_PERMISSION, required_permission
 from test_e2e import LightweightAgent
+
+from core.control_plane_policy import DEFAULT_PERMISSION, required_permission
 
 ADMIN_KEY = "sk-admin-control-plane"
 INFERENCE_KEY = "sk-proxy-inference-only"

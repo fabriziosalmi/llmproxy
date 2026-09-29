@@ -35,10 +35,10 @@ Headers injected:
 """
 
 import calendar
-import hmac
 import hashlib
-import time
+import hmac
 import logging
+import time
 
 logger = logging.getLogger("llmproxy.response_signer")
 

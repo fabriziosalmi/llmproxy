@@ -17,13 +17,13 @@ Cache key composition (computed AFTER PII masking in PRE_FLIGHT):
   SHA256(tenant_id \x00 model \x00 temperature \x00 messages_json)
 """
 
-import json
-import time
-import hashlib
-import logging
-import unicodedata
 import asyncio
-from typing import Optional, Dict, Any
+import hashlib
+import json
+import logging
+import time
+import unicodedata
+from typing import Any
 
 try:
     import aiosqlite
@@ -68,7 +68,7 @@ class NegativeCache:
                 logger.warning("cachetools not installed — negative cache disabled")
 
     @staticmethod
-    def _hash_prompt(body: Dict[str, Any]) -> str:
+    def _hash_prompt(body: dict[str, Any]) -> str:
         """Hash the raw prompt for negative cache lookup.
 
         Uses the full messages array + model (H9) to catch multi-turn
@@ -81,7 +81,7 @@ class NegativeCache:
         ).encode("utf-8")
         return hashlib.sha256(raw).hexdigest()
 
-    def check(self, body: Dict[str, Any]) -> Optional[str]:
+    def check(self, body: dict[str, Any]) -> str | None:
         """Check if this prompt was previously blocked.
 
         Returns the block reason if found, None if clean.
@@ -97,7 +97,7 @@ class NegativeCache:
             return str(reason)
         return None
 
-    def add(self, body: Dict[str, Any], reason: str):
+    def add(self, body: dict[str, Any], reason: str):
         """Record a blocked prompt hash.
 
         Called after SecurityShield returns a block reason.
@@ -108,7 +108,7 @@ class NegativeCache:
         h = self._hash_prompt(body)
         self._store[h] = reason
 
-    def stats(self) -> Dict[str, Any]:
+    def stats(self) -> dict[str, Any]:
         """Stats for SOC dashboard."""
         if not self._enabled or self._store is None:
             return {"enabled": False}
@@ -122,8 +122,8 @@ class NegativeCache:
         }
 
 
-def _find_semantic_match(cache_rows: list, current_prompt: str, threshold: float) -> Optional[str]:
-    from core.semantic_analyzer import _to_trigrams, _jaccard
+def _find_semantic_match(cache_rows: list, current_prompt: str, threshold: float) -> str | None:
+    from core.semantic_analyzer import _jaccard, _to_trigrams
 
     current_trigrams = _to_trigrams(current_prompt)
     best_sim = 0.0
@@ -151,12 +151,12 @@ class CacheBackend:
         db_path: str = "data/cache.db",
         ttl: int = 3600,
         enabled: bool = True,
-        config: Optional[dict] = None,
+        config: dict | None = None,
     ):
         self._db_path = db_path
         self._ttl = ttl
         self._enabled = enabled
-        self._conn: Optional[Any] = None
+        self._conn: Any | None = None
         # In-memory stats (not persisted — lightweight)
         self._hits = 0
         self._misses = 0
@@ -210,7 +210,7 @@ class CacheBackend:
     # ── Key Generation ──
 
     @staticmethod
-    def make_key(body: Dict[str, Any], tenant_id: str = "") -> str:
+    def make_key(body: dict[str, Any], tenant_id: str = "") -> str:
         """Build a deterministic, tenant-isolated cache key.
 
         Key = SHA256(tenant_id \x00 model \x00 temperature \x00 messages_json)
@@ -243,8 +243,8 @@ class CacheBackend:
     # ── Lookup ──
 
     async def get(
-        self, body: Dict[str, Any], tenant_id: str = ""
-    ) -> Optional[Dict[str, Any]]:
+        self, body: dict[str, Any], tenant_id: str = ""
+    ) -> dict[str, Any] | None:
         """Cache lookup. Returns parsed response dict or None.
 
         TTL check is done in SQL for efficiency.
@@ -265,7 +265,7 @@ class CacheBackend:
             self._hits += 1
             logger.debug(f"Cache HIT: {key[:12]}...")
             try:
-                result: Dict[str, Any] = json.loads(row[0])
+                result: dict[str, Any] = json.loads(row[0])
                 return result
             except (json.JSONDecodeError, TypeError):
                 logger.warning(f"Cache corruption for key {key[:12]}, ignoring")
@@ -311,8 +311,8 @@ class CacheBackend:
 
     async def put(
         self,
-        body: Dict[str, Any],
-        response_data: Dict[str, Any],
+        body: dict[str, Any],
+        response_data: dict[str, Any],
         tenant_id: str = "",
         model: str = "",
     ):
@@ -365,7 +365,7 @@ class CacheBackend:
 
     # ── Stats (for SOC dashboard) ──
 
-    async def stats(self) -> Dict[str, Any]:
+    async def stats(self) -> dict[str, Any]:
         """Return cache metrics for the SOC UI."""
         if not self._enabled or self._conn is None:
             return {"enabled": False}

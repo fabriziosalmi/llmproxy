@@ -28,8 +28,6 @@ JWT-authenticated caller whose roles are genuinely insufficient.
 
 from __future__ import annotations
 
-from typing import Optional, Tuple
-
 #: Permission required when no rule below matches.
 #
 # `users:manage` is held by `admin` alone, so an unmatched control-plane route
@@ -44,7 +42,7 @@ DEFAULT_PERMISSION = "users:manage"
 # are GET and HEAD; everything else is a write. The vocabulary is the one
 # core/rbac.py already declares; nothing new is invented here, because a
 # permission no role holds is a permission that only ever denies.
-_RULES: Tuple[Tuple[str, str, str], ...] = (
+_RULES: tuple[tuple[str, str, str], ...] = (
     ("/api/v1/registry", "registry:read", "registry:write"),
     ("/api/v1/endpoints", "registry:read", "registry:write"),
     ("/api/v1/logs", "logs:read", "logs:clear"),
@@ -91,7 +89,7 @@ def required_permission(method: str, path: str) -> str:
     return DEFAULT_PERMISSION
 
 
-def describe(method: str, path: str) -> Optional[str]:
+def describe(method: str, path: str) -> str | None:
     """Human-readable rule for a path, for logs and error messages."""
     perm = required_permission(method, path)
     return f"{method.upper()} {path} requires '{perm}'"

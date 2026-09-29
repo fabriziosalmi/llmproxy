@@ -13,10 +13,10 @@ Config (via manifest ui_schema):
 Ring: ROUTING (model selection)
 """
 
-from typing import Dict, Any
+from typing import Any
 
-from core.plugin_sdk import BasePlugin, PluginResponse, PluginHook
 from core.plugin_engine import PluginContext
+from core.plugin_sdk import BasePlugin, PluginHook, PluginResponse
 
 
 class TenantQoSRouter(BasePlugin):
@@ -27,9 +27,9 @@ class TenantQoSRouter(BasePlugin):
     description = "Routes requests to models based on tenant tier (free -> cheap, premium -> requested)"
     timeout_ms = 2
 
-    def __init__(self, config: Dict[str, Any] | None = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         super().__init__(config)
-        self.tier_mapping: Dict[str, str] = self.config.get(
+        self.tier_mapping: dict[str, str] = self.config.get(
             "tier_mapping",
             {
                 "free": "gpt-4o-mini",

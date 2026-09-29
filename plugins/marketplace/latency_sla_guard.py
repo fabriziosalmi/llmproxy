@@ -28,10 +28,10 @@ Config (via manifest ui_schema):
 
 import time
 from collections import deque
-from typing import Dict, Any, List
+from typing import Any
 
-from core.plugin_sdk import BasePlugin, PluginResponse, PluginHook
 from core.plugin_engine import PluginContext
+from core.plugin_sdk import BasePlugin, PluginHook, PluginResponse
 
 
 class LatencySlaGuard(BasePlugin):
@@ -42,7 +42,7 @@ class LatencySlaGuard(BasePlugin):
     description = "Measures TTFT and total latency, flags SLA violations"
     timeout_ms = 2  # Pure arithmetic, no I/O
 
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: dict[str, Any] = None):
         super().__init__(config)
         self.ttft_p95_ms: int = self.config.get("ttft_p95_ms", 500)
         self.total_p95_ms: int = self.config.get("total_p95_ms", 3000)
@@ -58,7 +58,7 @@ class LatencySlaGuard(BasePlugin):
         self._sla_warnings: int = 0
         self._sla_breaches: int = 0
 
-    def _compute_latency(self, ctx: PluginContext) -> Dict[str, float]:
+    def _compute_latency(self, ctx: PluginContext) -> dict[str, float]:
         """Extract latency measurements from request timestamps."""
         now = time.time()
 
@@ -81,7 +81,7 @@ class LatencySlaGuard(BasePlugin):
 
     def _evaluate_sla(self, total_ms: float, ttft_ms: float | None) -> tuple:
         """Evaluate latency against SLA targets. Returns (status, violations)."""
-        violations: List[str] = []
+        violations: list[str] = []
 
         # Hard limit breach
         if total_ms > self.hard_limit_ms:
@@ -100,7 +100,7 @@ class LatencySlaGuard(BasePlugin):
 
         return "ok", []
 
-    def _percentiles(self, samples: deque) -> Dict[str, float]:
+    def _percentiles(self, samples: deque) -> dict[str, float]:
         """Compute P50/P95/P99 from a deque of samples."""
         if not samples:
             return {"p50": 0.0, "p95": 0.0, "p99": 0.0}
@@ -112,7 +112,7 @@ class LatencySlaGuard(BasePlugin):
             "p99": round(sorted_samples[min(int(n * 0.99), n - 1)], 2),
         }
 
-    def get_sla_stats(self) -> Dict[str, Any]:
+    def get_sla_stats(self) -> dict[str, Any]:
         """Public stats for SOC dashboard / admin API."""
         return {
             "total_requests": self._total_requests,

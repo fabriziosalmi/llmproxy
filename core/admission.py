@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 logger = logging.getLogger("llmproxy.admission")
 
@@ -59,7 +59,7 @@ class AdmissionController:
         self._queued_lock = asyncio.Lock()
 
     @classmethod
-    def from_config(cls, config: Optional[Dict[str, Any]]) -> "AdmissionController":
+    def from_config(cls, config: dict[str, Any] | None) -> AdmissionController:
         """Size from connection_pool, because that is the real constraint.
 
         Admitting more requests than the connector can serve just moves the

@@ -28,10 +28,9 @@ Zero external deps — uses only Python stdlib.
 Typical latency: <0.2ms for normal prompts, <5ms for long prompts (1200 words).
 """
 
-import re
 import logging
+import re
 import unicodedata
-from typing import Optional
 
 # Single source of truth for the Cyrillic/Greek confusable table (was hand-rolled
 # here and in core/firewall_asgi.py with divergent, incomplete copies).
@@ -316,7 +315,7 @@ def _ensure_corpus():
 
 def semantic_scan(
     prompt: str, threshold: float = 0.35
-) -> Optional[tuple[float, str, str]]:
+) -> tuple[float, str, str] | None:
     """Scan a prompt for lexical similarity to known injection patterns.
 
     Uses sliding-window trigram Jaccard comparison for length-independent

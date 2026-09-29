@@ -12,9 +12,9 @@ Design principles:
   - Zero new deps: uses only stdlib + cachetools (already in requirements)
 """
 
-import time
 import logging
-from typing import Optional
+import time
+
 from cachetools import TTLCache
 
 logger = logging.getLogger("llmproxy.threat_ledger")
@@ -60,7 +60,7 @@ class ThreatLedger:
         ip: str = "",
         key_prefix: str = "",
         score: float = 0.0,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Record a threat score and check if actor exceeds threshold.
 
         Args:
@@ -91,7 +91,7 @@ class ThreatLedger:
         actor: str,
         score: float,
         now: float,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Record score for an actor and check threshold."""
         if not actor:
             return None

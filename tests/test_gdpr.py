@@ -9,15 +9,14 @@ Tests for:
 """
 
 import time
+
+import httpx
 import pytest
 import pytest_asyncio
-import httpx
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from proxy.routes.gdpr import create_router as gdpr_router
-
 
 # ── In-memory store with GDPR methods ──
 

@@ -15,13 +15,13 @@ Config (via manifest ui_schema):
   - hash_messages: int (default 3) — how many trailing messages to hash
 """
 
-import time
 import hashlib
+import time
 from collections import defaultdict
-from typing import Dict, Any, List, Tuple
+from typing import Any
 
-from core.plugin_sdk import BasePlugin, PluginResponse, PluginHook
 from core.plugin_engine import PluginContext
+from core.plugin_sdk import BasePlugin, PluginHook, PluginResponse
 
 
 class AgenticLoopBreaker(BasePlugin):
@@ -32,15 +32,15 @@ class AgenticLoopBreaker(BasePlugin):
     description = "Detects and breaks agentic retry loops via prompt hashing"
     timeout_ms = 10  # Must be fast — hash-only logic
 
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: dict[str, Any] = None):
         super().__init__(config)
         self.max_repeats: int = self.config.get("max_repeats", 3)
         self.window_seconds: int = self.config.get("window_seconds", 120)
         self.hash_messages: int = self.config.get("hash_messages", 3)
         # session_id → list of (timestamp, hash)
-        self._session_hashes: Dict[str, List[Tuple[float, str]]] = defaultdict(list)
+        self._session_hashes: dict[str, list[tuple[float, str]]] = defaultdict(list)
 
-    def _compute_prompt_hash(self, body: Dict[str, Any]) -> str:
+    def _compute_prompt_hash(self, body: dict[str, Any]) -> str:
         """Hash the trailing N messages to detect repeated prompts."""
         messages = body.get("messages", [])
         if not messages:

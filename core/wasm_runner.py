@@ -37,14 +37,14 @@ Usage:
   await runner.unload()
 """
 
-import json
 import asyncio
+import concurrent.futures
+import json
 import logging
 import threading
-import concurrent.futures
-from typing import Dict, Any, Optional
+from typing import Any
 
-from core.plugin_sdk import PluginResponse, PluginAction
+from core.plugin_sdk import PluginAction, PluginResponse
 
 logger = logging.getLogger("wasm_runner")
 
@@ -115,7 +115,7 @@ class WasmRunner:
     releasing the GIL and keeping the event loop free.
     """
 
-    def __init__(self, wasm_path: str, config: Dict[str, Any] | None = None):
+    def __init__(self, wasm_path: str, config: dict[str, Any] | None = None):
         self.wasm_path = wasm_path
         self.config = config or {}
         self._plugin = None  # Extism Plugin instance
@@ -170,8 +170,8 @@ class WasmRunner:
 
     async def execute(
         self,
-        body: Dict[str, Any],
-        metadata: Dict[str, Any] | None = None,
+        body: dict[str, Any],
+        metadata: dict[str, Any] | None = None,
         session_id: str = "default",
     ) -> PluginResponse:
         """
@@ -208,7 +208,7 @@ class WasmRunner:
             self.logger.error(f"WASM execution error: {e}")
             return PluginResponse.passthrough()
 
-    def _sync_call(self, input_json: str) -> Optional[bytes]:
+    def _sync_call(self, input_json: str) -> bytes | None:
         """Synchronous WASM call (runs in thread pool).
 
         Acquires self._exec_lock (a threading.Lock) before calling into the
@@ -222,7 +222,7 @@ class WasmRunner:
                 raise RuntimeError("WASM plugin not loaded — call load() first")
             return self._plugin.call("handle", input_json.encode("utf-8"))
 
-    def _parse_result(self, result_bytes: Optional[bytes]) -> PluginResponse:
+    def _parse_result(self, result_bytes: bytes | None) -> PluginResponse:
         """
         Parse WASM output bytes into a PluginResponse.
         If output is invalid/missing → passthrough.
