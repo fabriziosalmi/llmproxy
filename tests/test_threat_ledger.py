@@ -5,9 +5,8 @@ and ResponseSigner (HMAC provenance).
 
 import pytest
 
-from core.threat_ledger import ThreatLedger
 from core.response_signer import ResponseSigner
-
+from core.threat_ledger import ThreatLedger
 
 # ══════════════════════════════════════════════════════════
 # ThreatLedger

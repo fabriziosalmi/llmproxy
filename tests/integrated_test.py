@@ -1,8 +1,9 @@
 import asyncio
-import aiohttp
 import logging
-import sys
 import socket
+import sys
+
+import aiohttp
 import pytest
 
 

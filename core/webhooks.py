@@ -11,19 +11,21 @@ Features:
   - Rate-limited to prevent webhook flooding
 """
 
-import hmac
+import asyncio
 import hashlib
+import hmac
 import ipaddress
 import json
+import logging
 import socket
 import time
-import logging
-import asyncio
-import aiohttp
 import urllib.parse
-from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
+from datetime import UTC
 from enum import Enum
+from typing import Any
+
+import aiohttp
 
 from core.infisical import get_secret
 
@@ -62,8 +64,8 @@ class WebhookConfig:
     name: str
     url: str
     target: WebhookTarget = WebhookTarget.GENERIC
-    events: List[str] = field(default_factory=lambda: ["*"])  # "*" = all events
-    secret: Optional[str] = None  # HMAC signing secret
+    events: list[str] = field(default_factory=lambda: ["*"])  # "*" = all events
+    secret: str | None = None  # HMAC signing secret
 
 
 # SSRF — private/reserved CIDR ranges that webhook URLs must not target
@@ -185,17 +187,17 @@ class WebhookDispatcher:
         await dispatcher.dispatch(EventType.CIRCUIT_OPEN, {"endpoint": "openai", "reason": "5xx cascade"})
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         webhooks_cfg = config.get("webhooks", {})
         self.enabled = webhooks_cfg.get("enabled", False)
-        self.endpoints: List[WebhookConfig] = []
-        self._session: Optional[aiohttp.ClientSession] = None
-        self._last_dispatch: Dict[str, float] = {}  # event_key → timestamp (debounce)
+        self.endpoints: list[WebhookConfig] = []
+        self._session: aiohttp.ClientSession | None = None
+        self._last_dispatch: dict[str, float] = {}  # event_key → timestamp (debounce)
 
         if self.enabled:
             self._load_endpoints(webhooks_cfg.get("endpoints", []))
 
-    def _load_endpoints(self, endpoint_configs: List[Dict[str, Any]]):
+    def _load_endpoints(self, endpoint_configs: list[dict[str, Any]]):
         for ecfg in endpoint_configs:
             name = ecfg.get("name", "webhook")
             # URL from config or Infisical
@@ -253,7 +255,7 @@ class WebhookDispatcher:
         self._last_dispatch[event_key] = now
         return True
 
-    async def dispatch(self, event: EventType, data: Dict[str, Any]):
+    async def dispatch(self, event: EventType, data: dict[str, Any]):
         """
         Dispatch an event to all matching webhook endpoints.
         Non-blocking — errors are logged but never propagate.
@@ -275,7 +277,7 @@ class WebhookDispatcher:
             await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _send(
-        self, endpoint: WebhookConfig, event: EventType, data: Dict[str, Any]
+        self, endpoint: WebhookConfig, event: EventType, data: dict[str, Any]
     ):
         """Send a formatted payload to a single webhook endpoint."""
         try:
@@ -307,8 +309,8 @@ class WebhookDispatcher:
             )
 
     def _format_payload(
-        self, target: WebhookTarget, event: EventType, data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, target: WebhookTarget, event: EventType, data: dict[str, Any]
+    ) -> dict[str, Any]:
         """Format the event payload for the target platform."""
         severity = self._get_severity(event)
         title = f"🔔 LLMPROXY — {event.value.replace('_', ' ').title()}"
@@ -356,14 +358,14 @@ class WebhookDispatcher:
                 ]
             }
         elif target == WebhookTarget.SIEM:
-            from datetime import datetime, timezone
+            from datetime import datetime
 
             from core.siem import to_ecs
 
             return to_ecs(
                 event.value,
                 data,
-                timestamp=datetime.now(timezone.utc).isoformat(),
+                timestamp=datetime.now(UTC).isoformat(),
                 version=_proxy_version(),
             )
         else:

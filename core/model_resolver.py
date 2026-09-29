@@ -11,10 +11,10 @@ API key configured. If "auto" has [openai, google, anthropic] but only
 google has a key, it resolves to a Google model.
 """
 
+import logging
 import os
 import random
-import logging
-from typing import Dict, Any, Optional, List
+from typing import Any
 
 logger = logging.getLogger("llmproxy.model_resolver")
 
@@ -22,7 +22,7 @@ logger = logging.getLogger("llmproxy.model_resolver")
 _available_providers: set[str] | None = None
 
 
-def known_model_names(config: Dict[str, Any]) -> frozenset:
+def known_model_names(config: dict[str, Any]) -> frozenset:
     """Every model name this proxy recognises, from all three declarations.
 
     Used to bound Prometheus label cardinality: the cost counter is labelled by
@@ -49,7 +49,7 @@ def known_model_names(config: Dict[str, Any]) -> frozenset:
     return frozenset(names)
 
 
-def _get_available_providers(config: Dict[str, Any]) -> set[str]:
+def _get_available_providers(config: dict[str, Any]) -> set[str]:
     """Return set of provider names that have valid API keys configured."""
     global _available_providers
     if _available_providers is not None:
@@ -81,7 +81,7 @@ def _get_available_providers(config: Dict[str, Any]) -> set[str]:
 
 
 def resolve_model(
-    config: Dict[str, Any], requested_model: str
+    config: dict[str, Any], requested_model: str
 ) -> tuple[str, str | None]:
     """Resolve a model alias or group to a real model name + provider.
 
@@ -117,7 +117,7 @@ def invalidate_provider_cache():
     _available_providers = None
 
 
-def _filter_available(models: List[Dict], available: set[str]) -> List[Dict]:
+def _filter_available(models: list[dict], available: set[str]) -> list[dict]:
     """Filter models to only those whose provider has a valid API key."""
     if not available:
         return models  # No info — return all (best effort)
@@ -131,8 +131,8 @@ def _filter_available(models: List[Dict], available: set[str]) -> List[Dict]:
 
 
 def _pick_from_group(
-    group: Dict[str, Any], available: set[str]
-) -> Optional[tuple[str, str]]:
+    group: dict[str, Any], available: set[str]
+) -> tuple[str, str] | None:
     """Pick a model from a group based on strategy.
 
     Returns (model_name, provider_name) or None.

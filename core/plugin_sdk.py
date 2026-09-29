@@ -23,9 +23,9 @@ Example:
 from __future__ import annotations
 
 import logging
-from enum import Enum
-from typing import Dict, Any, Optional, TYPE_CHECKING
 from dataclasses import dataclass
+from enum import Enum
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from core.plugin_engine import PluginContext
@@ -43,10 +43,14 @@ class PluginHook(Enum):
     BACKGROUND = "background"  # Ring 5: FinOps, Logs, Telemetry
 
 
-class PluginAction(str, Enum):
+class PluginAction(str, Enum):  # noqa: UP042
     """
     Typed action enum for PluginResponse.
     Prevents silent failures from typos like action="banana".
+
+    Deliberate non-fix for UP042 (StrEnum): switching to StrEnum would change
+    str()/format() of members from 'PluginAction.X' to the raw value, which
+    is a wire-visible behaviour change for plugin authors. Revisit in a major.
     """
 
     PASSTHROUGH = "passthrough"
@@ -81,9 +85,9 @@ class PluginResponse:
 
     action: str = "passthrough"  # passthrough | modify | block | cache_hit
     status_code: int = 200
-    error_type: Optional[str] = None
-    message: Optional[str] = None
-    body: Optional[Dict[str, Any]] = None  # Modified body (for MODIFY action)
+    error_type: str | None = None
+    message: str | None = None
+    body: dict[str, Any] | None = None  # Modified body (for MODIFY action)
     response: Any = None  # Direct response (for CACHE_HIT)
 
     def __post_init__(self):
@@ -104,14 +108,14 @@ class PluginResponse:
             self.status_code = 403
 
     @classmethod
-    def passthrough(cls) -> "PluginResponse":
+    def passthrough(cls) -> PluginResponse:
         """Let the request pass through unchanged."""
         return cls(action="passthrough")
 
     @classmethod
     def modify(
-        cls, body: Dict[str, Any] | None = None, message: str | None = None
-    ) -> "PluginResponse":
+        cls, body: dict[str, Any] | None = None, message: str | None = None
+    ) -> PluginResponse:
         """Request body was modified, continue pipeline."""
         return cls(action="modify", body=body, message=message)
 
@@ -121,7 +125,7 @@ class PluginResponse:
         status_code: int = 403,
         error_type: str = "plugin_block",
         message: str = "Blocked by plugin",
-    ) -> "PluginResponse":
+    ) -> PluginResponse:
         """Block the request with an error."""
         return cls(
             action="block",
@@ -131,7 +135,7 @@ class PluginResponse:
         )
 
     @classmethod
-    def cache_hit(cls, response: Any) -> "PluginResponse":
+    def cache_hit(cls, response: Any) -> PluginResponse:
         """Return a cached response, skip routing."""
         return cls(action="cache_hit", response=response)
 
@@ -162,7 +166,7 @@ class BasePlugin:
     description: str = ""
     timeout_ms: int = 50  # Default timeout: 50ms (strict)
 
-    def __init__(self, config: Dict[str, Any] | None = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         """
         Initialize with optional config dict (from manifest ui_schema defaults
         merged with user overrides).
@@ -198,7 +202,7 @@ class BasePlugin:
         pass
 
     @property
-    def stats(self) -> Dict[str, Any]:
+    def stats(self) -> dict[str, Any]:
         """Return plugin performance stats."""
         invocations = self._stats["invocations"]
         return {

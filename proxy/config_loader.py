@@ -11,9 +11,9 @@ wiring + request dispatch.
 from __future__ import annotations
 
 import hashlib
-import os
 import logging
-from typing import Any, Dict
+import os
+from typing import Any
 
 import yaml
 
@@ -30,7 +30,7 @@ def dev_mode_enabled() -> bool:
     )
 
 
-def apply_dev_mode(cfg: Dict[str, Any]) -> Dict[str, Any]:
+def apply_dev_mode(cfg: dict[str, Any]) -> dict[str, Any]:
     """Turn authentication off when LLM_PROXY_DEV_MODE is set, loudly.
 
     This used to apply only when config.yaml was ABSENT, which made it useless
@@ -54,7 +54,7 @@ def apply_dev_mode(cfg: Dict[str, Any]) -> Dict[str, Any]:
     return cfg
 
 
-def load_config(config_path: str) -> Dict[str, Any]:
+def load_config(config_path: str) -> dict[str, Any]:
     """Load YAML config + apply env overlays.
 
     Missing file → fail-closed default (auth enabled). Set
@@ -63,7 +63,7 @@ def load_config(config_path: str) -> Dict[str, Any]:
     env values without needing a YAML edit.
     """
     if os.path.exists(config_path):
-        with open(config_path, "r") as f:
+        with open(config_path) as f:
             cfg = yaml.safe_load(f) or {}
     else:
         cfg = {"server": {"auth": {"enabled": True}}}

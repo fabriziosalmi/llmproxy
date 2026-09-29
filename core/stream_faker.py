@@ -13,12 +13,13 @@ Design:
   - Produces standard SSE: `data: {...}\n\n` with `data: [DONE]\n\n` terminator.
 """
 
-import json
 import asyncio
-from typing import AsyncGenerator, Dict, Any
+import json
+from collections.abc import AsyncGenerator
+from typing import Any
 
 
-async def fake_stream(cached_response: Dict[str, Any]) -> AsyncGenerator[bytes, None]:
+async def fake_stream(cached_response: dict[str, Any]) -> AsyncGenerator[bytes, None]:
     """Convert a cached response dict into OpenAI-compatible SSE chunks.
 
     Input: Full response dict with choices[0].message.content

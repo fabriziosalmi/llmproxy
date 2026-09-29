@@ -13,27 +13,27 @@ Extracted modules:
   - proxy/forwarder.py     — Upstream forwarding + fallback chain
 """
 
-import os
 import asyncio
 import logging
-import uvicorn
-import aiohttp
-from typing import Optional, Dict, Any
+import os
+from typing import Any
 
+import aiohttp
+import uvicorn
 
 from core.base_agent import BaseAgent
-from core.metrics import MetricsTracker
-from core.zero_trust import ZeroTrustManager
-from core.rbac import RBACManager
-from core.circuit_breaker import CircuitManager
-from core.security import SecurityShield
-from core.plugin_engine import PluginManager, PluginState
-from core.identity import IdentityManager
-from core.webhooks import WebhookDispatcher, EventType
-from core.export import DatasetExporter
 from core.cache import CacheBackend, NegativeCache
-
+from core.circuit_breaker import CircuitManager
+from core.export import DatasetExporter
+from core.identity import IdentityManager
+from core.metrics import MetricsTracker
+from core.plugin_engine import PluginManager, PluginState
+from core.rbac import RBACManager
+from core.security import SecurityShield
+from core.webhooks import EventType, WebhookDispatcher
+from core.zero_trust import ZeroTrustManager
 from store.base import BaseRepository
+
 from .adapters.registry import get_adapter
 from .app_factory import create_app
 from .event_log import EventLogger
@@ -49,7 +49,7 @@ class ProxyOrchestrator(BaseAgent):
         self, store: BaseRepository, assistant=None, config_path: str = "config.yaml"
     ):
         super().__init__("rotator")
-        self._session: Optional[aiohttp.ClientSession] = None
+        self._session: aiohttp.ClientSession | None = None
         self.store = store
         self.config_path = config_path
         self.model_adapter = get_adapter("openai")  # default, overridden per-request
@@ -322,24 +322,25 @@ class ProxyOrchestrator(BaseAgent):
     ):
         await self._event_logger.add_log(message, level, metadata, trace_id)
 
-    async def broadcast_event(self, event_type: str, data: Dict[str, Any]):
+    async def broadcast_event(self, event_type: str, data: dict[str, Any]):
         await self._event_logger.broadcast_event(event_type, data)
 
     # ── Lifecycle ──
 
     async def setup(self):
         """Pre-flight: DB init, plugin load, state hydration, cache init."""
+        from core.metrics_history import MetricsHistory
+
         from .background import (
-            config_watch_loop,
-            write_flush_loop,
             cache_eviction_loop,
+            config_watch_loop,
             dedup_cleanup_loop,
-            retention_purge_loop,
             local_discovery_loop,
             metrics_history_loop,
+            retention_purge_loop,
             smart_router_sync_loop,
+            write_flush_loop,
         )
-        from core.metrics_history import MetricsHistory
 
         # Q.3 — hourly KPI sparkline ring buffer. Constructed before the
         # snapshot loop is spawned so the very first tick has a target.
@@ -486,7 +487,7 @@ class ProxyOrchestrator(BaseAgent):
     # ── Core Proxy Pipeline ──
 
     async def proxy_request(
-        self, request, body: Dict[str, Any] | None = None, session_id: str = "default"
+        self, request, body: dict[str, Any] | None = None, session_id: str = "default"
     ):
         """Run a request through the 5-ring pipeline.
         Thin shim — see proxy/request_pipeline.process_proxy_request."""

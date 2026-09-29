@@ -11,10 +11,10 @@ Covers:
 import pytest
 
 from plugins.default.neural_router import (
-    update_endpoint_stats,
-    get_endpoint_stats,
     _compute_score,
     _endpoint_stats,
+    get_endpoint_stats,
+    update_endpoint_stats,
 )
 
 

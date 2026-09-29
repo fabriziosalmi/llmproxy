@@ -5,12 +5,10 @@ Uses FastAPI's built-in OpenAPI spec as the source of truth,
 then validates actual responses against declared response models.
 """
 
+import httpx
 import pytest
 import pytest_asyncio
-import httpx
-
 from conftest import InMemoryRepository, minimal_config
-
 
 # Reuse the LightweightAgent from test_e2e
 from test_e2e import LightweightAgent
@@ -150,7 +148,7 @@ async def test_features_response_shape(client):
 @pytest.mark.asyncio
 async def test_registry_response_shape(client, store):
     """GET /api/v1/registry items must have {id, name, url, status, latency, priority, type}."""
-    from models import LLMEndpoint, EndpointStatus
+    from models import EndpointStatus, LLMEndpoint
 
     ep = LLMEndpoint(
         id="shape-test",

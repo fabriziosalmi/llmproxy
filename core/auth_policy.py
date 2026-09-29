@@ -18,7 +18,8 @@ changes is only the case that used to boot open.
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 #: An absent `server.auth.enabled` means authentication is ON.
 DEFAULT_AUTH_ENABLED = True

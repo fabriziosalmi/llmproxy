@@ -70,11 +70,14 @@ bench: ## Run performance benchmarks
 
 # ── Code Quality ───────────────────────────────────────────────
 
-lint: ## Run linter (ruff)
+lint: ## Run linter (ruff, autofix)
 	. venv/bin/activate && ruff check . --fix
 
-typecheck: ## Run type checker (mypy)
-	. venv/bin/activate && mypy core/ proxy/ --ignore-missing-imports
+lint-ci: ## Run linter exactly as CI does (no autofix, fails on finding)
+	. venv/bin/activate && ruff check .
+
+typecheck: ## Run type checker (mypy, same scope as CI)
+	. venv/bin/activate && mypy core/ proxy/ store/ --ignore-missing-imports
 
 syntax: ## Verify all Python files parse
 	python -m compileall -q core/ proxy/ plugins/ store/ main.py models.py

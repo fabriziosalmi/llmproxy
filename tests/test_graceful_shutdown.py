@@ -17,7 +17,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Minimal mock store satisfying the StateBackend protocol
 # ---------------------------------------------------------------------------

@@ -10,7 +10,6 @@ Covers:
 from proxy.adapters.anthropic import AnthropicAdapter, _translate_content
 from proxy.adapters.google import GoogleAdapter, _translate_multimodal_parts
 
-
 # ══════════════════════════════════════════════════════
 # Anthropic Multimodal Translation
 # ══════════════════════════════════════════════════════

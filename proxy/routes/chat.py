@@ -1,24 +1,26 @@
 """Chat completion route: /v1/chat/completions — the core proxy endpoint."""
 
-import json
-import time
 import asyncio
 import datetime as _dt
+import json
 import logging
+import time
 
-from fastapi import APIRouter, Request, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import APIKeyHeader
 
 from core.metrics import MetricsTracker
+from core.pricing import estimate_cost
 from core.session_id import (
     from_fingerprint as session_id_from_fingerprint,
+)
+from core.session_id import (
     from_token as session_id_from_token,
 )
-from proxy.schemas import ChatCompletionRequest
+from core.tokenizer import count_messages_tokens
 from core.tracing import TraceManager
 from core.webhooks import EventType
-from core.pricing import estimate_cost
-from core.tokenizer import count_messages_tokens
+from proxy.schemas import ChatCompletionRequest
 
 logger = logging.getLogger("llmproxy.routes.chat")
 
@@ -76,7 +78,7 @@ def create_router(agent) -> APIRouter:
                     logger.warning(f"Identity verification failed: {e}")
                     raise HTTPException(
                         status_code=401, detail="Unauthorized: Invalid or expired token"
-                    )
+                    ) from e
 
             if identity and identity.verified:
                 request.state.identity = identity

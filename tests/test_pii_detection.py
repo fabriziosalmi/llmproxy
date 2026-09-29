@@ -5,7 +5,8 @@ Tests the SecurityShield PII layer regardless of whether Presidio is installed.
 """
 
 import pytest
-from core.security import SecurityShield, _PRESIDIO_AVAILABLE
+
+from core.security import _PRESIDIO_AVAILABLE, SecurityShield
 
 
 @pytest.fixture

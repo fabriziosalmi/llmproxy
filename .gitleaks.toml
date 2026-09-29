@@ -1,0 +1,24 @@
+# Gitleaks allowlist — llmproxy
+#
+# Docs contain curl examples with `Authorization: Bearer <placeholder>` by
+# design (README, configuration guide). Those trip the `curl-auth-header`
+# rule on every commit that touches them, while no real secret has ever
+# shipped via docs/** (the recorded incident came through .env.example,
+# which stays fully scanned). Test vectors and vendored/minified JS are
+# likewise synthetic by construction.
+#
+# Everything else — especially .env*, *.key, config, source — stays under
+# the default rules with no exceptions.
+
+[allowlist]
+description = "placeholder Bearer tokens in documentation curl examples"
+paths = [
+  '''docs/.*''',
+  '''README\.md''',
+  '''CHANGELOG\.md''',
+  '''CONTRIBUTING\.md''',
+  '''SECURITY\.md''',
+]
+regexes = [
+  '''(?i)authorization:\s*bearer\s+[a-z0-9_<>\-\.\$]+''',
+]

@@ -1,7 +1,8 @@
-from pydantic import BaseModel, HttpUrl
-from enum import IntEnum
-from typing import List, Optional, Dict, Any
 from datetime import datetime
+from enum import IntEnum
+from typing import Any
+
+from pydantic import BaseModel, HttpUrl
 
 
 class EndpointStatus(IntEnum):
@@ -16,16 +17,16 @@ class LLMEndpoint(BaseModel):
     url: HttpUrl
     status: EndpointStatus
     provider: str = "openai"  # openai, anthropic, google, azure, ollama, groq, together, mistral, deepseek, openai-compatible
-    provider_type: Optional[str] = None  # legacy alias for provider
-    metadata: Dict[str, Any] = {}
-    last_verified: Optional[datetime] = None
-    latency_ms: Optional[float] = 0.0
-    success_rate: Optional[float] = 0.0
-    tags: List[str] = []
+    provider_type: str | None = None  # legacy alias for provider
+    metadata: dict[str, Any] = {}
+    last_verified: datetime | None = None
+    latency_ms: float | None = 0.0
+    success_rate: float | None = 0.0
+    tags: list[str] = []
 
 
 class AgentState(BaseModel):
     agent_name: str
     last_run: datetime
     processed_count: int
-    active_tasks: List[str]
+    active_tasks: list[str]

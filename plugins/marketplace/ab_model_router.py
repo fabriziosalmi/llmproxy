@@ -22,13 +22,13 @@ Config (via manifest ui_schema):
   - experiment_id: str — tag injected into request metadata for tracking (default: "ab_test")
 """
 
-import random
 import logging
+import random
 import time
-from typing import Dict, Any
+from typing import Any
 
-from core.plugin_sdk import BasePlugin, PluginResponse, PluginHook
 from core.plugin_engine import PluginContext
+from core.plugin_sdk import BasePlugin, PluginHook, PluginResponse
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ class ABModelRouter(BasePlugin):
     )
     timeout_ms = 2
 
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: dict[str, Any] = None):
         super().__init__(config)
         self.control_model: str = self.config.get("control_model", "")
         self.variant_model: str = self.config.get("variant_model", "")
@@ -53,7 +53,7 @@ class ABModelRouter(BasePlugin):
         self.sticky: bool = self.config.get("sticky", True)
         self.experiment_id: str = self.config.get("experiment_id", "ab_test")
         # session_id → (arm: "control"|"variant", assigned_at: float)
-        self._session_arms: Dict[str, tuple] = {}
+        self._session_arms: dict[str, tuple] = {}
 
     def _prune_sessions(self):
         now = time.time()

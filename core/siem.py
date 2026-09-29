@@ -14,13 +14,13 @@ inject a second event or break the parser downstream.
 """
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 _VENDOR = "llmproxy"
 _PRODUCT = "llmproxy"
 
 # CEF severity is 0-10. Map each event type to a defensible level.
-_CEF_SEVERITY: Dict[str, int] = {
+_CEF_SEVERITY: dict[str, int] = {
     "panic_activated": 10,
     "injection_blocked": 8,
     "auth_failure": 6,
@@ -31,7 +31,7 @@ _CEF_SEVERITY: Dict[str, int] = {
 }
 
 # ECS event.category / event.type per event (https://www.elastic.co/guide/en/ecs).
-_ECS_META: Dict[str, Dict[str, Any]] = {
+_ECS_META: dict[str, dict[str, Any]] = {
     "injection_blocked": {"category": ["intrusion_detection"], "type": ["denied"], "kind": "alert"},
     "auth_failure": {"category": ["authentication"], "type": ["denied"], "kind": "alert"},
     "panic_activated": {"category": ["configuration"], "type": ["change"], "kind": "alert"},
@@ -42,7 +42,7 @@ _ECS_META: Dict[str, Dict[str, Any]] = {
 }
 
 # Human-readable CEF "Name" per event.
-_CEF_NAME: Dict[str, str] = {
+_CEF_NAME: dict[str, str] = {
     "injection_blocked": "Prompt injection blocked",
     "auth_failure": "Authentication failure",
     "panic_activated": "Kill-switch activated",
@@ -84,7 +84,7 @@ _CEF_KEY_MAP = {
 
 def to_cef(
     event_type: str,
-    data: Dict[str, Any] | None = None,
+    data: dict[str, Any] | None = None,
     *,
     version: str = "unknown",
 ) -> str:
@@ -118,18 +118,18 @@ def to_cef(
 
 def to_ecs(
     event_type: str,
-    data: Dict[str, Any] | None = None,
+    data: dict[str, Any] | None = None,
     *,
     timestamp: str,
     version: str = "unknown",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Format a security event as an Elastic Common Schema (ECS) document.
 
     `timestamp` is passed in (RFC3339) so this stays a pure function.
     """
     data = data or {}
     meta = _ECS_META.get(event_type, {"category": ["configuration"], "type": ["info"], "kind": "event"})
-    doc: Dict[str, Any] = {
+    doc: dict[str, Any] = {
         "@timestamp": timestamp,
         "event": {
             "kind": meta["kind"],

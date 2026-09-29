@@ -1,5 +1,7 @@
+target-version = "py312"
+
 [lint]
-select = ["E", "F", "W"]
+select = ["E", "F", "W", "I", "UP", "B"]
 ignore = ["E501"]
 exclude = ["venv/", ".venv/"]
 

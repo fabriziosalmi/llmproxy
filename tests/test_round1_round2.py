@@ -8,13 +8,13 @@ Tests for Round 1 & Round 2 features:
 """
 
 import json
+
 import pytest
 
+from core.deduplicator import RequestDeduplicator
+from core.model_resolver import resolve_model
 from proxy.adapters.openai import OpenAIAdapter, _is_o_series
 from proxy.routes.completions import _translate_chat_chunk_to_legacy
-from core.model_resolver import resolve_model
-from core.deduplicator import RequestDeduplicator
-
 
 # ══════════════════════════════════════════════════════
 # R2.2: O-Series Reasoning Models

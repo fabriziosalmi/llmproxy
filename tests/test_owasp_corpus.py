@@ -44,15 +44,14 @@ they're caller-side / build-time / model-side concerns, not proxy-side.
 from __future__ import annotations
 
 import os
-import yaml
 from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
-from core.security import SecurityShield
 from core.firewall_asgi import ByteLevelFirewallMiddleware
-
+from core.security import SecurityShield
 
 CORPUS_PATH = Path(__file__).parent / "corpus" / "owasp_llm_top10.yaml"
 REPORT_PATH = Path(__file__).parent.parent / "docs" / "OWASP_LLM_COVERAGE.md"
