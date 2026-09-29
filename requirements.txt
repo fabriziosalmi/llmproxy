@@ -11,7 +11,7 @@ aiosqlite==0.22.1
 asyncpg>=0.31.0
 
 # Monitoring
-prometheus-client==0.25.0
+prometheus-client==0.26.0
 
 # Security & Identity
 cryptography==50.0.1
