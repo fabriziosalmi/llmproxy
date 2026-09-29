@@ -193,6 +193,25 @@ def validate_config(config: dict) -> list[str]:
     if cache_cfg.get("enabled") and not cache_cfg.get("db_path"):
         warnings.append("Caching enabled but no db_path set — using 'cache.db'")
 
+    # 7. Prod exposure hygiene — warn, do not block.
+    #
+    # The compose file binds 8090 to 0.0.0.0 with TLS off by default, which is
+    # correct only behind a reverse proxy. A bare 0.0.0.0 without TLS and
+    # without segregated admin keys is how the 1.35.0 audit finding happened.
+    tls_cfg = server_cfg.get("tls", {}) or {}
+    if server_cfg.get("host") == "0.0.0.0" and not tls_cfg.get("enabled"):
+        warnings.append(
+            "server.host is 0.0.0.0 with TLS disabled — put a reverse proxy "
+            "with TLS in front for any non-local deployment."
+        )
+    metrics_cfg = server_cfg.get("metrics", {}) or {}
+    if metrics_cfg.get("enabled") and metrics_cfg.get("bind", "127.0.0.1") != "127.0.0.1":
+        warnings.append(
+            "Metrics exporter is bound beyond loopback — it serves outside "
+            "the ASGI app with no auth/rate-limit. Keep bind 127.0.0.1 or "
+            "scrape GET /metrics:8090 with an admin key."
+        )
+
     return warnings
 
 

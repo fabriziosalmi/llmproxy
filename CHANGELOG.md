@@ -2,6 +2,18 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.35.2] — 2026-09-29
+
+### Security & Ops Hardening (P0)
+
+- **Metrics exporter bound to loopback**: `docker-compose.yml` publishes `9091` as `127.0.0.1:9091:9091` — the exporter lives outside ASGI with no auth/rate-limit, so it must not sit on `0.0.0.0`.
+- **Verdict-aware compose healthcheck**: compose now fails on `{"status": "down"}` like the Dockerfile `HEALTHCHECK`, instead of passing on any HTTP 200.
+- **Compose hardening**: `no-new-privileges`, json-file log rotation (10m x3) on both services, resource limits for redis, documented `REDIS_PASSWORD`/`requirepass` path.
+- **TLS floor 1.3**: `config.yaml` `tls.min_version` `1.2` → `1.3`, with note that `host: 0.0.0.0` + TLS off requires a TLS-terminating reverse proxy in prod.
+- **Startup prod warnings**: `core/startup_checks.py` warns when bound to `0.0.0.0` without TLS and when the metrics exporter is bound beyond loopback.
+- **Single-tier warning**: `.env.example` marks unset `LLM_PROXY_ADMIN_KEYS` as single-tier/prod-must-set, adds `REDIS_URL` password + `DATABASE_URL` prod-credential guidance.
+- **Prometheus scrape honesty**: `monitoring/prometheus.yml` documents `bearer_token_file` for authed `/metrics:8090`; `HighP95Latency` threshold `10s` → `5s`.
+
 ## [1.35.1] — 2026-09-16
 
 ### Quality & Reliability Improvements
