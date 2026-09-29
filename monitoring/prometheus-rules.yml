@@ -25,12 +25,12 @@ groups:
       # ── Latency ──
       - alert: HighP95Latency
         expr: >
-          histogram_quantile(0.95, rate(llm_proxy_request_latency_seconds_bucket[5m])) > 10
+          histogram_quantile(0.95, rate(llm_proxy_request_latency_seconds_bucket[5m])) > 5
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "P95 latency above 10s"
+          summary: "P95 latency above 5s"
           description: "P95 request latency is {{ $value | printf \"%.1f\" }}s."
 
       # ── Circuit Breakers ──

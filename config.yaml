@@ -9,7 +9,9 @@ server:
     enabled: false
     cert_file: "/etc/llmproxy/certs/server.crt"
     key_file: "/etc/llmproxy/certs/server.key"
-    min_version: "1.2"
+    # 1.3 where possible. With enabled:false the proxy expects a reverse
+    # proxy with TLS in front when bound to 0.0.0.0 in prod.
+    min_version: "1.3"
   auth:
     # ON. This file is baked into the published image by `COPY . .`, so its
     # value is the default every `docker run` gets — and `false` here meant the
