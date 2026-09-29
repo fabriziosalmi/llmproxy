@@ -1,0 +1,30 @@
+# Alertmanager example for LLMProxy — copy, fill in, and reference from
+# alertmanager --config.file. Not wired into docker-compose.yml: run
+# alertmanager wherever you run Prometheus, or point
+# monitoring/prometheus.yml at your existing instance and add a
+# `alertmanagers:` static_config there.
+#
+# The critical route is the audit chain: AuditPersistenceFailing means the
+# tamper-evident ledger has gaps, so it pages while everything else mails.
+
+global:
+  # smtp_smarthost: "mail.internal.example.com:587"
+  # smtp_from: "llmproxy-alerts@example.com"
+
+route:
+  receiver: "team-mail"
+  routes:
+    - matchers:
+        - alertname = "AuditPersistenceFailing"
+      receiver: "team-pager"
+      continue: true
+
+receivers:
+  - name: "team-mail"
+    # email_configs:
+    #   - to: "platform@example.com"
+
+  - name: "team-pager"
+    # webhook_configs:
+    #   - url: "https://hooks.slack.com/services/T.../B.../xxx"
+    #     send_resolved: true
