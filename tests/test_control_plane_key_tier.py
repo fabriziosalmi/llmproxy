@@ -18,7 +18,6 @@ means something if discovery ever breaks.
 import httpx
 import pytest
 import pytest_asyncio
-
 from conftest import InMemoryRepository, minimal_config
 from test_e2e import LightweightAgent
 

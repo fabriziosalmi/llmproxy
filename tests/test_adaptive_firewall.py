@@ -8,13 +8,13 @@ Phase 3: AI escalation mock, timeout, degradation
 
 import asyncio
 import os
+
 import pytest
 import yaml
 
-from core.confidence import calculate_confidence, ConfidenceResult
-from core.signature_loader import SignatureStore
+from core.confidence import ConfidenceResult, calculate_confidence
 from core.security import SecurityShield
-
+from core.signature_loader import SignatureStore
 
 # ═══════════════════════════════════════════════════════════════
 # PHASE 1: SIGNATURE STORE

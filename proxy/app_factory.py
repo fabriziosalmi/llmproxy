@@ -48,19 +48,19 @@ can only ever refuse a JWT caller whose roles are genuinely
 insufficient.
 """
 
+import logging
 import os
 import re
-import logging
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from core.tracing import TraceManager
-from core.firewall_asgi import ByteLevelFirewallMiddleware
 from core.auth_policy import auth_enabled
 from core.control_plane_policy import required_permission
+from core.firewall_asgi import ByteLevelFirewallMiddleware
+from core.tracing import TraceManager
 
 logger = logging.getLogger("llmproxy.app_factory")
 
@@ -520,16 +520,16 @@ def create_app(agent) -> FastAPI:
 
     from .routes import (
         admin_router,
-        config_router,
-        registry_router,
-        identity_router,
-        plugins_router,
-        telemetry_router,
         chat_router,
-        models_router,
-        embeddings_router,
         completions_router,
+        config_router,
+        embeddings_router,
         gdpr_router,
+        identity_router,
+        models_router,
+        plugins_router,
+        registry_router,
+        telemetry_router,
     )
 
     app.include_router(chat_router(agent))

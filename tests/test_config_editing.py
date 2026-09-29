@@ -3,10 +3,11 @@
 The apply path must NEVER write an invalid config, and validate is a pure
 dry-run. Admin auth is exercised via auth_enabled=False (open in dev mode);
 the auth gate itself is covered by the existing admin-auth tests."""
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 from fastapi import FastAPI
-from httpx import AsyncClient, ASGITransport
-from unittest.mock import AsyncMock, MagicMock
+from httpx import ASGITransport, AsyncClient
 
 from tests.conftest import InMemoryRepository, minimal_config
 

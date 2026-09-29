@@ -6,7 +6,6 @@ import pytest
 
 from plugins.default.neural_router import _compute_score, _endpoint_stats
 
-
 # ══════════════════════════════════════════════════════════
 # _compute_score with cost awareness
 # ══════════════════════════════════════════════════════════
@@ -123,8 +122,9 @@ class TestBudgetDowngrade:
     @pytest.mark.asyncio
     async def test_no_downgrade_under_limit(self):
         """When under budget, model is NOT downgraded."""
-        from tests.test_pipeline_e2e import PipelineAgent
         import httpx
+
+        from tests.test_pipeline_e2e import PipelineAgent
 
         agent = PipelineAgent(
             config={
@@ -165,8 +165,9 @@ class TestBudgetDowngrade:
     @pytest.mark.asyncio
     async def test_downgrade_when_over_limit(self):
         """When over budget limit, model is downgraded to local."""
-        from tests.test_pipeline_e2e import PipelineAgent
         import httpx
+
+        from tests.test_pipeline_e2e import PipelineAgent
 
         agent = PipelineAgent(
             config={
@@ -216,8 +217,9 @@ class TestBudgetDowngrade:
     @pytest.mark.asyncio
     async def test_no_downgrade_without_config(self):
         """Without fallback_to_local_on_limit, no downgrade even over limit."""
-        from tests.test_pipeline_e2e import PipelineAgent
         import httpx
+
+        from tests.test_pipeline_e2e import PipelineAgent
 
         agent = PipelineAgent(
             config={

@@ -7,9 +7,9 @@ Targets: startup_checks, event_log, background, zero_trust,
 
 import asyncio
 import os
-import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # ── startup_checks ────────────────────────────────────────────
 
@@ -41,14 +41,14 @@ class TestStartupChecks:
         assert isinstance(warnings, list)
 
     def test_missing_api_keys_raises(self):
-        from core.startup_checks import validate_config, StartupError
+        from core.startup_checks import StartupError, validate_config
 
         os.environ.pop("LLM_PROXY_API_KEYS", None)
         with pytest.raises(StartupError, match="LLM_PROXY_API_KEYS"):
             validate_config(self._valid_config())
 
     def test_placeholder_api_key_raises(self):
-        from core.startup_checks import validate_config, StartupError
+        from core.startup_checks import StartupError, validate_config
 
         os.environ["LLM_PROXY_API_KEYS"] = "sk-proxy-CHANGE-ME"
         with pytest.raises(StartupError, match="LLM_PROXY_API_KEYS"):
@@ -106,7 +106,7 @@ class TestStartupChecks:
         assert isinstance(warnings, list)
 
     def test_invalid_port_raises(self):
-        from core.startup_checks import validate_config, StartupError
+        from core.startup_checks import StartupError, validate_config
 
         os.environ["LLM_PROXY_API_KEYS"] = "sk-proxy-test"
         os.environ["OPENAI_API_KEY"] = "sk-proj-real"

@@ -7,10 +7,9 @@ still in-flight, the second waits for the first to complete and returns
 the same response. Completed responses are cached for TTL seconds.
 """
 
-import time
 import asyncio
 import logging
-from typing import Dict
+import time
 
 logger = logging.getLogger("llmproxy.deduplicator")
 
@@ -19,8 +18,8 @@ class RequestDeduplicator:
     """Deduplicates in-flight and recently completed requests."""
 
     def __init__(self, ttl_seconds: int = 300):
-        self._in_flight: Dict[str, asyncio.Future] = {}
-        self._completed: Dict[str, tuple] = {}  # key → (response, expires_at)
+        self._in_flight: dict[str, asyncio.Future] = {}
+        self._completed: dict[str, tuple] = {}  # key → (response, expires_at)
         self._ttl = ttl_seconds
         self._lock = asyncio.Lock()
 
@@ -90,7 +89,7 @@ class RequestDeduplicator:
             del self._completed[k]
 
     @property
-    def stats(self) -> Dict[str, int]:
+    def stats(self) -> dict[str, int]:
         return {
             "in_flight": len(self._in_flight),
             "cached": len(self._completed),

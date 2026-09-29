@@ -8,7 +8,7 @@ one cohesive, independently-testable module.
 import logging
 import os
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from core.atomic_io import atomic_write as _atomic_write
@@ -58,7 +58,7 @@ def create_router(agent) -> APIRouter:
             return None, [f"YAML parse error: {exc}"], []
         if not isinstance(parsed, dict):
             return None, ["Config root must be a mapping (key: value), not a list or scalar."], []
-        from core.startup_checks import validate_config, StartupError
+        from core.startup_checks import StartupError, validate_config
 
         errors: list[str] = []
         warnings: list[str] = []
@@ -93,6 +93,7 @@ def create_router(agent) -> APIRouter:
         """Return the active config rendered as YAML, with secrets redacted."""
         _check_admin_auth(request)
         import yaml as _yaml
+
         from core.export import scrub_dict
 
         try:
@@ -116,7 +117,7 @@ def create_router(agent) -> APIRouter:
         """Return the raw on-disk config.yaml *source* for the editor (admin-only)."""
         _check_admin_auth(request)
         try:
-            with open(agent.config_path, "r") as f:
+            with open(agent.config_path) as f:
                 text = f.read()
         except FileNotFoundError:
             text = ""
@@ -174,7 +175,7 @@ def create_router(agent) -> APIRouter:
         abspath = os.path.abspath(agent.config_path)
         directory = os.path.dirname(abspath) or "."
         try:
-            with open(abspath, "r") as f:
+            with open(abspath) as f:
                 previous = f.read()
         except FileNotFoundError:
             previous = ""

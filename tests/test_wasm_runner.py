@@ -11,13 +11,13 @@ Tests verify:
 """
 
 import json
-import pytest
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
+from core.plugin_engine import PluginContext, PluginManager
 from core.plugin_sdk import PluginResponse
 from core.wasm_runner import WasmRunner
-from core.plugin_engine import PluginContext, PluginManager
-
 
 # ── WasmRunner Unit Tests (mock extism) ──
 

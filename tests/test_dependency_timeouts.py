@@ -156,7 +156,7 @@ async def test_jwks_fetch_does_not_block_the_event_loop():
 
     ticker = asyncio.create_task(_tick())
     try:
-        with pytest.raises(Exception):
+        with pytest.raises(RuntimeError):
             await manager.verify_token(token)
     finally:
         ticker.cancel()

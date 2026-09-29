@@ -12,21 +12,20 @@ mocked upstream forwarder (no real HTTP calls).
 import asyncio
 import json
 import time
-import pytest
-import pytest_asyncio
-import httpx
 from unittest.mock import AsyncMock, MagicMock
 
+import httpx
+import pytest
+import pytest_asyncio
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from starlette.responses import Response
 
-from core.security import SecurityShield
 from core.cache import NegativeCache
-from core.plugin_engine import PluginManager, PluginHook, PluginContext, PluginState
 from core.metrics import MetricsTracker
-
+from core.plugin_engine import PluginContext, PluginHook, PluginManager, PluginState
+from core.security import SecurityShield
 
 # ── Test helpers ──
 
@@ -183,6 +182,7 @@ class PipelineAgent:
     async def proxy_request(self, request, body=None, session_id="default"):
         """REAL pipeline logic — copied from RotatorAgent.proxy_request."""
         import uuid
+
         from fastapi import HTTPException
 
         start_total = time.time()
@@ -284,7 +284,7 @@ class PipelineAgent:
         except HTTPException:
             raise
         except Exception:
-            raise HTTPException(status_code=502, detail="Upstream request failed")
+            raise HTTPException(status_code=502, detail="Upstream request failed") from None
 
 
 # ── Fixtures ──

@@ -3,14 +3,15 @@
 import asyncio
 import logging
 import os
+
 import yaml
 from dotenv import load_dotenv
 
-from proxy.rotator import ProxyOrchestrator
-from core.metrics import start_metrics_server
 from core.discovery_utils import get_tailscale_ip
-from core.tracing import TraceManager
 from core.log_context import install as install_request_id_filter
+from core.metrics import start_metrics_server
+from core.tracing import TraceManager
+from proxy.rotator import ProxyOrchestrator
 
 load_dotenv()
 
@@ -34,7 +35,7 @@ async def main():
         return
 
     config_file = os.environ.get("CONFIG_FILE", "config.yaml")
-    with open(config_file, "r") as f:
+    with open(config_file) as f:
         config = yaml.safe_load(f) or {}
 
     # Apply env-based endpoint + WAF overlays so startup validation sees the

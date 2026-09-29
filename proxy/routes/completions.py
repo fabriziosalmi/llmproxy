@@ -11,22 +11,24 @@ Needed for: fine-tuned model deployments, LangChain OpenAI() (not ChatOpenAI()),
 batch processing scripts, and any pre-2023 code.
 """
 
+import datetime as _dt
 import json
 import logging
 import time
-import datetime as _dt
 
-from fastapi import APIRouter, Request, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import APIKeyHeader
 
 from core.metrics import MetricsTracker
+from core.pricing import estimate_cost
 from core.session_id import (
     from_fingerprint as session_id_from_fingerprint,
+)
+from core.session_id import (
     from_token as session_id_from_token,
 )
 from proxy.schemas import CompletionRequest
-from core.pricing import estimate_cost
 
 logger = logging.getLogger("llmproxy.routes.completions")
 
@@ -110,7 +112,7 @@ def create_router(agent) -> APIRouter:
                 except ValueError:
                     raise HTTPException(
                         status_code=401, detail="Unauthorized: Invalid or expired token"
-                    )
+                    ) from None
 
             if identity and identity.verified:
                 request.state.identity = identity

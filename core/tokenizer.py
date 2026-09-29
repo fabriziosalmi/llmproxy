@@ -9,7 +9,7 @@ Install: pip install tiktoken
 """
 
 import logging
-from typing import List, Dict, Any
+from typing import Any
 
 logger = logging.getLogger("llmproxy.tokenizer")
 
@@ -88,7 +88,7 @@ def count_tokens(text: str, model: str = "") -> int:
         return max(1, len(text) // 4)
 
 
-def count_messages_tokens(messages: List[Dict[str, Any]], model: str = "") -> int:
+def count_messages_tokens(messages: list[dict[str, Any]], model: str = "") -> int:
     """Count tokens for a full messages array including per-message overhead.
 
     Accounts for role tokens and structural overhead (~4 tokens per message).

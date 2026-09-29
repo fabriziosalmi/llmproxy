@@ -1,12 +1,13 @@
 """Admin routes: proxy toggle, status, version, service-info, features, priority, panic."""
 
+import logging
 import os
 import time
-import logging
 from typing import Any
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
+
 from core.auth_policy import auth_enabled
 
 logger = logging.getLogger("llmproxy.routes.admin")
@@ -248,7 +249,7 @@ def create_router(agent) -> APIRouter:
         """Live rate-limit config: enabled flag + active preset (if any) +
         the rpm/burst the limiter is currently serving."""
         _check_admin_auth(request)
-        from core.rate_limiter import RateLimitMiddleware, RATE_LIMIT_PRESETS
+        from core.rate_limiter import RATE_LIMIT_PRESETS, RateLimitMiddleware
 
         block: dict = {"presets": RATE_LIMIT_PRESETS}
         if RateLimitMiddleware.instance is not None:
@@ -272,7 +273,7 @@ def create_router(agent) -> APIRouter:
         runtime. Existing per-IP buckets are flushed so the new caps take
         effect immediately. Persists to the store, restart-safe."""
         _check_admin_auth(request)
-        from core.rate_limiter import RateLimitMiddleware, RATE_LIMIT_PRESETS
+        from core.rate_limiter import RATE_LIMIT_PRESETS, RateLimitMiddleware
 
         data = await request.json()
         name = (data.get("preset") or "").lower().strip()
@@ -309,7 +310,7 @@ def create_router(agent) -> APIRouter:
         try:
             new_weight = float(data.get("cost_weight"))
         except (TypeError, ValueError):
-            raise HTTPException(status_code=400, detail="cost_weight must be a number")
+            raise HTTPException(status_code=400, detail="cost_weight must be a number") from None
         if not 0.0 <= new_weight <= 1.0:
             raise HTTPException(
                 status_code=400, detail="cost_weight must be in [0.0, 1.0]"
@@ -529,7 +530,7 @@ def create_router(agent) -> APIRouter:
             agent.config = old_cfg
             agent._config_hash = old_hash
             logger.error(f"Config reload failed: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail="Config reload failed")
+            raise HTTPException(status_code=500, detail="Config reload failed") from e
 
     @router.post("/api/v1/panic")
     async def emergency_panic(request: Request):
@@ -768,7 +769,7 @@ def create_router(agent) -> APIRouter:
                 logger.error(
                     f"Cache eviction failed during clear_caches: {e}", exc_info=True
                 )
-                raise HTTPException(status_code=502, detail="Cache eviction failed")
+                raise HTTPException(status_code=502, detail="Cache eviction failed") from e
         return {"status": "cleared", **result}
 
     @router.post("/api/v1/security/reset")
@@ -816,7 +817,7 @@ def create_router(agent) -> APIRouter:
             }
         except Exception as e:
             logger.error(f"Webhook test dispatch failed: {e}", exc_info=True)
-            raise HTTPException(status_code=502, detail="Webhook test dispatch failed")
+            raise HTTPException(status_code=502, detail="Webhook test dispatch failed") from e
 
     @router.get("/api/v1/dashboard/summary")
     async def get_dashboard_summary(request: Request):
@@ -1088,7 +1089,7 @@ def create_router(agent) -> APIRouter:
             }
         except Exception:
             logger.error("Dashboard summary generation failed", exc_info=True)
-            raise HTTPException(status_code=500, detail="Internal server error")
+            raise HTTPException(status_code=500, detail="Internal server error") from None
 
     @router.get("/api/v1/slos")
     async def get_slos(request: Request):

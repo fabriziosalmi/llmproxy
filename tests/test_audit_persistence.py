@@ -11,16 +11,16 @@ request, and the Prometheus counter must record outcome.
 """
 
 import asyncio
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock
+
+import httpx
 import pytest
 import pytest_asyncio
-import httpx
-from typing import Any, Dict, List
+from conftest import InMemoryRepository, make_openai_response, minimal_config
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from unittest.mock import AsyncMock, MagicMock
-
-from conftest import InMemoryRepository, minimal_config, make_openai_response
 
 
 class _AuditRecordingStore(InMemoryRepository):
@@ -29,8 +29,8 @@ class _AuditRecordingStore(InMemoryRepository):
 
     def __init__(self):
         super().__init__()
-        self.audit_entries: List[Dict[str, Any]] = []
-        self.spend_entries: List[Dict[str, Any]] = []
+        self.audit_entries: list[dict[str, Any]] = []
+        self.spend_entries: list[dict[str, Any]] = []
 
     async def log_audit(self, **kwargs):
         self.audit_entries.append(kwargs)
