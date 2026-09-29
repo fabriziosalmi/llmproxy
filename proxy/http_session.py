@@ -10,12 +10,12 @@ Extracted from proxy/rotator.py.
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 import aiohttp
 
 
-def build_http_session(config: Dict[str, Any]) -> aiohttp.ClientSession:
+def build_http_session(config: dict[str, Any]) -> aiohttp.ClientSession:
     """Construct a fresh aiohttp.ClientSession from the proxy config.
 
     Reads `server.timeout` (default 30s, applied as sock_read),

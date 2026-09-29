@@ -7,8 +7,9 @@ TypingMind, Jan, LM Studio) calls this before anything else. Without it,
 Aggregates models from all endpoints configured in config.yaml.
 """
 
-import time
 import logging
+import time
+
 from fastapi import APIRouter, Depends
 from fastapi.security import APIKeyHeader
 

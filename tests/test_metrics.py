@@ -1,13 +1,13 @@
 """Tests for core.metrics.MetricsTracker."""
 
 from core.metrics import (
-    MetricsTracker,
-    REQUEST_COUNT,
-    REQUEST_ERRORS,
-    INJECTION_BLOCKED,
     BUDGET_CONSUMED,
     BUDGET_LIMIT,
     CIRCUIT_OPEN,
+    INJECTION_BLOCKED,
+    REQUEST_COUNT,
+    REQUEST_ERRORS,
+    MetricsTracker,
 )
 
 
@@ -59,8 +59,9 @@ def test_set_circuit_state():
 
 def _declared_metrics():
     """Module-level Prometheus collectors in core.metrics, by symbol name."""
-    import core.metrics as m
     from prometheus_client import Counter, Gauge, Histogram
+
+    import core.metrics as m
 
     return {
         name: obj

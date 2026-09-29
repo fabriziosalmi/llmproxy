@@ -8,10 +8,11 @@ Provides a fully wired RotatorAgent with:
   - All plugins loaded from manifest
 """
 
-import pytest
-from typing import List, Optional, Dict, Any
+from typing import Any
 
-from models import LLMEndpoint, EndpointStatus
+import pytest
+
+from models import EndpointStatus, LLMEndpoint
 from store.base import BaseRepository
 
 
@@ -37,8 +38,8 @@ class InMemoryRepository(BaseRepository):
     """Minimal in-memory store for E2E tests. No disk I/O."""
 
     def __init__(self):
-        self._endpoints: Dict[str, LLMEndpoint] = {}
-        self._state: Dict[str, Any] = {}
+        self._endpoints: dict[str, LLMEndpoint] = {}
+        self._state: dict[str, Any] = {}
 
     async def init(self):
         pass
@@ -49,19 +50,19 @@ class InMemoryRepository(BaseRepository):
     async def remove_endpoint(self, endpoint_id: str):
         self._endpoints.pop(endpoint_id, None)
 
-    async def get_all(self) -> List[LLMEndpoint]:
+    async def get_all(self) -> list[LLMEndpoint]:
         return list(self._endpoints.values())
 
-    async def get_pool(self) -> List[LLMEndpoint]:
+    async def get_pool(self) -> list[LLMEndpoint]:
         return [
             e for e in self._endpoints.values() if e.status == EndpointStatus.VERIFIED
         ]
 
-    async def get_by_status(self, status: EndpointStatus) -> List[LLMEndpoint]:
+    async def get_by_status(self, status: EndpointStatus) -> list[LLMEndpoint]:
         return [e for e in self._endpoints.values() if e.status == status]
 
     async def update_status(
-        self, endpoint_id: str, status: EndpointStatus, metadata: Optional[Dict] = None
+        self, endpoint_id: str, status: EndpointStatus, metadata: dict | None = None
     ):
         if endpoint_id in self._endpoints:
             self._endpoints[endpoint_id].status = status
@@ -80,6 +81,12 @@ class InMemoryRepository(BaseRepository):
 
     async def get_state(self, key: str, default: Any = None) -> Any:
         return self._state.get(key, default)
+
+    async def log_spend(self, **kwargs):
+        pass
+
+    async def log_audit(self, **kwargs):
+        pass
 
 
 def make_openai_response(content: str = "Hello! How can I help?", model: str = "gpt-4"):

@@ -3,8 +3,8 @@ import binascii
 import codecs
 import logging
 import re
-import time
 import threading
+import time
 import unicodedata
 from collections import defaultdict
 
@@ -359,7 +359,7 @@ class ByteLevelFirewallMiddleware:
 
         # ENCODING CHAIN: Re-decode each fragment through layers 1-5 up to 2
         # more iterations. This catches Base64(URL("...")), Hex(Base64("...")), etc.
-        for iteration in range(2):
+        for _iteration in range(2):
             new_fragments: list[tuple[bytes, str]] = []
             for fragment, enc_method in decoded_fragments:
                 # Re-normalize through URL decode + NFKC

@@ -7,14 +7,14 @@ Tests for new marketplace plugins:
 
 import json
 import time
+
 import pytest
 from fastapi.responses import Response
 
 from core.plugin_engine import PluginContext, PluginState
+from plugins.marketplace.latency_sla_guard import LatencySlaGuard
 from plugins.marketplace.prompt_complexity_scorer import PromptComplexityScorer
 from plugins.marketplace.response_quality_gate import ResponseQualityGate
-from plugins.marketplace.latency_sla_guard import LatencySlaGuard
-
 
 # ── Helpers ──
 

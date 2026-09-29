@@ -10,14 +10,16 @@ Anthropic has no embeddings API — requests for Anthropic models return 400.
 import json
 import logging
 
-from fastapi import APIRouter, Request, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import APIKeyHeader
 
-from proxy.adapters.registry import get_adapter, detect_provider
 from core.session_id import (
     from_fingerprint as session_id_from_fingerprint,
+)
+from core.session_id import (
     from_token as session_id_from_token,
 )
+from proxy.adapters.registry import detect_provider, get_adapter
 from proxy.schemas import EmbeddingsRequest
 
 logger = logging.getLogger("llmproxy.routes.embeddings")
@@ -83,7 +85,7 @@ def create_router(agent) -> APIRouter:
                     MetricsTracker.track_auth_failure("jwt_invalid")
                     raise HTTPException(
                         status_code=401, detail="Unauthorized: Invalid or expired token"
-                    )
+                    ) from None
 
             if identity and identity.verified:
                 request.state.identity = identity
@@ -104,7 +106,28 @@ def create_router(agent) -> APIRouter:
                     )
 
                 if not await agent.rbac.check_quota(token):
+                    # Parity with /v1/chat/completions: the chat path records
+                    # quota_exceeded on request.state and request_pipeline
+                    # enforces it. This route never reaches the pipeline, so
+                    # it must enforce here — setting the flag alone served
+                    # over-quota keys without limit.
+                    from core.webhooks import EventType
+
+                    agent._spawn_task(
+                        agent.webhooks.dispatch(
+                            EventType.BUDGET_THRESHOLD,
+                            {
+                                "reason": "quota_exceeded",
+                                "key_prefix": token[:8] + "...",
+                            },
+                        )
+                    )
                     request.state.quota_exceeded = True
+                    raise HTTPException(
+                        status_code=402,
+                        detail="FinOps: Budget Exceeded (HTTP 402). "
+                        "API key quota exhausted.",
+                    )
 
         # See proxy/schemas.py: validated at the boundary, forwarded unchanged.
         body = payload.to_body()
@@ -126,9 +149,15 @@ def create_router(agent) -> APIRouter:
                 request.headers.get("user-agent", ""),
                 request.headers.get("accept-language", ""),
             )
+        # ThreatLedger parity with request_pipeline: pass ip + key_prefix so
+        # cross-session aggregation sees this route too.
+        _client_ip = request.client.host if request.client else ""
+        _key_prefix = session_id[:8] if session_id != "default" else ""
         security_error = await agent.security.inspect(
             {"messages": [{"role": "user", "content": inspect_text}]},
             session_id,
+            ip=_client_ip,
+            key_prefix=_key_prefix,
         )
         if security_error:
             logger.warning(f"SecurityShield blocked embedding: {security_error}")
@@ -193,7 +222,7 @@ def create_router(agent) -> APIRouter:
             logger.error(f"Embedding request failed: {e}")
             raise HTTPException(
                 status_code=502, detail="Embedding upstream request failed"
-            )
+            ) from e
 
 
         # Translate response if needed (Google Gemini format → OpenAI)

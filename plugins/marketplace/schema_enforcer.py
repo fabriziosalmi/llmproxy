@@ -14,13 +14,13 @@ Ring: POST_FLIGHT (after LLM response, before returning to client)
 """
 
 import json
-from typing import Dict, Any
+from typing import Any
 
-from core.plugin_sdk import BasePlugin, PluginResponse, PluginHook
 from core.plugin_engine import PluginContext
+from core.plugin_sdk import BasePlugin, PluginHook, PluginResponse
 
 
-def _validate_json_schema(data: Any, schema: Dict[str, Any]) -> list[str]:
+def _validate_json_schema(data: Any, schema: dict[str, Any]) -> list[str]:
     """Lightweight JSON schema validation without external dependencies.
 
     Supports: type, required, properties, items, enum, minLength, maxLength,
@@ -87,7 +87,7 @@ class SchemaEnforcer(BasePlugin):
     description = "Validates LLM JSON responses against client-provided JSON schema"
     timeout_ms = 5
 
-    def __init__(self, config: Dict[str, Any] | None = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         super().__init__(config)
         self.action: str = self.config.get("action", "warn")
         self.max_schema_size: int = self.config.get("max_schema_size", 8192)

@@ -17,10 +17,10 @@ Config (via manifest ui_schema):
 
 import time
 from collections import defaultdict, deque
-from typing import Dict, Any
+from typing import Any
 
-from core.plugin_sdk import BasePlugin, PluginResponse, PluginHook
 from core.plugin_engine import PluginContext
+from core.plugin_sdk import BasePlugin, PluginHook, PluginResponse
 
 # Sensible defaults for common models
 DEFAULT_MODEL_LIMITS = {
@@ -44,16 +44,16 @@ class ModelRateLimiter(BasePlugin):
     description = "Per-model rate limiting with sliding window counters"
     timeout_ms = 2  # Deque operations only
 
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: dict[str, Any] = None):
         super().__init__(config)
         self.default_rpm: int = self.config.get("default_rpm", 60)
-        self.model_limits: Dict[str, int] = self.config.get(
+        self.model_limits: dict[str, int] = self.config.get(
             "model_limits", DEFAULT_MODEL_LIMITS
         )
         self.window_seconds: int = self.config.get("window_seconds", 60)
 
         # (tenant_id, model) → deque of timestamps
-        self._windows: Dict[str, deque] = defaultdict(lambda: deque())
+        self._windows: dict[str, deque] = defaultdict(lambda: deque())
 
         # Counters
         self._total_checked: int = 0
@@ -70,7 +70,7 @@ class ModelRateLimiter(BasePlugin):
         while window and window[0] < cutoff:
             window.popleft()
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Public stats for dashboard."""
         return {
             "total_checked": self._total_checked,

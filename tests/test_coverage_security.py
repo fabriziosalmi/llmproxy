@@ -5,6 +5,7 @@ Tests inspect(), mask_pii(), _check_injections(), and helper functions.
 """
 
 import pytest
+
 from core.security import SecurityShield, _luhn_check
 
 
@@ -187,7 +188,7 @@ class TestSessionMemoryConcurrency:
 
         # Structural invariants
         assert len(shield.session_memory) <= N_SESSIONS
-        for sid, data in shield.session_memory.items():
+        for _sid, data in shield.session_memory.items():
             assert isinstance(data, dict)
             assert "scores" in data and "last_seen" in data
             assert isinstance(data["scores"], list)

@@ -5,7 +5,8 @@ Ollama adapter.
 adapter with Ollama-specific defaults (no auth, localhost:11434).
 """
 
-from typing import Dict, Any, Tuple
+from typing import Any
+
 from .openai import OpenAIAdapter
 
 
@@ -17,9 +18,9 @@ class OllamaAdapter(OpenAIAdapter):
     def translate_embedding_request(
         self,
         base_url: str,
-        body: Dict[str, Any],
-        headers: Dict[str, str],
-    ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
+        body: dict[str, Any],
+        headers: dict[str, str],
+    ) -> tuple[str, dict[str, Any], dict[str, str]]:
         # Ollama supports OpenAI-compatible /v1/embeddings
         base = base_url.rstrip("/")
         if "/v1" not in base:
@@ -34,9 +35,9 @@ class OllamaAdapter(OpenAIAdapter):
     def translate_request(
         self,
         base_url: str,
-        body: Dict[str, Any],
-        headers: Dict[str, str],
-    ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
+        body: dict[str, Any],
+        headers: dict[str, str],
+    ) -> tuple[str, dict[str, Any], dict[str, str]]:
         # Ollama is OpenAI-compatible — just fix the URL
         base = base_url.rstrip("/")
         if "/v1" not in base:

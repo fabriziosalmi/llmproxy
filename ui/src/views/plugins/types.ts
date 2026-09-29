@@ -10,13 +10,13 @@ export interface UiSchemaField {
 
 export interface Plugin {
     name: string;
-    hook?: RingHook | string;
+    hook?: RingHook;
     entrypoint?: string;
     type?: string;
     description?: string;
     enabled?: boolean;
     timeout_ms?: number;
-    fail_policy?: 'open' | 'closed' | string;
+    fail_policy?: 'open' | 'closed';
     version?: string;
     /** Optional ui-schema published by the plugin describing its config knobs. */
     ui_schema?: UiSchemaField[];
@@ -36,7 +36,7 @@ export type PluginStatsMap = Record<string, PluginStats | undefined>;
 /** POST /api/v1/plugins/install payload. */
 export interface InstallPluginInput {
     name: string;
-    hook: RingHook | string;
+    hook: RingHook;
     entrypoint: string;
     type: 'python' | 'wasm';
     timeout_ms: number;

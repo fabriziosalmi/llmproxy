@@ -14,9 +14,12 @@ Key differences:
 
 import json
 import time
+from collections.abc import AsyncGenerator
+from typing import Any
+
 import aiohttp
-from typing import Dict, Any, AsyncGenerator, Tuple
 from starlette.responses import Response
+
 from .base import BaseModelAdapter
 
 
@@ -28,9 +31,9 @@ class GoogleAdapter(BaseModelAdapter):
     def translate_embedding_request(
         self,
         base_url: str,
-        body: Dict[str, Any],
-        headers: Dict[str, str],
-    ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
+        body: dict[str, Any],
+        headers: dict[str, str],
+    ) -> tuple[str, dict[str, Any], dict[str, str]]:
         """OpenAI /v1/embeddings → Gemini embedContent."""
         model = body.get("model", "text-embedding-004")
         url = f"{base_url.rstrip('/')}/models/{model}:embedContent"
@@ -57,8 +60,8 @@ class GoogleAdapter(BaseModelAdapter):
         return url, gemini_body, google_headers
 
     def translate_embedding_response(
-        self, response_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, response_data: dict[str, Any]
+    ) -> dict[str, Any]:
         """Gemini embedContent response → OpenAI format."""
         if "error" in response_data:
             return response_data
@@ -85,9 +88,9 @@ class GoogleAdapter(BaseModelAdapter):
     def translate_request(
         self,
         base_url: str,
-        body: Dict[str, Any],
-        headers: Dict[str, str],
-    ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
+        body: dict[str, Any],
+        headers: dict[str, str],
+    ) -> tuple[str, dict[str, Any], dict[str, str]]:
         model = body.get("model", "gemini-2.5-flash")
         stream = body.get("stream", False)
 
@@ -128,13 +131,13 @@ class GoogleAdapter(BaseModelAdapter):
 
             contents.append({"role": gemini_role, "parts": parts})
 
-        gemini_body: Dict[str, Any] = {"contents": contents}
+        gemini_body: dict[str, Any] = {"contents": contents}
 
         if system_parts:
             gemini_body["systemInstruction"] = {"parts": system_parts}
 
         # Generation config
-        gen_config: Dict[str, Any] = {}
+        gen_config: dict[str, Any] = {}
         if body.get("temperature") is not None:
             gen_config["temperature"] = body["temperature"]
         if body.get("top_p") is not None:
@@ -158,7 +161,7 @@ class GoogleAdapter(BaseModelAdapter):
 
         return url, gemini_body, google_headers
 
-    def translate_response(self, response_data: Dict[str, Any]) -> Dict[str, Any]:
+    def translate_response(self, response_data: dict[str, Any]) -> dict[str, Any]:
         """Gemini response → OpenAI format."""
         if "error" in response_data:
             return response_data
@@ -191,7 +194,7 @@ class GoogleAdapter(BaseModelAdapter):
                     }
                 )
 
-        message: Dict[str, Any] = {
+        message: dict[str, Any] = {
             "role": "assistant",
             "content": "\n".join(text_parts) if text_parts else None,
         }
@@ -296,8 +299,8 @@ class GoogleAdapter(BaseModelAdapter):
     async def request(
         self,
         url: str,
-        body: Dict[str, Any],
-        headers: Dict[str, str],
+        body: dict[str, Any],
+        headers: dict[str, str],
         session: aiohttp.ClientSession,
     ) -> Response:
         async with session.post(
@@ -321,8 +324,8 @@ class GoogleAdapter(BaseModelAdapter):
     async def stream(
         self,
         url: str,
-        body: Dict[str, Any],
-        headers: Dict[str, str],
+        body: dict[str, Any],
+        headers: dict[str, str],
         session: aiohttp.ClientSession,
     ) -> AsyncGenerator[bytes, None]:
         async with session.post(

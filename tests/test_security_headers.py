@@ -4,9 +4,9 @@ Mounts only `install_security_headers` on a bare FastAPI so we exercise the
 exact production middleware without pulling in store/plugins/tracing.
 """
 
+import httpx
 import pytest
 import pytest_asyncio
-import httpx
 from fastapi import FastAPI
 
 from proxy.app_factory import install_security_headers

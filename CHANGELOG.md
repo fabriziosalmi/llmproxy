@@ -2,6 +2,319 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.37.0] — 2026-09-29
+
+### Dangerous config deltas need a confirm token (minor, closes #108)
+
+- **The one-request disarm is gone**: `POST /api/v1/config/apply` with an
+  ordinary admin bearer could flip `server.auth.enabled`/`security.firewall.enabled`
+  to `false`, clear the domain blocklist, or widen the payload cap — with only
+  non-blocking warnings. Posture-lowering transitions (`auth-disabled`,
+  `firewall-disabled`, `blocklist-cleared`, `payload-widened` beyond 4x) now
+  return `403 confirm_required` unless the apply carries a single-use token.
+- **Two-step flow**: `POST /api/v1/config/confirm-token` mints an
+  HMAC token bound to the SHA-256 of the exact proposed text (~120s TTL,
+  single-use); rejections and confirmed applies are audit-logged with the
+  acting principal (key prefix or SSO identity).
+- **Honest scope**: confirmation-of-intent, not a second privilege tier — a
+  stolen admin bearer can still mint. `MASTER_KEY` deliberately NOT used as
+  the credential (it is documented as never-a-Bearer). `validate` reports
+  `dangerous_deltas` so editors warn pre-apply.
+- **Tests/docs**: `tests/test_config_dangerous_deltas.py` (18 tests:
+  detectors incl. 4x boundary, 403+untouched disk, mint→apply, hash binding,
+  single-use, TTL, audit entries); `docs/guide/configuration.md` documents
+  the flow.
+- **Supply chain**: PyJWT `2.13.0` → `2.14.0` (CVE-2026-102274, CI
+  Dependency Audit); `.gitleaks.toml` allowlists placeholder Bearer tokens
+  in docs curl examples (CI Secret Scan tripped on the new guide section —
+  finding was a false positive, allowlist is scoped to docs paths).
+
+## [1.36.2] — 2026-09-29
+
+### Security fix: quota enforcement on /v1/embeddings (patch)
+
+- **Quota bypass closed**: the embeddings route set `request.state.quota_exceeded`
+  when `check_quota` failed but never read the flag back — only
+  `request_pipeline` consumes it, and this route never reaches the pipeline.
+  Over-quota keys were served without limit. The route now mirrors
+  `/v1/chat/completions` (BUDGET_THRESHOLD webhook) and enforces immediately
+  with HTTP 402, the codebase's canonical budget status.
+- **ThreatLedger parity**: `security.inspect` on this route now receives
+  `ip` + `key_prefix` like the pipeline call, so cross-session aggregation
+  sees embeddings traffic too.
+- **Regression tests**: `tests/test_embeddings_quota.py` (402 on exhausted
+  quota with upstream untouched, 200 passthrough when quota holds, webhook
+  fired, shield kwargs asserted).
+
+## [1.36.1] — 2026-09-29
+
+### Observability & Hygiene (P2, patch)
+
+- **Background-loop alerts**: `BackgroundLoopStalled`, `AuditPersistenceFailing`, `LoadShedSpike`, `MultipleInstances` in `monitoring/prometheus-rules.yml` — all on real exported metrics, including the staleness check the metrics module itself suggests.
+- **Alertmanager example**: `monitoring/alertmanager.yml` stub with the audit-chain alert on a pager route; documented as opt-in, not wired into compose.
+- **Alembic URL honest**: `sqlite:///endpoints.db` → `sqlite:///data/endpoints.db` (matches `config.yaml`), with a note that Postgres stays behind `DATABASE_URL`/env.py instead of a second hardcoded DSN.
+- **Backup/hygiene runbook**: `docs/guide/deployment.md` gains a cron example, `0600` discipline for `.env`/`.bak`/secrets, and a logrotate snippet.
+
+## [1.36.0] — 2026-09-29
+
+### Code Quality & CI Alignment (P1, minor)
+
+- **Ruff rule set widened**: `ruff.toml` now selects `E,F,W,I,UP,B` with `target-version py312`. Applied ~950 autofixes across ~200 files (import sorting, `typing.Dict` → `dict`, `Optional[X]` → `X | None`, `asyncio.TimeoutError` → `TimeoutError`, `datetime.UTC`).
+- **Bugbear fixed, not silenced**: 24× `B904` (`raise ... from` in routes/engine), 9× `B007` (unused loop vars underscored), `B905` (`zip strict=False`), `B017` (specific `RuntimeError`), `B027` (`@abstractmethod` + `InMemoryRepository` overrides).
+- **One deliberate non-fix**: `PluginAction(str, Enum)` keeps `noqa: UP042` — StrEnum would change wire-visible `str()` of members; revisit in a major.
+- **Coverage gate honest**: `pyproject.toml` `fail_under` `65` → `71`, matching the CI gate.
+- **Reproducible lint/type**: `ruff==0.15.7` pinned in CI + `requirements-dev.txt`; `Makefile typecheck` now covers `core/ proxy/ store/` like CI; new `make lint-ci` mirrors CI without autofix.
+- **Version discipline**: release bumps via `scripts/bump_version.py` (VERSION + chart + UI stay in sync; gate tests enforce it).
+
+## [1.35.2] — 2026-09-29
+
+### Security & Ops Hardening (P0)
+
+- **Metrics exporter bound to loopback**: `docker-compose.yml` publishes `9091` as `127.0.0.1:9091:9091` — the exporter lives outside ASGI with no auth/rate-limit, so it must not sit on `0.0.0.0`.
+- **Verdict-aware compose healthcheck**: compose now fails on `{"status": "down"}` like the Dockerfile `HEALTHCHECK`, instead of passing on any HTTP 200.
+- **Compose hardening**: `no-new-privileges`, json-file log rotation (10m x3) on both services, resource limits for redis, documented `REDIS_PASSWORD`/`requirepass` path.
+- **TLS floor 1.3**: `config.yaml` `tls.min_version` `1.2` → `1.3`, with note that `host: 0.0.0.0` + TLS off requires a TLS-terminating reverse proxy in prod.
+- **Startup prod warnings**: `core/startup_checks.py` warns when bound to `0.0.0.0` without TLS and when the metrics exporter is bound beyond loopback.
+- **Single-tier warning**: `.env.example` marks unset `LLM_PROXY_ADMIN_KEYS` as single-tier/prod-must-set, adds `REDIS_URL` password + `DATABASE_URL` prod-credential guidance.
+- **Prometheus scrape honesty**: `monitoring/prometheus.yml` documents `bearer_token_file` for authed `/metrics:8090`; `HighP95Latency` threshold `10s` → `5s`.
+
+## [1.35.1] — 2026-09-16
+
+### Quality & Reliability Improvements
+
+- **Plugin & security frontend typing narrowed**: `fail_policy` and `hook` union types in `ui/src/views/plugins/types.ts` are strictly typed without string widening, and security summary dependency signatures in `ui/src/views/security/index.ts` use dedicated `SecurityGuardsStatus` and `SecurityCorpusStats` interfaces.
+- **Threats SSE event parsing observability**: Added diagnostic warning log in `ui/components/threats.js` when SSE log data payload parsing fails, avoiding silent error swallowing.
+- **State write queue saturation metrics**: Added Prometheus load-shed tracking (`MetricsTracker.track_load_shed()`) in `proxy/rotator.py` when the pending writes queue reaches capacity.
+
+## [1.35.0] — 2026-09-09
+
+### The audit that scored 39/100, and the sixteen pull requests that answered it
+
+A full code-metrics audit of `4df4235` across all 20 categories returned
+**39/100 — Poor**. The raw score was 56.9; a confirmed critical finding capped
+the rest. That finding was not subtle: the `config.yaml` baked into the
+published image shipped with `server.auth.enabled: false`, so the README's own
+quickstart produced a proxy that answered `/api/v1/registry` to anyone who
+could reach the port.
+
+This release is the answer to that audit. Every finding worth fixing is fixed,
+four of them are recorded below as findings that were **wrong**, and one is
+recorded as a deliberate non-fix.
+
+Note on versioning: `1.34.0` was written to `VERSION` and to this changelog but
+never tagged, so **1.35.0 is the first tag that contains that work** as well.
+
+### Breaking changes
+
+Four, all tightenings. Read them before upgrading.
+
+- **The shipped configuration now requires a credential** (#189). `config.yaml`
+  is baked into the image by `COPY . .`, so its `auth.enabled: false` was the
+  default every `docker run` inherited. It is now `true`. If you run the image
+  without mounting your own config, set `LLM_PROXY_API_KEYS` or requests will
+  be refused — which is the point. `DEV_MODE=true` still turns it off for local
+  work, and now does so whether or not a config file is present: previously
+  `apply_dev_mode` ran only when the file was *absent*, so the documented
+  escape hatch silently did nothing for anyone who had a config.
+
+- **The control plane checks a role, not just a key** (#203). `/api/v1/*` and
+  `/admin/*` already required an admin key as of 1.34.0; the middleware now
+  also resolves the caller's roles and checks a per-route permission
+  (`core/control_plane_policy.py`). An SSO user whose token verified got
+  `authenticated: true` and nothing else was consulted, so every JWT holder had
+  the whole control plane. Tokens without the required permission now receive
+  403 naming the permission they lack.
+
+- **The response signature wire format changed** (#206). The signed metadata
+  fields were joined with a bare `|`, justified as safe because `|` "is not
+  present in base64/hex" — but `model` and `provider` are free-form strings
+  from the request body and the endpoint config, so model `a|b` with provider
+  `c` signed the same message as model `a` with provider `b|c`. Fields are now
+  length-prefixed. The response body was fully covered either way, so tamper
+  detection always held; what was ambiguous was the metadata attribution.
+  **Verifiers must be updated** — use `ResponseSigner.verify`, which was
+  updated with the signer.
+
+- **The chart no longer publishes port 8081** (#208). `server.admin.port` is
+  read by nothing: `main.py` binds one listener on `server.port` plus,
+  optionally, the Prometheus exporter. The Service published an endpoint that
+  refused every connection, under a name implying a separate administrative
+  surface with its own exposure decision. Removed from the Service, the
+  Deployment, `values.yaml`, `config.yaml` and the config reference. A
+  `service.adminPort` override in your values is now ignored rather than
+  producing a dead port. The admin API is on the main port, separated by
+  credential tier.
+
+### The proxy served, or refused, when it should not have
+
+- **`/health` called a working proxy dead** (#211). Found while smoke-testing
+  this release on the CI box, not by reading code: the container answered every
+  request correctly while `/health` reported `{"status": "down"}`. The upstream
+  aiohttp session is created lazily on the first *forward*, and the route
+  treated "not created yet" as a failure of a critical component. For a
+  readiness gate that is a deadlock — no traffic means no session, no session
+  means never ready, never ready means no traffic. A session that exists and is
+  closed still reports down.
+
+- **The container health check could not fail** (#211). It was
+  `urlopen('/health')` and nothing more, and `/health` returns 200 whatever it
+  finds, so `docker ps` reported `healthy` with every component down. It now
+  reads the verdict. `degraded` still passes: it means serving with something
+  reduced, and a restart would not fix it.
+
+- **Four ways a request hung, crashed, or reached the wrong bag** (#190). The
+  Tailscale identity call had no timeout, so a stalled LocalAPI held the
+  request forever; two telemetry closures verified an *inference* key where an
+  admin key was meant; the SSE fallback secret was a hard-coded literal; the
+  metrics exporter defaulted to `0.0.0.0`; and a deeply nested JSON body could
+  exhaust the stack before any limit applied.
+
+- **A key could not be revoked** (#204). `core/infisical` cached secrets for the
+  life of the process with no expiry, so removing a compromised key from the
+  environment or from Infisical changed nothing until a restart. Now a 30 s TTL
+  (`LLM_PROXY_SECRET_CACHE_TTL`, `0` disables) and an explicit flush on config
+  reload.
+
+- **The encryption at rest protected nothing** (#204). `decrypt()` returned its
+  input unchanged when the key was missing or the payload was not encrypted, so
+  a caller could not distinguish plaintext from decrypted ciphertext. It raises
+  now. Both functions have no callers, which the class docstring says plainly
+  rather than implying a protection that is not deployed.
+
+### Load, concurrency and I/O
+
+- **Admission control** (#205). New `core/admission.py`: `/v1/` requests beyond
+  the configured concurrency wait in a bounded queue and are refused with 503
+  and `Retry-After` once it is full, instead of all arriving at the upstream at
+  once.
+
+- **A second instance is now noticed** (#205). The daily budget lives in process
+  memory and is persisted by overwriting a single key, so two processes each
+  enforce the full limit against their own float. The README described this as
+  a silent failure "that arrives as a provider invoice". A Redis heartbeat now
+  reports peers and exports `llmproxy_instance_count`. It deliberately does not
+  refuse to start: a rolling update legitimately runs two for a few seconds.
+
+- **JWKS fetches shared the pool everything else offloads to** (#209). 1.34.0
+  moved the synchronous urllib fetch off the event loop with
+  `asyncio.to_thread` — which submits to the loop's *default* executor, shared
+  with the event-log DLQ writes, the config-file hashing and the cache. So a
+  stalled identity provider starved them instead. Now a dedicated pool, one
+  fetch per provider at a time, and a per-caller ceiling that fails closed.
+
+- **One circuit-breaker read per request, not one per endpoint** (#195).
+  `filter_executable()` replaces a per-endpoint `evalsha` round trip with a
+  single MGET. Measured: 20 endpoints 5.22 ms → 0.42 ms; 50 endpoints 0.46 ms.
+
+- **The WASM thread pool is released deliberately** (#208), rather than being
+  reclaimed by process exit.
+
+### Configuration
+
+- **The reload path had none of the care the apply path has** (#208).
+  `config_watch_loop` installed the parsed file with no validation while
+  `POST /api/v1/config/apply` — identical content — validated, backed up
+  atomically and rolled back. The unguarded one is the path an operator editing
+  a file actually takes, so an `api_keys_env` naming an unset variable left
+  auth enabled with zero valid keys and every request 401ing. The candidate is
+  now validated first, and a rejected reload keeps the previous config running.
+
+- **The validator no longer fails cryptically** (#208).
+  `max_payload_size_kb: "512"` raised `TypeError`, uncaught, so the process
+  died with a traceback naming the validator rather than the operator's config.
+
+- **Validation at the boundary** (#206). The three OpenAI-compatible handlers
+  parse into Pydantic models (`proxy/schemas.py`) instead of reading a raw
+  dict. Plugin and config paths resolve symlinks (`realpath`, not `abspath`).
+  Three copies of `sha256(token)[:16]` became `core/session_id.py`, keyed with
+  HMAC.
+
+### Observability
+
+- **Metrics that described a subset of what happened** (#191). The budget gauge
+  followed only the chat route, so spend through completions and embeddings was
+  invisible; unknown model names were an unbounded label dimension and now
+  collapse to `other`; control-plane auth failures were not counted; and the
+  eight background loops had no liveness signal
+  (`llmproxy_background_last_success_timestamp`).
+
+### Supply chain and release
+
+- **The image is published behind the gate** (#192). `docker.yml` ran on
+  `workflow_run`, which loses `github.ref` — so semver tags were never applied
+  and a build could publish while the test job was still running. It is now a
+  reusable workflow called from CI after every gate passes.
+- **The Python transitives are locked with hashes** (#207). `requirements.lock`
+  (70 packages, `uv pip compile --generate-hashes`), installed with
+  `--require-hashes`, plus a CI job that recompiles and diffs so a manifest bump
+  without a regenerated lock fails.
+- **A licence gate** (#210). AGPL, SSPL and GPL fail the build. The AGPL is the
+  one that matters: its network-use clause reaches users of a hosted proxy,
+  which is how this is deployed. LGPL is reported for a human decision; MPL-2.0
+  is fine. Packages with no licence metadata are listed, not failed on — that
+  hole is named rather than hidden.
+- **Secret scanning**, Docker base images pinned by digest, `npm audit`
+  blocking on the frontend, and Dependabot covering the `docker` ecosystem
+  (#192).
+
+### Console
+
+- **The console rendered untrusted data** (#193). Drilldown and explain views
+  interpolated provider-controlled strings into `innerHTML`. New
+  `ui/src/ui/escape.ts` with an `html` tagged template; every affected site
+  escapes.
+- **OAuth values it never checked** (#193). The callback minted `state` and
+  `nonce` with `Math.random()` and the opener never compared the returned
+  `state` — and the callback page never forwarded it, so adding the comparison
+  on one side alone would have been inert. Both sides fixed;
+  `crypto.getRandomValues` throughout.
+
+### Documentation
+
+- **Documentation that matches this commit** (#196). The `docker run` recipe
+  named volumes that do not exist; four configuration sections were undocumented;
+  the two key tiers had no explanation. `tests/test_docs_match_the_code.py`
+  now asserts parametrically that every documented default equals the code's —
+  written after three defaults in this very release were documented from memory
+  and were wrong.
+
+### Four findings that were wrong
+
+Recorded because an audit that only reports its hits is not an audit.
+
+- **"Three gauges are declared and never set."** I searched for
+  `track_budget`, `track_circuit_state` and `track_pool_size` — methods that
+  have never existed. The real setters are `set_budget`, `set_pool_size` and
+  `set_circuit_state`, all called, and a live scrape confirmed the gauges
+  populate. Only the narrow, true part survived into #191.
+- **"Nothing clears the secret cache."** The absence pattern `cache_ttl` matched
+  `dns_cache_ttl` in an unrelated file, so the finding was refuted on its own
+  evidence and the category had to be resubmitted.
+- **Three `threat_ledger` defaults** were written from memory and were wrong
+  (threshold 2.0 vs 3.0, window 300 vs 600), and the section was placed at the
+  top level when `SecurityShield` reads it under `security:`.
+- **"No endpoint returns the merged effective config."** `GET
+  /api/v1/config/yaml` already returns the live in-memory object, redacted.
+  `/config/raw` reads the file deliberately, because it serves the editor.
+
+### One deliberate non-fix
+
+The per-request `store.get_pool()` query stays. Nothing measured it as a cost,
+and a cache there needs invalidation on `update_metrics`, which runs on every
+request — so the cache would be rebuilt as often as it was read.
+
+### Numbers
+
+- Tests: 1510 → **1755** on the CI gate, **1781** counting the benchmarks and
+  the integration file the gate excludes
+- Coverage: 70.11% → **72%**, gate raised 68% → 71%
+- CI jobs: 7 → **19**, with image publication gated behind all of them
+- Verified on the release box (LXC `ci-llmproxy`, Python 3.12.3, same minor as
+  CI): full suite green with **zero skipped**, and the published image smoke-
+  tested end to end — unauthenticated control plane 401, inference key on the
+  control plane 401, admin key 200, SQLite state surviving container
+  replacement by inode.
+
 ## [1.34.0] — 2026-09-09
 
 ### Seven findings from the second audit

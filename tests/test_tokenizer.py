@@ -1,6 +1,6 @@
 """Tests for core/tokenizer.py — tiktoken-based token counting."""
 
-from core.tokenizer import count_tokens, count_messages_tokens, is_tiktoken_available
+from core.tokenizer import count_messages_tokens, count_tokens, is_tiktoken_available
 
 
 class TestCountTokens:

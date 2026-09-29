@@ -19,10 +19,10 @@ Config (via manifest ui_schema):
   - model_windows: dict — per-model context window sizes
 """
 
-from typing import Dict, Any
+from typing import Any
 
-from core.plugin_sdk import BasePlugin, PluginResponse, PluginHook
 from core.plugin_engine import PluginContext
+from core.plugin_sdk import BasePlugin, PluginHook, PluginResponse
 
 # Context windows for common models (in tokens)
 DEFAULT_MODEL_WINDOWS = {
@@ -50,10 +50,10 @@ class ContextWindowGuard(BasePlugin):
     description = "Blocks requests exceeding the model's context window"
     timeout_ms = 2  # Arithmetic only
 
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: dict[str, Any] = None):
         super().__init__(config)
         self.safety_margin: float = self.config.get("safety_margin", 0.9)
-        self.model_windows: Dict[str, int] = self.config.get(
+        self.model_windows: dict[str, int] = self.config.get(
             "model_windows", DEFAULT_MODEL_WINDOWS
         )
 
@@ -61,7 +61,7 @@ class ContextWindowGuard(BasePlugin):
         self._total_checked: int = 0
         self._total_blocked: int = 0
 
-    def _estimate_tokens(self, body: Dict[str, Any]) -> int:
+    def _estimate_tokens(self, body: dict[str, Any]) -> int:
         """Estimate total prompt tokens using tiktoken or heuristic."""
         from core.tokenizer import count_messages_tokens
 
@@ -72,7 +72,7 @@ class ContextWindowGuard(BasePlugin):
         """Get context window size for a model."""
         return self.model_windows.get(model, DEFAULT_WINDOW)
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Public stats for dashboard."""
         return {
             "total_checked": self._total_checked,

@@ -31,8 +31,8 @@ Deterministic and fail-open: on any error the original message is left intact.
 import re
 from typing import Any
 
-from core.plugin_sdk import BasePlugin, PluginHook, PluginResponse
 from core.plugin_engine import PluginContext
+from core.plugin_sdk import BasePlugin, PluginHook, PluginResponse
 
 # ── Defaults (mirrored from l0-cache src/filter.rs) ──────────────────────────
 DEFAULT_HEAD = 30

@@ -14,3 +14,8 @@ scrape_configs:
       - targets: ["llmproxy:8090"]
     metrics_path: "/metrics"
     scrape_interval: 10s
+    # /metrics on :8090 requires an admin credential when auth is on.
+    # Provide it via bearer_token_file (prometheus --config.file with a
+    # mounted secret), or scrape the loopback exporter :9091 where the
+    # network restricts the port. Unauthenticated scrapes get 401.
+    # bearer_token_file: "/run/secrets/llmproxy_metrics_token"

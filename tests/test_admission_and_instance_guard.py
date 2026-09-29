@@ -18,11 +18,10 @@ import asyncio
 
 import httpx
 import pytest
-
 from conftest import InMemoryRepository, minimal_config
-from core.admission import AdmissionController
 from test_e2e import LightweightAgent
 
+from core.admission import AdmissionController
 
 # ── admission control ───────────────────────────────────────────────────────
 

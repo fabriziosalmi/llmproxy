@@ -24,10 +24,10 @@ Persistence (J.5):
 
 import asyncio
 from collections import defaultdict
-from typing import Dict, Any
+from typing import Any
 
-from core.plugin_sdk import BasePlugin, PluginResponse, PluginHook
 from core.plugin_engine import PluginContext
+from core.plugin_sdk import BasePlugin, PluginHook, PluginResponse
 
 
 class SmartBudgetGuard(BasePlugin):
@@ -40,7 +40,7 @@ class SmartBudgetGuard(BasePlugin):
     )
     timeout_ms = 10  # Slightly higher to account for first-execute hydration
 
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: dict[str, Any] = None):
         super().__init__(config)
         self.session_budget_usd: float = self.config.get("session_budget_usd", 5.0)
         self.team_budget_usd: float = self.config.get("team_budget_usd", 100.0)
@@ -48,9 +48,9 @@ class SmartBudgetGuard(BasePlugin):
         self.warn_threshold: float = self.config.get("warn_threshold", 0.8)
 
         # session_id → accumulated cost in USD
-        self._session_spend: Dict[str, float] = defaultdict(float)
+        self._session_spend: dict[str, float] = defaultdict(float)
         # team/api_key → accumulated cost in USD
-        self._team_spend: Dict[str, float] = defaultdict(float)
+        self._team_spend: dict[str, float] = defaultdict(float)
         # Lock protecting _session_spend and _team_spend from concurrent access
         self._spend_lock = asyncio.Lock()
         # J.5: Lazy hydration flag
@@ -58,7 +58,7 @@ class SmartBudgetGuard(BasePlugin):
         self._last_store = None  # Track store ref for on_unload persistence
         self._background_tasks: set[asyncio.Task] = set()
 
-    def _estimate_tokens(self, body: Dict[str, Any]) -> int:
+    def _estimate_tokens(self, body: dict[str, Any]) -> int:
         """Estimate input token count from messages using tiktoken or heuristic."""
         from core.tokenizer import count_messages_tokens
 
