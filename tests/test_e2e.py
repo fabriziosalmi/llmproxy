@@ -17,15 +17,15 @@ Coverage:
 """
 
 import asyncio
+from unittest.mock import AsyncMock, MagicMock
+
+import httpx
 import pytest
 import pytest_asyncio
-import httpx
-from unittest.mock import AsyncMock, MagicMock
+from conftest import InMemoryRepository, make_openai_response, minimal_config
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-
-from conftest import InMemoryRepository, minimal_config, make_openai_response
+from fastapi.responses import JSONResponse
 
 
 class LightweightAgent:
@@ -106,14 +106,14 @@ class LightweightAgent:
 
         from proxy.routes import (
             admin_router,
-            registry_router,
-            identity_router,
-            plugins_router,
-            telemetry_router,
             chat_router,
-            models_router,
-            embeddings_router,
             completions_router,
+            embeddings_router,
+            identity_router,
+            models_router,
+            plugins_router,
+            registry_router,
+            telemetry_router,
         )
 
         self.app.include_router(chat_router(self))
@@ -379,7 +379,7 @@ async def test_registry_empty(client):
 
 @pytest.mark.asyncio
 async def test_registry_with_endpoint(client, store):
-    from models import LLMEndpoint, EndpointStatus
+    from models import EndpointStatus, LLMEndpoint
 
     ep = LLMEndpoint(
         id="ep-1",
@@ -403,7 +403,7 @@ async def test_registry_with_endpoint(client, store):
 
 @pytest.mark.asyncio
 async def test_registry_toggle_endpoint(client, store):
-    from models import LLMEndpoint, EndpointStatus
+    from models import EndpointStatus, LLMEndpoint
 
     ep = LLMEndpoint(
         id="ep-2",
@@ -420,8 +420,8 @@ async def test_registry_toggle_endpoint(client, store):
 
 @pytest.mark.asyncio
 async def test_registry_probe_endpoint_updates_status_and_metrics(client, store, monkeypatch):
-    from models import LLMEndpoint, EndpointStatus
     import proxy.routes.registry as registry_mod
+    from models import EndpointStatus, LLMEndpoint
 
     ep = LLMEndpoint(
         id="probe-me",
@@ -473,7 +473,7 @@ async def test_registry_probe_endpoint_updates_status_and_metrics(client, store,
 
 @pytest.mark.asyncio
 async def test_registry_set_priority(client, store):
-    from models import LLMEndpoint, EndpointStatus
+    from models import EndpointStatus, LLMEndpoint
 
     ep = LLMEndpoint(
         id="ep-3",
@@ -490,7 +490,7 @@ async def test_registry_set_priority(client, store):
 
 @pytest.mark.asyncio
 async def test_registry_delete_endpoint(client, store):
-    from models import LLMEndpoint, EndpointStatus
+    from models import EndpointStatus, LLMEndpoint
 
     ep = LLMEndpoint(
         id="ep-4",

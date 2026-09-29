@@ -13,10 +13,10 @@ Config (via manifest ui_schema):
 Ring: PRE_FLIGHT (after auth, before routing)
 """
 
-from typing import Dict, Any
+from typing import Any
 
-from core.plugin_sdk import BasePlugin, PluginResponse, PluginHook
 from core.plugin_engine import PluginContext
+from core.plugin_sdk import BasePlugin, PluginHook, PluginResponse
 
 
 class ToolGuard(BasePlugin):
@@ -27,7 +27,7 @@ class ToolGuard(BasePlugin):
     description = "Strips or blocks restricted tools/functions based on user role"
     timeout_ms = 2
 
-    def __init__(self, config: Dict[str, Any] | None = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         super().__init__(config)
         self.restricted_tools: list[str] = self.config.get("restricted_tools", [])
         self.action: str = self.config.get("action", "strip")

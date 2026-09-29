@@ -1,10 +1,12 @@
-import pytest
 import asyncio
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from fastapi import Request
-from proxy.request_pipeline import process_proxy_request
+
 from core.plugin_engine import PluginState
+from proxy.request_pipeline import process_proxy_request
+
 
 @pytest.mark.asyncio
 async def test_process_proxy_request_finops_rejection():

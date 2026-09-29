@@ -200,7 +200,6 @@ def test_no_hot_path_probes_breakers_in_a_loop():
 
     import proxy.routes.admin as admin
     import proxy.routes.telemetry as telemetry
-
     from plugins.default import smart_router
 
     for module in (smart_router, telemetry, admin):

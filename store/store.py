@@ -1,8 +1,10 @@
 import logging
-from typing import List, Optional, Dict, Any
-from models import LLMEndpoint, EndpointStatus
-from .sql_store import SQLiteStore
+from typing import Any
+
+from models import EndpointStatus, LLMEndpoint
+
 from .base import BaseRepository
+from .sql_store import SQLiteStore
 
 logger = logging.getLogger(__name__)
 
@@ -25,17 +27,17 @@ class SQLiteRepository(BaseRepository):
     async def remove_endpoint(self, endpoint_id: str):
         await self.sql.remove_endpoint(endpoint_id)
 
-    async def get_all(self) -> List[LLMEndpoint]:
+    async def get_all(self) -> list[LLMEndpoint]:
         return await self.sql.get_all()
 
-    async def get_pool(self) -> List[LLMEndpoint]:
+    async def get_pool(self) -> list[LLMEndpoint]:
         return await self.sql.get_pool()
 
-    async def get_by_status(self, status: EndpointStatus) -> List[LLMEndpoint]:
+    async def get_by_status(self, status: EndpointStatus) -> list[LLMEndpoint]:
         return await self.sql.get_by_status(status)
 
     async def update_status(
-        self, endpoint_id: str, status: EndpointStatus, metadata: Optional[Dict] = None
+        self, endpoint_id: str, status: EndpointStatus, metadata: dict | None = None
     ):
         await self.sql.update_status(endpoint_id, status, metadata)
 

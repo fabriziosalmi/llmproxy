@@ -17,9 +17,7 @@ in the formula is fine; flipping the winner is a bug.
 
 from types import SimpleNamespace
 
-
 from plugins.default.smart_router import _compute_score
-
 
 # ── Fixtures: a few stand-in endpoints + their stats ──────────────
 

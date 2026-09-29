@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger("llmproxy.endpoint_stats")
 
@@ -43,7 +43,7 @@ async def update_endpoint_stats(
     endpoint_id: str,
     latency_ms: float,
     success: bool,
-    redis_client: Optional[Any] = None,
+    redis_client: Any | None = None,
 ):
     """Update endpoint performance stats with exponential moving average.
 

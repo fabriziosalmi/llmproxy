@@ -5,12 +5,13 @@ Tests the __call__ ASGI handler, _scan_payload, and _normalize_unicode.
 """
 
 import json
+
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 from starlette.applications import Starlette
-from starlette.routing import Route
 from starlette.requests import Request
 from starlette.responses import JSONResponse
+from starlette.routing import Route
 
 from core.firewall_asgi import ByteLevelFirewallMiddleware
 
@@ -130,7 +131,7 @@ class TestFirewallNormalizeUnicode:
 
     def test_normalize_fullwidth_chars(self):
         """Fullwidth ｉｇｎｏｒｅ → ignore."""
-        fullwidth = "ｉｇｎｏｒｅ".encode("utf-8")
+        fullwidth = "ｉｇｎｏｒｅ".encode()
         result = ByteLevelFirewallMiddleware._normalize_unicode(fullwidth)
         assert b"ignore" in result
 

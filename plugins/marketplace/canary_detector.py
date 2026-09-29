@@ -22,10 +22,10 @@ Config (via manifest ui_schema):
 
 import json
 import logging
-from typing import Dict, Any, Optional
+from typing import Any
 
-from core.plugin_sdk import BasePlugin, PluginResponse, PluginHook
 from core.plugin_engine import PluginContext
+from core.plugin_sdk import BasePlugin, PluginHook, PluginResponse
 
 logger = logging.getLogger("plugin.canary_detector")
 
@@ -38,7 +38,7 @@ class CanaryDetector(BasePlugin):
     description = "Detects system prompt leakage in LLM responses"
     timeout_ms = 5  # String matching only
 
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: dict[str, Any] = None):
         super().__init__(config)
         self.min_leak_chars: int = self.config.get("min_leak_chars", 50)
         self.similarity_threshold: float = self.config.get("similarity_threshold", 0.6)
@@ -48,7 +48,7 @@ class CanaryDetector(BasePlugin):
         self._total_checked: int = 0
         self._leaks_detected: int = 0
 
-    def _extract_system_prompt(self, ctx: PluginContext) -> Optional[str]:
+    def _extract_system_prompt(self, ctx: PluginContext) -> str | None:
         """Extract the system message from the request body."""
         messages = ctx.body.get("messages", [])
         for msg in messages:
@@ -77,7 +77,7 @@ class CanaryDetector(BasePlugin):
             logger.debug("CanaryDetector response parse skipped: %s", e)
             return ""
 
-    def _detect_leakage(self, system_prompt: str, response: str) -> Dict[str, Any]:
+    def _detect_leakage(self, system_prompt: str, response: str) -> dict[str, Any]:
         """Check if system prompt content appears in the response.
 
         Uses n-gram matching: splits system prompt into overlapping chunks
@@ -117,7 +117,7 @@ class CanaryDetector(BasePlugin):
             "method": "ngram_match",
         }
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Public stats for dashboard."""
         return {
             "total_checked": self._total_checked,

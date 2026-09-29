@@ -1,8 +1,9 @@
 """Tests for core.identity.IdentityManager."""
 
-import pytest
 import time
 from unittest.mock import patch
+
+import pytest
 
 IDENTITY_CONFIG = {
     "identity": {
@@ -52,7 +53,7 @@ async def test_malformed_jwt_returns_none(mock_secret):
     return_value="super-secret-key-that-is-at-least-32-bytes-long",
 )
 def test_generate_and_verify_proxy_jwt(mock_secret):
-    from core.identity import IdentityManager, IdentityContext
+    from core.identity import IdentityContext, IdentityManager
 
     mgr = IdentityManager(IDENTITY_CONFIG)
     identity = IdentityContext(
@@ -79,7 +80,7 @@ def test_generate_and_verify_proxy_jwt(mock_secret):
     return_value="super-secret-key-that-is-at-least-32-bytes-long",
 )
 def test_proxy_jwt_expired(mock_secret):
-    from core.identity import IdentityManager, IdentityContext
+    from core.identity import IdentityContext, IdentityManager
 
     mgr = IdentityManager(IDENTITY_CONFIG)
     identity = IdentityContext(
@@ -135,8 +136,9 @@ async def test_issuer_prefix_bypass_rejected(mock_secret):
     a trusted issuer's value (e.g. "https://accounts.google.com.attacker.com")
     must NOT match the trusted provider. Only exact-match issuer is accepted.
     """
-    from core.identity import IdentityManager, OIDCProvider
     import jwt as pyjwt
+
+    from core.identity import IdentityManager, OIDCProvider
 
     mgr = IdentityManager(IDENTITY_CONFIG)
     mgr.providers["google"] = OIDCProvider(
@@ -165,8 +167,9 @@ async def test_issuer_prefix_bypass_rejected(mock_secret):
 async def test_issuer_trailing_slash_variant_rejected(mock_secret):
     """The old `startswith(rstrip('/'))` matcher would have accepted
     'https://accounts.google.com/evil'. With exact-match it must be rejected."""
-    from core.identity import IdentityManager, OIDCProvider
     import jwt as pyjwt
+
+    from core.identity import IdentityManager, OIDCProvider
 
     mgr = IdentityManager(IDENTITY_CONFIG)
     mgr.providers["google"] = OIDCProvider(

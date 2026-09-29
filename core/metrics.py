@@ -10,15 +10,15 @@ Exposes /metrics endpoint via prometheus_client with:
 """
 
 import logging
-from typing import Container, Optional
+from collections.abc import Container
 
 from prometheus_client import (
-    Counter,
-    Histogram,
-    Gauge,
-    start_http_server,
-    generate_latest,
     CONTENT_TYPE_LATEST,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+    start_http_server,
 )
 
 logger = logging.getLogger("llmproxy.metrics")
@@ -179,7 +179,7 @@ class MetricsTracker:
         prompt_tokens: int,
         completion_tokens: int,
         cost: float,
-        known_models: Optional[Container[str]] = None,
+        known_models: Container[str] | None = None,
     ):
         """Record tokens and cost.
 

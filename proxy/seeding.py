@@ -12,9 +12,9 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict
+from typing import Any
 
-from models import LLMEndpoint, EndpointStatus
+from models import EndpointStatus, LLMEndpoint
 
 logger = logging.getLogger("llmproxy.seeding")
 
@@ -36,7 +36,7 @@ _KEY_PLACEHOLDERS = frozenset(
 )
 
 
-async def seed_endpoints_from_config(config: Dict[str, Any], store: Any) -> int:
+async def seed_endpoints_from_config(config: dict[str, Any], store: Any) -> int:
     """Persist config.yaml endpoints into `store` if not already present.
 
     Returns the number of new endpoints seeded.

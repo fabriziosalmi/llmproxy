@@ -7,14 +7,13 @@ model prefix auto-detection, and provider registry resolution.
 
 import json
 
-from proxy.adapters.openai import OpenAIAdapter
 from proxy.adapters.anthropic import AnthropicAdapter
-from proxy.adapters.google import GoogleAdapter
 from proxy.adapters.azure import AzureAdapter
+from proxy.adapters.google import GoogleAdapter
 from proxy.adapters.ollama import OllamaAdapter
+from proxy.adapters.openai import OpenAIAdapter
 from proxy.adapters.openai_compat import OpenAICompatAdapter
-from proxy.adapters.registry import get_adapter, detect_provider, SUPPORTED_PROVIDERS
-
+from proxy.adapters.registry import SUPPORTED_PROVIDERS, detect_provider, get_adapter
 
 # ── Fixtures ──
 

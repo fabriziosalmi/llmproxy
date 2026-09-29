@@ -26,8 +26,8 @@ Model must be pre-downloaded locally: huggingface-cli download openai/privacy-fi
 """
 from typing import Any
 
-from core.plugin_sdk import BasePlugin, PluginHook, PluginResponse
 from core.plugin_engine import PluginContext
+from core.plugin_sdk import BasePlugin, PluginHook, PluginResponse
 
 MODEL_ID = "openai/privacy-filter"
 

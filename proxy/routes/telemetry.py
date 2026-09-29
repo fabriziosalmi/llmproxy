@@ -1,18 +1,18 @@
 """Telemetry routes: health, metrics, logs SSE stream, client log ingest."""
 
-import re
-import json
 import asyncio
-import time
-import hmac
 import hashlib
+import hmac
+import json
+import re
 import secrets
+import time
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
-from core.metrics import MetricsTracker
 from core.auth_policy import auth_enabled
+from core.metrics import MetricsTracker
 
 # Strip ANSI escape sequences and control chars to prevent terminal injection via xterm.js
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?\x07")
@@ -66,7 +66,7 @@ def create_router(agent) -> APIRouter:
     def _mint_sse_token(ttl_s: int = 120) -> str:
         exp = int(time.time()) + max(10, min(ttl_s, 600))
         nonce = hashlib.sha256(
-            f"{time.time()}:{id(agent)}".encode("utf-8")
+            f"{time.time()}:{id(agent)}".encode()
         ).hexdigest()[:16]
         payload = f"{exp}.{nonce}"
         sig = hmac.new(
@@ -367,7 +367,7 @@ def create_router(agent) -> APIRouter:
                     try:
                         log = await asyncio.wait_for(stream_q.get(), timeout=1.0)
                         yield f"data: {json.dumps(_sanitize_log(log) if isinstance(log, dict) else log)}\n\n"
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         yield ": keep-alive\n\n"
                     except (asyncio.CancelledError, GeneratorExit):
                         break
@@ -418,7 +418,7 @@ def create_router(agent) -> APIRouter:
         try:
             body = await request.json()
         except Exception:
-            raise HTTPException(status_code=400, detail="Invalid JSON body")
+            raise HTTPException(status_code=400, detail="Invalid JSON body") from None
         if not isinstance(body, dict):
             raise HTTPException(status_code=400, detail="Body must be an object")
 

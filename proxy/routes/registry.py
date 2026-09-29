@@ -6,14 +6,14 @@ import logging
 import os
 import re
 import time
-from urllib.parse import urlparse
 from typing import Any
+from urllib.parse import urlparse
 
 import aiohttp
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
-from models import EndpointStatus
 from core.auth_policy import auth_enabled
+from models import EndpointStatus
 
 logger = logging.getLogger("llmproxy.routes.registry")
 
@@ -26,7 +26,7 @@ def create_router(agent) -> APIRouter:
         try:
             value = int(raw)
         except (TypeError, ValueError):
-            raise HTTPException(status_code=400, detail="priority must be an integer")
+            raise HTTPException(status_code=400, detail="priority must be an integer") from None
         return max(-1000, min(1000, value))
 
     def _validate_base_url(raw: str) -> str:
@@ -220,7 +220,7 @@ def create_router(agent) -> APIRouter:
                         "url": url,
                         "detail": text[:200],
                     }
-        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+        except (TimeoutError, aiohttp.ClientError) as e:
             await agent.store.update_status(endpoint_id, EndpointStatus.DISCOVERED)
             await agent._add_log(
                 f"ENDPOINT: {endpoint_id} probe failed ({type(e).__name__})",
@@ -247,6 +247,7 @@ def create_router(agent) -> APIRouter:
         """Real-time SSE stream for the SOC dashboard."""
         import asyncio
         import json
+
         from fastapi.responses import StreamingResponse
 
         async with _telemetry_lock:
@@ -263,7 +264,7 @@ def create_router(agent) -> APIRouter:
                     try:
                         event = await asyncio.wait_for(stream_q.get(), timeout=1.0)
                         yield f"data: {json.dumps(event)}\n\n"
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         yield ": keep-alive\n\n"
                     except (asyncio.CancelledError, GeneratorExit):
                         break
@@ -290,7 +291,7 @@ def create_router(agent) -> APIRouter:
         try:
             data = await request.json()
         except Exception:
-            raise HTTPException(status_code=400, detail="Invalid JSON body")
+            raise HTTPException(status_code=400, detail="Invalid JSON body") from None
         ep_id = data.get("id", "").strip().lower()
         if not _ENDPOINT_ID_RE.match(ep_id):
             raise HTTPException(
@@ -334,7 +335,7 @@ def create_router(agent) -> APIRouter:
             entry["auth_type"] = "none"
         endpoints_cfg[ep_id] = entry
 
-        from models import LLMEndpoint, EndpointStatus
+        from models import EndpointStatus, LLMEndpoint
 
         ep = LLMEndpoint(
             id=ep_id,
@@ -352,7 +353,7 @@ def create_router(agent) -> APIRouter:
             logger.error(
                 f"Failed to persist new endpoint '{ep_id}': {e}", exc_info=True
             )
-            raise HTTPException(status_code=500, detail="Failed to add endpoint")
+            raise HTTPException(status_code=500, detail="Failed to add endpoint") from e
         await agent._add_log(
             f"ENDPOINT: {ep_id} ADDED ({provider} @ {url}, {len(models)} models)",
             level="SYSTEM",

@@ -1,8 +1,8 @@
 """Tests for core.webhooks.WebhookDispatcher."""
 
 import pytest
-from core.webhooks import WebhookDispatcher, EventType, WebhookTarget
 
+from core.webhooks import EventType, WebhookDispatcher, WebhookTarget
 
 DISABLED_CONFIG = {"webhooks": {"enabled": False}}
 

@@ -7,9 +7,12 @@ Same request/response format as OpenAI, but different:
   - Model comes from deployment name in URL, not request body
 """
 
+from collections.abc import AsyncGenerator
+from typing import Any
+
 import aiohttp
-from typing import Dict, Any, AsyncGenerator, Tuple
 from starlette.responses import Response
+
 from .base import BaseModelAdapter
 
 
@@ -22,9 +25,9 @@ class AzureAdapter(BaseModelAdapter):
     def translate_embedding_request(
         self,
         base_url: str,
-        body: Dict[str, Any],
-        headers: Dict[str, str],
-    ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
+        body: dict[str, Any],
+        headers: dict[str, str],
+    ) -> tuple[str, dict[str, Any], dict[str, str]]:
         base = base_url.rstrip("/")
         if "/embeddings" not in base:
             url = f"{base}/embeddings?api-version={self.DEFAULT_API_VERSION}"
@@ -40,9 +43,9 @@ class AzureAdapter(BaseModelAdapter):
     def translate_request(
         self,
         base_url: str,
-        body: Dict[str, Any],
-        headers: Dict[str, str],
-    ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
+        body: dict[str, Any],
+        headers: dict[str, str],
+    ) -> tuple[str, dict[str, Any], dict[str, str]]:
         # base_url expected format:
         #   https://{resource}.openai.azure.com/openai/deployments/{deployment}
         # or just the resource URL — we append the rest
@@ -65,7 +68,7 @@ class AzureAdapter(BaseModelAdapter):
 
         return url, azure_body, azure_headers
 
-    def translate_response(self, response_data: Dict[str, Any]) -> Dict[str, Any]:
+    def translate_response(self, response_data: dict[str, Any]) -> dict[str, Any]:
         # Azure returns OpenAI-identical format
         return response_data
 
@@ -74,8 +77,8 @@ class AzureAdapter(BaseModelAdapter):
     async def request(
         self,
         url: str,
-        body: Dict[str, Any],
-        headers: Dict[str, str],
+        body: dict[str, Any],
+        headers: dict[str, str],
         session: aiohttp.ClientSession,
     ) -> Response:
         async with session.post(
@@ -89,8 +92,8 @@ class AzureAdapter(BaseModelAdapter):
     async def stream(
         self,
         url: str,
-        body: Dict[str, Any],
-        headers: Dict[str, str],
+        body: dict[str, Any],
+        headers: dict[str, str],
         session: aiohttp.ClientSession,
     ) -> AsyncGenerator[bytes, None]:
         async with session.post(

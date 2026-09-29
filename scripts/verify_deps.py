@@ -23,10 +23,10 @@ Usage:
   python scripts/verify_deps.py --strict # exit 1 on any finding
 """
 
-import sys
 import importlib.metadata
-import pathlib
 import logging
+import pathlib
+import sys
 
 logger = logging.getLogger("llmproxy.verify_deps")
 

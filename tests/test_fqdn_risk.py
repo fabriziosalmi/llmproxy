@@ -9,13 +9,12 @@ import pytest
 
 from core.fqdn_risk import (
     DEFAULT_BLOCK_THRESHOLD,
-    assess,
-    features,
     _parse_ip,
     _subdomain_count,
+    assess,
+    features,
 )
 from core.security import SecurityShield
-
 
 # ── Benign corpus: must stay below the block threshold ───────────────────────
 BENIGN = [

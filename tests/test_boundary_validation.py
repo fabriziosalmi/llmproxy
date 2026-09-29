@@ -16,7 +16,6 @@ separator.
 
 import httpx
 import pytest
-
 from conftest import InMemoryRepository, minimal_config
 from test_e2e import LightweightAgent
 

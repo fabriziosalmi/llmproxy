@@ -5,10 +5,14 @@ security-sensitive (it rewrites config.yaml and hot-reloads the proxy) — lives
 one cohesive, independently-testable module.
 """
 
+import hashlib
+import hmac
 import logging
 import os
+import secrets
+import time
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from core.atomic_io import atomic_write as _atomic_write
@@ -20,6 +24,89 @@ logger = logging.getLogger("llmproxy.routes.config")
 # secrets) — NOT the runtime-merged /config/yaml view, which is redacted and
 # would round-trip "***" back over real values.
 _MAX_CONFIG_BYTES = 256 * 1024
+
+# ── Dangerous-delta governance (issue #108) ──────────────────────────────
+#
+# An admin bearer can rewrite config.yaml live. Most keys are operational
+# (routing, aliases, budgets) — but a few deltas lower the security posture
+# itself: disabling auth, disabling the firewall, clearing the domain
+# blocklist, or widening the payload cap dramatically. Those need an explicit
+# second step: a short-lived confirm token bound to the exact proposed text.
+#
+# Honest scope: this is a confirmation-of-intent + audit gate, NOT a second
+# privilege tier. A stolen admin bearer can still mint a token (two requests
+# instead of one). What it stops is the one-click/one-request foot-gun — a
+# templated apply, a UI misclick, an automation pushing a config that happens
+# to flip `enabled: false` — and it leaves a named audit trail either way.
+# Real privilege separation stays where it is: segregated admin keys,
+# rotation, and never exposing the control plane without auth.
+_CONFIRM_TTL_S = 120
+_CONFIRM_USED_MAX = 1024
+
+
+# Last-resort confirm-token secret, generated per process. Same trade-off as
+# the SSE fallback in telemetry.py: a restart invalidates outstanding tokens,
+# and tokens live at most 600 seconds anyway.
+_FALLBACK_CONFIRM_SECRET = secrets.token_urlsafe(32)
+
+
+def _nested(cfg: object, *keys: str):
+    """Safe nested dict lookup; returns None when any level is absent."""
+    cur = cfg
+    for key in keys:
+        if not isinstance(cur, dict):
+            return None
+        cur = cur.get(key)
+    return cur
+
+
+def _config_sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _dangerous_deltas(old: dict, new: dict) -> list:
+    """Posture-lowering deltas between the live config and a proposed one.
+
+    Each entry is a short machine-readable id (also human-readable in the
+    403 response and the audit log). Only *transitions* from strict to lax
+    count — an already-disabled guard staying disabled is not a delta.
+    """
+    deltas = []
+
+    if _nested(old, "server", "auth", "enabled") is True and _nested(
+        new, "server", "auth", "enabled"
+    ) is False:
+        deltas.append("auth-disabled")
+
+    # Absent firewall flag defaults to enabled (app_factory), so only an
+    # explicit `false` in the proposal counts.
+    if _nested(old, "security", "firewall", "enabled") is not False and _nested(
+        new, "security", "firewall", "enabled"
+    ) is False:
+        deltas.append("firewall-disabled")
+
+    old_blocked = (
+        _nested(old, "security", "link_sanitization", "blocked_domains") or []
+    )
+    new_blocked = (
+        _nested(new, "security", "link_sanitization", "blocked_domains") or []
+    )
+    if old_blocked and not new_blocked:
+        deltas.append("blocklist-cleared")
+
+    old_cap = _nested(old, "security", "max_payload_size_kb")
+    new_cap = _nested(new, "security", "max_payload_size_kb")
+    if (
+        isinstance(old_cap, (int, float))
+        and not isinstance(old_cap, bool)
+        and isinstance(new_cap, (int, float))
+        and not isinstance(new_cap, bool)
+        and old_cap > 0
+        and new_cap > old_cap * 4
+    ):
+        deltas.append("payload-widened")
+
+    return deltas
 
 
 def create_router(agent) -> APIRouter:
@@ -55,10 +142,18 @@ def create_router(agent) -> APIRouter:
         try:
             parsed = _yaml.safe_load(text)
         except _yaml.YAMLError as exc:
-            return None, [f"YAML parse error: {exc}"], []
+            # Never echo raw exception text to the client: CodeQL
+            # py/stack-trace-exposure (and good hygiene) — the admin just sent
+            # this text, so they can locate the break; the detail goes to logs.
+            logger.error("Config YAML parse failed: %s", exc, exc_info=True)
+            return (
+                None,
+                ["YAML parse error: the proposed text is not valid YAML."],
+                [],
+            )
         if not isinstance(parsed, dict):
             return None, ["Config root must be a mapping (key: value), not a list or scalar."], []
-        from core.startup_checks import validate_config, StartupError
+        from core.startup_checks import StartupError, validate_config
 
         errors: list[str] = []
         warnings: list[str] = []
@@ -67,8 +162,78 @@ def create_router(agent) -> APIRouter:
         except StartupError as exc:
             errors.append(str(exc))
         except Exception as exc:  # noqa: BLE001 — a validator bug must not 500 the editor
-            errors.append(f"Validation error: {exc}")
+            logger.error("Config validator bug: %s", exc, exc_info=True)
+            errors.append("Validation error: internal validator failure — see server logs.")
         return parsed, errors, warnings
+
+    # Single-use confirm tokens, bound to a proposed config hash. Kept in
+    # closure state (per process, like the SSE token fallback): a restart
+    # invalidates outstanding tokens, which is the safe direction.
+    _used_confirm_tokens: set = set()
+
+    def _confirm_secret() -> str:
+        override = _nested(agent.config, "security", "confirm", "signing_secret")
+        if override:
+            return str(override)
+        try:
+            keys = agent._get_api_keys() or []
+        except Exception:  # noqa: BLE001 — test doubles may not implement it
+            keys = []
+        if keys:
+            return str(keys[0])
+        return _FALLBACK_CONFIRM_SECRET
+
+    def _mint_confirm_token(config_sha: str, ttl_s: int = _CONFIRM_TTL_S) -> str:
+        exp = int(time.time()) + max(10, min(ttl_s, 600))
+        nonce = secrets.token_hex(8)
+        payload = f"{exp}.{config_sha}.{nonce}"
+        sig = hmac.new(
+            _confirm_secret().encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
+        ).hexdigest()
+        return f"{payload}.{sig}"
+
+    def _verify_and_consume(token: str, config_sha: str) -> bool:
+        """Single-use verify: valid shape, signature, TTL, hash binding."""
+        parts = (token or "").split(".")
+        if len(parts) != 4:
+            return False
+        exp_s, sha, nonce, sig = parts
+        if (
+            not exp_s.isdigit()
+            or len(sha) != 64
+            or len(nonce) < 8
+            or len(sig) != 64
+            or not hmac.compare_digest(sha, config_sha)
+        ):
+            return False
+        if int(exp_s) < int(time.time()):
+            return False
+        payload = f"{exp_s}.{sha}.{nonce}"
+        expected = hmac.new(
+            _confirm_secret().encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(expected, sig):
+            return False
+        if token in _used_confirm_tokens:
+            return False
+        _used_confirm_tokens.add(token)
+        # Bound the set: drop entries once it grows past the cap. Tokens are
+        # self-expiring, so evicting oldest-first needs no bookkeeping — a
+        # plain clear is fine and fails closed (outstanding tokens die).
+        if len(_used_confirm_tokens) > _CONFIRM_USED_MAX:
+            _used_confirm_tokens.clear()
+        return True
+
+    def _acting_principal(request: Request) -> str:
+        """Short, non-secret identifier of the caller for the audit trail."""
+        from proxy.auth_helpers import parse_bearer, principal_already_verified
+
+        if principal_already_verified(request):
+            return "sso/jwt-principal"
+        token = parse_bearer(request.headers.get("Authorization", ""))
+        if token:
+            return f"key:{token[:8]}..."
+        return "dev-open"
 
     async def _reload_from_disk():
         """Re-read config.yaml and re-init config-dependent subsystems in place."""
@@ -93,6 +258,7 @@ def create_router(agent) -> APIRouter:
         """Return the active config rendered as YAML, with secrets redacted."""
         _check_admin_auth(request)
         import yaml as _yaml
+
         from core.export import scrub_dict
 
         try:
@@ -116,7 +282,7 @@ def create_router(agent) -> APIRouter:
         """Return the raw on-disk config.yaml *source* for the editor (admin-only)."""
         _check_admin_auth(request)
         try:
-            with open(agent.config_path, "r") as f:
+            with open(agent.config_path) as f:
                 text = f.read()
         except FileNotFoundError:
             text = ""
@@ -136,7 +302,60 @@ def create_router(agent) -> APIRouter:
         if len(text.encode("utf-8")) > _MAX_CONFIG_BYTES:
             raise HTTPException(status_code=413, detail="Config too large")
         _parsed, errors, warnings = _validate_config_text(text)
-        return {"valid": not errors, "errors": errors, "warnings": warnings}
+        dangerous = (
+            _dangerous_deltas(agent.config, _parsed)
+            if not errors and isinstance(_parsed, dict)
+            else []
+        )
+        return {
+            "valid": not errors,
+            "errors": errors,
+            "warnings": warnings,
+            "dangerous_deltas": dangerous,
+        }
+
+    @router.post("/api/v1/config/confirm-token")
+    async def confirm_token_endpoint(request: Request):
+        """Mint a single-use confirm token for a posture-lowering apply.
+
+        Body: {"yaml": "<proposed config>"}. The token is bound to the
+        SHA-256 of that exact text and expires after ~120s. Minting itself is
+        audit-logged, so a stolen bearer minting tokens leaves traces too.
+        """
+        _check_admin_auth(request)
+        body = await request.json()
+        text = body.get("yaml", "")
+        if not isinstance(text, str):
+            raise HTTPException(status_code=400, detail="`yaml` must be a string")
+        if len(text.encode("utf-8")) > _MAX_CONFIG_BYTES:
+            raise HTTPException(status_code=413, detail="Config too large")
+        _parsed, errors, _warnings = _validate_config_text(text)
+        if errors:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Config validation failed: {len(errors)} error(s)",
+            )
+        deltas = (
+            _dangerous_deltas(agent.config, _parsed)
+            if isinstance(_parsed, dict)
+            else []
+        )
+        if not deltas:
+            raise HTTPException(
+                status_code=400,
+                detail="No dangerous deltas in the proposed config — apply directly.",
+            )
+        principal = _acting_principal(request)
+        await agent._add_log(
+            f"SECURITY: Confirm token minted by {principal} for deltas: "
+            + ", ".join(deltas),
+            level="SECURITY",
+        )
+        return {
+            "confirm_token": _mint_confirm_token(_config_sha256(text)),
+            "expires_in": _CONFIRM_TTL_S,
+            "deltas": deltas,
+        }
 
     @router.post("/api/v1/config/apply")
     async def apply_config_endpoint(request: Request):
@@ -171,10 +390,41 @@ def create_router(agent) -> APIRouter:
                 },
             )
 
+        # Dangerous-delta gate (issue #108): posture-lowering transitions need
+        # a single-use confirm token bound to this exact text. Without it the
+        # attempt is rejected AND audit-logged — a silent probe for how far an
+        # admin bearer reaches must leave a trace.
+        deltas = (
+            _dangerous_deltas(agent.config, _parsed)
+            if isinstance(_parsed, dict)
+            else []
+        )
+        principal = _acting_principal(request)
+        if deltas:
+            token = body.get("confirm_token", "")
+            if not isinstance(token, str) or not _verify_and_consume(
+                token, _config_sha256(text)
+            ):
+                await agent._add_log(
+                    f"SECURITY: Dangerous config apply REJECTED for {principal} "
+                    f"(missing/invalid confirm token) — deltas: " + ", ".join(deltas),
+                    level="SECURITY",
+                )
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "detail": "Dangerous config deltas require a confirm token. "
+                        "Mint one via POST /api/v1/config/confirm-token with the "
+                        "same `yaml`, then retry apply with `confirm_token`.",
+                        "confirm_required": True,
+                        "deltas": deltas,
+                    },
+                )
+
         abspath = os.path.abspath(agent.config_path)
         directory = os.path.dirname(abspath) or "."
         try:
-            with open(abspath, "r") as f:
+            with open(abspath) as f:
                 previous = f.read()
         except FileNotFoundError:
             previous = ""
@@ -214,7 +464,9 @@ def create_router(agent) -> APIRouter:
             ) from e
 
         await agent._add_log(
-            f"SECURITY: Config applied via Admin UI (backup: {os.path.basename(backup_path)})",
+            f"SECURITY: Config applied via Admin UI by {principal} "
+            f"(backup: {os.path.basename(backup_path)})"
+            + (f" — dangerous deltas confirmed: {', '.join(deltas)}" if deltas else ""),
             level="SECURITY",
         )
         return {"applied": True, "warnings": warnings, "backup": os.path.basename(backup_path)}

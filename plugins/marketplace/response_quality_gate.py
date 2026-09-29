@@ -23,12 +23,12 @@ Config (via manifest ui_schema):
   - check_truncation: bool (true) — detect mid-sentence truncation
 """
 
-import re
 import logging
-from typing import Dict, Any
+import re
+from typing import Any
 
-from core.plugin_sdk import BasePlugin, PluginResponse, PluginHook
 from core.plugin_engine import PluginContext
+from core.plugin_sdk import BasePlugin, PluginHook, PluginResponse
 
 logger = logging.getLogger("plugin.response_quality_gate")
 
@@ -68,7 +68,7 @@ class ResponseQualityGate(BasePlugin):
         re.compile(r"\bmy apologies\b", re.IGNORECASE),
     ]
 
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: dict[str, Any] = None):
         super().__init__(config)
         self.min_length: int = self.config.get("min_length", 20)
         self.refusal_threshold: int = self.config.get("refusal_threshold", 2)

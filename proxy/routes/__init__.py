@@ -4,16 +4,16 @@ Split from the original monolithic _setup_routes() in rotator.py (J.6 refactor).
 """
 
 from .admin import create_router as admin_router
-from .config import create_router as config_router
-from .registry import create_router as registry_router
-from .identity import create_router as identity_router
-from .plugins import create_router as plugins_router
-from .telemetry import create_router as telemetry_router
 from .chat import create_router as chat_router
-from .models import create_router as models_router
-from .embeddings import create_router as embeddings_router
 from .completions import create_router as completions_router
+from .config import create_router as config_router
+from .embeddings import create_router as embeddings_router
 from .gdpr import create_router as gdpr_router
+from .identity import create_router as identity_router
+from .models import create_router as models_router
+from .plugins import create_router as plugins_router
+from .registry import create_router as registry_router
+from .telemetry import create_router as telemetry_router
 
 __all__ = [
     "admin_router",

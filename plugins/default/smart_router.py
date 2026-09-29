@@ -20,6 +20,7 @@ Latency and success_rate are updated after each request via update_endpoint_stat
 import asyncio
 import logging
 from typing import Any
+
 from core.endpoint_stats import (  # noqa: F401  — re-exported for plugin callers
     _endpoint_stats,
     get_endpoint_stats,

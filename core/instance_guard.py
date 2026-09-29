@@ -34,7 +34,7 @@ import os
 import socket
 import time
 import uuid
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger("llmproxy.instance_guard")
 
@@ -57,11 +57,11 @@ def _instance_id() -> str:
 class InstanceGuard:
     """Registers this process and counts the others."""
 
-    def __init__(self, redis_client: Optional[Any]):
+    def __init__(self, redis_client: Any | None):
         self.redis = redis_client
         self.instance_id = _instance_id()
         self.peers: list = []
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
 
     @property
     def enabled(self) -> bool:

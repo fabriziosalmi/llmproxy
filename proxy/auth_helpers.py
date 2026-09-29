@@ -11,12 +11,12 @@ reusable and independently testable.
 from __future__ import annotations
 
 import hmac
-from typing import Any, Dict, List
+from typing import Any
 
 from core.secrets import SecretManager
 
 
-def resolve_api_keys(config: Dict[str, Any]) -> List[str]:
+def resolve_api_keys(config: dict[str, Any]) -> list[str]:
     """Read the configured API key bag from secrets.
 
     Looks up `server.auth.api_keys_env` (defaulting to
@@ -46,7 +46,7 @@ def parse_bearer(auth_header: str) -> str:
     return h
 
 
-def resolve_admin_keys(config: Dict[str, Any]) -> List[str]:
+def resolve_admin_keys(config: dict[str, Any]) -> list[str]:
     """Read the dedicated control-plane admin key bag.
 
     Looks up ``server.auth.admin_keys_env`` (default ``LLM_PROXY_ADMIN_KEYS``).
@@ -63,7 +63,7 @@ def resolve_admin_keys(config: Dict[str, Any]) -> List[str]:
     return [k.strip() for k in raw.split(",") if k.strip()]
 
 
-def verify_admin_key(token: str, config: Dict[str, Any]) -> bool:
+def verify_admin_key(token: str, config: dict[str, Any]) -> bool:
     """Constant-time check that ``token`` is a valid ADMIN key.
 
     When dedicated admin keys are configured, ONLY those grant control-plane
@@ -78,7 +78,7 @@ def verify_admin_key(token: str, config: Dict[str, Any]) -> bool:
     return verify_api_key(token, resolve_api_keys(config))
 
 
-def verify_api_key(token: str, valid_keys: List[str]) -> bool:
+def verify_api_key(token: str, valid_keys: list[str]) -> bool:
     """Constant-time membership check.
 
     `token in valid_keys` short-circuits on the first byte mismatch and

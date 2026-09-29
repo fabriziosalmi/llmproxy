@@ -10,13 +10,13 @@ Tests:
 """
 
 import asyncio
+
 import pytest
 
-from core.plugin_sdk import BasePlugin, PluginResponse, PluginHook
 from core.plugin_engine import PluginContext, PluginManager
+from core.plugin_sdk import BasePlugin, PluginHook, PluginResponse
 
 # ── AgenticLoopBreaker Tests ──
-
 from plugins.marketplace.agentic_loop_breaker import AgenticLoopBreaker
 
 
@@ -897,7 +897,7 @@ async def test_fail_closed_timeout_stops():
 
 # ── Principle 2: AST Blocking I/O Detection ──
 
-from core.plugin_engine import ast_scan, PluginSecurityError
+from core.plugin_engine import PluginSecurityError, ast_scan
 
 
 def test_ast_blocks_requests_import():
@@ -938,7 +938,7 @@ def test_ast_allows_asyncio_sleep():
 
 # ── Principle 3: PluginResponse Validation ──
 
-from core.plugin_sdk import PluginResponseError, PluginAction
+from core.plugin_sdk import PluginAction, PluginResponseError
 
 
 def test_invalid_action_raises():

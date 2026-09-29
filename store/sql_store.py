@@ -1,13 +1,15 @@
-import aiosqlite
 import asyncio
 import json
 import logging
 import os
 import sqlite3
+from typing import Any
+
+import aiosqlite
+
+from models import EndpointStatus, LLMEndpoint
 
 from .schema import MIGRATIONS, SQLITE, iter_create_statements
-from typing import List, Dict, Any, Optional
-from models import LLMEndpoint, EndpointStatus
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +26,7 @@ class SQLiteStore:
 
     def __init__(self, db_path: str = "data/endpoints.db"):
         self.db_path = db_path
-        self._conn: Optional[aiosqlite.Connection] = None
+        self._conn: aiosqlite.Connection | None = None
         self._conn_lock = asyncio.Lock()
         # Protects conn.row_factory mutations — row_factory is connection-level
         # in aiosqlite, so concurrent queries that toggle it would corrupt each
@@ -123,7 +125,7 @@ class SQLiteStore:
         await conn.commit()
 
     async def update_status(
-        self, endpoint_id: str, status: EndpointStatus, metadata: Optional[Dict] = None
+        self, endpoint_id: str, status: EndpointStatus, metadata: dict | None = None
     ):
         conn = await self._get_conn()
         # Extract latency_ms from metadata if present
@@ -148,11 +150,11 @@ class SQLiteStore:
             )
         await conn.commit()
 
-    async def get_pool(self) -> List[LLMEndpoint]:
+    async def get_pool(self) -> list[LLMEndpoint]:
         """Returns all verified endpoints."""
         return await self.get_by_status(EndpointStatus.VERIFIED)
 
-    async def get_by_status(self, status: EndpointStatus) -> List[LLMEndpoint]:
+    async def get_by_status(self, status: EndpointStatus) -> list[LLMEndpoint]:
         """Returns all endpoints with a specific status."""
         conn = await self._get_conn()
         async with conn.execute(
@@ -172,7 +174,7 @@ class SQLiteStore:
                 for r in rows
             ]
 
-    async def get_all(self) -> List[LLMEndpoint]:
+    async def get_all(self) -> list[LLMEndpoint]:
         """Returns all endpoints in the database."""
         conn = await self._get_conn()
         async with conn.execute(

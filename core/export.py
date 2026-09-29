@@ -11,17 +11,18 @@ Features:
   - Optional Parquet conversion (if pyarrow available)
 """
 
+import asyncio
+import gzip
+import json
+import logging
 import os
 import re
-import json
-import gzip
 import shutil
-import logging
-import asyncio
-import aiofiles
-from datetime import datetime, date
-from typing import Dict, Any, Optional, List
+from datetime import date, datetime
 from pathlib import Path
+from typing import Any
+
+import aiofiles
 
 logger = logging.getLogger(__name__)
 
@@ -104,9 +105,9 @@ def scrub_pii(text: str) -> str:
     return text
 
 
-def scrub_dict(d: Dict[str, Any]) -> Dict[str, Any]:
+def scrub_dict(d: dict[str, Any]) -> dict[str, Any]:
     """Recursively scrub PII from a dictionary."""
-    result: Dict[str, Any] = {}
+    result: dict[str, Any] = {}
     for k, v in d.items():
         # Redact known sensitive fields regardless of value type
         if k.lower() in _SENSITIVE_FIELDS:
@@ -146,8 +147,8 @@ class DatasetExporter:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.scrub = scrub
         self.compress_on_rotate = compress_on_rotate
-        self._current_date: Optional[date] = None
-        self._file_handle: Optional[aiofiles.threadpool.text.AsyncTextIOWrapper] = None
+        self._current_date: date | None = None
+        self._file_handle: aiofiles.threadpool.text.AsyncTextIOWrapper | None = None
         self._lock = asyncio.Lock()
 
     def _get_filepath(self, d: date) -> Path:
@@ -209,7 +210,7 @@ class DatasetExporter:
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, _do_compress)
 
-    async def record(self, entry: Dict[str, Any]):
+    async def record(self, entry: dict[str, Any]):
         """
         Append a record to the current day's JSONL export file.
 
@@ -238,7 +239,7 @@ class DatasetExporter:
             await self._file_handle.write(line + "\n")
             await self._file_handle.flush()
 
-    async def export_parquet(self, jsonl_path: Optional[str] = None) -> Optional[str]:
+    async def export_parquet(self, jsonl_path: str | None = None) -> str | None:
         """
         Convert a JSONL file to Parquet format (requires pyarrow).
         Returns output path or None if pyarrow not available.
@@ -257,8 +258,8 @@ class DatasetExporter:
             logger.error(f"Export: File not found: {jsonl_path}")
             return None
 
-        records: List[Dict] = []
-        with open(jsonl_path, "r") as f:
+        records: list[dict] = []
+        with open(jsonl_path) as f:
             for line in f:
                 line = line.strip()
                 if line:

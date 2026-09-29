@@ -8,16 +8,16 @@ Tests for marketplace plugins batch 2:
 """
 
 import json
+
 import pytest
 from fastapi.responses import Response
 
 from core.plugin_engine import PluginContext, PluginState
-from plugins.marketplace.token_counter import TokenCounter
-from plugins.marketplace.model_downgrader import ModelDowngrader
 from plugins.marketplace.canary_detector import CanaryDetector
-from plugins.marketplace.model_rate_limiter import ModelRateLimiter
 from plugins.marketplace.context_window_guard import ContextWindowGuard
-
+from plugins.marketplace.model_downgrader import ModelDowngrader
+from plugins.marketplace.model_rate_limiter import ModelRateLimiter
+from plugins.marketplace.token_counter import TokenCounter
 
 # ── Helpers ──
 
