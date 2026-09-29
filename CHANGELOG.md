@@ -2,6 +2,16 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.37.1] — 2026-09-29
+
+### Dependency updates (patch)
+
+- **UI/frontend**: `autoprefixer 10.5.2→10.6.1`, `@typescript-eslint/eslint-plugin 8.62.1→8.70.1`, `happy-dom 20.9.0→20.14.5`, `prettier 3.9.4→3.9.9` (#162, #163, #164, #157)
+- **UI/tests**: `@vitest/coverage-v8 4.1.9→5.0.2` (co-merged with vitest peer fix) (#164)
+- **Docs**: `vue 3.5.39→3.5.43`, `npm_and_yarn` group (#168, #213)
+- **Python stubs**: `types-PyYAML 20260518→20260906` (#201)
+- **Actions**: `docker/build-push-action 7.2.0→7.3.0`, `docker/metadata-action 6.0.0→6.2.0`, `actions/deploy-pages 5.0.0→5.0.1` (#197, #198, #202)
+
 ## [1.37.0] — 2026-09-29
 
 ### Dangerous config deltas need a confirm token (minor, closes #108)
