@@ -24,6 +24,10 @@ All notable changes to LLMProxy are documented here.
   detectors incl. 4x boundary, 403+untouched disk, mint→apply, hash binding,
   single-use, TTL, audit entries); `docs/guide/configuration.md` documents
   the flow.
+- **Supply chain**: PyJWT `2.13.0` → `2.14.0` (CVE-2026-102274, CI
+  Dependency Audit); `.gitleaks.toml` allowlists placeholder Bearer tokens
+  in docs curl examples (CI Secret Scan tripped on the new guide section —
+  finding was a false positive, allowlist is scoped to docs paths).
 
 ## [1.36.2] — 2026-09-29
 
