@@ -2,6 +2,15 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.36.1] — 2026-09-29
+
+### Observability & Hygiene (P2, patch)
+
+- **Background-loop alerts**: `BackgroundLoopStalled`, `AuditPersistenceFailing`, `LoadShedSpike`, `MultipleInstances` in `monitoring/prometheus-rules.yml` — all on real exported metrics, including the staleness check the metrics module itself suggests.
+- **Alertmanager example**: `monitoring/alertmanager.yml` stub with the audit-chain alert on a pager route; documented as opt-in, not wired into compose.
+- **Alembic URL honest**: `sqlite:///endpoints.db` → `sqlite:///data/endpoints.db` (matches `config.yaml`), with a note that Postgres stays behind `DATABASE_URL`/env.py instead of a second hardcoded DSN.
+- **Backup/hygiene runbook**: `docs/guide/deployment.md` gains a cron example, `0600` discipline for `.env`/`.bak`/secrets, and a logrotate snippet.
+
 ## [1.36.0] — 2026-09-29
 
 ### Code Quality & CI Alignment (P1, minor)
