@@ -12,22 +12,24 @@ Ring-based plugin pipeline with:
   - Health check + automatic rollback
 """
 
-import os
 import ast
-import time
-import importlib.util
-import yaml
 import asyncio
-import logging
+import importlib.util
 import inspect
+import logging
+import os
+import time
 from collections import deque
-from enum import Enum
-from typing import List, Dict, Any, Optional, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any
 
+import yaml
+
+from core.atomic_io import atomic_write
 from core.plugin_sdk import BasePlugin, PluginResponse, PluginResponseError
 from core.wasm_runner import WasmRunner
-from core.atomic_io import atomic_write
 
 
 class PluginHook(Enum):
@@ -55,20 +57,20 @@ class PluginState:
 
     cache: Any = None  # SemanticCache instance
     metrics: Any = None  # MetricsTracker instance
-    config: Dict[str, Any] = field(default_factory=dict)  # Global proxy config
-    extra: Dict[str, Any] = field(default_factory=dict)  # Extensible slot
+    config: dict[str, Any] = field(default_factory=dict)  # Global proxy config
+    extra: dict[str, Any] = field(default_factory=dict)  # Extensible slot
 
 
 @dataclass
 class PluginContext:
     request: Any = None
-    body: Dict[str, Any] = field(default_factory=dict)
+    body: dict[str, Any] = field(default_factory=dict)
     response: Any = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     session_id: str = "default"
-    error: Optional[str] = None
+    error: str | None = None
     stop_chain: bool = False
-    state: Optional[PluginState] = None  # Principle 4: injected shared state
+    state: PluginState | None = None  # Principle 4: injected shared state
 
 
 # Default timeout for raw function plugins (ms)
@@ -195,7 +197,7 @@ def ast_scan(source: str, plugin_name: str) -> bool:
     try:
         tree = ast.parse(source)
     except SyntaxError as e:
-        raise PluginSecurityError(f"Plugin '{plugin_name}': Syntax error — {e}")
+        raise PluginSecurityError(f"Plugin '{plugin_name}': Syntax error — {e}") from e
 
     for node in ast.walk(tree):
         # Check imports
@@ -259,39 +261,39 @@ def ast_scan(source: str, plugin_name: str) -> bool:
 
 class PluginManager:
     def __init__(
-        self, plugins_dir: str = "plugins", config: Optional[Dict[str, Any]] = None
+        self, plugins_dir: str = "plugins", config: dict[str, Any] | None = None
     ):
         self.plugins_dir = plugins_dir
         self._config = config or {}
         # Writable dir for runtime-installed plugins (Docker: separate volume)
         self.installed_dir = os.path.join(plugins_dir, "installed")
-        self.rings: Dict[PluginHook, List[Dict[str, Any]]] = {
+        self.rings: dict[PluginHook, list[dict[str, Any]]] = {
             hook: [] for hook in PluginHook
         }
-        self._previous_rings: Optional[Dict[PluginHook, List[Dict[str, Any]]]] = None
+        self._previous_rings: dict[PluginHook, list[dict[str, Any]]] | None = None
         self.logger = logging.getLogger("plugin_engine")
         self.manifest_path = os.path.join(plugins_dir, "manifest.yaml")
-        self._plugin_meta: Dict[
-            str, Dict[str, Any]
+        self._plugin_meta: dict[
+            str, dict[str, Any]
         ] = {}  # name → metadata for marketplace
-        self._plugin_instances: Dict[
+        self._plugin_instances: dict[
             str, BasePlugin
         ] = {}  # name → BasePlugin instances
-        self._plugin_stats: Dict[str, Dict[str, Any]] = {}  # name → per-plugin metrics
+        self._plugin_stats: dict[str, dict[str, Any]] = {}  # name → per-plugin metrics
         # Per-plugin latency histogram: deque(maxlen=N) gives O(1) append + auto-eviction
-        self._latency_window: Dict[
+        self._latency_window: dict[
             str, deque
         ] = {}  # name → rolling window of latency samples
         self._latency_window_size = 500
         # Per-ring timing: dict keyed by req_id for O(1) lookup during a request,
         # plus an ordered list for chronological iteration / capping at max size.
         self._ring_traces: deque = deque()  # ordered, O(1) popleft eviction
-        self._ring_traces_index: Dict[
+        self._ring_traces_index: dict[
             str, dict
         ] = {}  # req_id → trace dict (O(1) lookup)
         self._ring_traces_max = 100
 
-    def update_runtime_config(self, config: Optional[Dict[str, Any]]) -> None:
+    def update_runtime_config(self, config: dict[str, Any] | None) -> None:
         """Update runtime config used for plugin loading policy decisions."""
         self._config = config or {}
 
@@ -348,7 +350,7 @@ class PluginManager:
             )
 
     @staticmethod
-    def _percentiles(samples: Sequence[float]) -> Dict[str, float]:
+    def _percentiles(samples: Sequence[float]) -> dict[str, float]:
         """Compute P50/P95/P99 from a list of latency samples."""
         if not samples:
             return {"p50": 0, "p95": 0, "p99": 0}
@@ -394,9 +396,9 @@ class PluginManager:
         traces = list(self._ring_traces)
         return list(reversed(traces[-limit:]))
 
-    def get_ring_latency(self) -> Dict[str, Any]:
+    def get_ring_latency(self) -> dict[str, Any]:
         """Aggregate ring-level latency percentiles from recent traces."""
-        ring_samples: Dict[str, list] = {h.value: [] for h in PluginHook}
+        ring_samples: dict[str, list] = {h.value: [] for h in PluginHook}
         for trace in self._ring_traces:
             for ring_name, ring_data in trace.get("rings", {}).items():
                 if ring_name in ring_samples:
@@ -409,14 +411,14 @@ class PluginManager:
             for ring, samples in ring_samples.items()
         }
 
-    def _read_merged_manifest(self) -> Optional[Dict[str, Any]]:
+    def _read_merged_manifest(self) -> dict[str, Any] | None:
         """Read bundled manifest + merge installed manifest. Returns None if
         no manifest is present (caller decides what to do)."""
         if not os.path.exists(self.manifest_path):
             self.logger.warning(f"Plugin manifest not found at {self.manifest_path}")
             return None
 
-        with open(self.manifest_path, "r") as f:
+        with open(self.manifest_path) as f:
             manifest = yaml.safe_load(f) or {}
 
         # Trust provenance: entries declared in the BUNDLED manifest are
@@ -428,7 +430,7 @@ class PluginManager:
 
         installed_manifest = os.path.join(self.installed_dir, "manifest.yaml")
         if os.path.exists(installed_manifest):
-            with open(installed_manifest, "r") as f:
+            with open(installed_manifest) as f:
                 installed = yaml.safe_load(f) or {}
             installed_plugins = installed.get("plugins", [])
             if installed_plugins:
@@ -466,12 +468,12 @@ class PluginManager:
                 {},
             )
 
-        new_rings: Dict[PluginHook, List[Dict[str, Any]]] = {
+        new_rings: dict[PluginHook, list[dict[str, Any]]] = {
             hook: [] for hook in PluginHook
         }
-        new_meta: Dict[str, Dict[str, Any]] = {}
-        new_instances: Dict[str, BasePlugin] = {}
-        new_stats: Dict[str, Dict[str, Any]] = {}
+        new_meta: dict[str, dict[str, Any]] = {}
+        new_instances: dict[str, BasePlugin] = {}
+        new_stats: dict[str, dict[str, Any]] = {}
 
         plugins = manifest.get("plugins", [])
         plugins.sort(key=lambda p: p.get("priority", 100))
@@ -520,12 +522,12 @@ class PluginManager:
 
     async def _load_plugin(
         self,
-        p_info: Dict[str, Any],
+        p_info: dict[str, Any],
         *,
-        rings: Optional[Dict[PluginHook, List[Dict[str, Any]]]] = None,
-        meta: Optional[Dict[str, Dict[str, Any]]] = None,
-        instances: Optional[Dict[str, BasePlugin]] = None,
-        stats: Optional[Dict[str, Dict[str, Any]]] = None,
+        rings: dict[PluginHook, list[dict[str, Any]]] | None = None,
+        meta: dict[str, dict[str, Any]] | None = None,
+        instances: dict[str, BasePlugin] | None = None,
+        stats: dict[str, dict[str, Any]] | None = None,
     ):
         # When target dicts are not provided, mutate self (back-compat).
         # When provided, write into them — used by atomic hot-swap to build a
@@ -613,7 +615,7 @@ class PluginManager:
                 raise FileNotFoundError(f"Plugin file not found: {file_path}")
 
             # AST lint scan (catches accidental forbidden imports, not a sandbox)
-            with open(file_path, "r") as f:
+            with open(file_path) as f:
                 source = f.read()
             ast_scan(source, name)
 
@@ -731,7 +733,7 @@ class PluginManager:
             status = "LIVE" if loaded else "STUB (extism not installed)"
             self.logger.info(f"Plugin Prepared (WASM): {name} [{status}]")
 
-    def _should_stop_on_failure(self, plugin: Dict[str, Any], hook: PluginHook) -> bool:
+    def _should_stop_on_failure(self, plugin: dict[str, Any], hook: PluginHook) -> bool:
         """
         Determine if a plugin failure should stop the chain.
         Uses per-plugin fail_policy, falling back to ring defaults.
@@ -784,7 +786,7 @@ class PluginManager:
                         result: PluginResponse = await asyncio.wait_for(
                             instance.execute(context), timeout=timeout_s
                         )
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         self.logger.warning(
                             f"Plugin {name} TIMEOUT ({timeout_ms}ms) in {hook.value}"
                         )
@@ -839,7 +841,7 @@ class PluginManager:
                     func = p["func"]
                     try:
                         await asyncio.wait_for(func(context), timeout=timeout_s)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         self.logger.warning(
                             f"Plugin {name} TIMEOUT ({timeout_ms}ms) in {hook.value}"
                         )
@@ -863,13 +865,7 @@ class PluginManager:
                     context.error = str(e)
                     context.stop_chain = True
 
-            except (
-                asyncio.TimeoutError,
-                AttributeError,
-                TypeError,
-                RuntimeError,
-                ValueError,
-            ) as e:
+            except (TimeoutError, AttributeError, TypeError, RuntimeError, ValueError) as e:
                 self.logger.error(f"Error executing plugin {name} in {hook.value}: {e}")
                 context.error = str(e)
                 if stats:
@@ -911,7 +907,7 @@ class PluginManager:
                 "plugins": ring_plugin_timings,
             }
 
-    async def _execute_wasm(self, plugin: Dict[str, Any], context: PluginContext):
+    async def _execute_wasm(self, plugin: dict[str, Any], context: PluginContext):
         """
         Execute a WASM plugin via WasmRunner.
 
@@ -935,7 +931,7 @@ class PluginManager:
                 ),
                 timeout=timeout_s,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             name = plugin.get("name", "wasm_unknown")
             self.logger.warning(f"WASM plugin {name} TIMEOUT ({timeout_ms}ms)")
             stats = self._plugin_stats.get(name)
@@ -1025,7 +1021,7 @@ class PluginManager:
             self._plugin_instances = old_instances
             self._plugin_stats = old_stats
             # Unload the failed new instances (best-effort).
-            for name, inst in new_instances.items():
+            for _name, inst in new_instances.items():
                 try:
                     await inst.on_unload()
                 except (AttributeError, RuntimeError, asyncio.CancelledError):
@@ -1052,15 +1048,15 @@ class PluginManager:
 
     # ── 9.4: Plugin Marketplace API ──
 
-    def list_plugins(self) -> List[Dict[str, Any]]:
+    def list_plugins(self) -> list[dict[str, Any]]:
         """List all known plugins with metadata for the marketplace UI."""
         return list(self._plugin_meta.values())
 
-    def get_plugin(self, name: str) -> Optional[Dict[str, Any]]:
+    def get_plugin(self, name: str) -> dict[str, Any] | None:
         """Get metadata for a specific plugin."""
         return self._plugin_meta.get(name)
 
-    async def install_plugin(self, manifest_entry: Dict[str, Any]) -> bool:
+    async def install_plugin(self, manifest_entry: dict[str, Any]) -> bool:
         """
         Install a new plugin by adding it to the installed dir and hot-swapping.
         Uses self.installed_dir (writable) to avoid conflicts with read-only
@@ -1074,7 +1070,7 @@ class PluginManager:
         if not os.path.exists(installed_manifest):
             _atomic_manifest_write({"plugins": []}, installed_manifest)
 
-        with open(installed_manifest, "r") as f:
+        with open(installed_manifest) as f:
             manifest = yaml.safe_load(f) or {"plugins": []}
 
         # Check for duplicates
@@ -1113,7 +1109,7 @@ class PluginManager:
                 if os.path.realpath(src_path).startswith(safe_base) and os.path.exists(
                     src_path
                 ):
-                    with open(src_path, "r") as src_file:
+                    with open(src_path) as src_file:
                         manifest_entry["sha256"] = compute_plugin_sha256(
                             src_file.read()
                         )
@@ -1131,7 +1127,7 @@ class PluginManager:
         if not os.path.exists(installed_manifest):
             return False
 
-        with open(installed_manifest, "r") as f:
+        with open(installed_manifest) as f:
             manifest = yaml.safe_load(f) or {"plugins": []}
 
         original_count = len(manifest["plugins"])

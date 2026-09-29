@@ -1,8 +1,8 @@
 """Tests for v1.6.0 marketplace plugins: ToolGuard, TenantQoSRouter, SchemaEnforcer, ShadowTraffic."""
 
 import pytest
-from core.plugin_engine import PluginContext, PluginState
 
+from core.plugin_engine import PluginContext, PluginState
 
 # ── ToolGuard ──
 

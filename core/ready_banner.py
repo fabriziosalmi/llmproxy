@@ -16,8 +16,8 @@ from __future__ import annotations
 import os
 import sys
 from typing import Any
-from core.auth_policy import auth_enabled as _auth_enabled
 
+from core.auth_policy import auth_enabled as _auth_enabled
 
 _RESET = "\033[0m"
 _BOLD = "\033[1m"

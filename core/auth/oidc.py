@@ -1,6 +1,7 @@
-import jwt
 import logging
-from typing import Optional, Dict, Any
+from typing import Any
+
+import jwt
 from fastapi import Request
 
 logger = logging.getLogger(__name__)
@@ -10,7 +11,7 @@ class JWTAuthenticator:
     Validates JWT tokens for the Admin UI, replacing static API keys for enterprise deployments.
     Supports symmetric (HS256) or asymmetric (RS256) validation via PyJWT.
     """
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         auth_config = config.get("server", {}).get("admin_auth", {})
         # If explicitly enabled, it will override static API keys
         self.enabled = auth_config.get("oidc_enabled", False)
@@ -86,7 +87,7 @@ class JWTAuthenticator:
             logger.warning(f"Admin UI auth failed: Invalid JWT ({e})")
             return False
 
-    def get_token_from_request(self, request: Request) -> Optional[str]:
+    def get_token_from_request(self, request: Request) -> str | None:
         auth_header = request.headers.get("Authorization", "")
         if auth_header.lower().startswith("bearer "):
             return auth_header[7:].strip()

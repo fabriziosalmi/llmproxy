@@ -20,6 +20,7 @@ is what guarantees the streaming charge persists.
 """
 
 import asyncio
+
 import pytest
 
 from proxy.budget import charge_and_persist

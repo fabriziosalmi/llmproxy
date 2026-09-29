@@ -11,11 +11,12 @@ Uses Hypothesis property-based testing to verify that:
 """
 
 import json
+
 import pytest
-from hypothesis import given, strategies as st, settings
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from core.firewall_asgi import ByteLevelFirewallMiddleware
-
 
 # ---------------------------------------------------------------------------
 # Helpers: minimal ASGI scope/receive/send wiring

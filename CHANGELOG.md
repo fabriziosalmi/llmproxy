@@ -2,6 +2,82 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.37.0] — 2026-09-29
+
+### Dangerous config deltas need a confirm token (minor, closes #108)
+
+- **The one-request disarm is gone**: `POST /api/v1/config/apply` with an
+  ordinary admin bearer could flip `server.auth.enabled`/`security.firewall.enabled`
+  to `false`, clear the domain blocklist, or widen the payload cap — with only
+  non-blocking warnings. Posture-lowering transitions (`auth-disabled`,
+  `firewall-disabled`, `blocklist-cleared`, `payload-widened` beyond 4x) now
+  return `403 confirm_required` unless the apply carries a single-use token.
+- **Two-step flow**: `POST /api/v1/config/confirm-token` mints an
+  HMAC token bound to the SHA-256 of the exact proposed text (~120s TTL,
+  single-use); rejections and confirmed applies are audit-logged with the
+  acting principal (key prefix or SSO identity).
+- **Honest scope**: confirmation-of-intent, not a second privilege tier — a
+  stolen admin bearer can still mint. `MASTER_KEY` deliberately NOT used as
+  the credential (it is documented as never-a-Bearer). `validate` reports
+  `dangerous_deltas` so editors warn pre-apply.
+- **Tests/docs**: `tests/test_config_dangerous_deltas.py` (18 tests:
+  detectors incl. 4x boundary, 403+untouched disk, mint→apply, hash binding,
+  single-use, TTL, audit entries); `docs/guide/configuration.md` documents
+  the flow.
+- **Supply chain**: PyJWT `2.13.0` → `2.14.0` (CVE-2026-102274, CI
+  Dependency Audit); `.gitleaks.toml` allowlists placeholder Bearer tokens
+  in docs curl examples (CI Secret Scan tripped on the new guide section —
+  finding was a false positive, allowlist is scoped to docs paths).
+
+## [1.36.2] — 2026-09-29
+
+### Security fix: quota enforcement on /v1/embeddings (patch)
+
+- **Quota bypass closed**: the embeddings route set `request.state.quota_exceeded`
+  when `check_quota` failed but never read the flag back — only
+  `request_pipeline` consumes it, and this route never reaches the pipeline.
+  Over-quota keys were served without limit. The route now mirrors
+  `/v1/chat/completions` (BUDGET_THRESHOLD webhook) and enforces immediately
+  with HTTP 402, the codebase's canonical budget status.
+- **ThreatLedger parity**: `security.inspect` on this route now receives
+  `ip` + `key_prefix` like the pipeline call, so cross-session aggregation
+  sees embeddings traffic too.
+- **Regression tests**: `tests/test_embeddings_quota.py` (402 on exhausted
+  quota with upstream untouched, 200 passthrough when quota holds, webhook
+  fired, shield kwargs asserted).
+
+## [1.36.1] — 2026-09-29
+
+### Observability & Hygiene (P2, patch)
+
+- **Background-loop alerts**: `BackgroundLoopStalled`, `AuditPersistenceFailing`, `LoadShedSpike`, `MultipleInstances` in `monitoring/prometheus-rules.yml` — all on real exported metrics, including the staleness check the metrics module itself suggests.
+- **Alertmanager example**: `monitoring/alertmanager.yml` stub with the audit-chain alert on a pager route; documented as opt-in, not wired into compose.
+- **Alembic URL honest**: `sqlite:///endpoints.db` → `sqlite:///data/endpoints.db` (matches `config.yaml`), with a note that Postgres stays behind `DATABASE_URL`/env.py instead of a second hardcoded DSN.
+- **Backup/hygiene runbook**: `docs/guide/deployment.md` gains a cron example, `0600` discipline for `.env`/`.bak`/secrets, and a logrotate snippet.
+
+## [1.36.0] — 2026-09-29
+
+### Code Quality & CI Alignment (P1, minor)
+
+- **Ruff rule set widened**: `ruff.toml` now selects `E,F,W,I,UP,B` with `target-version py312`. Applied ~950 autofixes across ~200 files (import sorting, `typing.Dict` → `dict`, `Optional[X]` → `X | None`, `asyncio.TimeoutError` → `TimeoutError`, `datetime.UTC`).
+- **Bugbear fixed, not silenced**: 24× `B904` (`raise ... from` in routes/engine), 9× `B007` (unused loop vars underscored), `B905` (`zip strict=False`), `B017` (specific `RuntimeError`), `B027` (`@abstractmethod` + `InMemoryRepository` overrides).
+- **One deliberate non-fix**: `PluginAction(str, Enum)` keeps `noqa: UP042` — StrEnum would change wire-visible `str()` of members; revisit in a major.
+- **Coverage gate honest**: `pyproject.toml` `fail_under` `65` → `71`, matching the CI gate.
+- **Reproducible lint/type**: `ruff==0.15.7` pinned in CI + `requirements-dev.txt`; `Makefile typecheck` now covers `core/ proxy/ store/` like CI; new `make lint-ci` mirrors CI without autofix.
+- **Version discipline**: release bumps via `scripts/bump_version.py` (VERSION + chart + UI stay in sync; gate tests enforce it).
+
+## [1.35.2] — 2026-09-29
+
+### Security & Ops Hardening (P0)
+
+- **Metrics exporter bound to loopback**: `docker-compose.yml` publishes `9091` as `127.0.0.1:9091:9091` — the exporter lives outside ASGI with no auth/rate-limit, so it must not sit on `0.0.0.0`.
+- **Verdict-aware compose healthcheck**: compose now fails on `{"status": "down"}` like the Dockerfile `HEALTHCHECK`, instead of passing on any HTTP 200.
+- **Compose hardening**: `no-new-privileges`, json-file log rotation (10m x3) on both services, resource limits for redis, documented `REDIS_PASSWORD`/`requirepass` path.
+- **TLS floor 1.3**: `config.yaml` `tls.min_version` `1.2` → `1.3`, with note that `host: 0.0.0.0` + TLS off requires a TLS-terminating reverse proxy in prod.
+- **Startup prod warnings**: `core/startup_checks.py` warns when bound to `0.0.0.0` without TLS and when the metrics exporter is bound beyond loopback.
+- **Single-tier warning**: `.env.example` marks unset `LLM_PROXY_ADMIN_KEYS` as single-tier/prod-must-set, adds `REDIS_URL` password + `DATABASE_URL` prod-credential guidance.
+- **Prometheus scrape honesty**: `monitoring/prometheus.yml` documents `bearer_token_file` for authed `/metrics:8090`; `HighP95Latency` threshold `10s` → `5s`.
+
 ## [1.35.1] — 2026-09-16
 
 ### Quality & Reliability Improvements

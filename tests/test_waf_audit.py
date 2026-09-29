@@ -16,12 +16,12 @@ Covers:
 """
 
 import base64
+
 import pytest
 
 from core.firewall_asgi import ByteLevelFirewallMiddleware
-from core.semantic_analyzer import semantic_scan, _normalize
 from core.security import SecurityShield
-
+from core.semantic_analyzer import _normalize, semantic_scan
 
 # ═══════════════════════════════════════════════════════════════
 # W1 / W12: ENCODING CHAIN BYPASS

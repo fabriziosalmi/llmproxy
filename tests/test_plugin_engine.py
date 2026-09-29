@@ -1,8 +1,10 @@
 """Tests for core.plugin_engine.ast_scan and PluginSecurityError."""
 
 import hashlib
+
 import pytest
-from core.plugin_engine import ast_scan, PluginSecurityError, compute_plugin_sha256
+
+from core.plugin_engine import PluginSecurityError, ast_scan, compute_plugin_sha256
 
 
 def test_safe_code_passes():
@@ -217,8 +219,9 @@ async def test_load_without_pin_warns_but_succeeds(tmp_path, caplog):
 async def test_hot_swap_build_failure_preserves_live_state(tmp_path):
     """If _build_plugin_state raises, self.* must be untouched. The previous
     state stays live — no fail-open window where rings are empty or partial."""
-    from core.plugin_engine import PluginManager, PluginHook
     import yaml as _yaml
+
+    from core.plugin_engine import PluginHook, PluginManager
 
     plugins_dir = str(tmp_path)
     _write_plugin_file(plugins_dir, "p1", _VALID_PLUGIN_SRC)
@@ -271,8 +274,9 @@ async def test_hot_swap_no_partial_clear_window(tmp_path):
     Now hot_swap builds new state off-side and swaps in one block — at no
     point should rings be empty if they were non-empty before AND a valid
     new state was built."""
-    from core.plugin_engine import PluginManager, PluginHook
     import yaml as _yaml
+
+    from core.plugin_engine import PluginHook, PluginManager
 
     plugins_dir = str(tmp_path)
     _write_plugin_file(plugins_dir, "p1", _VALID_PLUGIN_SRC)
@@ -320,8 +324,9 @@ async def test_hot_swap_no_partial_clear_window(tmp_path):
 @pytest.mark.asyncio
 async def test_hot_swap_health_check_failure_rolls_back_atomically(tmp_path):
     """If post-swap health check fails, all four pointers swap back."""
-    from core.plugin_engine import PluginManager, PluginHook
     import yaml as _yaml
+
+    from core.plugin_engine import PluginHook, PluginManager
 
     plugins_dir = str(tmp_path)
     _write_plugin_file(plugins_dir, "p1", _VALID_PLUGIN_SRC)
@@ -365,6 +370,7 @@ async def test_hot_swap_health_check_failure_rolls_back_atomically(tmp_path):
 
 # ── S1: plugin trust gate (in-process python requires trust or opt-in) ──
 import pytest as _pytest  # noqa: E402
+
 from core.plugin_engine import PluginManager  # noqa: E402
 
 

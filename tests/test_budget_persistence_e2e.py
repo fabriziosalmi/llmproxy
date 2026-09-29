@@ -18,11 +18,11 @@ ProxyOrchestrator (which pulls in 20+ subsystems).
 
 import asyncio
 import datetime
+
 import pytest
 
 from proxy.background import drain_pending_writes
 from proxy.budget import charge_and_persist, hydrate_daily_total
-
 from tests.conftest import InMemoryRepository
 
 

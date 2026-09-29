@@ -3,9 +3,10 @@ Rate Limiter Tests — token bucket, per-key isolation, eviction, middleware.
 """
 
 import asyncio
-import pytest
-from core.rate_limiter import TokenBucket, RateLimiter
 
+import pytest
+
+from core.rate_limiter import RateLimiter, TokenBucket
 
 # ── TokenBucket ──
 

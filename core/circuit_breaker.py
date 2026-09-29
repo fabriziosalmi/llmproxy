@@ -1,8 +1,9 @@
 import asyncio
-import time
 import logging
+import time
+from collections.abc import Callable
 from enum import Enum
-from typing import Dict, Optional, Callable, Any
+from typing import Any
 
 try:
     import redis.asyncio as redis
@@ -121,7 +122,7 @@ class LocalCircuitBreaker(BaseCircuitBreaker):
         name: str = "default",
         failure_threshold: int = 5,
         recovery_timeout: int = 60,
-        on_state_change: Optional[Callable[[str, str, str], None]] = None,
+        on_state_change: Callable[[str, str, str], None] | None = None,
     ):
         self.name = name
         self.failure_threshold = failure_threshold
@@ -199,7 +200,7 @@ class RedisCircuitBreaker(BaseCircuitBreaker):
         name: str = "default",
         failure_threshold: int = 5,
         recovery_timeout: int = 60,
-        on_state_change: Optional[Callable[[str, str, str], None]] = None,
+        on_state_change: Callable[[str, str, str], None] | None = None,
     ):
         self.redis = redis_client
         self.scripts = scripts
@@ -310,12 +311,12 @@ class RedisCircuitBreaker(BaseCircuitBreaker):
 class CircuitManager:
     def __init__(
         self,
-        on_state_change: Optional[Callable[[str, str, str], None]] = None,
-        redis_url: Optional[str] = None,
-        redis_client: Optional[Any] = None,
-        config: Optional[Dict[str, Any]] = None,
+        on_state_change: Callable[[str, str, str], None] | None = None,
+        redis_url: str | None = None,
+        redis_client: Any | None = None,
+        config: dict[str, Any] | None = None,
     ):
-        self._circuits: Dict[str, BaseCircuitBreaker] = {}
+        self._circuits: dict[str, BaseCircuitBreaker] = {}
         self._on_state_change = on_state_change
         self._lock = asyncio.Lock()
 

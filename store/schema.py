@@ -20,7 +20,8 @@ match does match, against both engines for real.
 
 from __future__ import annotations
 
-from typing import Iterable, NamedTuple
+from collections.abc import Iterable
+from typing import NamedTuple
 
 SQLITE = "sqlite"
 POSTGRES = "postgres"

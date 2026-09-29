@@ -8,11 +8,11 @@ circuit breaker so unhealthy endpoints are removed from the pool before
 any real traffic hits them.
 """
 
-import time
-import random
 import asyncio
 import logging
-from typing import Dict, Any
+import random
+import time
+from typing import Any
 
 from core.startup_checks import _is_provider_key_missing
 
@@ -33,7 +33,7 @@ def _looks_unconfigured(url: str) -> bool:
 class EndpointHealthProber:
     """Background health prober for configured endpoints."""
 
-    def __init__(self, config: Dict[str, Any], circuit_manager, get_session_fn):
+    def __init__(self, config: dict[str, Any], circuit_manager, get_session_fn):
         self.config = config
         self.circuit_manager = circuit_manager
         self._get_session = get_session_fn
@@ -43,7 +43,7 @@ class EndpointHealthProber:
         # what keeps a misconfigured/offline endpoint from flooding logs every
         # minute. We also remember the set of endpoints we've already refused
         # to probe so startup-time skips are announced exactly once.
-        self._last_state: Dict[str, str] = {}
+        self._last_state: dict[str, str] = {}
         self._warned_unprobeable: set[str] = set()
 
     async def start(self, interval: int = PROBE_INTERVAL):
@@ -148,8 +148,8 @@ class EndpointHealthProber:
 
     async def _probe_one(self, ep_name: str, provider: str, base_url: str, model: str):
         """Probe a single endpoint with a minimal request."""
-        from proxy.adapters.registry import get_adapter
         from core.endpoint_stats import update_endpoint_stats
+        from proxy.adapters.registry import get_adapter
 
         adapter = get_adapter(provider)
         cb = await self.circuit_manager.get_breaker(ep_name)
@@ -203,7 +203,7 @@ class EndpointHealthProber:
                      f"Probe FAIL: {ep_name} → {response.status_code}",
                 )
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             await cb.report_failure()
             await update_endpoint_stats(ep_name, PROBE_TIMEOUT * 1000, False)
             _record("timeout", f"Probe TIMEOUT: {ep_name} (>{PROBE_TIMEOUT}s)")

@@ -20,10 +20,10 @@ Config (via manifest ui_schema):
 """
 
 import logging
-from typing import Dict, Any, List
+from typing import Any
 
-from core.plugin_sdk import BasePlugin, PluginResponse, PluginHook
 from core.plugin_engine import PluginContext
+from core.plugin_sdk import BasePlugin, PluginHook, PluginResponse
 
 logger = logging.getLogger(__name__)
 
@@ -36,13 +36,13 @@ class SystemPromptEnforcer(BasePlugin):
     description = "Injects or overrides the system prompt in every request — clients cannot bypass it"
     timeout_ms = 2
 
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: dict[str, Any] = None):
         super().__init__(config)
         self.prompt: str = self.config.get("prompt", "")
         self.mode: str = self.config.get("mode", "prepend")
         self.skip_if_empty: bool = self.config.get("skip_if_empty", False)
 
-    def _apply(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _apply(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         enforced = {"role": "system", "content": self.prompt}
 
         if self.mode == "replace":

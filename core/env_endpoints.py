@@ -20,8 +20,8 @@ Example — LM Studio on the LAN:
 
 from __future__ import annotations
 
-import os
 import logging
+import os
 from typing import Any
 
 logger = logging.getLogger("llmproxy.env_endpoints")

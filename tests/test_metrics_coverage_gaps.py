@@ -22,7 +22,6 @@ import asyncio
 
 import httpx
 import pytest
-
 from conftest import InMemoryRepository, minimal_config
 from test_e2e import LightweightAgent
 
@@ -305,7 +304,6 @@ def test_the_heartbeat_records_a_timestamp():
 def test_the_heartbeat_cannot_kill_a_loop(monkeypatch):
     """Telemetry failing must never take a background task with it."""
     import core.metrics as metrics
-
     from proxy.background import _iteration_ok
 
     def _boom(loop):

@@ -1,7 +1,9 @@
-import pytest
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
-from core.circuit_breaker import RedisCircuitBreaker, CircuitManager
+import pytest
+
+from core.circuit_breaker import CircuitManager, RedisCircuitBreaker
+
 
 @pytest.fixture
 def mock_redis():

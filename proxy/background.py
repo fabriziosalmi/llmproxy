@@ -33,9 +33,9 @@ def _iteration_ok(loop: str) -> None:
 
 async def config_watch_loop(agent, interval: int = 30):
     """Detect config.yaml changes and hot-reload security subsystems."""
+    from core.security import SecurityShield
     from core.startup_checks import StartupError, validate_config
     from core.webhooks import WebhookDispatcher
-    from core.security import SecurityShield
 
     while True:
         await asyncio.sleep(interval)

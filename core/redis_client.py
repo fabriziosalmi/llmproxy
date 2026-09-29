@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any
 
 logger = logging.getLogger("llmproxy.redis_client")
 
@@ -54,7 +54,7 @@ def _positive_float(value: Any, fallback: float) -> float:
     return parsed if parsed > 0 else fallback
 
 
-def resolve_timeouts(config: Optional[Dict[str, Any]] = None) -> Dict[str, float]:
+def resolve_timeouts(config: dict[str, Any] | None = None) -> dict[str, float]:
     """Return the socket/connect timeouts for a Redis client.
 
     Precedence: caching.* in config, then LLM_PROXY_REDIS_TIMEOUT (which sets
@@ -80,7 +80,7 @@ def resolve_timeouts(config: Optional[Dict[str, Any]] = None) -> Dict[str, float
 def connect(
     redis_module: Any,
     redis_url: str,
-    config: Optional[Dict[str, Any]] = None,
+    config: dict[str, Any] | None = None,
     **kwargs: Any,
 ) -> Any:
     """Build a Redis client that cannot wait forever.

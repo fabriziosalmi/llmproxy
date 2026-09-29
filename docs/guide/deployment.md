@@ -211,6 +211,28 @@ The round trip is exercised in `tests/test_backup_db.py` — the backup is taken
 the live database is deleted, the backup is restored and the rows are asserted
 to have survived. An untested restore is not a backup.
 
+Schedule it — a documented command nobody runs is not a backup either:
+
+```cron
+# Daily 03:00 backup, keep 14, verify the newest; mail on failure (cron MAILTO).
+0 3 * * * cd /opt/llmproxy && python scripts/backup_db.py --keep 14 --verify-only data/backups/$(ls -t data/backups | head -1)
+```
+
+Host hygiene around the proxy: secret-adjacent files must be `0600`
+(`backup_db.py` already writes backups that way — extend the habit to `.env`,
+any `temp_secrets*` and rotated `.env.bak.*`, and delete the `.bak` files once
+the rotation is confirmed), and file log output needs rotation or it grows
+without bound (a 30MB+ `.proxy.log` at `0644` in the workdir is the shape this
+takes when nobody configures it). With `json-file` logging the compose file
+already caps at `10m x3`; for bare-metal, a minimal logrotate:
+
+```conf
+/var/log/llmproxy/*.log {
+  daily rotate 14 compress delaycompress
+  create 0600 llmproxy llmproxy
+}
+```
+
 ## Upgrading and rolling back
 
 Upgrade by moving the image tag (`docker compose pull && docker compose up -d`)

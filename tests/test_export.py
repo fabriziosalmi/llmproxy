@@ -1,8 +1,10 @@
 """Tests for core.export.DatasetExporter, scrub_pii, scrub_dict."""
 
-import pytest
 import json
-from core.export import DatasetExporter, scrub_pii, scrub_dict
+
+import pytest
+
+from core.export import DatasetExporter, scrub_dict, scrub_pii
 
 
 def test_scrub_email():
@@ -167,7 +169,6 @@ async def test_compress_fsyncs_the_archive_before_unlinking_the_source(tmp_path)
     would never show up in a normal run.
     """
     import os
-
     from pathlib import Path
 
     exporter = DatasetExporter(output_dir=str(tmp_path), scrub=False)
@@ -201,7 +202,6 @@ async def test_compress_fsyncs_the_archive_before_unlinking_the_source(tmp_path)
 async def test_compress_round_trips_the_content(tmp_path):
     """Streaming the copy must not change what ends up in the archive."""
     import gzip
-
     from pathlib import Path
 
     exporter = DatasetExporter(output_dir=str(tmp_path), scrub=False)

@@ -6,17 +6,16 @@ Supports Sentry integration for exception tracking.
 """
 
 import logging
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 try:
     from opentelemetry import trace
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
     from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 
     _OTEL_AVAILABLE = True
 except ImportError:
@@ -32,9 +31,9 @@ class TraceManager:
     def initialize(
         cls,
         service_name: str = "llmproxy",
-        otlp_endpoint: Optional[str] = None,
+        otlp_endpoint: str | None = None,
         console_export: bool = True,
-        sentry_dsn: Optional[str] = None,
+        sentry_dsn: str | None = None,
     ):
         """Initializes OpenTelemetry tracing with optional Sentry."""
         if not _OTEL_AVAILABLE:
@@ -73,8 +72,8 @@ class TraceManager:
         """Initialize Sentry for exception tracking and performance monitoring."""
         try:
             import sentry_sdk
-            from sentry_sdk.integrations.fastapi import FastApiIntegration
             from sentry_sdk.integrations.aiohttp import AioHttpIntegration
+            from sentry_sdk.integrations.fastapi import FastApiIntegration
 
             sentry_sdk.init(
                 dsn=dsn,

@@ -174,4 +174,35 @@ curl -X POST http://localhost:8090/api/v1/admin/reload \
   -H "Authorization: Bearer your-admin-key"
 ```
 
+### Dangerous deltas need a confirm token
+
+Most keys apply with a plain admin bearer — but posture-lowering transitions
+(`server.auth.enabled` → `false`, `security.firewall.enabled` → `false`,
+clearing `security.link_sanitization.blocked_domains`, or widening
+`security.max_payload_size_kb` beyond 4x) are rejected with `403
+confirm_required` unless the apply carries a single-use confirm token bound
+to the exact proposed text. This stops the one-request foot-gun (a templated
+apply or UI misclick silently disarming the proxy); rejections and confirmed
+applies are both written to the audit trail with the acting principal.
+
+```bash
+# 1. Mint (fails 400 when the proposal has no dangerous deltas)
+curl -X POST http://localhost:8090/api/v1/config/confirm-token \
+  -H "Authorization: Bearer your-admin-key" \
+  -H "Content-Type: application/json" \
+  -d '{"yaml": "...proposed config..."}'
+# → {"confirm_token": "exp.sha.nonce.sig", "expires_in": 120, "deltas": [...]}
+
+# 2. Apply with the token (single-use, ~120s TTL, hash-bound)
+curl -X POST http://localhost:8090/api/v1/config/apply \
+  -H "Authorization: Bearer your-admin-key" \
+  -H "Content-Type": "application/json" \
+  -d '{"yaml": "...same text...", "confirm_token": "exp.sha.nonce.sig"}'
+```
+
+Scope note: this is confirmation-of-intent, not a second privilege tier — a
+stolen admin bearer can still mint (two requests instead of one). Real
+separation stays with segregated admin keys and rotation. `validate` reports
+`dangerous_deltas` so editors can warn before the apply.
+
 For full configuration reference, see [Reference: Configuration](/reference/config).
