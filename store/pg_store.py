@@ -2,11 +2,13 @@ import asyncio
 import json
 import logging
 import time as _time
-from typing import List, Dict, Any, Optional
-import asyncpg
-from models import LLMEndpoint, EndpointStatus
-from .base import BaseRepository
+from typing import Any
 
+import asyncpg
+
+from models import EndpointStatus, LLMEndpoint
+
+from .base import BaseRepository
 from .schema import MIGRATIONS, POSTGRES, iter_create_statements
 
 logger = logging.getLogger("llmproxy.store.pg")
@@ -20,7 +22,7 @@ class PostgresStore:
 
     def __init__(self, dsn: str):
         self.dsn = dsn
-        self._pool: Optional[asyncpg.Pool] = None
+        self._pool: asyncpg.Pool | None = None
         self._audit_lock = asyncio.Lock()
 
     async def init_pool(self):
@@ -92,7 +94,7 @@ class PostgresStore:
         )
 
     async def update_status(
-        self, endpoint_id: str, status: EndpointStatus, metadata: Optional[Dict] = None
+        self, endpoint_id: str, status: EndpointStatus, metadata: dict | None = None
     ):
         pool = await self.init_pool()
         latency_ms = metadata.get("latency_ms") if metadata else None
@@ -124,7 +126,7 @@ class PostgresStore:
                 endpoint_id,
             )
 
-    async def get_by_status(self, status: EndpointStatus) -> List[LLMEndpoint]:
+    async def get_by_status(self, status: EndpointStatus) -> list[LLMEndpoint]:
         pool = await self.init_pool()
         rows = await pool.fetch(
             "SELECT id, url, status, metadata, latency_ms, success_rate FROM endpoints WHERE status = $1",
@@ -142,7 +144,7 @@ class PostgresStore:
             for r in rows
         ]
 
-    async def get_all(self) -> List[LLMEndpoint]:
+    async def get_all(self) -> list[LLMEndpoint]:
         pool = await self.init_pool()
         rows = await pool.fetch(
             "SELECT id, url, status, metadata, latency_ms, success_rate FROM endpoints"
@@ -234,7 +236,7 @@ class PostgresStore:
         assert col in valid_groups, f"BUG: col '{col}' escaped whitelist"
 
         where = "WHERE 1=1"
-        params: List[Any] = []
+        params: list[Any] = []
         param_counter = 1
 
         if date_from:
@@ -266,7 +268,7 @@ class PostgresStore:
 
     async def get_spend_total(self, date_from: str = "", date_to: str = "") -> dict:
         where = "WHERE 1=1"
-        params: List[Any] = []
+        params: list[Any] = []
         param_counter = 1
 
         if date_from:
@@ -381,7 +383,7 @@ class PostgresStore:
         offset: int = 0,
     ) -> dict:
         where = "WHERE 1=1"
-        params: List[Any] = []
+        params: list[Any] = []
         param_counter = 1
 
         if date_from:
@@ -602,17 +604,17 @@ class PostgresRepository(BaseRepository):
     async def remove_endpoint(self, endpoint_id: str):
         await self.sql.remove_endpoint(endpoint_id)
 
-    async def get_all(self) -> List[LLMEndpoint]:
+    async def get_all(self) -> list[LLMEndpoint]:
         return await self.sql.get_all()
 
-    async def get_pool(self) -> List[LLMEndpoint]:
+    async def get_pool(self) -> list[LLMEndpoint]:
         return await self.sql.get_by_status(EndpointStatus.VERIFIED)
 
-    async def get_by_status(self, status: EndpointStatus) -> List[LLMEndpoint]:
+    async def get_by_status(self, status: EndpointStatus) -> list[LLMEndpoint]:
         return await self.sql.get_by_status(status)
 
     async def update_status(
-        self, endpoint_id: str, status: EndpointStatus, metadata: Optional[Dict] = None
+        self, endpoint_id: str, status: EndpointStatus, metadata: dict | None = None
     ):
         await self.sql.update_status(endpoint_id, status, metadata)
 

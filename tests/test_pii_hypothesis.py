@@ -8,10 +8,10 @@ Uses Hypothesis to verify that:
 - demask_pii(mask_pii(text)) roundtrips correctly
 """
 
-from hypothesis import given, strategies as st, settings
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from core.security import SecurityShield
-
 
 # ---------------------------------------------------------------------------
 # Helpers

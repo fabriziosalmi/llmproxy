@@ -18,11 +18,10 @@ Config (via manifest ui_schema):
   - preserve_streaming: bool (true) — keep stream flag on downgrade
 """
 
-from typing import Dict, Any
+from typing import Any
 
-from core.plugin_sdk import BasePlugin, PluginResponse, PluginHook
 from core.plugin_engine import PluginContext
-
+from core.plugin_sdk import BasePlugin, PluginHook, PluginResponse
 
 # Default downgrade mappings (expensive → cheap equivalent)
 DEFAULT_DOWNGRADE_MAP = {
@@ -45,10 +44,10 @@ class ModelDowngrader(BasePlugin):
     description = "Downgrades expensive models for simple prompts to save costs"
     timeout_ms = 2  # Dict lookup only
 
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: dict[str, Any] = None):
         super().__init__(config)
         self.complexity_threshold: float = self.config.get("complexity_threshold", 0.3)
-        self.downgrade_map: Dict[str, str] = self.config.get(
+        self.downgrade_map: dict[str, str] = self.config.get(
             "downgrade_map", DEFAULT_DOWNGRADE_MAP
         )
 
@@ -56,7 +55,7 @@ class ModelDowngrader(BasePlugin):
         self._total_checked: int = 0
         self._total_downgraded: int = 0
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Public stats for dashboard."""
         return {
             "total_checked": self._total_checked,

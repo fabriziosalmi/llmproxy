@@ -5,15 +5,15 @@ Handles upstream forwarding with cross-provider fallback, circuit breaker
 integration, streaming support, and post-stream budget charging.
 """
 
-import json
-import time
 import asyncio
+import json
 import logging
+import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Awaitable
+from typing import Any
 
 import aiohttp
-
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 
@@ -298,7 +298,7 @@ class RequestForwarder:
             raise HTTPException(status_code=503, detail="No routable endpoints available")
 
         last_error: Exception | None = None
-        for i, attempt in enumerate(attempts):
+        for _i, attempt in enumerate(attempts):
             a_target = attempt["target"]
             a_adapter = attempt["adapter"]
             a_model = attempt["model"]
@@ -376,7 +376,7 @@ class RequestForwarder:
                     )
                     return ctx.response
 
-            except (asyncio.TimeoutError, aiohttp.ClientError, OSError) as e:
+            except (TimeoutError, aiohttp.ClientError, OSError) as e:
                 # Retryable: network/timeout errors → try next provider
                 last_error = e
                 if not attempt["is_fallback"] and self._add_log:
@@ -540,7 +540,7 @@ class RequestForwarder:
                         return
                     for c in held_chunks:
                         yield c
-            except (asyncio.TimeoutError, OSError, RuntimeError) as e:
+            except (TimeoutError, OSError, RuntimeError) as e:
                 if not circuit_success_reported:
                     await cb.report_failure()
                 raise e
@@ -615,6 +615,7 @@ class RequestForwarder:
                     # (chat, completions legacy, embeddings if they ever stream).
                     import datetime as _dt
                     import time as _time
+
                     from core.metrics import MetricsTracker as _MT
 
                     store = ctx.state.extra.get("store") if ctx.state else None

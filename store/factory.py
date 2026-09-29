@@ -1,5 +1,7 @@
-import yaml
 import os
+
+import yaml
+
 from .base import BaseRepository
 from .store import SQLiteRepository
 
@@ -12,7 +14,7 @@ class StorageFactory:
         """Determines the correct repository based on configuration."""
         config = {}
         if os.path.exists(config_path):
-            with open(config_path, "r") as f:
+            with open(config_path) as f:
                 config = yaml.safe_load(f)
 
         storage_type = config.get("server", {}).get("storage", {}).get("type", "sqlite")

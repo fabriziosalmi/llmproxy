@@ -1,6 +1,7 @@
 import pytest
+
+from models import EndpointStatus, LLMEndpoint
 from store.store import EndpointStore
-from models import LLMEndpoint, EndpointStatus
 
 
 @pytest.mark.asyncio

@@ -10,10 +10,10 @@ import time
 
 import pytest
 
-from proxy.auth_helpers import parse_bearer, verify_admin_key
-from core.response_signer import ResponseSigner
 from core.confidence import calculate_confidence
+from core.response_signer import ResponseSigner
 from core.security import SecurityShield
+from proxy.auth_helpers import parse_bearer, verify_admin_key
 
 
 # ── H1: admin-key segregation + Bearer parsing ───────────────────────────────

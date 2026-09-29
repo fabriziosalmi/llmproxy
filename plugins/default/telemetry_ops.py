@@ -1,6 +1,7 @@
-import time
 import json
 import logging
+import time
+
 from core.plugin_engine import PluginContext
 
 logger = logging.getLogger("llmproxy.plugins.telemetry_ops")

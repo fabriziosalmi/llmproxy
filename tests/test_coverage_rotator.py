@@ -6,10 +6,11 @@ running server: config loading, budget tracking, session management,
 task management, API key retrieval.
 """
 
-import os
 import asyncio
-import pytest
+import os
 from unittest.mock import patch
+
+import pytest
 
 from tests.conftest import InMemoryRepository
 

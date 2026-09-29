@@ -2,8 +2,9 @@
 
 import logging
 
-from fastapi import APIRouter, Request, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import APIKeyHeader
+
 from core.auth_policy import auth_enabled
 
 logger = logging.getLogger("llmproxy.routes.identity")
@@ -30,7 +31,7 @@ def create_router(agent) -> APIRouter:
                 "proxy_auth_enabled": proxy_auth_enabled,
             }
         providers = []
-        for name, p in agent.identity.providers.items():
+        for _name, p in agent.identity.providers.items():
             providers.append(
                 {
                     "name": p.name,
@@ -99,7 +100,7 @@ def create_router(agent) -> APIRouter:
             # expired" vs "Invalid issuer" lets attackers probe which
             # validation step failed.
             logger.warning(f"Token exchange validation failed: {e}")
-            raise HTTPException(status_code=401, detail="Invalid token")
+            raise HTTPException(status_code=401, detail="Invalid token") from e
         if not identity:
             raise HTTPException(status_code=401, detail="Invalid token")
         ttl = agent.config.get("identity", {}).get("session_ttl", 3600)

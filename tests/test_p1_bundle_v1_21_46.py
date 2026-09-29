@@ -26,7 +26,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from httpx import ASGITransport, AsyncClient
 
-
 # ── Fix 1: PRE_FLIGHT block raises, doesn't return None ───────────
 
 
@@ -63,8 +62,8 @@ class _StubOrchestrator:
 async def test_pre_flight_block_raises_http_exception():
     """The block path was returning ctx.response (None) instead of raising.
     A budget_guard block must surface as 402 Payment Required, not 500."""
-    from proxy.request_pipeline import process_proxy_request
     from core.plugin_engine import PluginHook
+    from proxy.request_pipeline import process_proxy_request
 
     orch = _StubOrchestrator()
 
@@ -94,8 +93,8 @@ async def test_pre_flight_block_raises_http_exception():
 async def test_pre_flight_block_uses_default_403_when_no_status_set():
     """If a plugin sets stop_chain + error but forgets _block_status,
     the handler should default to 403 (Forbidden) — generic block."""
-    from proxy.request_pipeline import process_proxy_request
     from core.plugin_engine import PluginHook
+    from proxy.request_pipeline import process_proxy_request
 
     orch = _StubOrchestrator()
 
@@ -122,9 +121,10 @@ async def test_pre_flight_block_uses_default_403_when_no_status_set():
 async def test_pre_flight_cache_hit_still_returns_response():
     """Cache-hit path must still work — it's a different stop_chain
     path that DOES set ctx.response. Don't break it."""
-    from proxy.request_pipeline import process_proxy_request
-    from core.plugin_engine import PluginHook
     from fastapi.responses import JSONResponse
+
+    from core.plugin_engine import PluginHook
+    from proxy.request_pipeline import process_proxy_request
 
     orch = _StubOrchestrator()
     cached_response = JSONResponse(

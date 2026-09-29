@@ -17,10 +17,10 @@ Config (via manifest ui_schema):
 """
 
 import logging
-from typing import Dict, Any
+from typing import Any
 
-from core.plugin_sdk import BasePlugin, PluginResponse, PluginHook
 from core.plugin_engine import PluginContext
+from core.plugin_sdk import BasePlugin, PluginHook, PluginResponse
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ class MaxTokensEnforcer(BasePlugin):
     description = "Clamps max_tokens to a configured ceiling — clients cannot exceed it"
     timeout_ms = 1
 
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: dict[str, Any] = None):
         super().__init__(config)
         self.ceiling: int = int(self.config.get("ceiling", 4096))
         self.inject_default: bool = self.config.get("inject_default", False)

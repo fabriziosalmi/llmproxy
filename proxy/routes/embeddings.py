@@ -10,14 +10,16 @@ Anthropic has no embeddings API — requests for Anthropic models return 400.
 import json
 import logging
 
-from fastapi import APIRouter, Request, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import APIKeyHeader
 
-from proxy.adapters.registry import get_adapter, detect_provider
 from core.session_id import (
     from_fingerprint as session_id_from_fingerprint,
+)
+from core.session_id import (
     from_token as session_id_from_token,
 )
+from proxy.adapters.registry import detect_provider, get_adapter
 from proxy.schemas import EmbeddingsRequest
 
 logger = logging.getLogger("llmproxy.routes.embeddings")
@@ -83,7 +85,7 @@ def create_router(agent) -> APIRouter:
                     MetricsTracker.track_auth_failure("jwt_invalid")
                     raise HTTPException(
                         status_code=401, detail="Unauthorized: Invalid or expired token"
-                    )
+                    ) from None
 
             if identity and identity.verified:
                 request.state.identity = identity
@@ -193,7 +195,7 @@ def create_router(agent) -> APIRouter:
             logger.error(f"Embedding request failed: {e}")
             raise HTTPException(
                 status_code=502, detail="Embedding upstream request failed"
-            )
+            ) from e
 
 
         # Translate response if needed (Google Gemini format → OpenAI)

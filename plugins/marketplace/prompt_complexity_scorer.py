@@ -25,10 +25,10 @@ Config (via manifest ui_schema):
 """
 
 import re
-from typing import Dict, Any
+from typing import Any
 
-from core.plugin_sdk import BasePlugin, PluginResponse, PluginHook
 from core.plugin_engine import PluginContext
+from core.plugin_sdk import BasePlugin, PluginHook, PluginResponse
 
 
 class PromptComplexityScorer(BasePlugin):
@@ -49,7 +49,7 @@ class PromptComplexityScorer(BasePlugin):
     )
     _NESTED_STRUCTURE_RE = re.compile(r"[{}\[\]<>]")
 
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: dict[str, Any] = None):
         super().__init__(config)
         self.depth_weight: float = self.config.get("depth_weight", 0.3)
         self.turns_weight: float = self.config.get("turns_weight", 0.2)

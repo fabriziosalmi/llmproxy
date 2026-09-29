@@ -2,6 +2,17 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.36.0] — 2026-09-29
+
+### Code Quality & CI Alignment (P1, minor)
+
+- **Ruff rule set widened**: `ruff.toml` now selects `E,F,W,I,UP,B` with `target-version py312`. Applied ~950 autofixes across ~200 files (import sorting, `typing.Dict` → `dict`, `Optional[X]` → `X | None`, `asyncio.TimeoutError` → `TimeoutError`, `datetime.UTC`).
+- **Bugbear fixed, not silenced**: 24× `B904` (`raise ... from` in routes/engine), 9× `B007` (unused loop vars underscored), `B905` (`zip strict=False`), `B017` (specific `RuntimeError`), `B027` (`@abstractmethod` + `InMemoryRepository` overrides).
+- **One deliberate non-fix**: `PluginAction(str, Enum)` keeps `noqa: UP042` — StrEnum would change wire-visible `str()` of members; revisit in a major.
+- **Coverage gate honest**: `pyproject.toml` `fail_under` `65` → `71`, matching the CI gate.
+- **Reproducible lint/type**: `ruff==0.15.7` pinned in CI + `requirements-dev.txt`; `Makefile typecheck` now covers `core/ proxy/ store/` like CI; new `make lint-ci` mirrors CI without autofix.
+- **Version discipline**: release bumps via `scripts/bump_version.py` (VERSION + chart + UI stay in sync; gate tests enforce it).
+
 ## [1.35.2] — 2026-09-29
 
 ### Security & Ops Hardening (P0)

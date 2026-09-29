@@ -7,15 +7,15 @@ the configured fallback_chains.
 """
 
 import asyncio
-import pytest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 from fastapi import HTTPException
 from starlette.responses import Response
 
 from core.circuit_breaker import CircuitManager
 from proxy.forwarder import RequestForwarder
-
 
 # ── Helpers ──
 

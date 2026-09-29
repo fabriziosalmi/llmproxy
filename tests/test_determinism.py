@@ -10,10 +10,10 @@ Uses Hypothesis to generate random inputs and verify:
 """
 
 import json
-import pytest
-from hypothesis import given, settings, HealthCheck
-from hypothesis import strategies as st
 
+import pytest
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 
 # ── D1-D2: Adapter Translation Determinism ────────────────────
 

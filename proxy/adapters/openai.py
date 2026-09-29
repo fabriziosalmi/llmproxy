@@ -8,11 +8,13 @@ what the rest of the pipeline (shield_sanitizer, cache write, metrics) expects.
 stream() yields raw SSE byte chunks while the connection is open.
 """
 
-import aiohttp
-from typing import Dict, Any, AsyncGenerator, Tuple
-from starlette.responses import Response
-from .base import BaseModelAdapter
+from collections.abc import AsyncGenerator
+from typing import Any
 
+import aiohttp
+from starlette.responses import Response
+
+from .base import BaseModelAdapter
 
 _O_SERIES_PREFIXES = ("o1", "o3", "o4")
 
@@ -34,9 +36,9 @@ class OpenAIAdapter(BaseModelAdapter):
     def translate_request(
         self,
         base_url: str,
-        body: Dict[str, Any],
-        headers: Dict[str, str],
-    ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
+        body: dict[str, Any],
+        headers: dict[str, str],
+    ) -> tuple[str, dict[str, Any], dict[str, str]]:
         url = f"{base_url.rstrip('/')}/chat/completions"
         model = body.get("model", "")
 
@@ -74,16 +76,16 @@ class OpenAIAdapter(BaseModelAdapter):
 
         return url, body, headers
 
-    def translate_response(self, response_data: Dict[str, Any]) -> Dict[str, Any]:
+    def translate_response(self, response_data: dict[str, Any]) -> dict[str, Any]:
         # Already in OpenAI format
         return response_data
 
     def translate_embedding_request(
         self,
         base_url: str,
-        body: Dict[str, Any],
-        headers: Dict[str, str],
-    ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
+        body: dict[str, Any],
+        headers: dict[str, str],
+    ) -> tuple[str, dict[str, Any], dict[str, str]]:
         url = f"{base_url.rstrip('/')}/embeddings"
         return url, body, headers
 
@@ -95,8 +97,8 @@ class OpenAIAdapter(BaseModelAdapter):
     async def request(
         self,
         url: str,
-        body: Dict[str, Any],
-        headers: Dict[str, str],
+        body: dict[str, Any],
+        headers: dict[str, str],
         session: aiohttp.ClientSession,
     ) -> Response:
         async with session.post(
@@ -110,8 +112,8 @@ class OpenAIAdapter(BaseModelAdapter):
     async def stream(
         self,
         url: str,
-        body: Dict[str, Any],
-        headers: Dict[str, str],
+        body: dict[str, Any],
+        headers: dict[str, str],
         session: aiohttp.ClientSession,
     ) -> AsyncGenerator[bytes, None]:
         async with session.post(

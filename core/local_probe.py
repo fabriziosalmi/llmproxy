@@ -108,7 +108,7 @@ async def _probe_one(
             if resp.status != 200:
                 return None
             data = await resp.json(content_type=None)
-    except (aiohttp.ClientError, asyncio.TimeoutError, ValueError):
+    except (TimeoutError, aiohttp.ClientError, ValueError):
         return None
 
     models = []

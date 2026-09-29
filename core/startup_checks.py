@@ -7,9 +7,10 @@ also stashed at module scope so admin routes can surface it in the UI
 (see /api/v1/config/warnings).
 """
 
+import logging
 import os
 import sys
-import logging
+
 from core.auth_policy import auth_enabled
 
 logger = logging.getLogger("llmproxy.startup")

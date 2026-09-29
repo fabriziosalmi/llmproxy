@@ -1,12 +1,12 @@
 """Tests for core.pricing — per-model cost estimation."""
 
 from core.pricing import (
+    MODEL_PRICING,
+    _config_overrides,
     estimate_cost,
     estimate_cost_pre_flight,
     get_pricing,
     set_config_overrides,
-    MODEL_PRICING,
-    _config_overrides,
 )
 
 
@@ -53,7 +53,7 @@ class TestGetPricing:
         _config_overrides.clear()
 
     def test_dynamic_set_model_pricing_preserves_overrides(self):
-        from core.pricing import set_model_pricing, _SORTED_PREFIXES, MODEL_PRICING
+        from core.pricing import _SORTED_PREFIXES, MODEL_PRICING, set_model_pricing
         original_pricing = dict(MODEL_PRICING)
         try:
             _config_overrides.clear()

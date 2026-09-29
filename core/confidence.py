@@ -12,7 +12,6 @@ Score ranges:
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -51,10 +50,10 @@ _DEFAULT_PASS = 0.3
 
 def calculate_confidence(
     threat_score: float = 0.0,
-    threat_patterns: Optional[list[str]] = None,
-    semantic_result: Optional[tuple[float, str, str]] = None,
+    threat_patterns: list[str] | None = None,
+    semantic_result: tuple[float, str, str] | None = None,
     trajectory_score: float = 0.0,
-    config: Optional[dict] = None,
+    config: dict | None = None,
 ) -> ConfidenceResult:
     """Calculate composite confidence from all detection signals.
 

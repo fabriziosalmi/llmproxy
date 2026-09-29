@@ -6,7 +6,6 @@ Override via config.yaml `pricing` section for custom/private deployments.
 """
 
 import logging
-from typing import Dict, Set
 
 logger = logging.getLogger("llmproxy.pricing")
 
@@ -14,12 +13,12 @@ logger = logging.getLogger("llmproxy.pricing")
 # log signal-to-noise ratio sane: we want to tell the operator "your model
 # 'foo' is using default pricing" exactly once per process, not on every
 # request that names it. Reset on process restart.
-_DEFAULT_PRICING_WARNED: Set[str] = set()
+_DEFAULT_PRICING_WARNED: set[str] = set()
 
 # ── Static pricing table ($/MTok) ──
 # Sources: official provider pricing pages as of March 2026
 
-MODEL_PRICING: Dict[str, Dict[str, float]] = {
+MODEL_PRICING: dict[str, dict[str, float]] = {
     # OpenAI
     "gpt-4o": {"input": 2.50, "output": 10.00},
     "gpt-4o-mini": {"input": 0.15, "output": 0.60},
@@ -81,14 +80,14 @@ MODEL_PRICING: Dict[str, Dict[str, float]] = {
 _DEFAULT_PRICING = {"input": 1.00, "output": 3.00}
 
 # Runtime config overrides (populated by RotatorAgent.setup() from config.yaml)
-_config_overrides: Dict[str, Dict[str, float]] = {}
+_config_overrides: dict[str, dict[str, float]] = {}
 
 # Pre-sorted prefix list for O(log n) longest-prefix matching via bisect.
 # Sorted longest-first so the first match is the most specific.
 _SORTED_PREFIXES: list = sorted(MODEL_PRICING.keys(), key=len, reverse=True)
 
 
-def set_config_overrides(overrides: Dict[str, Dict[str, float]]):
+def set_config_overrides(overrides: dict[str, dict[str, float]]):
     """Apply pricing overrides from config.yaml at startup."""
     _config_overrides.update(overrides)
     global _SORTED_PREFIXES
@@ -96,7 +95,7 @@ def set_config_overrides(overrides: Dict[str, Dict[str, float]]):
     _SORTED_PREFIXES[:] = sorted(all_prefixes, key=len, reverse=True)
 
 
-def get_pricing(model: str) -> Dict[str, float]:
+def get_pricing(model: str) -> dict[str, float]:
     """Get pricing for a model. Priority: config override > exact match > longest prefix > default.
 
     Prefix matching is O(P) where P = number of known models (~40), but the
@@ -132,7 +131,7 @@ def get_pricing(model: str) -> Dict[str, float]:
     return _DEFAULT_PRICING
 
 
-def baseline_premium_pricing() -> Dict[str, float]:
+def baseline_premium_pricing() -> dict[str, float]:
     """The most-expensive paid model in MODEL_PRICING — used as the
     'what if I'd run everything on the premium tier' baseline for the
     /cost-efficiency savings estimate. Free models ($0) are excluded —
@@ -148,7 +147,7 @@ def baseline_premium_pricing() -> Dict[str, float]:
 
 def estimate_baseline_savings(
     spend_rows: list,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Compute model-mix savings vs a premium-tier baseline.
 
     For each spend row, computes what the same prompt+completion tokens

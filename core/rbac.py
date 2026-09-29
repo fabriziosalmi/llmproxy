@@ -1,12 +1,12 @@
-import sqlite3
 import asyncio
 import logging
-from typing import Dict, Optional, List, Set, Any
+import sqlite3
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 # Default role -> permission mapping
-DEFAULT_PERMISSIONS: Dict[str, Set[str]] = {
+DEFAULT_PERMISSIONS: dict[str, set[str]] = {
     "admin": {
         "proxy:use",
         "proxy:toggle",
@@ -57,7 +57,7 @@ class RBACManager:
     def __init__(self, db_path: str = "endpoints.db"):
         self.db_path = db_path
         self.permissions = dict(DEFAULT_PERMISSIONS)
-        self._conn: Optional[Any] = None
+        self._conn: Any | None = None
         self._conn_lock = asyncio.Lock()
         self._sync_init_db()
 
@@ -138,7 +138,7 @@ class RBACManager:
 
     # -- Role-based permission checks (pure in-memory, no I/O) --
 
-    def check_permission(self, roles: List[str], permission: str) -> bool:
+    def check_permission(self, roles: list[str], permission: str) -> bool:
         """Check if any of the given roles grants the specified permission."""
         for role in roles:
             role_perms = self.permissions.get(role, set())
@@ -146,15 +146,15 @@ class RBACManager:
                 return True
         return False
 
-    def get_permissions_for_roles(self, roles: List[str]) -> Set[str]:
+    def get_permissions_for_roles(self, roles: list[str]) -> set[str]:
         """Get the union of all permissions for the given roles."""
-        perms: Set[str] = set()
+        perms: set[str] = set()
         for role in roles:
             perms |= self.permissions.get(role, set())
         return perms
 
     async def set_user_roles(
-        self, subject: str, email: Optional[str], roles: List[str]
+        self, subject: str, email: str | None, roles: list[str]
     ):
         """Persist user->role mapping."""
         conn = await self._get_conn()
@@ -164,7 +164,7 @@ class RBACManager:
         )
         await conn.commit()
 
-    async def get_user_roles(self, subject: str) -> List[str]:
+    async def get_user_roles(self, subject: str) -> list[str]:
         """Look up persisted roles for a user subject."""
         conn = await self._get_conn()
         async with conn.execute(
