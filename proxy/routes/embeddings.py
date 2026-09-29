@@ -106,7 +106,28 @@ def create_router(agent) -> APIRouter:
                     )
 
                 if not await agent.rbac.check_quota(token):
+                    # Parity with /v1/chat/completions: the chat path records
+                    # quota_exceeded on request.state and request_pipeline
+                    # enforces it. This route never reaches the pipeline, so
+                    # it must enforce here — setting the flag alone served
+                    # over-quota keys without limit.
+                    from core.webhooks import EventType
+
+                    agent._spawn_task(
+                        agent.webhooks.dispatch(
+                            EventType.BUDGET_THRESHOLD,
+                            {
+                                "reason": "quota_exceeded",
+                                "key_prefix": token[:8] + "...",
+                            },
+                        )
+                    )
                     request.state.quota_exceeded = True
+                    raise HTTPException(
+                        status_code=402,
+                        detail="FinOps: Budget Exceeded (HTTP 402). "
+                        "API key quota exhausted.",
+                    )
 
         # See proxy/schemas.py: validated at the boundary, forwarded unchanged.
         body = payload.to_body()
@@ -128,9 +149,15 @@ def create_router(agent) -> APIRouter:
                 request.headers.get("user-agent", ""),
                 request.headers.get("accept-language", ""),
             )
+        # ThreatLedger parity with request_pipeline: pass ip + key_prefix so
+        # cross-session aggregation sees this route too.
+        _client_ip = request.client.host if request.client else ""
+        _key_prefix = session_id[:8] if session_id != "default" else ""
         security_error = await agent.security.inspect(
             {"messages": [{"role": "user", "content": inspect_text}]},
             session_id,
+            ip=_client_ip,
+            key_prefix=_key_prefix,
         )
         if security_error:
             logger.warning(f"SecurityShield blocked embedding: {security_error}")

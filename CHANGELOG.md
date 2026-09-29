@@ -2,6 +2,23 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.36.2] — 2026-09-29
+
+### Security fix: quota enforcement on /v1/embeddings (patch)
+
+- **Quota bypass closed**: the embeddings route set `request.state.quota_exceeded`
+  when `check_quota` failed but never read the flag back — only
+  `request_pipeline` consumes it, and this route never reaches the pipeline.
+  Over-quota keys were served without limit. The route now mirrors
+  `/v1/chat/completions` (BUDGET_THRESHOLD webhook) and enforces immediately
+  with HTTP 402, the codebase's canonical budget status.
+- **ThreatLedger parity**: `security.inspect` on this route now receives
+  `ip` + `key_prefix` like the pipeline call, so cross-session aggregation
+  sees embeddings traffic too.
+- **Regression tests**: `tests/test_embeddings_quota.py` (402 on exhausted
+  quota with upstream untouched, 200 passthrough when quota holds, webhook
+  fired, shield kwargs asserted).
+
 ## [1.36.1] — 2026-09-29
 
 ### Observability & Hygiene (P2, patch)
