@@ -14,7 +14,6 @@ import json
 import time
 from unittest.mock import MagicMock
 
-
 # ── Helpers ──
 
 
@@ -194,8 +193,9 @@ class TestFirewallBenchmarks:
 
     def test_firewall_scan_with_base64(self, benchmark):
         """Payload with benign base64 segment — tests decode overhead."""
-        from core.firewall_asgi import ByteLevelFirewallMiddleware
         import base64
+
+        from core.firewall_asgi import ByteLevelFirewallMiddleware
 
         fw = ByteLevelFirewallMiddleware(app=MagicMock())
         encoded = base64.b64encode(
@@ -262,7 +262,7 @@ class TestTrigramBenchmarks:
 
     def test_jaccard_computation(self, benchmark):
         """Jaccard similarity between two trigram sets."""
-        from core.semantic_analyzer import _to_trigrams, _jaccard
+        from core.semantic_analyzer import _jaccard, _to_trigrams
 
         set_a = _to_trigrams("ignore previous instructions")
         set_b = _to_trigrams("disregard earlier directions")

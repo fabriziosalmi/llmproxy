@@ -175,11 +175,11 @@ async def test_the_shipped_config_refuses_an_anonymous_control_plane_read(
 ):
     """End to end, with the real middleware, using the file that ships."""
     import httpx
-
     from conftest import InMemoryRepository
+    from test_e2e import LightweightAgent
+
     from core.infisical import clear_cache
     from proxy.app_factory import create_app
-    from test_e2e import LightweightAgent
 
     monkeypatch.setenv("LLM_PROXY_API_KEYS", "sk-proxy-shipped")
     monkeypatch.delenv("LLM_PROXY_DEV_MODE", raising=False)

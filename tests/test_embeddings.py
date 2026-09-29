@@ -9,13 +9,12 @@ Covers:
   - Security pipeline (PII in document chunks)
 """
 
-from proxy.adapters.openai import OpenAIAdapter
 from proxy.adapters.anthropic import AnthropicAdapter
-from proxy.adapters.google import GoogleAdapter
 from proxy.adapters.azure import AzureAdapter
+from proxy.adapters.google import GoogleAdapter
 from proxy.adapters.ollama import OllamaAdapter
+from proxy.adapters.openai import OpenAIAdapter
 from proxy.routes.embeddings import _detect_embedding_provider
-
 
 OPENAI_EMBEDDING_REQUEST = {
     "model": "text-embedding-3-small",

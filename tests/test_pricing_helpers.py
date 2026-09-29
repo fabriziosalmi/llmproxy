@@ -17,13 +17,12 @@ import pytest
 
 from core import pricing
 from core.pricing import (
-    MODEL_PRICING,
     _DEFAULT_PRICING,
+    MODEL_PRICING,
     baseline_premium_pricing,
     estimate_baseline_savings,
     get_pricing,
 )
-
 
 # ── A.2: default-pricing fallback warning ─────────────────────────
 

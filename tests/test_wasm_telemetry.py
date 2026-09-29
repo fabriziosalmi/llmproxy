@@ -1,6 +1,8 @@
-import pytest
 import logging
 from unittest.mock import patch
+
+import pytest
+
 import core.wasm_runner
 from core.wasm_runner import WasmRunner, _check_extism
 

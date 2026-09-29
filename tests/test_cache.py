@@ -7,15 +7,15 @@ Tests:
   - CacheCheck plugin: hit, miss, bypass
 """
 
-import json
 import asyncio
-import pytest
+import json
 from unittest.mock import AsyncMock, MagicMock
 
-from core.cache import CacheBackend, NegativeCache
-from core.stream_faker import fake_stream
-from core.plugin_engine import PluginContext, PluginState
+import pytest
 
+from core.cache import CacheBackend, NegativeCache
+from core.plugin_engine import PluginContext, PluginState
+from core.stream_faker import fake_stream
 
 # ── Fixtures ──
 

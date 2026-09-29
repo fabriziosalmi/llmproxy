@@ -11,10 +11,11 @@ sibling returned 401 — reconnaissance for an attacker and configuration an
 operator would assume was private.
 """
 
+from unittest.mock import MagicMock
+
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from unittest.mock import MagicMock
 
 from tests.conftest import InMemoryRepository, minimal_config
 

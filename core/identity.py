@@ -18,14 +18,14 @@ Architecture:
 
 import asyncio
 import concurrent.futures
-import time
 import logging
-import aiohttp
-from typing import Dict, Any, Optional, List
+import time
 from dataclasses import dataclass, field
+from typing import Any
 
+import aiohttp
 import jwt
-from jwt import PyJWKClient, InvalidTokenError
+from jwt import InvalidTokenError, PyJWKClient
 
 from core.infisical import get_secret
 
@@ -76,10 +76,10 @@ class IdentityContext:
 
     provider: str  # "google", "microsoft", "apple", "tailscale", "api_key"
     subject: str  # Unique user ID (sub claim or API key hash)
-    email: Optional[str] = None
-    name: Optional[str] = None
-    roles: List[str] = field(default_factory=lambda: ["user"])
-    raw_claims: Dict[str, Any] = field(default_factory=dict)
+    email: str | None = None
+    name: str | None = None
+    roles: list[str] = field(default_factory=lambda: ["user"])
+    raw_claims: dict[str, Any] = field(default_factory=dict)
     verified: bool = False
 
 
@@ -91,7 +91,7 @@ class OIDCProvider:
     issuer: str
     jwks_uri: str
     client_id: str
-    audience: Optional[str] = None
+    audience: str | None = None
     # Claim mapping
     email_claim: str = "email"
     name_claim: str = "name"
@@ -121,16 +121,16 @@ class IdentityManager:
     No user database — identity is derived entirely from token claims.
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         identity_cfg = config.get("identity", {})
         self.enabled = identity_cfg.get("enabled", False)
-        self.providers: Dict[str, OIDCProvider] = {}
-        self._jwks_clients: Dict[str, PyJWKClient] = {}
-        self._jwks_cache_ts: Dict[str, float] = {}
+        self.providers: dict[str, OIDCProvider] = {}
+        self._jwks_clients: dict[str, PyJWKClient] = {}
+        self._jwks_cache_ts: dict[str, float] = {}
         # One lock per provider, so concurrent cache misses coalesce into a
         # single fetch instead of a thundering herd of identical ones.
-        self._jwks_locks: Dict[str, asyncio.Lock] = {}
-        self._session: Optional[aiohttp.ClientSession] = None
+        self._jwks_locks: dict[str, asyncio.Lock] = {}
+        self._session: aiohttp.ClientSession | None = None
 
         # Default role for authenticated users
         self.default_role = identity_cfg.get("default_role", "user")
@@ -140,7 +140,7 @@ class IdentityManager:
         if self.enabled:
             self._load_providers(identity_cfg.get("providers", []))
 
-    def _load_providers(self, provider_configs: List[Dict[str, Any]]):
+    def _load_providers(self, provider_configs: list[dict[str, Any]]):
         """Load OIDC providers from config."""
         for pcfg in provider_configs:
             name = pcfg.get("name", "").lower()
@@ -246,7 +246,7 @@ class IdentityManager:
 
         try:
             return await asyncio.wait_for(_resolve(), timeout=JWKS_TOTAL_BUDGET_S)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # Fail closed. The abandoned fetch keeps running on its thread and
             # populates the client cache, so the next caller is likely to be
             # served from it rather than repeating this wait.
@@ -256,9 +256,9 @@ class IdentityManager:
                 provider.name,
                 JWKS_TOTAL_BUDGET_S,
             )
-            raise ValueError("Identity provider unavailable")
+            raise ValueError("Identity provider unavailable") from None
 
-    async def verify_token(self, token: str) -> Optional[IdentityContext]:
+    async def verify_token(self, token: str) -> IdentityContext | None:
         """
         Verify a JWT token against all configured OIDC providers.
         Returns an IdentityContext if valid, None if not a recognized JWT.
@@ -308,11 +308,11 @@ class IdentityManager:
                 },
             )
         except jwt.ExpiredSignatureError:
-            raise ValueError("Token expired")
+            raise ValueError("Token expired") from None
         except jwt.InvalidAudienceError:
-            raise ValueError("Invalid audience")
+            raise ValueError("Invalid audience") from None
         except InvalidTokenError as e:
-            raise ValueError(f"Invalid token: {e}")
+            raise ValueError(f"Invalid token: {e}") from e
 
         # Extract identity from claims
         email = claims.get(provider.email_claim)
@@ -338,8 +338,8 @@ class IdentityManager:
         return identity
 
     def _resolve_roles(
-        self, claims: Dict[str, Any], provider: OIDCProvider, email: Optional[str]
-    ) -> List[str]:
+        self, claims: dict[str, Any], provider: OIDCProvider, email: str | None
+    ) -> list[str]:
         """
         Map JWT claims to internal RBAC roles.
 
@@ -385,7 +385,7 @@ class IdentityManager:
         }
         return jwt.encode(payload, secret, algorithm="HS256")
 
-    def verify_proxy_jwt(self, token: str) -> Optional[IdentityContext]:
+    def verify_proxy_jwt(self, token: str) -> IdentityContext | None:
         """
         Verify an internal proxy JWT (issued by generate_proxy_jwt).
         Used for session continuity — avoids re-validating external OIDC on every request.

@@ -1,6 +1,7 @@
 """Tests for core.rbac.RBACManager."""
 
 import pytest
+
 from core.rbac import RBACManager
 
 

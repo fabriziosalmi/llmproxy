@@ -16,7 +16,6 @@ import asyncio
 
 import pytest
 
-
 # ── C1: Rate Limiter Under Concurrent Load ────────────────────
 
 
@@ -67,8 +66,8 @@ class TestBudgetGuardConcurrency:
     @pytest.mark.asyncio
     async def test_concurrent_requests_respect_session_budget(self):
         """C2: N concurrent requests never collectively overspend session budget."""
-        from plugins.marketplace.smart_budget_guard import SmartBudgetGuard
         from core.plugin_engine import PluginContext
+        from plugins.marketplace.smart_budget_guard import SmartBudgetGuard
 
         guard = SmartBudgetGuard(
             config={
@@ -118,9 +117,9 @@ class TestNeuralRouterStatsConcurrency:
     async def test_concurrent_updates_count_correctly(self):
         """C3: 500 concurrent updates → request_count == 500."""
         from plugins.default.neural_router import (
-            update_endpoint_stats,
-            get_endpoint_stats,
             _endpoint_stats,
+            get_endpoint_stats,
+            update_endpoint_stats,
         )
 
         _endpoint_stats.clear()
@@ -140,9 +139,9 @@ class TestNeuralRouterStatsConcurrency:
     async def test_concurrent_multi_endpoint_isolation(self):
         """C3b: Concurrent updates to different endpoints don't interfere."""
         from plugins.default.neural_router import (
-            update_endpoint_stats,
-            get_endpoint_stats,
             _endpoint_stats,
+            get_endpoint_stats,
+            update_endpoint_stats,
         )
 
         _endpoint_stats.clear()
@@ -152,7 +151,7 @@ class TestNeuralRouterStatsConcurrency:
             await update_endpoint_stats(name, latency, True)
 
         tasks = []
-        for i in range(N):
+        for _i in range(N):
             tasks.append(update_ep("fast_ep", 50.0))
             tasks.append(update_ep("slow_ep", 500.0))
 

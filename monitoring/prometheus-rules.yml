@@ -25,12 +25,12 @@ groups:
       # ── Latency ──
       - alert: HighP95Latency
         expr: >
-          histogram_quantile(0.95, rate(llm_proxy_request_latency_seconds_bucket[5m])) > 10
+          histogram_quantile(0.95, rate(llm_proxy_request_latency_seconds_bucket[5m])) > 5
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "P95 latency above 10s"
+          summary: "P95 latency above 5s"
           description: "P95 request latency is {{ $value | printf \"%.1f\" }}s."
 
       # ── Circuit Breakers ──
@@ -80,6 +80,44 @@ groups:
         annotations:
           summary: "Auth failure spike: {{ $value }} in 5m"
           description: "Possible brute-force attack or misconfigured client."
+
+      # ── Background loops & persistence ──
+      - alert: BackgroundLoopStalled
+        expr: >
+          time() - llm_proxy_background_last_success_timestamp > 900
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Background loop {{ $labels.loop }} stalled >15m"
+          description: "The loop has not completed an iteration. Check proxy logs; state writes/retention may be stuck."
+
+      - alert: AuditPersistenceFailing
+        expr: increase(llm_proxy_audit_persistence_total{outcome="fail"}[10m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Audit writes are failing"
+          description: "The tamper-evident chain has gaps. Check store health and disk immediately."
+
+      - alert: LoadShedSpike
+        expr: increase(llm_proxy_load_shed_total[10m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Admission control is shedding load"
+          description: "Proxy at capacity (queues full). Scale or raise limits if sustained."
+
+      - alert: MultipleInstances
+        expr: llm_proxy_instance_count > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "More than one live instance sharing state"
+          description: "Daily budget is enforced independently per instance — the fleet can overspend. Intended only for Redis-backed HA."
 
   - name: llmproxy-recording
     rules:

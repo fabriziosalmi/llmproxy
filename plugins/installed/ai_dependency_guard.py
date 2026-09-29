@@ -39,10 +39,10 @@ import json
 import re
 import time
 from collections import OrderedDict
-from typing import Any, Optional
+from typing import Any
 
-from core.plugin_sdk import BasePlugin, PluginHook, PluginResponse
 from core.plugin_engine import PluginContext
+from core.plugin_sdk import BasePlugin, PluginHook, PluginResponse
 
 # ── Package reference extraction ─────────────────────────────────────────────
 # Python installers that pull from PyPI: pip, python -m pip, uv / uv pip,
@@ -105,7 +105,7 @@ def _split_args(arg_str: str) -> list:
     return out
 
 
-def _norm_pypi(tok: str) -> Optional[str]:
+def _norm_pypi(tok: str) -> str | None:
     tok = tok.strip().strip("\"'").lower()
     # strip version specifier / extras / markers: keep the leading name only
     tok = re.split(r"[=<>~!;\[@ ]", tok, maxsplit=1)[0].strip()
@@ -114,7 +114,7 @@ def _norm_pypi(tok: str) -> Optional[str]:
     return tok if _PYPI_NAME_RE.match(tok) else None
 
 
-def _norm_npm(tok: str) -> Optional[str]:
+def _norm_npm(tok: str) -> str | None:
     tok = tok.strip().strip("\"'").lower()
     if tok.startswith("@"):  # scoped: @scope/name[@version]
         parts = tok.split("@")  # ["", "scope/name", "version"?]
@@ -134,7 +134,7 @@ def _extract_packages(text: str) -> list:
     seen: set = set()
     found: list = []
 
-    def add(eco: str, name: Optional[str]):
+    def add(eco: str, name: str | None):
         if name and (eco, name) not in seen:
             seen.add((eco, name))
             found.append((eco, name))
@@ -158,7 +158,7 @@ _CACHE: "OrderedDict[tuple[str, str], tuple[bool, float]]" = OrderedDict()
 _CACHE_MAX = 4096
 
 
-def _cache_get(key) -> Optional[bool]:
+def _cache_get(key) -> bool | None:
     hit = _CACHE.get(key)
     if hit is None:
         return None
@@ -232,7 +232,7 @@ class AiDependencyGuard(BasePlugin):
             self.logger.debug("ai_dependency_guard response parse skipped: %s", e)
             return ""
 
-    async def _registry_exists(self, session, ecosystem: str, name: str) -> Optional[bool]:
+    async def _registry_exists(self, session, ecosystem: str, name: str) -> bool | None:
         """Tri-state existence check:
           True  = the registry AFFIRMATIVELY has it (HTTP 200) → cached;
           False = the registry AFFIRMATIVELY lacks it (404/410) → cached, flagged;
@@ -290,7 +290,7 @@ class AiDependencyGuard(BasePlugin):
         except Exception as e:  # fail-open on any sweep-level error
             self.logger.debug("ai_dependency_guard Tier-2 sweep skipped: %s", e)
             return missing
-        for (eco, name), res in zip(to_check, results):
+        for (eco, name), res in zip(to_check, results, strict=False):
             if res is False:  # only a definitive 404/410 flags; None/True/exc don't
                 missing.append((eco, name))
         return missing

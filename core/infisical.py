@@ -5,11 +5,10 @@ Centralizes all secret retrieval through Infisical.
 Falls back to environment variables only in development mode.
 """
 
-import os
 import logging
+import os
 import threading
 import time
-from typing import Optional, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +28,7 @@ _client = None
 #
 # clear_cache() existed and its docstring said it was "useful for rotation",
 # but nothing in the running system called it — only tests.
-_secrets_cache: Dict[str, tuple] = {}
+_secrets_cache: dict[str, tuple] = {}
 _lock = threading.Lock()
 
 #: How long a resolved secret is reused before being read again.
@@ -106,13 +105,13 @@ def _get_client():
 
 def get_secret(
     key: str,
-    default: Optional[str] = None,
+    default: str | None = None,
     *,
     required: bool = False,
-    project_id: Optional[str] = None,
-    environment: Optional[str] = None,
+    project_id: str | None = None,
+    environment: str | None = None,
     secret_path: str = "/",
-) -> Optional[str]:
+) -> str | None:
     """
     Retrieve a secret from Infisical, falling back to env vars.
 
@@ -187,10 +186,10 @@ def get_secret(
 def get_secrets_batch(
     keys: list[str],
     *,
-    project_id: Optional[str] = None,
-    environment: Optional[str] = None,
+    project_id: str | None = None,
+    environment: str | None = None,
     secret_path: str = "/",
-) -> Dict[str, Optional[str]]:
+) -> dict[str, str | None]:
     """Retrieve multiple secrets at once."""
     return {
         key: get_secret(

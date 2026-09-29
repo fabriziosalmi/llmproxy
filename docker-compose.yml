@@ -10,7 +10,10 @@ services:
     restart: unless-stopped
     ports:
       - "8090:8090"   # Proxy API
-      - "9091:9091"   # Prometheus metrics
+      # Metrics exporter lives outside the ASGI app: no auth, no rate-limit,
+      # no firewall, no security headers. Bind loopback; scrape via RP or
+      # use GET /metrics:8090 (admin-auth) instead of widening this.
+      - "127.0.0.1:9091:9091"   # Prometheus metrics (loopback only)
     volumes:
       - llmproxy-data:/app/data
       - ./config.yaml:/app/config.yaml:ro
@@ -35,11 +38,20 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/health')"]
+      # Verdict-aware like Dockerfile HEALTHCHECK: /health returns 200 even
+      # when status is down/degraded, so urlopen() alone can never fail.
+      test: ["CMD", "python", "-c", "import json, sys, urllib.request; sys.exit(1) if json.load(urllib.request.urlopen('http://localhost:8090/health', timeout=4)).get('status') == 'down' else sys.exit(0)"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 15s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     deploy:
       resources:
         limits:
@@ -55,11 +67,27 @@ services:
       - "127.0.0.1:6379:6379"
     volumes:
       - redis-data:/data
+    # Example with auth: set REDIS_PASSWORD in .env, then use
+    # command: ["redis-server", "--appendonly", "yes", "--requirepass", "$${REDIS_PASSWORD}"]
+    # and REDIS_URL=redis://:$$REDIS_PASSWORD@redis:6379/0 on llmproxy.
+    # Default stays without password for local dev; prod must set it —
+    # rate-limit/circuit state is mutable by anyone on this network.
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   llmproxy-data:

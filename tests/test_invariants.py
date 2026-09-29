@@ -24,9 +24,8 @@ import json
 import math
 
 import pytest
-from hypothesis import given, settings, assume, HealthCheck
+from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
-
 
 # ── I1: Injection Corpus Completeness ──────────────────────────
 
@@ -39,7 +38,7 @@ class TestInjectionCorpusCompleteness:
     @pytest.mark.security
     def test_every_corpus_pattern_self_detects(self):
         """I1: For each pattern P in corpus, semantic_scan(P) must return non-None."""
-        from core.semantic_analyzer import semantic_scan, INJECTION_CORPUS
+        from core.semantic_analyzer import INJECTION_CORPUS, semantic_scan
 
         failures = []
         for pattern, category in INJECTION_CORPUS:
@@ -56,7 +55,7 @@ class TestInjectionCorpusCompleteness:
     @pytest.mark.security
     def test_every_pattern_detects_correct_category(self):
         """I1b: Detection must return the correct attack category."""
-        from core.semantic_analyzer import semantic_scan, INJECTION_CORPUS
+        from core.semantic_analyzer import INJECTION_CORPUS, semantic_scan
 
         mismatches = []
         for pattern, expected_category in INJECTION_CORPUS:
@@ -77,10 +76,10 @@ class TestInjectionCorpusCompleteness:
     @pytest.mark.security
     def test_self_similarity_above_threshold(self):
         """I1c: Self-similarity score must be ≥ 0.90 for every pattern."""
-        from core.semantic_analyzer import semantic_scan, INJECTION_CORPUS
+        from core.semantic_analyzer import INJECTION_CORPUS, semantic_scan
 
         low_scores = []
-        for pattern, category in INJECTION_CORPUS:
+        for pattern, _category in INJECTION_CORPUS:
             result = semantic_scan(
                 pattern, threshold=0.01
             )  # Very low threshold to get score
@@ -288,7 +287,7 @@ class TestPricingInvariants:
 
         # This is a soft invariant — most models follow this pattern
         exceptions = 0
-        for model, pricing in MODEL_PRICING.items():
+        for _model, pricing in MODEL_PRICING.items():
             if pricing.get("output", 0) < pricing.get("input", 0):
                 exceptions += 1
 
@@ -361,8 +360,8 @@ class TestBudgetGuardAccounting:
     @pytest.mark.asyncio
     async def test_session_spend_never_exceeds_budget(self):
         """I11: After block, session_spend ≤ session_budget."""
-        from plugins.marketplace.smart_budget_guard import SmartBudgetGuard
         from core.plugin_engine import PluginContext
+        from plugins.marketplace.smart_budget_guard import SmartBudgetGuard
 
         guard = SmartBudgetGuard(
             config={

@@ -4,10 +4,11 @@ Coverage tests for proxy/routes/admin.py — 159 uncovered lines.
 Tests admin endpoints via httpx AsyncClient against a mock agent.
 """
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock
-from httpx import AsyncClient, ASGITransport
 from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 
 from tests.conftest import minimal_config
 
@@ -458,10 +459,10 @@ class TestAdminRoutes:
     async def test_set_rate_limit_preset_applies_and_persists(self):
         """Happy path: middleware exists, preset is valid, limiter mutates,
         store records the preset name."""
-        from core.rate_limiter import RateLimitMiddleware
-
         # Spin up a real middleware so .instance is set + apply_preset works.
         from starlette.applications import Starlette
+
+        from core.rate_limiter import RateLimitMiddleware
 
         mw = RateLimitMiddleware(
             app=Starlette(), config={"rate_limiting": {"enabled": True}}
@@ -598,8 +599,9 @@ class TestAdminRoutes:
         """A bucket created at the OLD rate must be evicted so the next
         request from that key gets the new defaults — otherwise an attacker
         spraying during the cutover keeps their old (relaxed) cap."""
-        from core.rate_limiter import RateLimitMiddleware
         from starlette.applications import Starlette
+
+        from core.rate_limiter import RateLimitMiddleware
 
         mw = RateLimitMiddleware(
             app=Starlette(),

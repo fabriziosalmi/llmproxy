@@ -14,14 +14,13 @@ Targeted services → endpoints:
 """
 
 import time
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import FastAPI
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
 from tests.conftest import InMemoryRepository, minimal_config
-
 
 # ── Fixture: mock agent + app with all relevant route modules ──────────────
 
@@ -68,9 +67,9 @@ def _make_app():
     agent = _mock_agent()
     app = FastAPI()
     from proxy.routes.admin import create_router as admin
-    from proxy.routes.registry import create_router as registry
     from proxy.routes.models import create_router as models
     from proxy.routes.plugins import create_router as plugins
+    from proxy.routes.registry import create_router as registry
 
     app.include_router(admin(agent))
     app.include_router(registry(agent))
@@ -121,7 +120,7 @@ async def test_guards_status_contract(app_agent):
         "explain.js reads circuit_breakers[<id>] for circuit kind"
     )
     # Each breaker must expose the fields the drawer shows (state, failure_count, failure_threshold).
-    for ep_id, cb in data["circuit_breakers"].items():
+    for _ep_id, cb in data["circuit_breakers"].items():
         assert "state" in cb
         assert "failure_count" in cb
         assert "failure_threshold" in cb
@@ -145,7 +144,7 @@ async def test_registry_list_contract(app_agent):
     circuit_state, failure_count, failure_threshold."""
     app, agent = _make_app()
     # Seed so the store has something to return.
-    from models import LLMEndpoint, EndpointStatus
+    from models import EndpointStatus, LLMEndpoint
 
     await agent.store.add_endpoint(
         LLMEndpoint(
