@@ -61,6 +61,7 @@ from core.auth_policy import auth_enabled
 from core.control_plane_policy import required_permission
 from core.firewall_asgi import ByteLevelFirewallMiddleware
 from core.tracing import TraceManager
+from proxy.error_envelope import install_error_handlers
 
 logger = logging.getLogger("llmproxy.app_factory")
 
@@ -217,6 +218,7 @@ def create_app(agent) -> FastAPI:
         redoc_url=_redoc_url,
         openapi_url=_openapi_url,
     )
+    install_error_handlers(app)
     agent._start_time = __import__("time").time()
     agent._version = _version
     TraceManager.instrument_app(app)
