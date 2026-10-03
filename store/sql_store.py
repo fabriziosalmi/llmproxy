@@ -665,28 +665,35 @@ class SQLiteStore:
     async def verify_audit_chain(self) -> dict:
         """Verify the integrity of the audit log hash chain.
 
-        Walks every entry in order and recomputes its hash from the stored fields
-        + previous hash. If any recomputed hash doesn't match the stored hash,
-        the chain is broken (tamper detected). Rows removed by a recorded
-        retention purge or erasure are bridged (see store/audit_chain.py).
+        Walks every entry in order, a page at a time, and recomputes its hash
+        from the stored fields + previous hash. If any recomputed hash doesn't
+        match the stored hash, the chain is broken (tamper detected). Rows
+        removed by a recorded retention purge or erasure are bridged (see
+        store/audit_chain.py).
         """
         conn = await self._get_conn()
-        # R2-12: Limit rows to prevent OOM on large audit logs. This reads the
-        # FIRST MAX_VERIFY_ROWS rows by id, not the most recent: rows past the
-        # limit are not verified (audit finding LLMPRO-DATA-02, still open).
-        async with self._row_factory_lock:
-            conn.row_factory = aiosqlite.Row
-            try:
-                async with conn.execute(
-                    "SELECT * FROM audit_log ORDER BY id ASC LIMIT ?",
-                    (audit_chain.MAX_VERIFY_ROWS,),
-                ) as cursor:
-                    rows = [dict(r) for r in await cursor.fetchall()]
-            finally:
-                conn.row_factory = None
-
         gaps = audit_chain.load_gaps(await self.get_state(audit_chain.GAPS_KEY))
-        return audit_chain.verify_rows(rows, gaps)
+        verifier = audit_chain.ChainVerifier(gaps)
+        last_id = -1
+        while True:
+            # Keyset paging: no OFFSET, and rows appended meanwhile are simply
+            # picked up by a later page.
+            async with self._row_factory_lock:
+                conn.row_factory = aiosqlite.Row
+                try:
+                    async with conn.execute(
+                        "SELECT * FROM audit_log WHERE id > ? ORDER BY id ASC LIMIT ?",
+                        (last_id, audit_chain.VERIFY_PAGE_SIZE),
+                    ) as cursor:
+                        rows = [dict(r) for r in await cursor.fetchall()]
+                finally:
+                    conn.row_factory = None
+            if not rows:
+                return verifier.result()
+            failure = verifier.feed(rows)
+            if failure is not None:
+                return failure
+            last_id = rows[-1]["id"]
 
     async def health_check(self) -> bool:
         """Verify the database connection is alive via a lightweight PRAGMA."""

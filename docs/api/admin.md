@@ -248,7 +248,7 @@ Permission `logs:read`. Walks the audit hash chain and recomputes each entry's
 SHA-256. Returns `{"valid": true, "total": N, "verified": N, "broken_at": null,
 "rows_removed": N}`, or `valid: false` with `broken_at` (row id) and `error`.
 `rows_removed` counts rows removed by a recorded retention purge or erasure and
-bridged over. It checks the first 100,000 rows by id.
+bridged over. It checks the whole chain, a page of 5,000 rows at a time, so the time it takes grows with the length of the audit log (about a second per 100,000 rows on a laptop); `total` is the rows examined, which on a failure is the rows up to and including the one that broke.
 
 ## Runtime tuning
 

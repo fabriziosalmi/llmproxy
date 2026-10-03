@@ -33,8 +33,9 @@ GAPS_KEY = "audit_chain_gaps"
 
 GENESIS = "GENESIS"
 
-#: Rows examined per verification. Unchanged from the stores' original limit.
-MAX_VERIFY_ROWS = 100_000
+#: Rows the stores read per page while verifying. The whole chain is checked, a
+#: page at a time, so memory stays flat however long the log is.
+VERIFY_PAGE_SIZE = 5_000
 
 
 def entry_hash(prev_hash: str, row: dict[str, Any]) -> str:
@@ -144,65 +145,83 @@ def _bridged(stored_prev: str, expected_prev: str, by_end: dict[str, dict[str, A
     return 0
 
 
-def verify_rows(
-    rows: list[dict[str, Any]], gaps: list[dict[str, Any]] | None = None
-) -> dict[str, Any]:
-    """Walk ``rows`` (ascending id) and check the chain.
+class ChainVerifier:
+    """Checks the chain incrementally: feed pages of rows in ascending id order.
 
-    ``gaps`` are the recorded deletions; without them every removal is a break.
+    The stores used to read ``ORDER BY id ASC LIMIT 100000`` into one list, which
+    verified the *oldest* 100,000 rows while a comment claimed it checked the most
+    recent: every row after that was never examined, yet the answer was still
+    ``valid`` (one audit row is written per request). Carrying the state between
+    pages covers the whole chain without holding it in memory.
     """
-    by_end = {g["end"]: g for g in (gaps or [])}
-    expected_prev = GENESIS
-    verified = 0
-    rows_removed = 0
-    total = len(rows)
 
-    def broken(row: dict[str, Any], error: str) -> dict[str, Any]:
+    def __init__(self, gaps: list[dict[str, Any]] | None = None):
+        self._by_end = {g["end"]: g for g in (gaps or [])}
+        self._expected_prev = GENESIS
+        self.verified = 0
+        self.rows_removed = 0
+        self.total = 0
+
+    def _broken(self, row: dict[str, Any], error: str) -> dict[str, Any]:
         return {
             "valid": False,
-            "total": total,
-            "verified": verified,
+            # Rows examined up to and including the one that failed.
+            "total": self.total,
+            "verified": self.verified,
             "broken_at": row.get("id"),
             "error": error,
         }
 
-    for row in rows:
-        stored_hash = row.get("entry_hash", "")
-        stored_prev = row.get("prev_hash", "")
+    def feed(self, rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+        """Check the next rows. Returns the failure result, or None to continue."""
+        for row in rows:
+            self.total += 1
+            stored_hash = row.get("entry_hash", "")
+            stored_prev = row.get("prev_hash", "")
 
-        # Blank entry_hash: tolerate ONLY for leading legacy rows written before
-        # the hash-chain migration (no hashed row seen yet). A blank hash AFTER
-        # hashed rows is an attacker blanking a row to truncate the tail and
-        # re-anchor the chain to GENESIS: a break, not a reset.
-        if not stored_hash:
-            if verified == 0:
-                expected_prev = GENESIS
-                continue
-            return broken(
-                row,
-                f"blank entry_hash at id={row.get('id')} after hashed rows (tamper detected)",
-            )
+            # Blank entry_hash: tolerate ONLY for leading legacy rows written
+            # before the hash-chain migration (no hashed row seen yet). A blank
+            # hash AFTER hashed rows is an attacker blanking a row to truncate
+            # the tail and re-anchor the chain to GENESIS: a break, not a reset.
+            if not stored_hash:
+                if self.verified == 0:
+                    self._expected_prev = GENESIS
+                    continue
+                return self._broken(
+                    row,
+                    f"blank entry_hash at id={row.get('id')} after hashed rows (tamper detected)",
+                )
 
-        if stored_prev != expected_prev:
-            bridged = _bridged(stored_prev, expected_prev, by_end)
-            if not bridged:
-                return broken(row, f"prev_hash mismatch at id={row.get('id')}")
-            rows_removed += bridged
+            if stored_prev != self._expected_prev:
+                bridged = _bridged(stored_prev, self._expected_prev, self._by_end)
+                if not bridged:
+                    return self._broken(row, f"prev_hash mismatch at id={row.get('id')}")
+                self.rows_removed += bridged
 
-        if entry_hash(stored_prev, row) != stored_hash:
-            return broken(
-                row, f"entry_hash mismatch at id={row.get('id')} (tamper detected)"
-            )
+            if entry_hash(stored_prev, row) != stored_hash:
+                return self._broken(
+                    row, f"entry_hash mismatch at id={row.get('id')} (tamper detected)"
+                )
 
-        expected_prev = stored_hash
-        verified += 1
+            self._expected_prev = stored_hash
+            self.verified += 1
+        return None
 
-    return {
-        "valid": True,
-        "total": total,
-        "verified": verified,
-        "broken_at": None,
-        # Rows removed by a recorded retention purge or erasure and bridged
-        # over; visible so "valid" is not mistaken for "nothing was removed".
-        "rows_removed": rows_removed,
-    }
+    def result(self) -> dict[str, Any]:
+        return {
+            "valid": True,
+            "total": self.total,
+            "verified": self.verified,
+            "broken_at": None,
+            # Rows removed by a recorded retention purge or erasure and bridged
+            # over; visible so "valid" is not mistaken for "nothing was removed".
+            "rows_removed": self.rows_removed,
+        }
+
+
+def verify_rows(
+    rows: list[dict[str, Any]], gaps: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
+    """Verify a complete list of rows (ascending id) in one call."""
+    verifier = ChainVerifier(gaps)
+    return verifier.feed(rows) or verifier.result()

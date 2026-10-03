@@ -610,17 +610,28 @@ class PostgresStore:
     async def verify_audit_chain(self) -> dict:
         """Verify the audit hash chain with the same rules as the SQLite store.
 
-        Both backends call store.audit_chain.verify_rows. This one used to carry
-        its own copy that reset the expected link on a blank entry_hash, the
-        case the SQLite copy had been changed to treat as a break.
+        Both backends share store.audit_chain.ChainVerifier and page through the
+        whole chain by id. This one used to carry its own copy that reset the
+        expected link on a blank entry_hash, the case the SQLite copy had been
+        changed to treat as a break, and read only the first 100,000 rows.
         """
         pool = await self.init_pool()
-        rows = await pool.fetch(
-            "SELECT * FROM audit_log ORDER BY id ASC LIMIT $1",
-            audit_chain.MAX_VERIFY_ROWS,
-        )
         gaps = audit_chain.load_gaps(await self.get_state(audit_chain.GAPS_KEY))
-        return audit_chain.verify_rows([dict(r) for r in rows], gaps)
+        verifier = audit_chain.ChainVerifier(gaps)
+        last_id = -1
+        while True:
+            rows = await pool.fetch(
+                "SELECT * FROM audit_log WHERE id > $1 ORDER BY id ASC LIMIT $2",
+                last_id,
+                audit_chain.VERIFY_PAGE_SIZE,
+            )
+            if not rows:
+                return verifier.result()
+            page = [dict(r) for r in rows]
+            failure = verifier.feed(page)
+            if failure is not None:
+                return failure
+            last_id = page[-1]["id"]
 
     async def health_check(self) -> bool:
         try:
