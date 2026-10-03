@@ -2,6 +2,42 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.37.16] — 2026-10-03
+
+### Each route module declares what it uses from the orchestrator; three broken admin routes fixed (patch, audit LLMPRO-ARCH-01)
+
+- **Changed (ARCH-01)**: every route module was built from the whole
+  `ProxyOrchestrator` (`create_router(agent)`): 11 modules reading 36 distinct
+  `agent.*` attributes, several private, and nothing said which module needed
+  which. `proxy/routes/deps.py` now writes that down: small capability Protocols
+  (`HasStore`, `CanLog`, `VerifiesAdminKeys` ...) composed into one Protocol per
+  module (`ModelsAgent` needs 1 member, `CompletionsAgent` 3, the largest,
+  `AdminAgent`, 22), and each `create_router(agent: XAgent)` is typed to it.
+  mypy now checks every route body against its declared surface and checks that
+  the real orchestrator provides it (verified: a Protocol demanding a missing
+  member fails all eleven). `tests/test_route_dependencies.py` fails when a route
+  reads an `agent.<x>` it did not declare, or declares one it no longer uses, so
+  a new dependency arrives as a diff in `deps.py`. Documented in CONTRIBUTING.
+  This narrows what each route can reach; it does not remove the dependency on the
+  orchestrator, and the private member names (`_add_log` ...) are unchanged.
+- **Fixed (found by typing the routes)**: three destructive admin routes
+  answered **500** whenever the real collaborator was present; their tests passed
+  because the agent was a `MagicMock`, which accepts any attribute:
+  - `POST /api/v1/cache/clear` called `NegativeCache.clear()`, which did not
+    exist. It exists now and returns how many entries it dropped.
+  - `POST /api/v1/security/reset` cleared `threat_ledger._by_ip` / `_by_key`; the
+    ledgers are `_ip_ledger` / `_key_ledger`. `ThreatLedger.clear()` now does it
+    and the route reports `threat_ledger_dropped`.
+  - `POST /api/v1/circuit-breaker/{id}/reset` took `cb._lock` and set attributes,
+    which a Redis breaker (state in four `cb:<name>:*` keys) does not have, and
+    which could not have reset it anyway. Both breakers have a public `reset()`;
+    the Redis one deletes its keys and the local fallback, and a Redis failure is
+    a `502` rather than a false "CLOSED".
+- **Also**: the dashboard route read the ledger's `stats` through an unnarrowed
+  `Optional`; and `docs/api/admin.md` describes the corrected responses.
+- **Tests**: `tests/test_route_dependencies.py`, `tests/test_destructive_routes.py`
+  (real objects; real Redis with `TEST_REDIS_URL`).
+
 ## [1.37.15] — 2026-10-03
 
 ### The dashboard summary is built from small functions, and a missing section is visible (patch, audit LLMPRO-QUAL-01)

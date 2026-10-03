@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends
 from fastapi.security import APIKeyHeader
 
 from proxy.auth_helpers import require_data_plane_auth
+from proxy.routes.deps import ModelsAgent
 
 logger = logging.getLogger("llmproxy.routes.models")
 
@@ -21,7 +22,7 @@ logger = logging.getLogger("llmproxy.routes.models")
 API_KEY_HEADER = APIKeyHeader(name="Authorization", auto_error=False)
 
 
-def create_router(agent) -> APIRouter:
+def create_router(agent: ModelsAgent) -> APIRouter:
     router = APIRouter()
 
     @router.get("/v1/models")

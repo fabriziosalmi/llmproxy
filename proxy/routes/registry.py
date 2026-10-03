@@ -14,11 +14,12 @@ from fastapi import APIRouter, HTTPException, Request
 
 from core.auth_policy import auth_enabled
 from models import EndpointStatus
+from proxy.routes.deps import RegistryAgent
 
 logger = logging.getLogger("llmproxy.routes.registry")
 
 
-def create_router(agent) -> APIRouter:
+def create_router(agent: RegistryAgent) -> APIRouter:
     router = APIRouter()
     _ENDPOINT_ID_RE = re.compile(r"^[a-z0-9._-]{1,64}$")
 

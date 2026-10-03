@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 
 from core.auth_policy import auth_enabled
 from proxy import dashboard
+from proxy.routes.deps import AdminAgent
 
 logger = logging.getLogger("llmproxy.routes.admin")
 
@@ -64,7 +65,7 @@ def _compute_forecast(
     return block
 
 
-def create_router(agent) -> APIRouter:
+def create_router(agent: AdminAgent) -> APIRouter:
     router = APIRouter()
 
     def _parse_int_param(
@@ -359,9 +360,7 @@ def create_router(agent) -> APIRouter:
             # the real state, because it reads exactly these two keys.
             "security_shield": {
                 "threat_ledger": (
-                    agent.security.threat_ledger.stats
-                    if getattr(agent.security, "threat_ledger", None)
-                    else {}
+                    ledger.stats if (ledger := getattr(agent.security, "threat_ledger", None)) else {}
                 ),
             },
             "response_signing": {
@@ -743,8 +742,7 @@ def create_router(agent) -> APIRouter:
         result = {}
         # L1 negative cache
         if hasattr(agent, "negative_cache") and agent.negative_cache:
-            agent.negative_cache.clear()
-            result["negative_cache"] = "cleared"
+            result["negative_cache"] = f"cleared {agent.negative_cache.clear()} entries"
         # L2 positive cache
         if hasattr(agent, "cache_backend") and agent.cache_backend:
             try:
@@ -767,9 +765,8 @@ def create_router(agent) -> APIRouter:
             agent.security.session_memory.clear()
             result["sessions_cleared"] = sessions
             if agent.security.threat_ledger:
-                agent.security.threat_ledger._by_ip.clear()
-                agent.security.threat_ledger._by_key.clear()
                 result["threat_ledger"] = "cleared"
+                result["threat_ledger_dropped"] = agent.security.threat_ledger.clear()
         return {"status": "reset", **result}
 
     @router.post("/api/v1/circuit-breaker/{endpoint_id}/reset")
@@ -777,12 +774,11 @@ def create_router(agent) -> APIRouter:
         """Manually reset a circuit breaker to CLOSED state."""
         _check_admin_auth(request)
         cb = await agent.circuit_manager.get_breaker(endpoint_id)
-        async with cb._lock:
-            from core.circuit_breaker import CircuitState
-
-            cb.state = CircuitState.CLOSED
-            cb.failure_count = 0
-            cb._half_open_probe_active = False
+        try:
+            await cb.reset()
+        except Exception as e:
+            logger.error(f"Circuit breaker reset failed for {endpoint_id}: {e}", exc_info=True)
+            raise HTTPException(status_code=502, detail="Circuit breaker reset failed") from e
         return {"status": "reset", "endpoint": endpoint_id, "state": "CLOSED"}
 
     @router.post("/api/v1/webhooks/test")

@@ -21,6 +21,7 @@ from core.session_id import (
 )
 from proxy.adapters.registry import detect_provider, get_adapter
 from proxy.auth_helpers import authenticate_data_plane
+from proxy.routes.deps import EmbeddingsAgent
 from proxy.schemas import EmbeddingsRequest
 
 logger = logging.getLogger("llmproxy.routes.embeddings")
@@ -51,7 +52,7 @@ def _detect_embedding_provider(model: str) -> str:
     return detect_provider(model)
 
 
-def create_router(agent) -> APIRouter:
+def create_router(agent: EmbeddingsAgent) -> APIRouter:
     router = APIRouter()
 
     @router.post("/v1/embeddings")

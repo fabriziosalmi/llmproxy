@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 
 from core.atomic_io import atomic_write as _atomic_write
 from core.auth_policy import auth_enabled
+from proxy.routes.deps import ConfigAgent
 
 logger = logging.getLogger("llmproxy.routes.config")
 
@@ -109,7 +110,7 @@ def _dangerous_deltas(old: dict, new: dict) -> list:
     return deltas
 
 
-def create_router(agent) -> APIRouter:
+def create_router(agent: ConfigAgent) -> APIRouter:
     router = APIRouter()
 
     def _check_admin_auth(request: Request):

@@ -103,6 +103,10 @@ class BaseCircuitBreaker:
     async def get_state_info(self) -> dict:
         raise NotImplementedError
 
+    async def reset(self) -> None:
+        """Force the breaker to CLOSED with no failures and no probe in flight."""
+        raise NotImplementedError
+
     async def call(self, func, *args, **kwargs):
         if not await self.can_execute():
             raise Exception(f"Circuit {getattr(self, 'name', 'unknown')} is OPEN. Blocking execution.")
@@ -190,6 +194,16 @@ class LocalCircuitBreaker(BaseCircuitBreaker):
             "last_failure_time": self.last_failure_time,
             "backend": "local"
         }
+
+    async def reset(self) -> None:
+        async with self._lock:
+            old = self.state.value
+            self.state = CircuitState.CLOSED
+            self.failure_count = 0
+            self._half_open_probe_active = False
+            if old != CircuitState.CLOSED.value:
+                logger.info(f"CircuitBreaker ({self.name}): manually reset to CLOSED.")
+                self._notify_state_change(old, "closed")
 
 
 class RedisCircuitBreaker(BaseCircuitBreaker):
@@ -306,6 +320,20 @@ class RedisCircuitBreaker(BaseCircuitBreaker):
             local_info = await self._local_fallback.get_state_info()
             local_info["backend"] = "redis_fallback_local"
             return local_info
+
+    async def reset(self) -> None:
+        """Clear the shared state in Redis and the local fallback.
+
+        The admin route used to set ``state`` and ``failure_count`` on the
+        object and take ``_lock``; a Redis breaker has no such attributes (its
+        state is the four ``cb:<name>:*`` keys), so the route answered 500 with
+        Redis configured, and setting attributes could not have reset it anyway.
+        A Redis failure propagates: reporting CLOSED while Redis still says OPEN
+        would be false.
+        """
+        await self._local_fallback.reset()
+        await self.redis.delete(self.k_state, self.k_fail, self.k_last, self.k_probe)
+        self._notify_state_change("open", "closed")
 
 
 class CircuitManager:

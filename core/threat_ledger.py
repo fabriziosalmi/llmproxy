@@ -55,6 +55,18 @@ class ThreatLedger:
         self._ip_ledger: TTLCache = TTLCache(maxsize=max_actors, ttl=ttl)
         self._key_ledger: TTLCache = TTLCache(maxsize=max_actors, ttl=ttl)
 
+    def clear(self) -> dict[str, int]:
+        """Forget every tracked actor; returns how many IPs and keys were dropped.
+
+        POST /api/v1/security/reset reached for ``_by_ip`` / ``_by_key``, which do
+        not exist (the ledgers are ``_ip_ledger`` / ``_key_ledger``), so the route
+        answered 500 whenever a threat ledger was configured.
+        """
+        dropped = {"ips": len(self._ip_ledger), "keys": len(self._key_ledger)}
+        self._ip_ledger.clear()
+        self._key_ledger.clear()
+        return dropped
+
     def record(
         self,
         ip: str = "",
