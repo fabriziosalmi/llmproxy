@@ -10,7 +10,7 @@ logger = logging.getLogger("llmproxy.kill_switch")
 
 async def analyze(ctx: PluginContext):
     """Ring 4: Post-Flight Speculative Kill-Switch."""
-    rotator = ctx.metadata.get("rotator")
+    rotator = ctx.require_rotator()
     if not ctx.response or not hasattr(ctx.response, "body"):
         return
 

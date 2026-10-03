@@ -9,7 +9,7 @@ logger = logging.getLogger("llmproxy.plugins.telemetry_ops")
 
 async def record(ctx: PluginContext):
     """Ring 5: Background Telemetry & FinOps."""
-    rotator = ctx.metadata.get("rotator")
+    rotator = ctx.require_rotator()
 
     # 1. Calculate tokens — prefer actual usage from response, fall back to tiktoken/heuristic
     from core.tokenizer import count_messages_tokens, count_tokens

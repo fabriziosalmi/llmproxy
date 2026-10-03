@@ -18,7 +18,7 @@ from core.plugin_engine import PluginContext
 
 async def cleanse(ctx: PluginContext):
     """Ring 4: Post-Flight Sanitization & Watermarking."""
-    rotator = ctx.metadata.get("rotator")
+    rotator = ctx.require_rotator()
     if not ctx.response or not hasattr(ctx.response, "body"):
         # H12: StreamingResponse has no .body — it's an async iterator.
         # Streaming responses are NOT sanitized by this plugin. The only

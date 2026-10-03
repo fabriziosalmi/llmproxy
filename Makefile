@@ -77,7 +77,7 @@ lint-ci: ## Run linter exactly as CI does (no autofix, fails on finding)
 	. venv/bin/activate && ruff check .
 
 typecheck: ## Run type checker (mypy, same scope as CI)
-	. venv/bin/activate && mypy core/ proxy/ store/ --ignore-missing-imports
+	. venv/bin/activate && mypy core/ proxy/ store/ plugins/ --ignore-missing-imports
 
 syntax: ## Verify all Python files parse
 	python -m compileall -q core/ proxy/ plugins/ store/ main.py models.py

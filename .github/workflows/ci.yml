@@ -115,13 +115,11 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install mypy types-PyYAML types-cachetools types-aiofiles
-      - name: mypy (core + proxy + store)
-        # store/ was outside the gate while holding the hand-written SQL and
-        # both backend implementations. It passes clean, so it is in now.
-        # plugins/ still reports 13 union-attr errors — genuine possible
-        # AttributeErrors on a None rotator — and is left out until those are
-        # fixed rather than silenced.
-        run: python -m mypy core/ proxy/ store/ --ignore-missing-imports --disable-error-code misc --disable-error-code assignment --disable-error-code no-any-return
+      - name: mypy (core + proxy + store + plugins)
+        # plugins/ holds the routing and security plugins that run on every
+        # request. It was left out while it reported 13 errors (eleven were
+        # "rotator may be None" attribute accesses); those are fixed, so it is in.
+        run: python -m mypy core/ proxy/ store/ plugins/ --ignore-missing-imports --disable-error-code misc --disable-error-code assignment --disable-error-code no-any-return
 
   security:
     name: Dependency Audit

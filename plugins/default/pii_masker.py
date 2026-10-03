@@ -8,7 +8,7 @@ async def mask(ctx: PluginContext):
     hide PII (SSN, credit card) in earlier messages which are forwarded
     to the upstream LLM provider in cleartext.
     """
-    rotator = ctx.metadata.get("rotator")
+    rotator = ctx.require_rotator()
     body = ctx.body
 
     messages = body.get("messages")
