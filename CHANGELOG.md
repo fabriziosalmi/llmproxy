@@ -2,6 +2,34 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.37.8] — 2026-10-03
+
+### The routing ring no longer reads the endpoint pool from the database on every request (patch, audit LLMPRO-PERF-01, PERF-02)
+
+- **Fixed (PERF-01)**: `select_endpoint` (Ring 3, every proxied request) called
+  `store.get_pool()`, which ran a `SELECT`, a `json.loads` per row and a pydantic
+  `LLMEndpoint` (with `HttpUrl`) per row, then filtered in Python: one database
+  round trip plus work linear in the number of endpoints, per request (and again
+  in `shadow_traffic` when enabled; a network query with the Postgres store).
+  The pool changes only through `add_endpoint`, `remove_endpoint`,
+  `update_status` and `update_metrics`.
+- **How**: both stores keep a snapshot (`store/pool_cache.py`) that those four
+  writes invalidate after committing. `get_pool()` stays the single accessor, so
+  no caller changes. A 5-second TTL is only a backstop for a writer the store
+  cannot see. A read that was in flight when a write landed cannot store its
+  older result. The list is copied per call; the endpoint objects are shared and
+  read-only to callers. `get_by_status` and `get_all` never serve the snapshot.
+- **Measured (PERF-02)**: new `TestRoutingBenchmarks` runs `select_endpoint`
+  against a real SQLite store at 1, 10 and 50 endpoints: cached ~49/51/58 µs vs
+  cold ~138/158/300 µs on a developer laptop. The cold figure is what every
+  request used to pay and it grows with the pool. Documented in
+  `docs/PERFORMANCE.md` next to the other hot-path costs.
+- **Multi-writer note**: with several processes on one database, another
+  process's endpoint edit is seen after at most the TTL. The deployment is
+  single-instance by design (README).
+- **Tests**: `tests/test_pool_cache.py` (SQLite always, Postgres with
+  `TEST_POSTGRES_DSN`).
+
 ## [1.37.7] — 2026-10-03
 
 ### Shared endpoint stats are atomic and the sync no longer stalls requests (patch, audit LLMPRO-CONC-01, CONC-02)
