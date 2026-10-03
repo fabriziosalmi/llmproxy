@@ -16,7 +16,7 @@ import json
 import logging
 import time
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import APIKeyHeader
 
@@ -28,6 +28,7 @@ from core.session_id import (
 from core.session_id import (
     from_token as session_id_from_token,
 )
+from proxy.auth_helpers import authenticate_data_plane
 from proxy.schemas import CompletionRequest
 
 logger = logging.getLogger("llmproxy.routes.completions")
@@ -90,49 +91,7 @@ def create_router(agent) -> APIRouter:
         payload: CompletionRequest,
         api_key: str = Depends(API_KEY_HEADER),
     ):
-        # Auth parity with /v1/chat/completions.
-        token = ""
-        if agent.config["server"]["auth"]["enabled"]:
-            if not api_key:
-                raise HTTPException(
-                    status_code=401, detail="Unauthorized: Missing API key"
-                )
-            from proxy.auth_helpers import parse_bearer
-
-            token = parse_bearer(api_key)
-            if not token:
-                raise HTTPException(status_code=401, detail="Unauthorized: Empty token")
-
-            identity = None
-            if agent.identity.enabled:
-                try:
-                    identity = agent.identity.verify_proxy_jwt(token)
-                    if not identity:
-                        identity = await agent.identity.verify_token(token)
-                except ValueError:
-                    raise HTTPException(
-                        status_code=401, detail="Unauthorized: Invalid or expired token"
-                    ) from None
-
-            if identity and identity.verified:
-                request.state.identity = identity
-                request.state.user = identity.email or identity.subject
-                request.state.roles = identity.roles
-                if not agent.rbac.check_permission(identity.roles, "proxy:use"):
-                    raise HTTPException(
-                        status_code=403, detail="Insufficient permissions"
-                    )
-                await agent.rbac.set_user_roles(
-                    identity.subject, identity.email, identity.roles
-                )
-            else:
-                if not agent._verify_api_key(token):
-                    raise HTTPException(
-                        status_code=401, detail="Unauthorized: Invalid API key or JWT"
-                    )
-
-                if not await agent.rbac.check_quota(token):
-                    request.state.quota_exceeded = True
+        token = await authenticate_data_plane(agent, request, api_key)
 
         # See proxy/schemas.py: validated at the boundary, forwarded unchanged.
         body = payload.to_body()

@@ -58,6 +58,12 @@ def _make_agent(monkeypatch, *, quota_ok: bool):
     agent.identity.enabled = False
     agent.rbac.check_quota = AsyncMock(return_value=quota_ok)
     agent.webhooks.dispatch = AsyncMock()
+    # Authentication goes through proxy.auth_helpers.authenticate_data_plane,
+    # which (as for chat) also checks the Tailscale identity and logs.
+    agent.zt_manager.verify_tailscale_identity = AsyncMock(
+        return_value={"status": "unverified"}
+    )
+    agent._add_log = AsyncMock()
     agent._budget_lock = asyncio.Lock()
     agent.total_cost_today = 0.0
     agent._background_tasks: set[asyncio.Task] = set()

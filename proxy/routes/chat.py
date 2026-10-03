@@ -20,6 +20,7 @@ from core.session_id import (
 from core.tokenizer import count_messages_tokens
 from core.tracing import TraceManager
 from core.webhooks import EventType
+from proxy.auth_helpers import authenticate_data_plane
 from proxy.schemas import ChatCompletionRequest
 
 logger = logging.getLogger("llmproxy.routes.chat")
@@ -36,110 +37,7 @@ def create_router(agent) -> APIRouter:
         payload: ChatCompletionRequest,
         api_key: str = Depends(API_KEY_HEADER),
     ):
-        if agent.config["server"]["auth"]["enabled"]:
-            if not api_key:
-                MetricsTracker.track_auth_failure("missing_key")
-                agent._spawn_task(
-                    agent.webhooks.dispatch(
-                        EventType.AUTH_FAILURE,
-                        {
-                            "reason": "missing_key",
-                            "ip": request.client.host if request.client else "unknown",
-                        },
-                    )
-                )
-                raise HTTPException(
-                    status_code=401, detail="Unauthorized: Missing API key"
-                )
-            from proxy.auth_helpers import parse_bearer
-
-            token = parse_bearer(api_key)
-            if not token:
-                MetricsTracker.track_auth_failure("empty_token")
-                raise HTTPException(status_code=401, detail="Unauthorized: Empty token")
-
-            identity = None
-
-            if agent.identity.enabled:
-                try:
-                    identity = agent.identity.verify_proxy_jwt(token)
-                    if not identity:
-                        identity = await agent.identity.verify_token(token)
-                except ValueError as e:
-                    MetricsTracker.track_auth_failure("jwt_invalid")
-                    agent._spawn_task(
-                        agent.webhooks.dispatch(
-                            EventType.AUTH_FAILURE,
-                            {"reason": "jwt_invalid", "error": str(e)},
-                        )
-                    )
-                    # H7: Don't leak internal error details (JWKS paths, OIDC
-                    # URLs, JWT algorithm info). Log full error, return generic.
-                    logger.warning(f"Identity verification failed: {e}")
-                    raise HTTPException(
-                        status_code=401, detail="Unauthorized: Invalid or expired token"
-                    ) from e
-
-            if identity and identity.verified:
-                request.state.identity = identity
-                request.state.user = identity.email or identity.subject
-                request.state.roles = identity.roles
-                if not agent.rbac.check_permission(identity.roles, "proxy:use"):
-                    raise HTTPException(
-                        status_code=403, detail="Insufficient permissions"
-                    )
-                await agent.rbac.set_user_roles(
-                    identity.subject, identity.email, identity.roles
-                )
-                await agent._add_log(
-                    f"IDENTITY: {identity.provider} user={identity.email or identity.subject} roles={identity.roles}",
-                    level="SECURITY",
-                )
-            else:
-                if not agent._verify_api_key(token):
-                    MetricsTracker.track_auth_failure("invalid_key")
-                    _ip = request.client.host if request.client else "unknown"
-                    # Surface on the Security dashboard's live event feed — a
-                    # rejected key is exactly the signal an operator wants to see.
-                    await agent._add_log(
-                        f"AUTH: rejected invalid API key from {_ip}",
-                        level="SECURITY",
-                    )
-                    agent._spawn_task(
-                        agent.webhooks.dispatch(
-                            EventType.AUTH_FAILURE,
-                            {
-                                "reason": "invalid_api_key",
-                                "ip": _ip,
-                            },
-                        )
-                    )
-                    raise HTTPException(
-                        status_code=401, detail="Unauthorized: Invalid API key or JWT"
-                    )
-
-                if not await agent.rbac.check_quota(token):
-                    agent._spawn_task(
-                        agent.webhooks.dispatch(
-                            EventType.BUDGET_THRESHOLD,
-                            {
-                                "reason": "quota_exceeded",
-                                "key_prefix": token[:8] + "...",
-                            },
-                        )
-                    )
-                    request.state.quota_exceeded = True
-
-            client_host = request.client.host if request.client else "0.0.0.0"  # nosec B104
-            ts_id = await agent.zt_manager.verify_tailscale_identity(client_host)
-            if ts_id["status"] == "verified":
-                await agent._add_log(
-                    f"ZT VERIFIED: {ts_id['user']} on {ts_id['node']}", level="SECURITY"
-                )
-                request.state.user = (
-                    getattr(request.state, "user", None) or ts_id["user"]
-                )
-                request.state.node = ts_id["node"]
+        token = await authenticate_data_plane(agent, request, api_key)
 
         if not agent.proxy_enabled:
             raise HTTPException(
@@ -153,7 +51,7 @@ def create_router(agent) -> APIRouter:
             # H5: When auth is disabled, avoid collapsing all users behind the
             # same NAT into one session. Hash IP + User-Agent + Accept-Language
             # as a rough client fingerprint to disambiguate.
-            if "token" in locals() and token:
+            if token:
                 session_id = session_id_from_token(token)
             else:
                 session_id = session_id_from_fingerprint(
@@ -252,7 +150,7 @@ def create_router(agent) -> APIRouter:
             # We still log the audit entry here for all requests.
             _now = int(time.time())
             _date = _dt.date.today().isoformat()
-            _key = (token[:8] + "...") if "token" in locals() and token else ""
+            _key = (token[:8] + "...") if token else ""
             _is_streaming = not hasattr(response, "body")
             # Extract metadata from response headers (set by rotator.proxy_request)
             _provider = ""
