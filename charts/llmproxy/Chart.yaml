@@ -2,8 +2,8 @@ apiVersion: v2
 name: llmproxy
 description: Helm chart for LLMProxy — The Enterprise GenAI Gateway
 type: application
-version: 1.37.6
-appVersion: "1.37.6"
+version: 1.37.7
+appVersion: "1.37.7"
 dependencies:
   - name: redis
     version: 18.0.0

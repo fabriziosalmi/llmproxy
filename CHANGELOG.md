@@ -2,6 +2,32 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.37.7] — 2026-10-03
+
+### Shared endpoint stats are atomic and the sync no longer stalls requests (patch, audit LLMPRO-CONC-01, CONC-02)
+
+- **Fixed (CONC-01)**: with Redis configured, `update_endpoint_stats` read the
+  stats hash (`HGETALL`), computed the new average and wrote it back (`HSET`) as
+  three unsynchronised steps. Concurrent updates for one endpoint, from request
+  tasks or from replicas, read the same `request_count` and each wrote count+1,
+  losing observations. Measured against a real Redis before the fix: 200
+  concurrent updates left `request_count` at **3**. The update is now one Lua
+  script (`HMGET`, EMA, `HSET`), atomic on the Redis side; the first observation
+  seeds the average exactly as before.
+- **Fixed (CONC-02)**: `sync_endpoint_stats_from_redis` held `_stats_lock`, which
+  every `update_endpoint_stats` call shares, across a `KEYS ep:stats:*` scan and
+  one `HGETALL` per endpoint, so each 5-second sync stalled every request's stats
+  update for 1+N round trips (and `KEYS` walks the whole keyspace). It now reads
+  with `SCAN` and one pipelined batch first and takes the lock only for the dict
+  assignment.
+- **Also fixed**: the sync derived the endpoint id with `key.split(":")[-1]`, so
+  an id containing a colon (`host:port`) was stored under its last segment. It
+  strips the key prefix instead. A malformed remote hash is skipped with a
+  warning instead of aborting the whole sync.
+- **Tests**: `tests/test_endpoint_stats_redis.py`. The fake-client tests always
+  run; the real-Redis tests (concurrency, EMA values, round trip) need
+  `TEST_REDIS_URL`, which CI now provides through a `redis:7-alpine` service.
+
 ## [1.37.6] — 2026-10-03
 
 ### Numeric config is validated at startup and on reload (patch, audit LLMPRO-CONF-01)
