@@ -85,6 +85,13 @@ deliberate: signature evasion at one layer is caught by scoring at the next.
   an append-only **hash chain** verifiable via `/api/v1/audit/verify` (a broken
   link is detectable); `ResponseSigner` HMAC-signs outgoing responses so a
   consumer can prove the payload transited the proxy unmodified.
+- **Sessions can be revoked.** A proxy-issued session JWT carries its roles until
+  it expires, so an administrator can end one early: `POST /api/v1/identity/revoke`
+  by `jti` (one token) or by subject (every session issued so far). The list is
+  persisted and reloaded at startup, and checked inside `verify_proxy_jwt`, which
+  both the data plane and the control plane use. It does not reach the identity
+  provider: the person can obtain a new session by signing in again unless their
+  access is also removed there.
 - **Legitimate deletions are recorded, not invisible.** The retention purge and
   GDPR erasure remove audit rows; each leaves a gap record (the hash before the
   removed run and the hash of its last row, no row content) in `app_state` under

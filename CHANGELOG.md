@@ -2,6 +2,39 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.37.12] — 2026-10-03
+
+### Proxy sessions can be revoked (patch, audit LLMPRO-AUTH-01)
+
+- **Fixed**: a proxy-issued session JWT embeds the caller's roles and was
+  trusted until `exp` (default one hour). A user removed in the identity provider
+  or demoted here kept their roles, including administrator permissions on the
+  control plane, for the rest of the hour, and the only lever was rotating
+  `LLM_PROXY_IDENTITY_SECRET`, which logs out everyone. There was no `jti`, no
+  deny-list and no way to cut one session.
+- **Now**: every proxy JWT carries a random `jti`. `verify_proxy_jwt` (used by
+  the data plane, the control plane and `/identity/me`) refuses a token whose
+  `jti` is revoked, or whose subject was revoked at or after its `iat`.
+  `POST /api/v1/identity/revoke` takes `{"subject": ...}` (every session issued
+  so far) or `{"jti": ..., "exp": ...}` (one token); administrators only
+  (`users:manage`). `GET /api/v1/identity/revocations` returns counts.
+- **Persistent**: the list lives in `app_state` (`identity:revocations`), is
+  written before the revoke call answers, and is reloaded at startup, so a
+  restart does not un-revoke anyone. Entries are dropped when they can no longer
+  matter (a token's own expiry, or a week for a subject-wide revocation).
+- **Scope, stated plainly**: this ends sessions that exist. A fresh exchange
+  against the identity provider mints a new one, so removing someone also needs
+  the provider (or the role mapping) changed. Tokens minted before this release
+  have no `jti` and can only be revoked by subject. The default `session_ttl` is
+  unchanged (3600 s); lower it if an hour is longer than you want a role
+  to outlive a change.
+- **Docs**: `docs/api/identity.md` documents the routes; its exchange response
+  example now shows the fields the route actually returns (`token`, `identity`)
+  instead of `session_token`/`roles`.
+- **Tests**: `tests/test_session_revocation.py` (jti, subject, same-second
+  boundary, persistence round trip, malformed state, route, data plane, control
+  plane).
+
 ## [1.37.11] — 2026-10-03
 
 ### OpenAI error envelope on /v1; every route documented (patch, audit LLMPRO-API-01, API-02)

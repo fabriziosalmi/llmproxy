@@ -357,6 +357,11 @@ class ProxyOrchestrator(BaseAgent):
             await self.store.get_state("routing:cost_weight", self.routing_cost_weight)
         )
 
+        # Sessions revoked before a restart stay revoked.
+        from core.revocation import STATE_KEY as _REVOCATIONS_KEY
+
+        self.identity.revocations.load(await self.store.get_state(_REVOCATIONS_KEY, {}))
+
         # N.6 — Apply persisted rate-limit preset (if any) to the live
         # middleware. Done after middleware construction (which happens when
         # FastAPI is built earlier in startup) so the singleton already exists.
