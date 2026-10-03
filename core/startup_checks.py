@@ -268,6 +268,7 @@ def validate_config(config: dict) -> list[str]:
     _require_number(config, "rate_limiting.requests_per_minute", minimum=0, above=True)
     _require_number(config, "rate_limiting.burst")
     _require_number(config, "caching.ttl")
+    _require_number(config, "audit.head_log_interval_seconds")
 
     return warnings
 

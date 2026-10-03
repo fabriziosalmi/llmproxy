@@ -332,6 +332,7 @@ class ProxyOrchestrator(BaseAgent):
         from core.metrics_history import MetricsHistory
 
         from .background import (
+            audit_head_loop,
             cache_eviction_loop,
             config_watch_loop,
             dedup_cleanup_loop,
@@ -459,6 +460,14 @@ class ProxyOrchestrator(BaseAgent):
         if gdpr_cfg.get("auto_purge", True):
             retention_days = gdpr_cfg.get("retention_days", 90)
             self._spawn_task(retention_purge_loop(self.store, retention_days))
+
+        # Publish the audit chain head outside the database (see audit_head_loop).
+        self._spawn_task(
+            audit_head_loop(
+                self,
+                int(self.config.get("audit", {}).get("head_log_interval_seconds", 3600)),
+            )
+        )
 
         self.logger.info("Security gateway ready.")
 

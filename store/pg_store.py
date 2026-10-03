@@ -613,7 +613,16 @@ class PostgresStore:
             "roles": [dict(r) for r in roles_rows],
         }
 
-    async def verify_audit_chain(self) -> dict:
+    async def get_audit_head(self) -> dict:
+        """Id and hash of the newest audit row, and the row count, in one read."""
+        pool = await self.init_pool()
+        row = await pool.fetchrow(
+            "SELECT id, entry_hash, (SELECT COUNT(*) FROM audit_log) AS n "
+            "FROM audit_log ORDER BY id DESC LIMIT 1"
+        )
+        return audit_chain.chain_head(tuple(row) if row else None)
+
+    async def verify_audit_chain(self, anchor: dict | None = None) -> dict:
         """Verify the audit hash chain with the same rules as the SQLite store.
 
         Both backends share store.audit_chain.ChainVerifier and page through the
@@ -623,7 +632,7 @@ class PostgresStore:
         """
         pool = await self.init_pool()
         gaps = audit_chain.load_gaps(await self.get_state(audit_chain.GAPS_KEY))
-        verifier = audit_chain.ChainVerifier(gaps)
+        verifier = audit_chain.ChainVerifier(gaps, anchor)
         last_id = -1
         while True:
             rows = await pool.fetch(
@@ -728,5 +737,8 @@ class PostgresRepository(BaseRepository):
     async def export_subject_data(self, subject: str) -> dict:
         return await self.sql.export_subject_data(subject)
 
-    async def verify_audit_chain(self) -> dict:
-        return await self.sql.verify_audit_chain()
+    async def verify_audit_chain(self, anchor: dict | None = None) -> dict:
+        return await self.sql.verify_audit_chain(anchor)
+
+    async def get_audit_head(self) -> dict:
+        return await self.sql.get_audit_head()

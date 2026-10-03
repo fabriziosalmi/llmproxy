@@ -100,6 +100,16 @@ deliberate: signature evasion at one layer is caught by scoring at the next.
   still breaks the chain. The chain is keyless SHA-256: it detects corruption
   and unrecorded edits, not someone with write access to the database who
   recomputes it.
+- **The head can be kept outside the database.** `GET /api/v1/audit/head` and an
+  hourly `AUDIT HEAD` security-log line (exported to the SIEM) give a copy of the
+  chain's newest row that the database's writers cannot alter;
+  `/api/v1/audit/verify?anchor_id=&anchor_hash=` checks the chain against one. That
+  catches a consistent rewrite of rows before the anchor and a truncation of the
+  tail. It does not catch rows forged *after* the newest anchor you hold, nor a
+  rollback of the whole database to an earlier state that matches an older
+  anchor; a keyed hash (HMAC under a key held outside the database) would stop
+  forged appends but needs a key-custody decision and a chain-format change, and
+  is not done.
 
 ### 3.4 Information disclosure
 **Threats:** PII regurgitation; secret/stack-trace leakage.

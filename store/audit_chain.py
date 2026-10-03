@@ -155,12 +155,21 @@ class ChainVerifier:
     pages covers the whole chain without holding it in memory.
     """
 
-    def __init__(self, gaps: list[dict[str, Any]] | None = None):
+    def __init__(
+        self,
+        gaps: list[dict[str, Any]] | None = None,
+        anchor: dict[str, Any] | None = None,
+    ):
         self._by_end = {g["end"]: g for g in (gaps or [])}
         self._expected_prev = GENESIS
         self.verified = 0
         self.rows_removed = 0
         self.total = 0
+        # An externally recorded head ({"id", "hash"}) to check the chain against.
+        self._anchor = anchor
+        self._first_id: int | None = None
+        self._last_id: int | None = None
+        self._anchor_hash_seen: str | None = None
 
     def _broken(self, row: dict[str, Any], error: str) -> dict[str, Any]:
         return {
@@ -176,6 +185,13 @@ class ChainVerifier:
         """Check the next rows. Returns the failure result, or None to continue."""
         for row in rows:
             self.total += 1
+            row_id = row.get("id")
+            if isinstance(row_id, int):
+                if self._first_id is None:
+                    self._first_id = row_id
+                self._last_id = row_id
+                if self._anchor and row_id == self._anchor["id"]:
+                    self._anchor_hash_seen = row.get("entry_hash", "")
             stored_hash = row.get("entry_hash", "")
             stored_prev = row.get("prev_hash", "")
 
@@ -207,8 +223,35 @@ class ChainVerifier:
             self.verified += 1
         return None
 
+    def _check_anchor(self) -> tuple[str, str | None]:
+        """(status, error) for the externally recorded head, after the walk."""
+        assert self._anchor is not None  # nosec B101 - callers check
+        want_id, want_hash = self._anchor["id"], self._anchor["hash"]
+        if self._anchor_hash_seen is not None:
+            if self._anchor_hash_seen == want_hash:
+                return "ok", None
+            return "mismatch", (
+                f"anchor mismatch at id={want_id}: the externally recorded head "
+                "hash differs from the chain (rows before it were rewritten)"
+            )
+        # The anchored row is not in the chain.
+        if self._last_id is None or want_id > self._last_id:
+            return "truncated", (
+                f"chain truncated: the recorded head is id={want_id} but the chain "
+                f"ends at id={self._last_id if self._last_id is not None else 0}"
+            )
+        if self._first_id is not None and want_id < self._first_id:
+            # Older than the oldest retained row: removed by the retention purge.
+            return "purged", None
+        if want_hash in self._by_end:
+            return "erased", None  # removed by a recorded erasure
+        return "missing", (
+            f"the recorded head id={want_id} is missing from the chain and no "
+            "recorded deletion accounts for it"
+        )
+
     def result(self) -> dict[str, Any]:
-        return {
+        result: dict[str, Any] = {
             "valid": True,
             "total": self.total,
             "verified": self.verified,
@@ -217,11 +260,51 @@ class ChainVerifier:
             # over; visible so "valid" is not mistaken for "nothing was removed".
             "rows_removed": self.rows_removed,
         }
+        if self._anchor is not None:
+            status, error = self._check_anchor()
+            result["anchor"] = {"id": self._anchor["id"], "status": status}
+            if error:
+                result.update(valid=False, broken_at=self._anchor["id"], error=error)
+        return result
 
 
 def verify_rows(
-    rows: list[dict[str, Any]], gaps: list[dict[str, Any]] | None = None
+    rows: list[dict[str, Any]],
+    gaps: list[dict[str, Any]] | None = None,
+    anchor: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Verify a complete list of rows (ascending id) in one call."""
-    verifier = ChainVerifier(gaps)
+    verifier = ChainVerifier(gaps, anchor)
     return verifier.feed(rows) or verifier.result()
+
+
+def chain_head(last_row: tuple[Any, ...] | None) -> dict[str, Any]:
+    """The current head of the chain from ``(id, entry_hash, row_count)`` or None.
+
+    The head is the one short value (id and hash of the newest row, plus the row
+    count) worth recording OUTSIDE the database: a log line, a ticket, a monitor.
+    The chain is keyless SHA-256, so someone who can write the database can edit a
+    row and recompute everything after it, or delete the newest rows, and the
+    chain still verifies against itself. Checked against a head recorded
+    elsewhere, either shows up (see ChainVerifier's ``anchor``).
+    """
+    if last_row is None:
+        return {"id": 0, "hash": GENESIS, "count": 0}
+    row_id, entry_hash_, count = last_row
+    return {"id": int(row_id), "hash": entry_hash_ or "", "count": int(count)}
+
+
+def parse_anchor(anchor_id: Any, anchor_hash: Any) -> dict[str, Any] | None:
+    """Validate an externally recorded head; None when neither part was given."""
+    if anchor_id is None and anchor_hash is None:
+        return None
+    if anchor_id is None or anchor_hash is None:
+        raise ValueError("anchor_id and anchor_hash must be given together")
+    try:
+        row_id = int(anchor_id)
+    except (TypeError, ValueError):
+        raise ValueError("anchor_id must be an integer") from None
+    digest = str(anchor_hash).strip().lower()
+    if row_id < 1 or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
+        raise ValueError("anchor_hash must be the 64-character hex entry hash of a row")
+    return {"id": row_id, "hash": digest}

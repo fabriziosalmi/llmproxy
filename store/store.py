@@ -90,8 +90,11 @@ class SQLiteRepository(BaseRepository):
     async def export_subject_data(self, subject: str) -> dict:
         return await self.sql.export_subject_data(subject)
 
-    async def verify_audit_chain(self) -> dict:
-        return await self.sql.verify_audit_chain()
+    async def verify_audit_chain(self, anchor: dict | None = None) -> dict:
+        return await self.sql.verify_audit_chain(anchor)
+
+    async def get_audit_head(self) -> dict:
+        return await self.sql.get_audit_head()
 
     async def close(self):
         """Close the underlying SQLite store connection."""
