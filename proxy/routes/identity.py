@@ -7,13 +7,14 @@ from fastapi.security import APIKeyHeader
 
 from core.auth_policy import auth_enabled
 from core.revocation import STATE_KEY as REVOCATIONS_KEY
+from proxy.routes.deps import IdentityAgent
 
 logger = logging.getLogger("llmproxy.routes.identity")
 
 API_KEY_HEADER = APIKeyHeader(name="Authorization", auto_error=False)
 
 
-def create_router(agent) -> APIRouter:
+def create_router(agent: IdentityAgent) -> APIRouter:
     router = APIRouter()
 
     @router.get("/api/v1/identity/config")
@@ -150,7 +151,7 @@ def create_router(agent) -> APIRouter:
             exp = data.get("exp")
             if exp is not None and not isinstance(exp, (int, float)):
                 raise HTTPException(status_code=400, detail="'exp' must be a number")
-            revocations.revoke_jti(jti, exp)
+            revocations.revoke_jti(str(jti), exp)
             result = {"status": "revoked", "jti": jti}
         # Persist before answering: a revocation that a restart can undo is not one.
         await agent.store.set_state(REVOCATIONS_KEY, revocations.dump())

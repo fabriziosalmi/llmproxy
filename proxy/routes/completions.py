@@ -29,6 +29,7 @@ from core.session_id import (
     from_token as session_id_from_token,
 )
 from proxy.auth_helpers import authenticate_data_plane
+from proxy.routes.deps import CompletionsAgent
 from proxy.schemas import CompletionRequest
 
 logger = logging.getLogger("llmproxy.routes.completions")
@@ -82,7 +83,7 @@ def _translate_chat_chunk_to_legacy(chunk: bytes) -> bytes:
     return result.encode("utf-8")
 
 
-def create_router(agent) -> APIRouter:
+def create_router(agent: CompletionsAgent) -> APIRouter:
     router = APIRouter()
 
     @router.post("/v1/completions")

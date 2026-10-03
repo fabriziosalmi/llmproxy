@@ -21,6 +21,7 @@ from core.tokenizer import count_messages_tokens
 from core.tracing import TraceManager
 from core.webhooks import EventType
 from proxy.auth_helpers import authenticate_data_plane
+from proxy.routes.deps import ChatAgent
 from proxy.schemas import ChatCompletionRequest
 
 logger = logging.getLogger("llmproxy.routes.chat")
@@ -28,7 +29,7 @@ logger = logging.getLogger("llmproxy.routes.chat")
 API_KEY_HEADER = APIKeyHeader(name="Authorization", auto_error=False)
 
 
-def create_router(agent) -> APIRouter:
+def create_router(agent: ChatAgent) -> APIRouter:
     router = APIRouter()
 
     @router.post("/v1/chat/completions")

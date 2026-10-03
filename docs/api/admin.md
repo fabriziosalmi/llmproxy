@@ -214,10 +214,10 @@ principal.
 
 | Route | Permission | Effect |
 |-------|-----------|--------|
-| `POST /api/v1/cache/clear` | `features:toggle` | Empties the negative cache and evicts expired positive-cache entries. Returns `{"status": "cleared", ...}`; `502` if eviction fails. |
-| `POST /api/v1/security/reset` | `features:toggle` | **Destructive.** Clears the shield's per-session memory and the threat ledger (per-IP and per-key aggregates). Multi-turn injection scoring starts from zero. Returns the number of sessions cleared. |
+| `POST /api/v1/cache/clear` | `features:toggle` | Empties the negative cache and evicts expired positive-cache entries. Returns `{"status": "cleared", "negative_cache": "cleared N entries", ...}`; `502` if eviction fails. |
+| `POST /api/v1/security/reset` | `features:toggle` | **Destructive.** Clears the shield's per-session memory and the threat ledger (per-IP and per-key aggregates). Multi-turn injection scoring starts from zero. Returns `sessions_cleared` and, when a ledger is configured, `threat_ledger_dropped` (`{"ips": N, "keys": N}`). |
 | `POST /api/v1/firewall/reset` | `users:manage` | **Destructive.** Zeroes the firewall WAF counters (scanned, blocked, per-signature and per-encoding block counts, scan time). Counters only; no rule or setting changes. |
-| `POST /api/v1/circuit-breaker/{endpoint_id}/reset` | `users:manage` | Forces that endpoint's breaker to CLOSED, so traffic resumes immediately. |
+| `POST /api/v1/circuit-breaker/{endpoint_id}/reset` | `users:manage` | Forces that endpoint's breaker to CLOSED, so traffic resumes immediately. With Redis configured it clears the shared breaker state for every process; if Redis cannot be reached the answer is `502`, not a claim that the breaker is closed. |
 | `POST /api/v1/webhooks/test` | `users:manage` | Sends a test payload to every configured webhook. |
 
 ## Data protection (GDPR)

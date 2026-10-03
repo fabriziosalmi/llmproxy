@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from core.auth_policy import auth_enabled
 from core.metrics import MetricsTracker
+from proxy.routes.deps import TelemetryAgent
 
 # Strip ANSI escape sequences and control chars to prevent terminal injection via xterm.js
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?\x07")
@@ -51,7 +52,7 @@ def _sanitize_log(log: dict) -> dict:
     return sanitized
 
 
-def create_router(agent) -> APIRouter:
+def create_router(agent: TelemetryAgent) -> APIRouter:
     router = APIRouter()
 
     def _sse_token_secret() -> str:

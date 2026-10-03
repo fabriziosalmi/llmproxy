@@ -67,6 +67,18 @@ class NegativeCache:
             if enabled and TTLCache is None:
                 logger.warning("cachetools not installed — negative cache disabled")
 
+    def clear(self) -> int:
+        """Drop every entry; returns how many there were.
+
+        POST /api/v1/cache/clear called this and it did not exist, so the route
+        answered 500 whenever a negative cache was present.
+        """
+        if not self._enabled:
+            return 0
+        dropped = len(self._store)
+        self._store.clear()
+        return dropped
+
     @staticmethod
     def _hash_prompt(body: dict[str, Any]) -> str:
         """Hash the raw prompt for negative cache lookup.

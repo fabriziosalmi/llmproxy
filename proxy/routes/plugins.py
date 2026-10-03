@@ -7,9 +7,10 @@ from fastapi import APIRouter, HTTPException, Request
 
 from core.atomic_io import atomic_write
 from core.auth_policy import auth_enabled
+from proxy.routes.deps import PluginsAgent
 
 
-def create_router(agent) -> APIRouter:
+def create_router(agent: PluginsAgent) -> APIRouter:
     router = APIRouter()
 
     def _check_admin_auth(request: Request):

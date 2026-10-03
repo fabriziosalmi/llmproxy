@@ -15,11 +15,12 @@ import time
 from fastapi import APIRouter, HTTPException, Request
 
 from core.auth_policy import auth_enabled
+from proxy.routes.deps import GdprAgent
 
 logger = logging.getLogger("llmproxy.routes.gdpr")
 
 
-def create_router(agent) -> APIRouter:
+def create_router(agent: GdprAgent) -> APIRouter:
     router = APIRouter()
 
     def _check_admin_auth(request: Request):

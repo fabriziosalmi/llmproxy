@@ -36,6 +36,18 @@ make test           # Run the test suite
 - **Plugins**: Marketplace plugins in `plugins/marketplace/`. Must extend `BasePlugin`.
 - **Config**: All secrets via environment variables, never hardcoded.
 
+### Route dependencies
+
+A route module does not get "the orchestrator", it gets the surface declared for
+it in `proxy/routes/deps.py`: `create_router(agent: ChatAgent)`, where `ChatAgent`
+is built from small capability Protocols (`HasStore`, `CanLog`, ...). To use a new
+orchestrator member from a route, add (or reuse) a capability there and put it in
+that module's base list. `make typecheck` checks the route against it and checks
+the real `ProxyOrchestrator` provides it; `tests/test_route_dependencies.py`
+fails if a route reads an `agent.<x>` that is not declared, or if a declared
+member is no longer used. The diff in `deps.py` is how a reviewer sees a new
+dependency.
+
 ### Commit Messages
 - Use conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`
 - Keep the first line under 72 characters
