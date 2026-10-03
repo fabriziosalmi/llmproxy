@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import APIKeyHeader
 
 from core.auth_policy import auth_enabled
+from core.revocation import STATE_KEY as REVOCATIONS_KEY
 
 logger = logging.getLogger("llmproxy.routes.identity")
 
@@ -118,5 +119,50 @@ def create_router(agent) -> APIRouter:
                 "provider": identity.provider,
             },
         }
+
+    @router.post("/api/v1/identity/revoke")
+    async def revoke_sessions(request: Request):
+        """End proxy-issued sessions before they expire (administrator only).
+
+        Body: ``{"subject": "<sub>"}`` revokes every session for that person
+        issued up to now; ``{"jti": "<id>", "exp": <epoch, optional>}`` revokes
+        one token. A fresh login against the identity provider afterwards gets a
+        new session: this ends access that exists, it does not decide who may
+        sign in again.
+        """
+        data = await request.json()
+        if not isinstance(data, dict):
+            raise HTTPException(status_code=400, detail="Body must be an object")
+        subject, jti = data.get("subject"), data.get("jti")
+        if bool(subject) == bool(jti):
+            raise HTTPException(
+                status_code=400, detail="Provide exactly one of 'subject' or 'jti'"
+            )
+        target = subject or jti
+        if not isinstance(target, str) or len(target) > 256:
+            raise HTTPException(status_code=400, detail="Invalid identifier")
+
+        revocations = agent.identity.revocations
+        if subject:
+            revoked_at = revocations.revoke_subject(subject)
+            result = {"status": "revoked", "subject": subject, "revoked_at": revoked_at}
+        else:
+            exp = data.get("exp")
+            if exp is not None and not isinstance(exp, (int, float)):
+                raise HTTPException(status_code=400, detail="'exp' must be a number")
+            revocations.revoke_jti(jti, exp)
+            result = {"status": "revoked", "jti": jti}
+        # Persist before answering: a revocation that a restart can undo is not one.
+        await agent.store.set_state(REVOCATIONS_KEY, revocations.dump())
+        await agent._add_log(
+            f"IDENTITY: sessions revoked ({'subject' if subject else 'jti'}={target[:64]})",
+            level="SECURITY",
+        )
+        return result
+
+    @router.get("/api/v1/identity/revocations")
+    async def revocation_summary():
+        """How many tokens and subjects are currently revoked."""
+        return agent.identity.revocations.summary()
 
     return router

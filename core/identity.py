@@ -20,6 +20,7 @@ import asyncio
 import concurrent.futures
 import logging
 import time
+import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -28,6 +29,7 @@ import jwt
 from jwt import InvalidTokenError, PyJWKClient
 
 from core.infisical import get_secret
+from core.revocation import RevocationList
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +133,10 @@ class IdentityManager:
         # single fetch instead of a thundering herd of identical ones.
         self._jwks_locks: dict[str, asyncio.Lock] = {}
         self._session: aiohttp.ClientSession | None = None
+        # Proxy-issued sessions that were cut short. In memory so the check is a
+        # dict lookup per request; the orchestrator persists and reloads it
+        # (core/revocation.py).
+        self.revocations = RevocationList()
 
         # Default role for authenticated users
         self.default_role = identity_cfg.get("default_role", "user")
@@ -382,6 +388,8 @@ class IdentityManager:
             "provider": identity.provider,
             "iat": int(time.time()),
             "exp": int(time.time()) + ttl,
+            # Lets one session be revoked without logging everyone out.
+            "jti": uuid.uuid4().hex,
         }
         return jwt.encode(payload, secret, algorithm="HS256")
 
@@ -401,6 +409,13 @@ class IdentityManager:
                 issuer="llmproxy",
                 options={"verify_exp": True},
             )
+            if self.revocations.is_revoked(claims):
+                logger.info(
+                    "Identity: refused revoked proxy session sub=%s jti=%s",
+                    claims.get("sub"),
+                    claims.get("jti"),
+                )
+                return None
             return IdentityContext(
                 provider=claims.get("provider", "proxy"),
                 subject=claims.get("sub", "unknown"),
