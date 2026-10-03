@@ -2,6 +2,26 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.37.13] — 2026-10-03
+
+### The audit chain is verified end to end (patch, audit LLMPRO-DATA-02)
+
+- **Fixed**: `verify_audit_chain` read `ORDER BY id ASC LIMIT 100000` into one
+  list, so it verified the *oldest* 100,000 rows while its comment said it checked
+  the most recent ones. One audit row is written per request; once the log passed
+  100,000 rows every later row, the ones an attacker would edit, was never
+  examined and the answer was still `valid`. Reproduced before the fix: a log of
+  100,050 rows with the 100,047th edited verified as `valid: true`.
+- **How**: both stores page through the whole chain by id (keyset cursor,
+  5,000 rows a page, no `OFFSET`) feeding a `ChainVerifier` that carries its
+  state between pages, so memory stays flat however long the log is. On a failure
+  `total` is now the rows examined up to and including the one that broke.
+- **Cost**: verification time now grows with the log (about a second per
+  100,000 rows on a laptop, on the event loop between pages). It is run on
+  demand by `GET /api/v1/audit/verify`.
+- **Tests**: `tests/test_audit_chain_gaps.py` gained page-boundary cases (with a
+  gap bridge on a boundary), appends between pages, and the 100,050-row case.
+
 ## [1.37.12] — 2026-10-03
 
 ### Proxy sessions can be revoked (patch, audit LLMPRO-AUTH-01)

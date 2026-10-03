@@ -302,3 +302,137 @@ def test_load_gaps_tolerates_missing_and_malformed_state():
     assert audit_chain.load_gaps([{"start": "a"}, "junk", {"start": "a", "end": "b"}]) == [
         {"start": "a", "end": "b"}
     ]
+
+
+# ── the whole chain is verified, page by page ───────────────────────────────
+
+
+@pytest.fixture
+def small_pages(monkeypatch):
+    """Force several pages so the cursor and the carried state are exercised."""
+    monkeypatch.setattr(audit_chain, "VERIFY_PAGE_SIZE", 3)
+
+
+async def test_a_long_chain_verifies_across_page_boundaries(store, small_pages):
+    for i in range(10):
+        await _log(store, 10 - i, f"r{i}")
+
+    verdict = await store.verify_audit_chain()
+
+    assert verdict["valid"] is True, verdict
+    assert verdict["total"] == 10 and verdict["verified"] == 10
+
+
+async def test_tampering_beyond_the_first_page_is_detected(store, small_pages):
+    # The old verifier read only the first N rows by id and called the rest valid.
+    for i in range(10):
+        await _log(store, 10 - i, f"r{i}")
+    victim = (await _rows(store))[8][0]  # the ninth row: pages of 3 reach it in page 3
+
+    await _execute(
+        store,
+        "UPDATE audit_log SET cost_usd = 99 WHERE id = ?",
+        "UPDATE audit_log SET cost_usd = 99 WHERE id = $1",
+        victim,
+    )
+
+    verdict = await store.verify_audit_chain()
+    assert verdict["valid"] is False
+    assert verdict["broken_at"] == victim
+    assert verdict["total"] == 9  # rows examined up to and including the failure
+
+
+async def test_a_gap_bridge_works_when_the_break_falls_on_a_page_boundary(
+    store, small_pages
+):
+    for i, age in enumerate([200, 190, 180, 5, 4, 3, 2, 1]):
+        await _log(store, age, f"r{i}")
+    await store.purge_expired(90)  # removes the first three; survivors start a page
+
+    verdict = await store.verify_audit_chain()
+
+    assert verdict["valid"] is True, verdict
+    assert verdict["verified"] == 5 and verdict["rows_removed"] == 3
+
+
+async def test_rows_appended_between_pages_do_not_break_verification(store, small_pages):
+    for i in range(6):
+        await _log(store, 6 - i, f"r{i}")
+    await _log(store, 0, "late")
+
+    assert (await store.verify_audit_chain())["verified"] == 7
+
+
+def test_the_verifier_carries_state_between_feeds_like_one_call():
+    rows = []
+    prev = "GENESIS"
+    for i in range(1, 8):
+        row = {
+            "id": i, "ts": i, "req_id": f"r{i}", "session_id": "s", "key_prefix": "k",
+            "model": "m", "provider": "p", "status": 200, "prompt_tokens": 1,
+            "completion_tokens": 1, "cost_usd": 0.0, "latency_ms": 1.0, "blocked": 0,
+            "block_reason": "", "metadata": "{}", "prev_hash": prev,
+        }
+        row["entry_hash"] = audit_chain.entry_hash(prev, row)
+        prev = row["entry_hash"]
+        rows.append(row)
+
+    paged = audit_chain.ChainVerifier()
+    for i in range(0, len(rows), 2):
+        assert paged.feed(rows[i : i + 2]) is None
+
+    assert paged.result() == audit_chain.verify_rows(rows)
+    assert paged.result()["verified"] == 7
+
+    rows[4]["cost_usd"] = 1.0
+    bad = audit_chain.ChainVerifier()
+    failure = None
+    for i in range(0, len(rows), 2):  # the stores stop at the first failure
+        failure = bad.feed(rows[i : i + 2])
+        if failure:
+            break
+    assert failure["broken_at"] == 5
+    assert failure["total"] == 5
+
+
+async def test_tampering_past_one_hundred_thousand_rows_is_detected(tmp_path):
+    """The reported defect itself: the old verifier stopped at 100,000 rows."""
+    s = SQLiteStore(str(tmp_path / "big.db"))
+    await s.init_db()
+    n = 100_050
+    base = {
+        "session_id": "s", "key_prefix": "k", "model": "m", "provider": "p",
+        "status": 200, "prompt_tokens": 1, "completion_tokens": 1, "cost_usd": 0.0,
+        "latency_ms": 1.0, "blocked": 0, "block_reason": "", "metadata": "{}",
+    }
+    prev, batch = "GENESIS", []
+    for i in range(1, n + 1):
+        row = {**base, "ts": i, "req_id": f"r{i}"}
+        h = audit_chain.entry_hash(prev, row)
+        batch.append(
+            (
+                i, row["ts"], row["req_id"], "s", "k", "m", "p", 200, 1, 1, 0.0, 1.0,
+                0, "", "{}", h, prev,
+            )
+        )
+        prev = h
+    conn = await s._get_conn()
+    await conn.executemany(
+        "INSERT INTO audit_log (id, ts, req_id, session_id, key_prefix, model, provider, "
+        "status, prompt_tokens, completion_tokens, cost_usd, latency_ms, blocked, "
+        "block_reason, metadata, entry_hash, prev_hash) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        batch,
+    )
+    await conn.commit()
+
+    healthy = await s.verify_audit_chain()
+    assert healthy["valid"] is True and healthy["verified"] == n
+
+    await conn.execute("UPDATE audit_log SET cost_usd = 99 WHERE id = ?", (n - 3,))
+    await conn.commit()
+
+    verdict = await s.verify_audit_chain()
+    assert verdict["valid"] is False
+    assert verdict["broken_at"] == n - 3
+    await s.close()
