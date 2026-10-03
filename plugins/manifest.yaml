@@ -40,6 +40,10 @@ plugins:
     priority: 80
     enabled: true
     version: "1.0.0"
+    # Response-side security control (injection markers, PII restore): an error
+    # refuses the response rather than returning it unsanitized. post_flight
+    # defaults to fail-open, so this is stated here rather than inherited.
+    fail_policy: "closed"
     entrypoint: "default.shield_sanitizer:cleanse"
 
   - name: "Unified Telemetry & FinOps"
@@ -62,6 +66,9 @@ plugins:
     priority: 70
     enabled: true
     version: "1.0.0"
+    # Best-effort quality guard (snips loops and stuttering), not a security
+    # control: an error is logged and the response passes unchanged.
+    fail_policy: "open"
     entrypoint: "default.kill_switch:analyze"
 
   - name: "JSON Auto-Healer"
@@ -69,6 +76,7 @@ plugins:
     priority: 90
     enabled: true
     version: "1.0.0"
+    fail_policy: "open"
     entrypoint: "default.json_healer:repair"
 
   # ── Marketplace Plugins (BasePlugin class mode) ──

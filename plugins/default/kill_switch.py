@@ -1,8 +1,11 @@
+import logging
 import re
 
 from fastapi.responses import Response
 
 from core.plugin_engine import PluginContext
+
+logger = logging.getLogger("llmproxy.kill_switch")
 
 
 async def analyze(ctx: PluginContext):
@@ -44,5 +47,9 @@ async def analyze(ctx: PluginContext):
                 level="CRITICAL",
             )
 
-    except Exception:
-        pass
+    except Exception as e:
+        # Best-effort by design (manifest: fail_policy "open"): this plugin snips
+        # runaway output, it does not protect against an attacker, so a failure
+        # here must not turn a good response into an error. It is logged rather
+        # than swallowed, so a broken kill-switch is visible.
+        logger.warning("Kill-switch analysis failed; response passed unchanged: %s", e)

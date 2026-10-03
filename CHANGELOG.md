@@ -2,6 +2,35 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.37.3] — 2026-10-03
+
+### Quarantine no longer disarms fail-closed plugins; post-flight policies stated (patch, audit LLMPRO-ERR-01, ERR-02)
+
+- **Fixed (ERR-01)**: after `PLUGIN_CB_THRESHOLD` (10) consecutive errors the
+  engine quarantined a plugin for 60 s and then skipped it before consulting its
+  fail policy, at DEBUG. A plugin declared `fail_policy: "closed"` (PII masker,
+  budget guard, loop breaker, context minifier) therefore stopped protecting
+  requests once ten of them had made it error or time out: every request in the
+  window passed through unmasked or unmetered. Quarantine now keeps the policy:
+  a quarantined **fail-closed** plugin refuses the request (`503`,
+  `plugin_unavailable`, naming the plugin and the cooldown left); a quarantined
+  **fail-open** plugin is still skipped, with one WARNING per quarantine window
+  (then DEBUG) instead of silence.
+- **Fixed (ERR-02)**: the Post-Flight Sanitizer caught its own exceptions, logged,
+  and returned, so the engine saw success and the response went out unsanitized
+  whatever the manifest said — setting `fail_policy` alone would have changed
+  nothing. It now lets a sanitization failure reach the engine (as a
+  `RuntimeError`, counted toward quarantine) and the manifest declares
+  `fail_policy: "closed"`. A body that is not a JSON chat completion is still
+  passed through untouched; that is not a failure.
+- **Stated, not inherited**: the Speculative Kill-Switch and JSON Auto-Healer
+  are best-effort quality guards and now say `fail_policy: "open"`; the
+  Kill-Switch logs a WARNING on failure instead of a bare `pass`.
+- **Behaviour change to know about**: with the sanitizer fail-closed, a
+  sanitizer error now returns `403 {"error": ...}` from the post-flight ring
+  (the ring's existing stop-chain response) instead of the unsanitized body.
+- **Tests**: `tests/test_plugin_quarantine.py`, `tests/test_post_flight_fail_policy.py`.
+
 ## [1.37.2] — 2026-10-03
 
 ### Endpoint provider survives a store round trip (patch, audit LLMPRO-DOM-01)

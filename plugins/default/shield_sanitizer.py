@@ -27,11 +27,19 @@ async def cleanse(ctx: PluginContext):
         # To enforce full sanitization, disable streaming or use buffered mode.
         return
 
+    # A body that is not a JSON chat completion has nothing to sanitize here:
+    # that is not a failure of this plugin, so it passes through untouched.
     try:
         data = json.loads(ctx.response.body.decode())
-        choices = data.get("choices")
-        if not choices:
-            return
+    except ValueError:  # JSONDecodeError and UnicodeDecodeError
+        return
+    if not isinstance(data, dict):
+        return
+    choices = data.get("choices")
+    if not choices:
+        return
+
+    try:
 
         # The vault a pre-flight masker filled, scoped to this request. Passing
         # it means only placeholders this request minted are restored; a token
@@ -71,4 +79,12 @@ async def cleanse(ctx: PluginContext):
             ctx.stop_chain = True
 
     except Exception as e:
+        # This plugin IS the response-side security control, so a failure in it
+        # must reach the engine's fail policy (manifest: fail_policy "closed").
+        # Logging and returning left the model output exactly as the model wrote
+        # it, with its injection markers in place and any masked PII
+        # placeholders unresolved, and the engine saw a success. RuntimeError
+        # because the engine's handler covers it and counts it toward
+        # quarantine like any other plugin failure.
         rotator.logger.error(f"Sanitization error: {e}")
+        raise RuntimeError(f"response sanitization failed: {e}") from e
