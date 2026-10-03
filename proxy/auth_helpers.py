@@ -213,7 +213,7 @@ def principal_already_verified(request: Any) -> bool:
 
 
 async def authenticate_data_plane(
-    agent: Any, request: Any, api_key: str | None, *, enforce_quota: bool = False
+    agent: Any, request: Any, authorization: str | None, *, enforce_quota: bool = False
 ) -> str:
     """Authenticate a /v1/ caller; the one implementation behind every data-plane route.
 
@@ -225,7 +225,8 @@ async def authenticate_data_plane(
     Everything now lives here, so a new credential type or a new failure reason
     is added once.
 
-    Returns the bearer token ("" when authentication is disabled). Raises
+    ``authorization`` is the raw Authorization header value (a bearer token, or a bare
+    key). Returns the bearer token ("" when authentication is disabled). Raises
     HTTPException(401/403) on failure. A valid key whose quota is exhausted sets
     ``request.state.quota_exceeded`` for the pipeline to enforce; a route that
     never reaches the pipeline passes ``enforce_quota=True`` and gets a 402.
@@ -245,7 +246,7 @@ async def authenticate_data_plane(
 
     ip = request.client.host if request.client else "unknown"
 
-    if not api_key:
+    if not authorization:
         MetricsTracker.track_auth_failure("missing_key")
         agent._spawn_task(
             agent.webhooks.dispatch(
@@ -254,7 +255,7 @@ async def authenticate_data_plane(
         )
         raise HTTPException(status_code=401, detail="Unauthorized: Missing API key")
 
-    token = parse_bearer(api_key)
+    token = parse_bearer(authorization)
     if not token:
         MetricsTracker.track_auth_failure("empty_token")
         raise HTTPException(status_code=401, detail="Unauthorized: Empty token")
