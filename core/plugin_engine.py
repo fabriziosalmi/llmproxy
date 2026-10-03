@@ -327,8 +327,16 @@ class PluginManager:
             # Cooldown expired — half-open: reset and allow retry
             stats["quarantined_until"] = 0.0
             stats["consecutive_errors"] = 0
+            stats["quarantine_skips"] = 0
             self.logger.info(f"Plugin {name} circuit breaker: half-open (retry)")
         return False
+
+    def _plugin_quarantine_remaining(self, name: str) -> float:
+        """Seconds of cooldown left for a quarantined plugin (0.0 if not quarantined)."""
+        stats = self._plugin_stats.get(name)
+        if not stats or stats["quarantined_until"] <= 0:
+            return 0.0
+        return max(0.0, stats["quarantined_until"] - time.perf_counter())
 
     def _plugin_success(self, name: str):
         """Record a plugin success — resets consecutive error counter."""
@@ -344,6 +352,7 @@ class PluginManager:
         stats["consecutive_errors"] += 1
         if stats["consecutive_errors"] >= self.PLUGIN_CB_THRESHOLD:
             stats["quarantined_until"] = time.perf_counter() + self.PLUGIN_CB_COOLDOWN
+            stats["quarantine_skips"] = 0
             self.logger.warning(
                 f"Plugin {name} QUARANTINED: {stats['consecutive_errors']} consecutive errors. "
                 f"Will retry in {self.PLUGIN_CB_COOLDOWN}s"
@@ -770,9 +779,38 @@ class PluginManager:
             stats = self._plugin_stats.get(name)
             fail_closed = self._should_stop_on_failure(p, hook)
 
-            # Plugin circuit breaker — skip quarantined plugins
+            # Plugin circuit breaker. Quarantine is a decision about a FAILING
+            # plugin, not about the request, so it must not change what the
+            # plugin's fail policy says happens to the request. A fail-open
+            # plugin is skipped. A fail-closed one is a control the operator
+            # declared must run: skipping it would let every request through
+            # unmasked or unmetered for the whole cooldown, and ten requests
+            # that make it error are enough to open that window. Refuse
+            # instead, as an ordinary failure of that plugin would.
             if self._plugin_quarantined(name):
-                self.logger.debug(f"Plugin {name} skipped (quarantined)")
+                remaining = self._plugin_quarantine_remaining(name)
+                if fail_closed:
+                    self.logger.warning(
+                        f"Plugin {name} is quarantined and fail-closed in "
+                        f"{hook.value}: refusing request ({remaining:.0f}s of cooldown left)"
+                    )
+                    if stats:
+                        stats["blocks"] += 1
+                    context.error = f"Plugin {name} unavailable (quarantined)"
+                    context.metadata["_block_status"] = 503
+                    context.metadata["_block_error_type"] = "plugin_unavailable"
+                    context.stop_chain = True
+                    break
+                # Fail-open skip: say so once per quarantine window at WARNING
+                # (a per-request warning would drown the log), then at DEBUG.
+                skips = (stats or {}).get("quarantine_skips", 0)
+                if stats is not None:
+                    stats["quarantine_skips"] = skips + 1
+                log = self.logger.warning if skips == 0 else self.logger.debug
+                log(
+                    f"Plugin {name} skipped in {hook.value} (quarantined, "
+                    f"{remaining:.0f}s of cooldown left)"
+                )
                 continue
 
             t0 = time.perf_counter()
