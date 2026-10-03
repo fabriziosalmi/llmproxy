@@ -29,6 +29,7 @@ COMPLIANCE_OPERATIONS = (
     "delete_subject_data",
     "export_subject_data",
     "verify_audit_chain",
+    "get_audit_head",
 )
 
 
@@ -55,6 +56,7 @@ def test_every_async_operation_of_the_base_is_overridden_by_each_real_repository
     ("delete_subject_data", ("subject-1234",)),
     ("export_subject_data", ("subject-1234",)),
     ("verify_audit_chain", ()),
+    ("get_audit_head", ()),
 ])
 async def test_the_base_class_refuses_instead_of_pretending(operation, args):
     # BaseRepository is abstract, so call the unbound default directly.

@@ -627,14 +627,37 @@ def create_router(agent: AdminAgent) -> APIRouter:
     # ── Audit Log (R2.10) ──
 
     @router.get("/api/v1/audit/verify")
-    async def verify_audit_chain():
+    async def verify_audit_chain(request: Request):
         """Verify the integrity of the audit log hash chain.
 
         Walks every entry and recomputes SHA256 hashes. If any entry was
         modified, deleted, or inserted out of order, the chain breaks.
         Returns {"valid": true/false, "total": N, "verified": N, "broken_at": id|null}.
+
+        ``?anchor_id=N&anchor_hash=<hex>`` also checks the chain against a head
+        recorded OUTSIDE the database (from /api/v1/audit/head, or the AUDIT HEAD
+        security log line): the chain is keyless, so only a copy held elsewhere can
+        reveal a rewrite or a truncation that recomputes consistently.
         """
-        return await agent.store.verify_audit_chain()
+        from store.audit_chain import parse_anchor
+
+        params = request.query_params
+        try:
+            anchor = parse_anchor(params.get("anchor_id"), params.get("anchor_hash"))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from None
+        if anchor is None:
+            return await agent.store.verify_audit_chain()
+        return await agent.store.verify_audit_chain(anchor)
+
+    @router.get("/api/v1/audit/head")
+    async def audit_head():
+        """The head of the audit chain: ``{"id", "hash", "count"}``.
+
+        Record it somewhere the database's writers cannot reach, then pass it back
+        to /api/v1/audit/verify as ``anchor_id`` / ``anchor_hash`` later.
+        """
+        return await agent.store.get_audit_head()
 
     @router.get("/api/v1/metrics/hourly-buckets")
     async def get_hourly_buckets(request: Request):

@@ -250,6 +250,18 @@ SHA-256. Returns `{"valid": true, "total": N, "verified": N, "broken_at": null,
 `rows_removed` counts rows removed by a recorded retention purge or erasure and
 bridged over. It checks the whole chain, a page of 5,000 rows at a time, so the time it takes grows with the length of the audit log (about a second per 100,000 rows on a laptop); `total` is the rows examined, which on a failure is the rows up to and including the one that broke.
 
+```
+GET /api/v1/audit/verify?anchor_id=<id>&anchor_hash=<64 hex>
+```
+
+The chain is keyless SHA-256: someone who can write the database can edit a row and recompute every later hash, or delete the newest rows, and the chain still verifies against itself. With an **anchor**, a head you recorded earlier and kept outside the database, the chain must also still contain that row with that hash. The result gains `anchor: {"id", "status"}` where `status` is `ok`; `purged` (older than the oldest retained row, removed by the retention purge) or `erased` (removed by a recorded erasure), both fine; or a failure: `mismatch` (the rows up to it were rewritten), `truncated` (the chain now ends before it), `missing` (gone with no recorded deletion). `400` if only one of the two parameters is given or they are malformed.
+
+```
+GET /api/v1/audit/head
+```
+
+Permission `logs:read`. Returns `{"id": N, "hash": "<64 hex>", "count": N}`: the newest audit row and the row count (`{"id": 0, "hash": "GENESIS", "count": 0}` when empty). This is the value to record elsewhere. The proxy also writes it to the security log hourly (`AUDIT HEAD id=... hash=... count=...`, `audit.head_log_interval_seconds`).
+
 ## Runtime tuning
 
 | Route | Permission | Description |

@@ -82,15 +82,43 @@ groups:
           description: "Possible brute-force attack or misconfigured client."
 
       # ── Background loops & persistence ──
+      # Loops that iterate every few seconds to every five minutes.
+      # The slow ones (hourly and daily) are excluded here and have their own
+      # thresholds below; a 15-minute rule would fire for most of every hour on
+      # a loop that is healthy and simply runs once an hour.
       - alert: BackgroundLoopStalled
         expr: >
-          time() - llm_proxy_background_last_success_timestamp > 900
+          time() - llm_proxy_background_last_success_timestamp{loop!~"metrics_history|cache_eviction|audit_head|retention_purge"} > 900
         for: 5m
         labels:
           severity: warning
         annotations:
           summary: "Background loop {{ $labels.loop }} stalled >15m"
           description: "The loop has not completed an iteration. Check proxy logs; state writes/retention may be stuck."
+
+      # Hourly loops (metrics_history, cache_eviction, audit_head by default):
+      # stalled after two missed iterations. Raise this if you lengthen their
+      # intervals (audit.head_log_interval_seconds, caching eviction).
+      - alert: HourlyBackgroundLoopStalled
+        expr: >
+          time() - llm_proxy_background_last_success_timestamp{loop=~"metrics_history|cache_eviction|audit_head"} > 7500
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Hourly background loop {{ $labels.loop }} stalled >2h"
+          description: "The loop has missed two iterations. For audit_head that also means the audit chain head is no longer being published."
+
+      # The retention purge runs once a day.
+      - alert: RetentionPurgeStalled
+        expr: >
+          time() - llm_proxy_background_last_success_timestamp{loop="retention_purge"} > 176400
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Retention purge has not completed in over 2 days"
+          description: "Audit and spend rows older than gdpr.retention_days are not being deleted. Check proxy logs for 'Retention purge error'."
 
       - alert: AuditPersistenceFailing
         expr: increase(llm_proxy_audit_persistence_total{outcome="fail"}[10m]) > 0

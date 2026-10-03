@@ -291,6 +291,33 @@ async def retention_purge_loop(store, retention_days: int = 90, interval: int = 
             logger.warning(f"Retention purge error: {e}")
 
 
+async def audit_head_loop(agent, interval: int = 3600):
+    """Publish the audit chain head through the security log, hourly by default.
+
+    The chain is keyless SHA-256: someone who can write the database can rewrite
+    a row and recompute everything after it, or delete the newest rows, and it
+    still verifies against itself. The only defence is a head recorded where they
+    cannot reach. The security log is exported (SIEM, webhooks, the log pipeline),
+    so a line there is a copy outside the database; GET /api/v1/audit/verify
+    ?anchor_id=&anchor_hash= later checks a recorded head against the chain.
+    ``audit.head_log_interval_seconds`` sets the period; 0 turns it off.
+    """
+    if interval <= 0:
+        return
+    while True:
+        try:
+            head = await agent.store.get_audit_head()
+            if head["count"]:
+                await agent._add_log(
+                    f"AUDIT HEAD id={head['id']} hash={head['hash']} count={head['count']}",
+                    level="SECURITY",
+                )
+            _iteration_ok("audit_head")
+        except Exception as e:
+            logger.warning(f"Audit head publication error: {e}")
+        await asyncio.sleep(interval)
+
+
 async def smart_router_sync_loop(agent, interval: int = 5):
     """Periodically synchronize local _endpoint_stats with Redis."""
     if not getattr(agent, "redis_client", None):

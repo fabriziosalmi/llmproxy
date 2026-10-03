@@ -669,18 +669,29 @@ class SQLiteStore:
                 conn.row_factory = None
         return {"audit": audit, "spend": spend, "roles": roles}
 
-    async def verify_audit_chain(self) -> dict:
+    async def get_audit_head(self) -> dict:
+        """Id and hash of the newest audit row, and the row count, in one read."""
+        conn = await self._get_conn()
+        async with conn.execute(
+            "SELECT id, entry_hash, (SELECT COUNT(*) FROM audit_log) "
+            "FROM audit_log ORDER BY id DESC LIMIT 1"
+        ) as cursor:
+            row = await cursor.fetchone()
+        return audit_chain.chain_head(tuple(row) if row else None)
+
+    async def verify_audit_chain(self, anchor: dict | None = None) -> dict:
         """Verify the integrity of the audit log hash chain.
 
         Walks every entry in order, a page at a time, and recomputes its hash
         from the stored fields + previous hash. If any recomputed hash doesn't
         match the stored hash, the chain is broken (tamper detected). Rows
         removed by a recorded retention purge or erasure are bridged (see
-        store/audit_chain.py).
+        store/audit_chain.py). With ``anchor`` (``{"id", "hash"}``, a head
+        recorded outside the database) the chain must also still contain that row.
         """
         conn = await self._get_conn()
         gaps = audit_chain.load_gaps(await self.get_state(audit_chain.GAPS_KEY))
-        verifier = audit_chain.ChainVerifier(gaps)
+        verifier = audit_chain.ChainVerifier(gaps, anchor)
         last_id = -1
         while True:
             # Keyset paging: no OFFSET, and rows appended meanwhile are simply

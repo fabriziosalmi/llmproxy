@@ -125,7 +125,14 @@ class BaseRepository(ABC):
         """DSAR (Article 15): export all data for a subject."""
         raise NotImplementedError(f"{type(self).__name__} does not implement export_subject_data")
 
-    async def verify_audit_chain(self) -> dict:
+    async def verify_audit_chain(self, anchor: dict | None = None) -> dict:
         """Verify the integrity of the audit log hash chain.
-        Returns {"valid": bool, "total": int, "verified": int, "broken_at": int|None}."""
+        Returns {"valid": bool, "total": int, "verified": int, "broken_at": int|None}.
+        ``anchor`` ({"id", "hash"}, a head recorded outside the database) also checks
+        the chain still contains that row."""
         raise NotImplementedError(f"{type(self).__name__} does not implement verify_audit_chain")
+
+    async def get_audit_head(self) -> dict:
+        """The newest audit row's id and hash plus the row count: the value to
+        record outside the database. {"id": 0, "hash": "GENESIS", "count": 0} when empty."""
+        raise NotImplementedError(f"{type(self).__name__} does not implement get_audit_head")

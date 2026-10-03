@@ -2,6 +2,43 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.37.18] — 2026-10-03
+
+### An audit chain head you can keep outside the database (patch, audit LLMPRO-DATA-04)
+
+- **The gap**: the audit chain is keyless SHA-256 with nothing stored outside the
+  database. Anyone who can write it can edit a row and recompute every later
+  `prev_hash` / `entry_hash`, or delete the newest rows, and `verify_audit_chain`
+  still says valid: the chain is only checked against itself. (Shown in
+  `tests/test_audit_anchor.py`: a consistent rewrite verifies without an anchor.)
+- **Added**: the chain's **head** (`id`, `hash` and row `count` of the newest
+  row) is exported two ways: `GET /api/v1/audit/head`, and an hourly
+  `AUDIT HEAD id=... hash=... count=...` line through the security log, which
+  reaches the SIEM and webhook exports (`audit.head_log_interval_seconds`,
+  default 3600, `0` = off). `GET /api/v1/audit/verify?anchor_id=&anchor_hash=`
+  checks the chain against a head recorded elsewhere: it fails with
+  `mismatch` (rows up to it were rewritten, even consistently) or `truncated`
+  (the chain now ends before it), and reports `ok`, `purged` (older than the
+  oldest retained row) or `erased` (removed by a recorded erasure) without
+  alarm. `400` for a malformed or half-given anchor.
+- **Not done, and why**: the proposed keyed hash (HMAC). It would stop forged
+  appends, but it changes the format of every stored `entry_hash` (old rows
+  would need a scheme marker; the column is fixed-width) and needs a decision
+  about where the key lives and how it rotates. The head export is the part that
+  needs neither. `docs/threat_model.md` states what an anchor catches (consistent
+  rewrites, tail truncation) and what it does not (rows forged after your newest
+  anchor, rollback of the whole database to a state matching an older one).
+- **Alerting fix found on the way**: `BackgroundLoopStalled` used one 15-minute
+  threshold for every loop, but `metrics_history`, `cache_eviction` and
+  `audit_head` run hourly and `retention_purge` daily, so it fired for most of
+  every hour on loops that were working. The slow loops are excluded from it and
+  have their own rules (`HourlyBackgroundLoopStalled`, `RetentionPurgeStalled`);
+  a test checks each loop's real interval against the rule that covers it.
+- **Docs**: `docs/api/admin.md`, a new "Audit and retention" section in
+  `docs/guide/configuration.md`, and `docs/threat_model.md`.
+- **Tests**: `tests/test_audit_anchor.py` (SQLite always; Postgres with
+  `TEST_POSTGRES_DSN`), `tests/test_background_loop_alerts.py`.
+
 ## [1.37.17] — 2026-10-03
 
 ### SQLite deployments: retention purge, erasure, export and audit verification actually run (patch, found while fixing LLMPRO-DATA-04)

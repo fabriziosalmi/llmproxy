@@ -145,6 +145,30 @@ budget:
 
 Budget is persisted to SQLite and survives restarts.
 
+## Audit and retention
+
+```yaml
+gdpr:
+  auto_purge: true        # default true: delete old audit/spend rows daily
+  retention_days: 90      # default 90
+
+audit:
+  head_log_interval_seconds: 3600   # default 3600; 0 turns it off
+```
+
+`gdpr.auto_purge` runs a daily job that deletes audit and spend rows older than
+`gdpr.retention_days`. The audit hash chain stays verifiable across it: each purge
+and each erasure records the hashes around the removed rows
+(see the [audit API](/api/admin#audit-integrity)).
+
+The audit chain is keyless SHA-256, so it detects accidental damage and unrecorded
+edits, not someone who can write the database and recomputes it. To cover that,
+the proxy writes an `AUDIT HEAD id=... hash=... count=...` line to the security log
+every `audit.head_log_interval_seconds`, which reaches the SIEM and webhook
+exports. Keep one of those lines (or `GET /api/v1/audit/head`) somewhere the
+database's writers cannot reach, and later check the chain against it with
+`GET /api/v1/audit/verify?anchor_id=<id>&anchor_hash=<hash>`.
+
 ## Security
 
 ```yaml
