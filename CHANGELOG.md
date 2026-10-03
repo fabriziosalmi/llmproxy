@@ -2,6 +2,34 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.37.11] — 2026-10-03
+
+### OpenAI error envelope on /v1; every route documented (patch, audit LLMPRO-API-01, API-02)
+
+- **Fixed (API-02)**: no exception handler was registered, so a failure on the
+  OpenAI-compatible routes came back as FastAPI's `{"detail": "..."}`: right
+  status, but no `error.message` / `error.type` / `error.code` for an OpenAI
+  client to read, and a shape nothing documented. On `/v1/` the body is now the
+  OpenAI envelope **and** still carries `detail`, so the bundled UI and any
+  caller that already reads `detail` are unaffected. Validation errors keep
+  status 422 and name the field in `error.param`. `Retry-After` and other
+  exception headers pass through. The control plane (`/api/v1/`) keeps FastAPI's
+  default response. Defined once in `proxy/error_envelope.py`.
+- **Not covered**: responses produced before a route runs (the firewall's
+  413/403, the rate limiter's 429) keep their own bodies. Documented as such.
+- **Fixed (API-01)**: 30 control-plane paths appeared in no document, among them
+  the ones that delete or reset state (`/api/v1/gdpr/purge`, `/gdpr/erase/{subject}`,
+  `/security/reset`, `/firewall/reset`, `/cache/clear`). `docs/api/admin.md` now
+  states the permission each route needs and what it does, marks the destructive
+  ones, and documents config apply/validate/confirm-token, audit verify, runtime
+  tuning, GDPR and the dashboard endpoints. `docs/api/proxy.md` gains an
+  **Errors** section with the status/type/code table. The docs build is clean.
+- **Guard**: `tests/test_api_docs_cover_routes.py` reads the schema of the app
+  `create_app` actually builds and fails when a registered path is missing from
+  `docs/api/*.md`.
+- **Tests**: `tests/test_error_envelope.py` and the new error-contract tests in
+  `tests/test_openapi_contracts.py` (through `create_app`).
+
 ## [1.37.10] — 2026-10-03
 
 ### plugins/ is inside the mypy gate (patch, audit LLMPRO-QUAL-03)

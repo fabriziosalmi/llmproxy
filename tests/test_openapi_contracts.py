@@ -246,6 +246,63 @@ async def test_chat_proxy_disabled_returns_503(client, agent):
     agent.proxy_enabled = True
 
 
+# ── Error Contracts ──
+#
+# /v1 is the OpenAI-compatible data plane, so its failures carry the OpenAI
+# envelope (error.message / type / param / code) as well as `detail`. /api/v1 is
+# the control plane and keeps FastAPI's {"detail": ...}. See proxy/error_envelope.py
+# and docs/api/proxy.md ("Errors").
+
+
+@pytest_asyncio.fixture
+async def full_client(agent):
+    """The app as create_app builds it, so the error handlers it installs are in play."""
+    from proxy.app_factory import create_app
+
+    agent.config["server"]["auth"]["enabled"] = False
+    agent.app = create_app(agent)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=agent.app), base_url="http://test"
+    ) as c:
+        yield c
+
+
+@pytest.mark.asyncio
+async def test_data_plane_error_is_an_openai_envelope(full_client, agent):
+    agent.proxy_enabled = False
+    resp = await full_client.post(
+        "/v1/chat/completions",
+        json={"model": "gpt-4", "messages": [{"role": "user", "content": "hi"}]},
+    )
+    agent.proxy_enabled = True
+
+    assert resp.status_code == 503
+    body = resp.json()
+    assert set(body) == {"error", "detail"}
+    assert set(body["error"]) == {"message", "type", "param", "code"}
+    assert body["error"]["type"] == "server_error"
+    assert body["error"]["code"] == "service_unavailable"
+    assert body["error"]["message"] == body["detail"]
+
+
+@pytest.mark.asyncio
+async def test_data_plane_validation_error_names_the_field(full_client):
+    resp = await full_client.post("/v1/chat/completions", json={"model": "gpt-4"})
+
+    assert resp.status_code == 422
+    error = resp.json()["error"]
+    assert error["type"] == "invalid_request_error"
+    assert error["param"] == "messages"
+
+
+@pytest.mark.asyncio
+async def test_control_plane_error_keeps_the_default_shape(full_client):
+    resp = await full_client.post("/api/v1/registry/ghost/toggle")
+
+    assert resp.status_code == 404
+    assert set(resp.json()) == {"detail"}
+
+
 # ── Content-Type Contracts ──
 
 
