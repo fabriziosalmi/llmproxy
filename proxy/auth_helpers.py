@@ -210,3 +210,125 @@ def principal_already_verified(request: Any) -> bool:
     the contradiction.
     """
     return getattr(getattr(request, "state", None), "principal_kind", None) is not None
+
+
+async def authenticate_data_plane(
+    agent: Any, request: Any, api_key: str | None, *, enforce_quota: bool = False
+) -> str:
+    """Authenticate a /v1/ caller; the one implementation behind every data-plane route.
+
+    chat, completions and embeddings each carried their own copy of this block
+    and the copies had drifted: only chat recorded the missing-key, empty-token
+    and invalid-key failures, so a client brute-forcing keys against
+    /v1/completions moved no llm_proxy_auth_failures_total counter, and only
+    chat dispatched the AUTH_FAILURE webhook or verified the Tailscale identity.
+    Everything now lives here, so a new credential type or a new failure reason
+    is added once.
+
+    Returns the bearer token ("" when authentication is disabled). Raises
+    HTTPException(401/403) on failure. A valid key whose quota is exhausted sets
+    ``request.state.quota_exceeded`` for the pipeline to enforce; a route that
+    never reaches the pipeline passes ``enforce_quota=True`` and gets a 402.
+    """
+    import logging
+
+    from fastapi import HTTPException
+
+    from core.auth_policy import auth_enabled
+    from core.metrics import MetricsTracker
+    from core.webhooks import EventType
+
+    logger = logging.getLogger("llmproxy.auth")
+
+    if not auth_enabled(agent.config):
+        return ""
+
+    ip = request.client.host if request.client else "unknown"
+
+    if not api_key:
+        MetricsTracker.track_auth_failure("missing_key")
+        agent._spawn_task(
+            agent.webhooks.dispatch(
+                EventType.AUTH_FAILURE, {"reason": "missing_key", "ip": ip}
+            )
+        )
+        raise HTTPException(status_code=401, detail="Unauthorized: Missing API key")
+
+    token = parse_bearer(api_key)
+    if not token:
+        MetricsTracker.track_auth_failure("empty_token")
+        raise HTTPException(status_code=401, detail="Unauthorized: Empty token")
+
+    identity = None
+    if agent.identity.enabled:
+        try:
+            identity = agent.identity.verify_proxy_jwt(token)
+            if not identity:
+                identity = await agent.identity.verify_token(token)
+        except ValueError as e:
+            MetricsTracker.track_auth_failure("jwt_invalid")
+            agent._spawn_task(
+                agent.webhooks.dispatch(
+                    EventType.AUTH_FAILURE, {"reason": "jwt_invalid", "error": str(e)}
+                )
+            )
+            # H7: Don't leak internal error details (JWKS paths, OIDC URLs, JWT
+            # algorithm info). Log the full error, return a generic one.
+            logger.warning(f"Identity verification failed: {e}")
+            raise HTTPException(
+                status_code=401, detail="Unauthorized: Invalid or expired token"
+            ) from e
+
+    if identity and identity.verified:
+        request.state.identity = identity
+        request.state.user = identity.email or identity.subject
+        request.state.roles = identity.roles
+        if not agent.rbac.check_permission(identity.roles, "proxy:use"):
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
+        await agent.rbac.set_user_roles(identity.subject, identity.email, identity.roles)
+        await agent._add_log(
+            f"IDENTITY: {identity.provider} user={identity.email or identity.subject} roles={identity.roles}",
+            level="SECURITY",
+        )
+    else:
+        if not agent._verify_api_key(token):
+            MetricsTracker.track_auth_failure("invalid_key")
+            # Surface on the Security dashboard's live event feed: a rejected
+            # key is exactly the signal an operator wants to see.
+            await agent._add_log(
+                f"AUTH: rejected invalid API key from {ip}", level="SECURITY"
+            )
+            agent._spawn_task(
+                agent.webhooks.dispatch(
+                    EventType.AUTH_FAILURE, {"reason": "invalid_api_key", "ip": ip}
+                )
+            )
+            raise HTTPException(
+                status_code=401, detail="Unauthorized: Invalid API key or JWT"
+            )
+
+        if not await agent.rbac.check_quota(token):
+            agent._spawn_task(
+                agent.webhooks.dispatch(
+                    EventType.BUDGET_THRESHOLD,
+                    {"reason": "quota_exceeded", "key_prefix": token[:8] + "..."},
+                )
+            )
+            request.state.quota_exceeded = True
+            if enforce_quota:
+                raise HTTPException(
+                    status_code=402,
+                    detail="FinOps: Budget Exceeded (HTTP 402). "
+                    "API key quota exhausted.",
+                )
+
+    client_host = request.client.host if request.client else "0.0.0.0"  # nosec B104
+    ts_id = await agent.zt_manager.verify_tailscale_identity(client_host)
+    if ts_id["status"] == "verified":
+        await agent._add_log(
+            f"ZT VERIFIED: {ts_id['user']} on {ts_id['node']}", level="SECURITY"
+        )
+        request.state.user = getattr(request.state, "user", None) or ts_id["user"]
+        request.state.node = ts_id["node"]
+
+    return token

@@ -20,6 +20,7 @@ from core.session_id import (
     from_token as session_id_from_token,
 )
 from proxy.adapters.registry import detect_provider, get_adapter
+from proxy.auth_helpers import authenticate_data_plane
 from proxy.schemas import EmbeddingsRequest
 
 logger = logging.getLogger("llmproxy.routes.embeddings")
@@ -62,72 +63,11 @@ def create_router(agent) -> APIRouter:
         from core.metrics import MetricsTracker
         from core.pricing import estimate_cost
 
-        # Auth parity with /v1/chat/completions.
-        token = ""
-        if agent.config["server"]["auth"]["enabled"]:
-            if not api_key:
-                raise HTTPException(
-                    status_code=401, detail="Unauthorized: Missing API key"
-                )
-            from proxy.auth_helpers import parse_bearer
-
-            token = parse_bearer(api_key)
-            if not token:
-                raise HTTPException(status_code=401, detail="Unauthorized: Empty token")
-
-            identity = None
-            if agent.identity.enabled:
-                try:
-                    identity = agent.identity.verify_proxy_jwt(token)
-                    if not identity:
-                        identity = await agent.identity.verify_token(token)
-                except ValueError:
-                    MetricsTracker.track_auth_failure("jwt_invalid")
-                    raise HTTPException(
-                        status_code=401, detail="Unauthorized: Invalid or expired token"
-                    ) from None
-
-            if identity and identity.verified:
-                request.state.identity = identity
-                request.state.user = identity.email or identity.subject
-                request.state.roles = identity.roles
-                if not agent.rbac.check_permission(identity.roles, "proxy:use"):
-                    raise HTTPException(
-                        status_code=403, detail="Insufficient permissions"
-                    )
-                await agent.rbac.set_user_roles(
-                    identity.subject, identity.email, identity.roles
-                )
-            else:
-                if not agent._verify_api_key(token):
-                    MetricsTracker.track_auth_failure("invalid_key")
-                    raise HTTPException(
-                        status_code=401, detail="Unauthorized: Invalid API key or JWT"
-                    )
-
-                if not await agent.rbac.check_quota(token):
-                    # Parity with /v1/chat/completions: the chat path records
-                    # quota_exceeded on request.state and request_pipeline
-                    # enforces it. This route never reaches the pipeline, so
-                    # it must enforce here — setting the flag alone served
-                    # over-quota keys without limit.
-                    from core.webhooks import EventType
-
-                    agent._spawn_task(
-                        agent.webhooks.dispatch(
-                            EventType.BUDGET_THRESHOLD,
-                            {
-                                "reason": "quota_exceeded",
-                                "key_prefix": token[:8] + "...",
-                            },
-                        )
-                    )
-                    request.state.quota_exceeded = True
-                    raise HTTPException(
-                        status_code=402,
-                        detail="FinOps: Budget Exceeded (HTTP 402). "
-                        "API key quota exhausted.",
-                    )
+        # This route never reaches request_pipeline, which is what enforces
+        # quota_exceeded for chat, so it enforces here (402).
+        token = await authenticate_data_plane(
+            agent, request, api_key, enforce_quota=True
+        )
 
         # See proxy/schemas.py: validated at the boundary, forwarded unchanged.
         body = payload.to_body()

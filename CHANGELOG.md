@@ -2,6 +2,33 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.37.5] — 2026-10-03
+
+### One authentication path for the data plane (patch, audit LLMPRO-QUAL-02, LLMPRO-CONF-02)
+
+- **Fixed (QUAL-02)**: chat, completions and embeddings each carried a pasted
+  copy of the `/v1` auth block and the copies had drifted. Only chat counted
+  missing-key, empty-token and invalid-key failures, dispatched the
+  `AUTH_FAILURE` webhook, wrote the rejected-key line to the live security feed
+  and checked the Tailscale identity, so a client brute-forcing keys against
+  `/v1/completions` moved no `llm_proxy_auth_failures_total` counter (embeddings
+  counted two of the four reasons). The block is now
+  `proxy.auth_helpers.authenticate_data_plane` and all three routes call it.
+  Embeddings keeps its stricter quota behaviour (`402`, because it never reaches
+  the pipeline that enforces `quota_exceeded` for chat) via `enforce_quota=True`.
+- **Fixed (CONF-02)**: the three handlers read `agent.config["server"]["auth"]
+  ["enabled"]` directly. A config with no `server.auth` section passes startup
+  validation and the control-plane middleware treats it as authentication ON,
+  but every `/v1/chat/completions`, `/v1/completions` and `/v1/embeddings`
+  request raised `KeyError` and returned 500. They now go through
+  `auth_enabled()`, so the missing section means "authenticate" everywhere.
+- **Behaviour to know about**: completions and embeddings now also record the
+  failures and webhook events chat always did, and verify the Tailscale identity
+  when one is present (it only annotates `request.state`).
+- **Tests**: `tests/test_data_plane_auth_parity.py` (same counters on all three
+  routes, no-auth-section config, webhook, quota). `tests/test_embeddings_quota.py`
+  gained the collaborators its hand-built agent double needs.
+
 ## [1.37.4] — 2026-10-03
 
 ### The audit chain survives retention purge and erasure (patch, audit LLMPRO-DATA-01)
