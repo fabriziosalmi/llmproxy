@@ -84,6 +84,44 @@ def _is_provider_key_missing(api_key_env: str) -> bool:
     return not val or val in _PLACEHOLDERS
 
 
+def _require_number(
+    config: dict,
+    path: str,
+    *,
+    minimum: float = 0,
+    integer: bool = False,
+    above: bool = False,
+):
+    """Return the number at a dotted config path, or None when it is absent.
+
+    Raises StartupError naming the key when it is present and is not a number
+    in range. These values are compared with floats on the request path or when
+    the hot-reload loop applies them, so a quoted number such as
+    ``daily_limit: "50"`` would otherwise pass validation and raise TypeError
+    on every request.
+    """
+    node: object = config
+    for part in path.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return None
+        node = node[part]
+    value = node
+    kind = "an integer" if integer else "a number"
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or (integer and isinstance(value, float) and not value.is_integer())
+    ):
+        raise StartupError(
+            f"{path} must be {kind}, got {type(value).__name__} ({value!r}). "
+            "Remove the quotes if you wrote it as a string."
+        )
+    if value < minimum or (above and value == minimum):
+        bound = f"greater than {minimum:g}" if above else f"at least {minimum:g}"
+        raise StartupError(f"{path} must be {bound}, got {value!r}.")
+    return value
+
+
 def validate_config(config: dict) -> list[str]:
     """Validate config and return warnings. Raises StartupError on critical issues."""
     warnings = []
@@ -212,6 +250,24 @@ def validate_config(config: dict) -> list[str]:
             "the ASGI app with no auth/rate-limit. Keep bind 127.0.0.1 or "
             "scrape GET /metrics:8090 with an admin key."
         )
+
+    # 8. Numeric thresholds the request path and the reload loop use.
+    #
+    # Type- and range-checked here, at startup and (because the hot-reload loop
+    # calls this function) on every reload, instead of failing later as a
+    # TypeError inside a request.
+    daily = _require_number(config, "budget.daily_limit")
+    soft = _require_number(config, "budget.soft_limit")
+    if daily is not None and soft is not None and soft > daily:
+        raise StartupError(
+            f"budget.soft_limit ({soft:g}) must not exceed budget.daily_limit "
+            f"({daily:g}): the warning would never fire before the hard cap."
+        )
+    _require_number(config, "circuit_breaker.failure_threshold", minimum=1, integer=True)
+    _require_number(config, "circuit_breaker.recovery_timeout", minimum=0, above=True)
+    _require_number(config, "rate_limiting.requests_per_minute", minimum=0, above=True)
+    _require_number(config, "rate_limiting.burst")
+    _require_number(config, "caching.ttl")
 
     return warnings
 
