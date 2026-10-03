@@ -609,11 +609,7 @@ def create_app(agent) -> FastAPI:
             logger.info(f"Shutdown: cancelled {len(tasks)} background task(s)")
 
         # 1. Flush plugin state (SmartBudgetGuard persists on_unload)
-        for name, instance in agent.plugin_manager._plugin_instances.items():
-            try:
-                await instance.on_unload()
-            except Exception as e:
-                logger.error(f"Plugin '{name}' unload failed: {e}")
+        await agent.plugin_manager.unload_all()
         # 2. Drain pending write queue to SQLite
         await drain_pending_writes(agent)
         # 3. Force SQLite WAL checkpoint before container receives SIGKILL

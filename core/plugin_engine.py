@@ -405,6 +405,33 @@ class PluginManager:
         traces = list(self._ring_traces)
         return list(reversed(traces[-limit:]))
 
+    def get_ttft_stats(self) -> dict[str, Any]:
+        """Time-to-first-token percentiles over the recent request traces."""
+        samples = [t["ttft_ms"] for t in self._ring_traces if "ttft_ms" in t]
+        return {"samples": len(samples), **self._percentiles(samples)}
+
+    def annotate_ring_trace(self, req_id: str, **fields: Any) -> bool:
+        """Attach end-of-request fields (total_ms, ttft_ms...) to a request's trace.
+
+        Returns False when the trace is gone (never recorded or already evicted).
+        """
+        trace = self._ring_traces_index.get(req_id)
+        if trace is None:
+            return False
+        trace.update(fields)
+        return True
+
+    async def unload_all(self) -> None:
+        """Call on_unload on every plugin instance so each can flush its state.
+
+        One plugin failing must not stop the others from flushing.
+        """
+        for name, instance in self._plugin_instances.items():
+            try:
+                await instance.on_unload()
+            except Exception as e:
+                self.logger.error(f"Plugin '{name}' unload failed: {e}")
+
     def get_ring_latency(self) -> dict[str, Any]:
         """Aggregate ring-level latency percentiles from recent traces."""
         ring_samples: dict[str, list] = {h.value: [] for h in PluginHook}

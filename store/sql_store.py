@@ -533,7 +533,8 @@ class SQLiteStore:
                 async with conn.execute(
                     "SELECT MIN(id) FROM audit_log WHERE ts >= ?", (cutoff_ts,)
                 ) as cursor:
-                    first_kept = (await cursor.fetchone())[0]
+                    row = await cursor.fetchone()
+                first_kept = row[0] if row else None
 
                 # Nothing inside the window: the whole chain is expired and the
                 # next append starts a new one at GENESIS, so there is no

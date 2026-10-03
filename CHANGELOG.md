@@ -2,6 +2,25 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.37.9] — 2026-10-03
+
+### Transport layer uses PluginManager's public API (patch, audit LLMPRO-ARCH-02)
+
+- **Fixed**: `proxy/routes/admin.py` (the latency metrics route), `proxy/request_pipeline.py`
+  and the shutdown handler in `proxy/app_factory.py` read `PluginManager._ring_traces`,
+  `._percentiles`, `._ring_traces_index` and `._plugin_instances` directly. They are
+  attribute accesses, so no import or type check flagged them, and restructuring
+  the manager's internals would have broken three modules at runtime.
+- **Now**: `PluginManager.get_ttft_stats()`, `annotate_ring_trace(req_id, **fields)`
+  and `unload_all()` (one plugin failing to flush no longer stops the others).
+  The `/api/v1/metrics/latency` response shape is unchanged.
+- **Guard**: `tests/test_plugin_manager_public_api.py` fails if anything under
+  `proxy/` reads a `plugin_manager._private` member again.
+- **Also fixed**: the 1.37.4 purge code indexed `cursor.fetchone()` without a
+  `None` check, which the CI mypy gate rejects (`Row | None` is not indexable).
+  Behaviour was already correct (`MIN(id)` always returns a row); now it also
+  type-checks. mypy over `core/ proxy/ store/` is clean.
+
 ## [1.37.8] — 2026-10-03
 
 ### The routing ring no longer reads the endpoint pool from the database on every request (patch, audit LLMPRO-PERF-01, PERF-02)
