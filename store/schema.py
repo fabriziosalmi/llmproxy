@@ -23,12 +23,18 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import NamedTuple
 
+from models import EndpointStatus
+
 SQLITE = "sqlite"
 POSTGRES = "postgres"
 
 # sha256, hex-encoded. Named so the audit-chain columns cannot drift apart
 # again by someone changing one of the two literals.
 _HASH_LEN = 64
+
+# The status values come from the enum, so the constraint cannot drift from it.
+_STATUS_MIN = min(EndpointStatus)
+_STATUS_MAX = max(EndpointStatus)
 
 
 class Column(NamedTuple):
@@ -81,11 +87,14 @@ TABLES: dict[str, list[Column]] = {
     "endpoints": [
         _text("id", 255, "PRIMARY KEY"),
         _text("url", 512, "UNIQUE"),
-        _int("status"),
+        # Range checks live here, in the database, because the pydantic model is
+        # only one of the writers: an admin's SQL fix, a restore from backup or a
+        # future store method can all bypass it. NULL is allowed (unmeasured).
+        _int("status", f"CHECK (status BETWEEN {_STATUS_MIN.value} AND {_STATUS_MAX.value})"),
         _blob_text("metadata"),
         _text("last_verified", 50),
-        _real("latency_ms"),
-        _real("success_rate"),
+        _real("latency_ms", "CHECK (latency_ms >= 0)"),
+        _real("success_rate", "CHECK (success_rate BETWEEN 0 AND 1)"),
     ],
     "app_state": [
         _text("key", 255, "PRIMARY KEY"),
@@ -197,3 +206,71 @@ def iter_create_statements(dialect: str) -> Iterable[str]:
 
 def column_names(table: str) -> list[str]:
     return [c.name for c in TABLES[table]]
+
+
+# ── 002: range checks on endpoints ───────────────────────────────────────────
+#
+# CREATE TABLE IF NOT EXISTS leaves an existing table alone, so a database built
+# before the CHECK constraints were declared would never get them. Values that
+# are already out of range are brought into range first (a status outside the
+# enum becomes IGNORED, a rate is clamped to [0, 1], a negative latency becomes
+# 0): rows with such values could not be read back through EndpointStatus or fed
+# to the routing score anyway.
+
+_ENDPOINT_CLAMPS = (
+    f"UPDATE endpoints SET status = {EndpointStatus.IGNORED.value} "
+    f"WHERE status IS NOT NULL AND status NOT BETWEEN {_STATUS_MIN.value} AND {_STATUS_MAX.value}",
+)
+
+_SQLITE_REBUILD_COLUMNS = ", ".join(c.name for c in TABLES["endpoints"])
+
+_SQLITE_002 = [
+    "DROP TABLE IF EXISTS endpoints_rebuild",
+    create_table_sql("endpoints", SQLITE).replace(
+        "CREATE TABLE IF NOT EXISTS endpoints", "CREATE TABLE endpoints_rebuild", 1
+    ),
+    # Copy with the out-of-range values brought into range.
+    "INSERT INTO endpoints_rebuild (" + _SQLITE_REBUILD_COLUMNS + ") SELECT "
+    + ", ".join(
+        {
+            "status": f"CASE WHEN status IS NOT NULL AND status NOT BETWEEN {_STATUS_MIN.value} AND {_STATUS_MAX.value} THEN {EndpointStatus.IGNORED.value} ELSE status END",
+            "latency_ms": "CASE WHEN latency_ms < 0 THEN 0 ELSE latency_ms END",
+            "success_rate": "CASE WHEN success_rate < 0 THEN 0 WHEN success_rate > 1 THEN 1 ELSE success_rate END",
+        }.get(c.name, c.name)
+        for c in TABLES["endpoints"]
+    )
+    + " FROM endpoints",
+    "DROP TABLE endpoints",
+    "ALTER TABLE endpoints_rebuild RENAME TO endpoints",
+    create_index_sql("idx_endpoints_status", "endpoints", "status"),
+]
+
+
+def _pg_add_check(name: str, expression: str) -> str:
+    """Add a named CHECK to endpoints unless it is already there (fresh databases
+    get the same constraint inline, under the same generated name)."""
+    return (
+        "DO $$ BEGIN "
+        f"IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = '{name}' "
+        "AND conrelid = 'endpoints'::regclass) THEN "
+        f"ALTER TABLE endpoints ADD CONSTRAINT {name} CHECK ({expression}); "
+        "END IF; END $$"
+    )
+
+
+_POSTGRES_002 = [
+    *_ENDPOINT_CLAMPS,
+    "UPDATE endpoints SET latency_ms = 0 WHERE latency_ms < 0",
+    "UPDATE endpoints SET success_rate = LEAST(1.0, GREATEST(0.0, success_rate)) "
+    "WHERE success_rate < 0 OR success_rate > 1",
+    _pg_add_check(
+        "endpoints_status_check",
+        f"status BETWEEN {_STATUS_MIN.value} AND {_STATUS_MAX.value}",
+    ),
+    _pg_add_check("endpoints_latency_ms_check", "latency_ms >= 0"),
+    _pg_add_check("endpoints_success_rate_check", "success_rate BETWEEN 0 AND 1"),
+]
+
+MIGRATIONS.append(
+    ("002_endpoints_range_checks", {SQLITE: _SQLITE_002, POSTGRES: _POSTGRES_002})
+)

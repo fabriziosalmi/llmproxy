@@ -2,6 +2,43 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.37.14] — 2026-10-03
+
+### One copy of endpoint health, and range checks in the database (patch, audit LLMPRO-DOM-02, LLMPRO-DOM-03)
+
+- **Fixed (DOM-02)**: an endpoint's `latency_ms` and `success_rate` lived in
+  their columns, inside the metadata JSON, and (as a routing average) in memory;
+  `update_status` copied from one to another, and a later metadata write left the
+  column and the JSON copy disagreeing. The columns are now the stored truth.
+  `update_status` and `add_endpoint` store metadata **without** the stat keys;
+  stats passed in metadata still reach their columns. `LLMEndpoint` moves any
+  stats found in metadata (rows written by older versions) into its fields and
+  strips them, the field winning when it has a value. The routing average in
+  `core/endpoint_stats.py` is a different thing (a smoothed estimate over recent
+  requests) and is left as it is.
+- **Also fixed**: a call that carried *only* stats used to replace the stored
+  metadata with `{"latency_ms": ...}`, dropping the provider and models. It now
+  updates the columns and leaves the metadata alone.
+- **Fixed (DOM-03)**: the schema declared no `CHECK` constraints, so
+  `success_rate = 5` or `status = 99` could be written by anything that bypassed
+  the pydantic model (an admin's SQL, a restore, a future store method). The
+  `endpoints` table now enforces `status` within the `EndpointStatus` range
+  (derived from the enum, so it cannot drift), `success_rate` in [0, 1] and
+  `latency_ms >= 0`; NULL (unmeasured) is allowed.
+- **Migration `002_endpoints_range_checks`** brings existing databases up to
+  date. Out-of-range values already present are brought into range first: a
+  status outside the enum becomes `IGNORED` (such a row could not be read back
+  through `EndpointStatus` anyway), a rate is clamped to [0, 1], a negative
+  latency becomes 0. SQLite cannot add a constraint in place, so the table is
+  rebuilt (copy, drop, rename, re-create the status index) inside one
+  transaction; Postgres adds named constraints guarded by an existence check.
+  Running it twice changes nothing.
+- **Tests**: `tests/test_endpoint_integrity.py` (SQLite always; Postgres with
+  `TEST_POSTGRES_DSN`), including migration of a database built before the
+  constraints. `tests/test_postgres_store.py::test_postgres_update_status` pinned
+  the SQL text of the old stats-only behaviour (replace the metadata); it now
+  asserts the new statements and keeps its original intent.
+
 ## [1.37.13] — 2026-10-03
 
 ### The audit chain is verified end to end (patch, audit LLMPRO-DATA-02)

@@ -14,6 +14,21 @@ class EndpointStatus(IntEnum):
 
 DEFAULT_PROVIDER = "openai"
 
+#: Measured health lives in the endpoints table's latency_ms/success_rate
+#: columns and nowhere else on the stored row. Older writers also copied these
+#: into the metadata JSON, where the copy went stale the moment a column was
+#: updated on its own.
+ENDPOINT_STAT_KEYS = ("latency_ms", "success_rate")
+
+
+def split_endpoint_stats(
+    metadata: dict[str, Any] | None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """(metadata without the stat keys, the stat values that were in it)."""
+    clean = dict(metadata or {})
+    stats = {k: clean.pop(k) for k in ENDPOINT_STAT_KEYS if k in clean}
+    return clean, stats
+
 
 class LLMEndpoint(BaseModel):
     """A registered upstream.
@@ -37,20 +52,28 @@ class LLMEndpoint(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _fold_provider_into_metadata(cls, data: Any) -> Any:
-        """Accept ``provider=`` / the legacy ``provider_type=`` and store it in metadata.
+    def _normalise_metadata(cls, data: Any) -> Any:
+        """Keep each fact in one place: provider in metadata, health in the fields.
 
-        Metadata that already names a provider wins, so a persisted row is never
-        overridden by a constructor default.
+        * ``provider=`` / the legacy ``provider_type=`` are folded into
+          metadata; metadata that already names a provider wins, so a persisted
+          row is never overridden by a constructor default.
+        * ``latency_ms`` / ``success_rate`` found in metadata (rows written by
+          older versions) are moved out of it. The field wins when it has a
+          value; the metadata copy only fills a missing one.
         """
         if not isinstance(data, dict):
             return data
-        metadata = dict(data.get("metadata") or {})
+        metadata, stats = split_endpoint_stats(data.get("metadata"))
         if not metadata.get("provider"):
             explicit = data.get("provider") or data.get("provider_type")
             if explicit:
                 metadata["provider"] = explicit
-        return {**data, "metadata": metadata}
+        merged = {**data, "metadata": metadata}
+        for key, value in stats.items():
+            if merged.get(key) is None:
+                merged[key] = value
+        return merged
 
     @computed_field  # type: ignore[prop-decorator]
     @property
