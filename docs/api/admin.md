@@ -264,7 +264,7 @@ bridged over. It checks the whole chain, a page of 5,000 rows at a time, so the 
 
 | Route | Permission | Description |
 |-------|-----------|-------------|
-| `GET /api/v1/dashboard/summary` | `logs:read` | The attention list and suggested next steps behind the overview page. |
+| `GET /api/v1/dashboard/summary` | `logs:read` | The attention list and suggested next steps behind the overview page: `now`, `attention`, `do_next`, `recent_changes`. If a section could not be built (for example the audit query failed) the rest is still returned and `section_errors` lists the missing sections: an empty `attention` is only "all clear" when `section_errors` is absent. |
 | `GET /api/v1/slos` | `users:manage` | Per-endpoint error rates from the circuit breakers and the daily budget burn. |
 | `GET /api/v1/analytics/forecast` | `users:manage` | Today's burn rate, projected total, headroom and time to the limit. |
 | `GET /api/v1/analytics/cost-efficiency` | `users:manage` | Average cost per request and savings against a premium-model baseline. |

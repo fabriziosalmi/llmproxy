@@ -2,6 +2,31 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.37.15] — 2026-10-03
+
+### The dashboard summary is built from small functions, and a missing section is visible (patch, audit LLMPRO-QUAL-01)
+
+- **Fixed**: `get_dashboard_summary` was a single 230-line closure with
+  cyclomatic complexity 52, the highest in the repository: pool and breaker
+  state, five kinds of attention item, sorting, the item-to-task mapping and the
+  audit read in one body. Changing one alert meant reading all of it. The pieces
+  are now pure functions in `proxy/dashboard.py` (`circuit_attention`,
+  `threat_attention`, `registry_attention`, `budget_attention`,
+  `sort_attention`, a `TASK_FOR_KIND` table behind `do_next`, `recent_changes`,
+  `degradation_state`); the route gathers state and calls them. The IP and key
+  threat loops, which were line-for-line copies, are one helper. Lizard
+  complexity of the route drops from 52 to under 10, and nothing in
+  `proxy/dashboard.py` is above 10.
+- **No change in what it returns**: `tests/test_dashboard_summary.py` was written
+  against the old implementation first (15 tests: every attention kind, ordering,
+  task mapping, audit mapping, section isolation) and passes unchanged on the new
+  one.
+- **Added**: each section was wrapped in a try/except that logged a warning and
+  carried on, so a broken section simply vanished from the response and an empty
+  `attention` list looked like "all clear". The response now carries
+  `section_errors` (names of the sections that could not be built) when there are
+  any, and omits the key when there are none. Documented in `docs/api/admin.md`.
+
 ## [1.37.14] — 2026-10-03
 
 ### One copy of endpoint health, and range checks in the database (patch, audit LLMPRO-DOM-02, LLMPRO-DOM-03)
