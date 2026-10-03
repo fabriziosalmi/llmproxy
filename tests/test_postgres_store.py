@@ -103,23 +103,37 @@ async def test_postgres_update_status(mock_pool_and_conn):
     store = PostgresStore("postgresql://localhost/dummy")
     store._pool = mock_pool
 
-    # 1. Update with metadata
+    # 1. Stats only: they go to their columns and the stored metadata is left alone
+    #    (a stats-only call used to REPLACE the metadata, dropping the provider).
     await store.update_status("test-ep", EndpointStatus.FOUND, {"latency_ms": 250.0})
     sql = mock_pool.execute.call_args[0][0]
     args = mock_pool.execute.call_args[0][1:]
-    assert "UPDATE endpoints SET status = $1, metadata = $2" in sql
+    assert "metadata" not in sql
+    assert "latency_ms = COALESCE($2, latency_ms)" in sql
     assert "TO_CHAR(NOW()" in sql
-    assert args[0] == EndpointStatus.FOUND.value
-    assert args[2] == 250.0
+    assert args == (EndpointStatus.FOUND.value, 250.0, None, "test-ep")
 
-    # 2. Update without metadata
+    # 2. Real metadata plus stats: metadata is replaced WITHOUT the stat keys,
+    #    the stats go to the columns.
+    await store.update_status(
+        "test-ep",
+        EndpointStatus.FOUND,
+        {"provider": "anthropic", "priority": 2, "latency_ms": 250.0, "success_rate": 0.9},
+    )
+    sql = mock_pool.execute.call_args[0][0]
+    args = mock_pool.execute.call_args[0][1:]
+    assert "UPDATE endpoints SET status = $1, metadata = $2" in sql
+    assert args[0] == EndpointStatus.FOUND.value
+    assert json.loads(args[1]) == {"provider": "anthropic", "priority": 2}
+    assert args[2] == 250.0 and args[3] == 0.9 and args[4] == "test-ep"
+
+    # 3. Update without metadata
     await store.update_status("test-ep", EndpointStatus.FOUND)
     sql_no_meta = mock_pool.execute.call_args[0][0]
     args_no_meta = mock_pool.execute.call_args[0][1:]
     assert "UPDATE endpoints SET status = $1" in sql_no_meta
     assert "last_verified = TO_CHAR" in sql_no_meta
-    assert args_no_meta[0] == EndpointStatus.FOUND.value
-    assert args_no_meta[1] == "test-ep"
+    assert args_no_meta == (EndpointStatus.FOUND.value, None, None, "test-ep")
 
 
 @pytest.mark.asyncio

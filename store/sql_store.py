@@ -7,7 +7,7 @@ from typing import Any
 
 import aiosqlite
 
-from models import EndpointStatus, LLMEndpoint
+from models import EndpointStatus, LLMEndpoint, split_endpoint_stats
 
 from . import audit_chain
 from .pool_cache import PoolCache
@@ -120,7 +120,7 @@ class SQLiteStore:
                 endpoint.id,
                 str(endpoint.url),
                 endpoint.status.value,
-                json.dumps(endpoint.metadata),
+                json.dumps(split_endpoint_stats(endpoint.metadata)[0]),
                 endpoint.latency_ms,
                 endpoint.success_rate,
             ),
@@ -131,17 +131,24 @@ class SQLiteStore:
     async def update_status(
         self, endpoint_id: str, status: EndpointStatus, metadata: dict | None = None
     ):
-        conn = await self._get_conn()
-        # Extract latency_ms from metadata if present
-        latency_ms = metadata.get("latency_ms") if metadata else None
-        success_rate = metadata.get("success_rate") if metadata else None
+        """Set an endpoint's status, and optionally its metadata and health.
 
-        if metadata:
+        ``latency_ms`` / ``success_rate`` in ``metadata`` are written to their
+        columns and are not stored in the metadata JSON as well. A call that
+        carries only those stats updates the columns and leaves the stored
+        metadata (provider, models, priority) as it was.
+        """
+        conn = await self._get_conn()
+        clean, stats = split_endpoint_stats(metadata)
+        latency_ms = stats.get("latency_ms")
+        success_rate = stats.get("success_rate")
+
+        if clean:
             await conn.execute(
                 "UPDATE endpoints SET status = ?, metadata = ?, latency_ms = COALESCE(?, latency_ms), success_rate = COALESCE(?, success_rate), last_verified = CURRENT_TIMESTAMP WHERE id = ?",
                 (
                     status.value,
-                    json.dumps(metadata),
+                    json.dumps(clean),
                     latency_ms,
                     success_rate,
                     endpoint_id,
@@ -149,8 +156,8 @@ class SQLiteStore:
             )
         else:
             await conn.execute(
-                "UPDATE endpoints SET status = ?, last_verified = CURRENT_TIMESTAMP WHERE id = ?",
-                (status.value, endpoint_id),
+                "UPDATE endpoints SET status = ?, latency_ms = COALESCE(?, latency_ms), success_rate = COALESCE(?, success_rate), last_verified = CURRENT_TIMESTAMP WHERE id = ?",
+                (status.value, latency_ms, success_rate, endpoint_id),
             )
         await conn.commit()
         self._pool_cache.invalidate()

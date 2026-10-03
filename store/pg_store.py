@@ -6,7 +6,7 @@ from typing import Any
 
 import asyncpg
 
-from models import EndpointStatus, LLMEndpoint
+from models import EndpointStatus, LLMEndpoint, split_endpoint_stats
 
 from . import audit_chain
 from .base import BaseRepository
@@ -91,7 +91,7 @@ class PostgresStore:
             endpoint.id,
             str(endpoint.url),
             endpoint.status.value,
-            json.dumps(endpoint.metadata),
+            json.dumps(split_endpoint_stats(endpoint.metadata)[0]),
             endpoint.latency_ms,
             endpoint.success_rate,
         )
@@ -100,11 +100,13 @@ class PostgresStore:
     async def update_status(
         self, endpoint_id: str, status: EndpointStatus, metadata: dict | None = None
     ):
+        """See SQLiteStore.update_status: stats go to their columns only."""
         pool = await self.init_pool()
-        latency_ms = metadata.get("latency_ms") if metadata else None
-        success_rate = metadata.get("success_rate") if metadata else None
+        clean, stats = split_endpoint_stats(metadata)
+        latency_ms = stats.get("latency_ms")
+        success_rate = stats.get("success_rate")
 
-        if metadata:
+        if clean:
             await pool.execute(
                 """
                 UPDATE endpoints SET status = $1, metadata = $2,
@@ -114,7 +116,7 @@ class PostgresStore:
                 WHERE id = $5
                 """,
                 status.value,
-                json.dumps(metadata),
+                json.dumps(clean),
                 latency_ms,
                 success_rate,
                 endpoint_id,
@@ -123,10 +125,14 @@ class PostgresStore:
             await pool.execute(
                 """
                 UPDATE endpoints SET status = $1,
+                                     latency_ms = COALESCE($2, latency_ms),
+                                     success_rate = COALESCE($3, success_rate),
                                      last_verified = TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS')
-                WHERE id = $2
+                WHERE id = $4
                 """,
                 status.value,
+                latency_ms,
+                success_rate,
                 endpoint_id,
             )
         self._pool_cache.invalidate()
