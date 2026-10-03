@@ -85,7 +85,7 @@ jobs:
           cache-dependency-path: ui/package-lock.json
       - run: npm ci --no-audit --no-fund
       - run: npm run test:coverage
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: ui-coverage
@@ -105,7 +105,7 @@ jobs:
           cache-dependency-path: ui/package-lock.json
       - run: npm ci --no-audit --no-fund
       - run: npm run build
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ui-dist
           path: ui/dist/
@@ -174,7 +174,7 @@ jobs:
         run: |
           if [ -f backend.pid ]; then kill "$(cat backend.pid)" 2>/dev/null || true; fi
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: failure()
         with:
           name: playwright-report
