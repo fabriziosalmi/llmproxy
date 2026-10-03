@@ -2,6 +2,24 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.37.6] — 2026-10-03
+
+### Numeric config is validated at startup and on reload (patch, audit LLMPRO-CONF-01)
+
+- **Fixed**: `validate_config` never looked at the `budget` section, although
+  `budget.daily_limit` is compared with a float on every chat request. A quoted
+  number (`daily_limit: "50"`, the slip `max_payload_size_kb` was already guarded
+  against) passed startup and hot-reload validation and then raised `TypeError`
+  inside the request pipeline on each call.
+- **Now checked** (type and range, message names the key and says "remove the
+  quotes"): `budget.daily_limit` and `budget.soft_limit` (numbers, not booleans,
+  >= 0, soft <= daily when both are set), `circuit_breaker.failure_threshold`
+  (integer >= 1) and `recovery_timeout` (> 0), `rate_limiting.requests_per_minute`
+  (> 0) and `burst` (>= 0), `caching.ttl` (>= 0). These are the values the
+  request path and the reload loop apply; the reload loop already calls
+  `validate_config`, so a bad edit is rejected and the running config is kept.
+- **Tests**: `tests/test_config_numeric_validation.py`.
+
 ## [1.37.5] — 2026-10-03
 
 ### One authentication path for the data plane (patch, audit LLMPRO-QUAL-02, LLMPRO-CONF-02)
