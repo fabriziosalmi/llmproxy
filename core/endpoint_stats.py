@@ -38,6 +38,31 @@ _stats_lock = asyncio.Lock()
 # EMA smoothing factor (0.1 = slow adaptation, 0.3 = fast adaptation)
 _EMA_ALPHA = 0.2
 
+_REDIS_KEY_PREFIX = "ep:stats:"
+
+# One endpoint's shared stats are updated by every request task of every
+# replica. A read (HGETALL), a compute and a write (HSET) as separate round trips
+# lets two updaters read the same count and both write count+1, losing an
+# observation; run as one script the whole read-modify-write is atomic on the
+# Redis side. The first observation seeds the average, as before.
+_REDIS_UPDATE_STATS = """
+local lat, succ, alpha = tonumber(ARGV[1]), tonumber(ARGV[2]), tonumber(ARGV[3])
+local cur = redis.call('HMGET', KEYS[1], 'latency_ms', 'success_rate', 'request_count')
+local l = tonumber(cur[1])
+local s = tonumber(cur[2])
+local c = tonumber(cur[3]) or 0
+if l == nil then l = lat end
+if s == nil then s = succ end
+l = alpha * lat + (1 - alpha) * l
+s = alpha * succ + (1 - alpha) * s
+c = c + 1
+redis.call('HSET', KEYS[1],
+    'latency_ms', string.format('%.17g', l),
+    'success_rate', string.format('%.17g', s),
+    'request_count', string.format('%d', c))
+return c
+"""
+
 
 async def update_endpoint_stats(
     endpoint_id: str,
@@ -69,48 +94,62 @@ async def update_endpoint_stats(
 
     if redis_client:
         try:
-            res = await redis_client.hgetall(f"ep:stats:{endpoint_id}")
-            if res:
-                db_lat = float(res.get("latency_ms", latency_ms))
-                db_succ = float(res.get("success_rate", 1.0 if success else 0.0))
-                db_count = int(res.get("request_count", 0))
-            else:
-                db_lat = latency_ms
-                db_succ = 1.0 if success else 0.0
-                db_count = 0
-
-            new_lat = _EMA_ALPHA * latency_ms + (1 - _EMA_ALPHA) * db_lat
-            new_succ = _EMA_ALPHA * (1.0 if success else 0.0) + (1 - _EMA_ALPHA) * db_succ
-            new_count = db_count + 1
-
-            await redis_client.hset(
-                f"ep:stats:{endpoint_id}",
-                mapping={
-                    "latency_ms": str(new_lat),
-                    "success_rate": str(new_succ),
-                    "request_count": str(new_count),
-                },
+            await redis_client.eval(
+                _REDIS_UPDATE_STATS,
+                1,
+                f"{_REDIS_KEY_PREFIX}{endpoint_id}",
+                latency_ms,
+                1.0 if success else 0.0,
+                _EMA_ALPHA,
             )
         except Exception as e:
             logger.warning(f"Failed to update Redis stats for {endpoint_id}: {e}")
 
 
 async def sync_endpoint_stats_from_redis(redis_client):
-    """Pulls all endpoint stats from Redis and updates local _endpoint_stats."""
-    async with _stats_lock:
+    """Pulls all endpoint stats from Redis and updates local _endpoint_stats.
+
+    The Redis round trips (a SCAN, then one pipelined batch of HGETALLs) happen
+    before the lock is taken: update_endpoint_stats shares _stats_lock, so
+    holding it across the network stalled every request's stats update for
+    1 + N round trips on each sync, and KEYS walks the whole keyspace. The lock
+    now covers only the dictionary assignment.
+    """
+    try:
+        keys = [
+            key
+            async for key in redis_client.scan_iter(
+                match=f"{_REDIS_KEY_PREFIX}*", count=200
+            )
+        ]
+        if not keys:
+            return
+        pipe = redis_client.pipeline(transaction=False)
+        for key in keys:
+            pipe.hgetall(key)
+        hashes = await pipe.execute()
+    except Exception as e:
+        logger.warning(f"Failed to sync endpoint stats from Redis: {e}")
+        return
+
+    fresh: dict[str, dict[str, Any]] = {}
+    for key, res in zip(keys, hashes, strict=True):
+        if not res:
+            continue
+        # Strip the prefix rather than splitting on ":": an endpoint id may
+        # itself contain colons (host:port).
+        endpoint_id = key[len(_REDIS_KEY_PREFIX) :]
         try:
-            keys = await redis_client.keys("ep:stats:*")
-            for key in keys:
-                endpoint_id = key.split(":")[-1]
-                res = await redis_client.hgetall(key)
-                if res:
-                    _endpoint_stats[endpoint_id] = {
-                        "latency_ms": float(res.get("latency_ms", 0.0)),
-                        "success_rate": float(res.get("success_rate", 1.0)),
-                        "request_count": int(res.get("request_count", 0)),
-                    }
-        except Exception as e:
-            logger.warning(f"Failed to sync endpoint stats from Redis: {e}")
+            fresh[endpoint_id] = {
+                "latency_ms": float(res.get("latency_ms", 0.0)),
+                "success_rate": float(res.get("success_rate", 1.0)),
+                "request_count": int(res.get("request_count", 0)),
+            }
+        except (TypeError, ValueError) as e:
+            logger.warning(f"Skipping malformed Redis stats for {endpoint_id}: {e}")
+
+    async with _stats_lock:
+        _endpoint_stats.update(fresh)
 
 
 def get_endpoint_stats(endpoint_id: str) -> dict[str, Any]:
