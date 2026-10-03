@@ -38,6 +38,28 @@ caught. For pure-ASCII English — the common case — the two forms are identic
 the scanner detects that and makes a single pass, cutting the long-prompt cost by
 ~35 % (1.17 ms → 0.76 ms) with no loss of detection.
 
+## Routing: choosing an endpoint
+
+Ring 3 (`select_endpoint`) runs for every proxied request. It used to read the
+whole verified endpoint pool from the database each time (a `SELECT`, a
+`json.loads` and a pydantic model per row), so its cost grew with the number of
+registered endpoints. The store now serves a snapshot of the pool that every
+endpoint write (add, remove, status, metrics) invalidates, with a 5-second TTL
+as a backstop for a writer the store cannot see.
+
+Reproduce: `pytest tests/test_benchmarks.py::TestRoutingBenchmarks --benchmark-only -v`
+
+| Endpoints in pool | Cached (steady state) | Cold (what every request used to pay) |
+|------------------:|----------------------:|--------------------------------------:|
+| 1  | ~49 µs  | ~138 µs |
+| 10 | ~51 µs  | ~158 µs |
+| 50 | ~58 µs  | ~300 µs |
+
+Measured on a developer laptop against a local SQLite file; with the Postgres
+store the cold path additionally pays a network round trip, which is the part
+the cache removes. Treat the figures as orders of magnitude and re-run on your
+hardware.
+
 ## What is not on the hot path
 
 - **Semantic scan** (trigram Jaccard) and **AI escalation** run only for gray-zone

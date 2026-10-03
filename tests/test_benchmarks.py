@@ -479,3 +479,89 @@ class TestRoutingFanoutBenchmarks:
         """The batched form must be flat in the pool size, not linear."""
         manager = self._BatchedManager(self._CALL_LATENCY_S)
         assert len(benchmark(self._run(manager, 50))) == 50
+
+
+# ── Routing: select_endpoint against a real store ──
+
+
+class TestRoutingBenchmarks:
+    """Ring 3 runs for every proxied request, so what it costs is a per-request cost.
+
+    It used to read the whole verified pool from the database each time (a
+    SELECT, json.loads and a pydantic LLMEndpoint per row), a cost that grows
+    with the number of registered endpoints. The store now serves a snapshot
+    that writes invalidate. 'cached' is the steady state; 'cold' invalidates
+    before every call and is what each request used to pay. Run with
+    --benchmark-only and compare the pairs at 1, 10 and 50 endpoints.
+    """
+
+    @staticmethod
+    def _routing_bench(benchmark, tmp_path, n_endpoints, *, cold):
+        from core.circuit_breaker import CircuitManager
+        from core.plugin_engine import PluginContext
+        from models import EndpointStatus, LLMEndpoint
+        from plugins.default.smart_router import select_endpoint
+        from store.sql_store import SQLiteStore
+
+        loop = asyncio.new_event_loop()
+        store = SQLiteStore(str(tmp_path / "routing.db"))
+
+        class _Rotator:
+            circuit_manager = CircuitManager(redis_client=None)
+            config: dict = {}
+            priority_mode = False
+            routing_cost_weight = 0.0
+
+            async def _add_log(self, *args, **kwargs):
+                return None
+
+        rotator = _Rotator()
+        rotator.store = store
+
+        async def setup():
+            await store.init_db()
+            for i in range(n_endpoints):
+                await store.add_endpoint(
+                    LLMEndpoint(
+                        id=f"ep{i}",
+                        url=f"http://ep{i}.test/v1",
+                        status=EndpointStatus.VERIFIED,
+                        metadata={"provider": "openai", "models": ["gpt-4o"]},
+                    )
+                )
+
+        async def once():
+            if cold:
+                store._pool_cache.invalidate()
+            ctx = PluginContext(
+                body={"model": "gpt-4o"}, metadata={"rotator": rotator}
+            )
+            await select_endpoint(ctx)
+            return ctx
+
+        try:
+            loop.run_until_complete(setup())
+            ctx = benchmark(lambda: loop.run_until_complete(once()))
+            assert ctx.error is None
+            assert ctx.metadata["target_endpoint"].id.startswith("ep")
+        finally:
+            loop.run_until_complete(store.close())
+            loop.close()
+
+    def test_select_endpoint_1_endpoint_cached(self, benchmark, tmp_path):
+        self._routing_bench(benchmark, tmp_path, 1, cold=False)
+
+    def test_select_endpoint_1_endpoint_cold(self, benchmark, tmp_path):
+        self._routing_bench(benchmark, tmp_path, 1, cold=True)
+
+    def test_select_endpoint_10_endpoints_cached(self, benchmark, tmp_path):
+        self._routing_bench(benchmark, tmp_path, 10, cold=False)
+
+    def test_select_endpoint_10_endpoints_cold(self, benchmark, tmp_path):
+        self._routing_bench(benchmark, tmp_path, 10, cold=True)
+
+    def test_select_endpoint_50_endpoints_cached(self, benchmark, tmp_path):
+        self._routing_bench(benchmark, tmp_path, 50, cold=False)
+
+    def test_select_endpoint_50_endpoints_cold(self, benchmark, tmp_path):
+        self._routing_bench(benchmark, tmp_path, 50, cold=True)

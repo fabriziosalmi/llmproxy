@@ -10,6 +10,7 @@ import aiosqlite
 from models import EndpointStatus, LLMEndpoint
 
 from . import audit_chain
+from .pool_cache import PoolCache
 from .schema import MIGRATIONS, SQLITE, iter_create_statements
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,7 @@ class SQLiteStore:
         # prev_hash, compute diverging entry_hashes, and the chain splits —
         # verify_audit_chain() then reports permanent tamper-detection failure.
         self._audit_lock = asyncio.Lock()
+        self._pool_cache = PoolCache()
 
     async def _get_conn(self) -> aiosqlite.Connection:
         """Return the persistent connection, creating it if needed.
@@ -124,6 +126,7 @@ class SQLiteStore:
             ),
         )
         await conn.commit()
+        self._pool_cache.invalidate()
 
     async def update_status(
         self, endpoint_id: str, status: EndpointStatus, metadata: dict | None = None
@@ -150,10 +153,17 @@ class SQLiteStore:
                 (status.value, endpoint_id),
             )
         await conn.commit()
+        self._pool_cache.invalidate()
 
     async def get_pool(self) -> list[LLMEndpoint]:
-        """Returns all verified endpoints."""
-        return await self.get_by_status(EndpointStatus.VERIFIED)
+        """Returns all verified endpoints (a snapshot; see store/pool_cache.py)."""
+        cached = self._pool_cache.get()
+        if cached is not None:
+            return cached
+        generation = self._pool_cache.generation
+        pool = await self.get_by_status(EndpointStatus.VERIFIED)
+        self._pool_cache.put(pool, generation)
+        return pool
 
     async def get_by_status(self, status: EndpointStatus) -> list[LLMEndpoint]:
         """Returns all endpoints with a specific status."""
@@ -198,6 +208,7 @@ class SQLiteStore:
         conn = await self._get_conn()
         await conn.execute("DELETE FROM endpoints WHERE id = ?", (endpoint_id,))
         await conn.commit()
+        self._pool_cache.invalidate()
 
     # App State Persistence
     async def set_state(self, key: str, value: Any):
@@ -226,6 +237,7 @@ class SQLiteStore:
             (latency_ms, success_rate, endpoint_id),
         )
         await conn.commit()
+        self._pool_cache.invalidate()
 
     # ── Spend Log (R2.3) ──
 

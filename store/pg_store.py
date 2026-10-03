@@ -10,6 +10,7 @@ from models import EndpointStatus, LLMEndpoint
 
 from . import audit_chain
 from .base import BaseRepository
+from .pool_cache import PoolCache
 from .schema import MIGRATIONS, POSTGRES, iter_create_statements
 
 logger = logging.getLogger("llmproxy.store.pg")
@@ -25,6 +26,7 @@ class PostgresStore:
         self.dsn = dsn
         self._pool: asyncpg.Pool | None = None
         self._audit_lock = asyncio.Lock()
+        self._pool_cache = PoolCache()
 
     async def init_pool(self):
         """Initialize the connection pool if not already initialized."""
@@ -93,6 +95,7 @@ class PostgresStore:
             endpoint.latency_ms,
             endpoint.success_rate,
         )
+        self._pool_cache.invalidate()
 
     async def update_status(
         self, endpoint_id: str, status: EndpointStatus, metadata: dict | None = None
@@ -126,6 +129,17 @@ class PostgresStore:
                 status.value,
                 endpoint_id,
             )
+        self._pool_cache.invalidate()
+
+    async def get_pool(self) -> list[LLMEndpoint]:
+        """Returns all verified endpoints (a snapshot; see store/pool_cache.py)."""
+        cached = self._pool_cache.get()
+        if cached is not None:
+            return cached
+        generation = self._pool_cache.generation
+        pool = await self.get_by_status(EndpointStatus.VERIFIED)
+        self._pool_cache.put(pool, generation)
+        return pool
 
     async def get_by_status(self, status: EndpointStatus) -> list[LLMEndpoint]:
         pool = await self.init_pool()
@@ -165,6 +179,7 @@ class PostgresStore:
     async def remove_endpoint(self, endpoint_id: str):
         pool = await self.init_pool()
         await pool.execute("DELETE FROM endpoints WHERE id = $1", endpoint_id)
+        self._pool_cache.invalidate()
 
     async def set_state(self, key: str, value: Any):
         pool = await self.init_pool()
@@ -192,6 +207,7 @@ class PostgresStore:
             success_rate,
             endpoint_id,
         )
+        self._pool_cache.invalidate()
 
     async def log_spend(
         self,
@@ -650,7 +666,7 @@ class PostgresRepository(BaseRepository):
         return await self.sql.get_all()
 
     async def get_pool(self) -> list[LLMEndpoint]:
-        return await self.sql.get_by_status(EndpointStatus.VERIFIED)
+        return await self.sql.get_pool()
 
     async def get_by_status(self, status: EndpointStatus) -> list[LLMEndpoint]:
         return await self.sql.get_by_status(status)
