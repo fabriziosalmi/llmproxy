@@ -2,6 +2,24 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.37.19] — 2026-10-03
+
+### CI fixes for the audit remediation PR (patch)
+
+- **Dependencies (pip-audit)**: `PyJWT 2.14.0 → 2.15.0` (PYSEC-2026-4141, the
+  advisory noted in the audit) and `urllib3 2.7.0 → 2.8.0` (PYSEC-2026-4175, -4176,
+  -4177, transitive). `requirements.lock` is regenerated with its header command
+  and changes only those two pins (hashes included); `pip-audit` on the lock is clean.
+- **CodeQL (`py/weak-sensitive-data-hashing`)**: the flow reached the HMAC in
+  `core/session_id.py` from the `api_key` parameter of `authenticate_data_plane`.
+  That parameter holds the raw `Authorization` header, so it is renamed
+  `authorization`, which is also the accurate name; the HMAC itself is unchanged
+  (a keyed HMAC for a non-secret session identifier, not password storage).
+- **Test**: `tests/test_endpoint_stats_redis.py` put 200 updates in flight on a
+  default redis-py client; redis-py 8 caps the default pool at 100 connections, so
+  half failed with "Too many connections" in CI (the local client was unbounded).
+  The fixture now sizes its pool. The code under test was not at fault.
+
 ## [1.37.18] — 2026-10-03
 
 ### An audit chain head you can keep outside the database (patch, audit LLMPRO-DATA-04)

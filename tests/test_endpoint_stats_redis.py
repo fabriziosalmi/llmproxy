@@ -185,7 +185,9 @@ requires_redis = pytest.mark.skipif(
 @pytest.fixture
 async def redis():
     aioredis = pytest.importorskip("redis.asyncio")
-    client = aioredis.from_url(TEST_REDIS_URL, decode_responses=True)
+    # redis-py 8 caps the default pool (100 connections); the concurrency test
+    # puts 200 updates in flight at once, so the pool must be able to serve them.
+    client = aioredis.from_url(TEST_REDIS_URL, decode_responses=True, max_connections=500)
     await client.flushdb()
     yield client
     await client.flushdb()
