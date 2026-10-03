@@ -2,6 +2,27 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.37.2] — 2026-10-03
+
+### Endpoint provider survives a store round trip (patch, audit LLMPRO-DOM-01)
+
+- **Fixed**: `LLMEndpoint.provider` was a field defaulting to `"openai"` that
+  neither store wrote or loaded — the `endpoints` table has no provider column
+  and the real provider is persisted only as `metadata["provider"]`. Every
+  endpoint read back from the store therefore claimed to be `openai`, and
+  `proxy/forwarder.py`, which selects the adapter from that attribute, sent
+  Anthropic and Google endpoints through the OpenAI adapter (an explicit
+  provider outranks model-name detection in `get_adapter`). OpenAI-compatible
+  endpoints were unaffected. The 429 upstream hint used the same wrong value.
+- **One owner**: `metadata["provider"]` is now the single copy and
+  `LLMEndpoint.provider` is read from it. `provider=` and the legacy
+  `provider_type=` constructor arguments are still accepted and folded into
+  metadata (metadata that already names a provider wins). The never-persisted
+  `provider_type` and `tags` fields are removed; the forwarder reads the
+  provider through one `_endpoint_provider()` helper in both places.
+- **Test**: `tests/test_endpoint_provider_roundtrip.py` stores an Anthropic
+  endpoint, reloads it, and asserts the adapter the forwarder would choose.
+
 ## [1.37.1] — 2026-09-29
 
 ### Dependency updates (patch)

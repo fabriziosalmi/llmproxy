@@ -22,6 +22,18 @@ from core.metrics import MetricsTracker
 logger = logging.getLogger("llmproxy.forwarder")
 
 
+def _endpoint_provider(endpoint: Any) -> str | None:
+    """The provider an upstream belongs to, read the same way everywhere.
+
+    A stored endpoint (LLMEndpoint) answers from metadata["provider"]; the
+    SimpleNamespace stand-ins built for fallback-chain entries carry
+    ``provider`` and the legacy ``provider_type``.
+    """
+    return getattr(endpoint, "provider", None) or getattr(
+        endpoint, "provider_type", None
+    )
+
+
 # Rolling window cap for the speculative-analyzer text buffer. A 128 KB
 # window holds plenty of context for injection-pattern matching (patterns
 # are short; the window only needs to be longer than the longest pattern
@@ -220,9 +232,7 @@ class RequestForwarder:
             # common operator-fixable upstream error. 4xx auth (401/403)
             # passes through to the SDK caller unchanged so existing client
             # error-handling paths still work.
-            provider = getattr(
-                ctx.metadata.get("target_endpoint"), "provider", None
-            ) or getattr(ctx.metadata.get("target_endpoint"), "provider_type", None)
+            provider = _endpoint_provider(ctx.metadata.get("target_endpoint"))
             hint = _actionable_hint(provider, response.status_code)
             raise HTTPException(
                 status_code=response.status_code,
@@ -254,9 +264,7 @@ class RequestForwarder:
             )
 
         # Build attempt list: primary + fallback chain
-        primary_provider = getattr(target, "provider", None) or getattr(
-            target, "provider_type", None
-        )
+        primary_provider = _endpoint_provider(target)
         primary_adapter = get_adapter(primary_provider, original_model)
 
         # Only if routing actually selected one. `target` arrives from
