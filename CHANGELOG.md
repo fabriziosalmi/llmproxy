@@ -2,6 +2,43 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.37.4] — 2026-10-03
+
+### The audit chain survives retention purge and erasure (patch, audit LLMPRO-DATA-01)
+
+- **Fixed**: `gdpr.auto_purge` is on by default with `retention_days: 90`. The
+  daily purge deleted the oldest `audit_log` rows, but `verify_audit_chain`
+  expected the first remaining row to link to `GENESIS`, so the first purge made
+  `/api/v1/audit/verify` report `prev_hash mismatch` on a healthy log, and it
+  stayed red on every deployment older than 90 days. GDPR erasure
+  (`delete_subject_data`) deleted rows from the middle of the chain with the
+  same effect. Reproduced with the real store before the fix: 4 entries
+  (200/150/10/5 days old) verify, purge removes 2, verification reports
+  `valid: false` at id 3.
+- **How**: a legitimate deletion now records a *gap* (the hash that preceded the
+  removed run and the hash of its last row; hashes only, no row content) in
+  `app_state` under `audit_chain_gaps`, in the same transaction as the delete.
+  Consecutive purges collapse into one record. The verifier bridges a break only
+  when a gap accounts for exactly that break; a row removed any other way still
+  breaks the chain, and an edited survivor still fails its hash. The result gains
+  `rows_removed` so "valid" is not read as "nothing was removed".
+- **Purge now removes a run, not a filter**: audit rows older than the window
+  are deleted as the oldest contiguous run of the chain (everything before the
+  first row still inside the window). A row with an older timestamp that follows
+  a newer one is retained until the run reaches it.
+- **Serialised with appends**: purge and erasure take the same lock as
+  `log_audit` (the process lock, plus the Postgres advisory lock), so an append
+  cannot read a last-hash that is being deleted.
+- **One verifier for both backends**: the walk lives in `store/audit_chain.py`
+  and both stores call it. As a result the Postgres verifier now treats a blank
+  `entry_hash` after hashed rows as a break, as SQLite always did (it used to
+  reset to `GENESIS`; this also closes audit finding LLMPRO-DATA-03).
+- **Not changed**: the verifier still reads the first 100,000 rows by id
+  (LLMPRO-DATA-02), and the chain is still keyless SHA-256 (LLMPRO-DATA-04).
+  `docs/threat_model.md` states what the chain does and does not detect.
+- **Tests**: `tests/test_audit_chain_gaps.py` runs against SQLite always and
+  against Postgres when `TEST_POSTGRES_DSN` is set (`make test-pg`).
+
 ## [1.37.3] — 2026-10-03
 
 ### Quarantine no longer disarms fail-closed plugins; post-flight policies stated (patch, audit LLMPRO-ERR-01, ERR-02)
