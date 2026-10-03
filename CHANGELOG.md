@@ -2,6 +2,42 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.37.17] — 2026-10-03
+
+### SQLite deployments: retention purge, erasure, export and audit verification actually run (patch, found while fixing LLMPRO-DATA-04)
+
+> **Upgrade note.** The retention purge has never run on the default SQLite
+> backend. From this release it does, so the first daily pass after startup
+> deletes audit and spend rows older than `gdpr.retention_days` (default 90)
+> unless `gdpr.auto_purge` is false. If you rely on older rows, back up first
+> (`python scripts/backup_db.py`), or raise `gdpr.retention_days` / set
+> `gdpr.auto_purge: false` before upgrading.
+
+- **Fixed**: `SQLiteRepository`, the repository `StorageFactory` builds by
+  default, did not define `purge_expired`, `delete_subject_data`,
+  `export_subject_data` or `verify_audit_chain`, so it inherited
+  `BaseRepository`'s stubs, which returned empty results. On the default backend:
+  - the daily retention purge deleted nothing (audit and spend rows were kept
+    forever and the database grew without bound);
+  - `POST /api/v1/gdpr/erase/{subject}` wrote its intent record, found "no
+    data" and **erased nothing** (a `404`, so it looked like there was nothing
+    to erase);
+  - the data-subject access request exported nothing;
+  - `GET /api/v1/audit/verify` answered `valid: true, total: 0` for a chain that
+    had been tampered with, so tamper detection did not work.
+  `PostgresRepository` had all four, which is why nothing noticed; the tests ran
+  against the inner store, a mock, or Postgres, never the SQLite repository.
+- **Now**: `SQLiteRepository` delegates all four to the store. The
+  `BaseRepository` defaults raise `NotImplementedError` instead of returning
+  empty results, so a backend that forgets one fails loudly.
+- **Interaction with 1.37.4**: the audit-chain gap records added there
+  (retention purge and erasure no longer make verification report tamper) only
+  matter once purge runs; they are what makes enabling it on SQLite safe.
+- **Tests**: `tests/test_repository_contract.py` runs purge, erase, export and
+  verify through `SQLiteRepository` and `PostgresRepository` (the latter with
+  `TEST_POSTGRES_DSN`), and fails if a concrete repository leaves any of them to
+  the base class.
+
 ## [1.37.16] — 2026-10-03
 
 ### Each route module declares what it uses from the orchestrator; three broken admin routes fixed (patch, audit LLMPRO-ARCH-01)

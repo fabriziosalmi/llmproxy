@@ -71,6 +71,28 @@ class SQLiteRepository(BaseRepository):
     async def query_audit(self, **kwargs):
         return await self.sql.query_audit(**kwargs)
 
+    # ── GDPR and audit integrity ──
+    #
+    # These four were missing here, so SQLiteRepository (the default backend,
+    # and the one StorageFactory builds) inherited BaseRepository's stubs: the
+    # retention purge deleted nothing, erasure reported "no data" and erased
+    # nothing, the access request exported nothing, and verify_audit_chain said
+    # "valid" for a tampered chain. PostgresRepository had them, which is why
+    # nothing noticed. tests/test_repository_contract.py now fails if a concrete
+    # repository leaves any of them to the base class.
+
+    async def purge_expired(self, retention_days: int = 90) -> dict:
+        return await self.sql.purge_expired(retention_days)
+
+    async def delete_subject_data(self, subject: str) -> dict:
+        return await self.sql.delete_subject_data(subject)
+
+    async def export_subject_data(self, subject: str) -> dict:
+        return await self.sql.export_subject_data(subject)
+
+    async def verify_audit_chain(self) -> dict:
+        return await self.sql.verify_audit_chain()
+
     async def close(self):
         """Close the underlying SQLite store connection."""
         await self.sql.close()

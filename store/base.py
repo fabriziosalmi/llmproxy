@@ -106,21 +106,26 @@ class BaseRepository(ABC):
 
     # ── GDPR: Data Subject Rights ──
 
+    # A repository that stores audit data MUST implement these. The defaults used
+    # to return empty results, so a backend that forgot one (SQLiteRepository did)
+    # silently did nothing: no purge, no erasure, an empty export and an audit
+    # chain that always verified. A missing implementation now raises.
+
     async def purge_expired(self, retention_days: int = 90) -> dict:
         """Delete audit/spend records older than retention_days. Returns counts."""
-        return {"audit_deleted": 0, "spend_deleted": 0}
+        raise NotImplementedError(f"{type(self).__name__} does not implement purge_expired")
 
     async def delete_subject_data(self, subject: str) -> dict:
         """Right to erasure (Article 17): delete all data for a subject.
         Subject matches on session_id or key_prefix in audit/spend logs,
         and on subject/email in user_roles."""
-        return {"audit_deleted": 0, "spend_deleted": 0, "roles_deleted": 0}
+        raise NotImplementedError(f"{type(self).__name__} does not implement delete_subject_data")
 
     async def export_subject_data(self, subject: str) -> dict:
         """DSAR (Article 15): export all data for a subject."""
-        return {"audit": [], "spend": [], "roles": []}
+        raise NotImplementedError(f"{type(self).__name__} does not implement export_subject_data")
 
     async def verify_audit_chain(self) -> dict:
         """Verify the integrity of the audit log hash chain.
         Returns {"valid": bool, "total": int, "verified": int, "broken_at": int|None}."""
-        return {"valid": True, "total": 0, "verified": 0, "broken_at": None}
+        raise NotImplementedError(f"{type(self).__name__} does not implement verify_audit_chain")
