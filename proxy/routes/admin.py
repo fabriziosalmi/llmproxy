@@ -449,19 +449,6 @@ def create_router(agent) -> APIRouter:
         plugin_stats = agent.plugin_manager.get_plugin_stats()
         ring_latency = agent.plugin_manager.get_ring_latency()
 
-        # Also extract TTFT from Prometheus if available
-        ttft_samples = []
-        # Collect from ring traces
-        for trace in agent.plugin_manager._ring_traces:
-            if "ttft_ms" in trace:
-                ttft_samples.append(trace["ttft_ms"])
-
-        ttft_percentiles = (
-            agent.plugin_manager._percentiles(ttft_samples)
-            if ttft_samples
-            else {"p50": 0, "p95": 0, "p99": 0}
-        )
-
         return {
             "rings": ring_latency,
             "plugins": {
@@ -472,10 +459,7 @@ def create_router(agent) -> APIRouter:
                 }
                 for name, s in plugin_stats.items()
             },
-            "ttft": {
-                "samples": len(ttft_samples),
-                **ttft_percentiles,
-            },
+            "ttft": agent.plugin_manager.get_ttft_stats(),
         }
 
     @router.get("/api/v1/metrics/ring-timeline")

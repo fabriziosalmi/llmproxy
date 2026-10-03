@@ -343,12 +343,13 @@ async def process_proxy_request(
         # Store total pipeline latency in trace (O(1) via index dict)
         total_ms = (time.time() - start_total) * 1000
         req_id = ctx.metadata.get("req_id", "unknown")
-        trace = orchestrator.plugin_manager._ring_traces_index.get(req_id)
-        if trace:
-            trace["total_ms"] = round(total_ms, 2)
-            trace["upstream_ms"] = round(ctx.metadata.get("duration", 0) * 1000, 2)
-            if "ttft_ms" in ctx.metadata:
-                trace["ttft_ms"] = ctx.metadata["ttft_ms"]
+        fields = {
+            "total_ms": round(total_ms, 2),
+            "upstream_ms": round(ctx.metadata.get("duration", 0) * 1000, 2),
+        }
+        if "ttft_ms" in ctx.metadata:
+            fields["ttft_ms"] = ctx.metadata["ttft_ms"]
+        orchestrator.plugin_manager.annotate_ring_trace(req_id, **fields)
 
         return ctx.response
 
