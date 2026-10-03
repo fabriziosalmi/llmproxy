@@ -30,7 +30,7 @@ def _validate_json_schema(data: Any, schema: dict[str, Any]) -> list[str]:
 
     expected_type = schema.get("type")
     if expected_type:
-        type_map = {
+        type_map: dict[str, type | tuple[type, ...]] = {
             "object": dict,
             "array": list,
             "string": str,

@@ -2,6 +2,25 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.37.10] — 2026-10-03
+
+### plugins/ is inside the mypy gate (patch, audit LLMPRO-QUAL-03)
+
+- **Fixed**: CI type-checked `core/`, `proxy/` and `store/` but not `plugins/`,
+  which held the routing and security plugins that run on every request and
+  reported 13 errors; a regression there passed CI. Eleven were the same
+  pattern: `ctx.metadata.get("rotator")` dereferenced as if it could not be
+  `None`. `PluginContext.require_rotator()` returns the orchestrator or raises a
+  `RuntimeError` naming what is missing (the engine's fail policy then applies,
+  as it already did for the `AttributeError` this replaces); the default plugins
+  use it. The other two were a mis-typed `type_map` in `schema_enforcer` and an
+  honest return type for `latency_sla_guard._compute_latency` (`total_ms` is
+  always a float, only `ttft_ms` can be `None`; now a `TypedDict`).
+- **Gate**: `ci.yml` and `make typecheck` run mypy over
+  `core/ proxy/ store/ plugins/`; the "plugins/ still reports 13 errors" comment
+  is gone. mypy over all four is clean.
+- **Tests**: `tests/test_plugin_context_rotator.py`.
+
 ## [1.37.9] — 2026-10-03
 
 ### Transport layer uses PluginManager's public API (patch, audit LLMPRO-ARCH-02)

@@ -14,7 +14,7 @@ from core.plugin_engine import PluginContext
 
 async def verify(ctx: PluginContext):
     """Ring 1: ZT identity enrichment (no re-auth)."""
-    rotator = ctx.metadata.get("rotator")
+    rotator = ctx.require_rotator()
     request = ctx.request
     if not request:
         return

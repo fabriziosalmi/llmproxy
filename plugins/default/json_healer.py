@@ -69,7 +69,7 @@ async def repair(ctx: PluginContext):
     Detects truncated JSON responses (e.g., from stream interruption)
     and attempts heuristic repair by closing unclosed brackets/braces.
     """
-    rotator = ctx.metadata.get("rotator")
+    rotator = ctx.require_rotator()
     if not ctx.response or not hasattr(ctx.response, "body"):
         return
 

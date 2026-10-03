@@ -72,6 +72,19 @@ class PluginContext:
     stop_chain: bool = False
     state: PluginState | None = None  # Principle 4: injected shared state
 
+    def require_rotator(self) -> Any:
+        """The orchestrator the engine put in the context, or a clear error.
+
+        Plugins need it for logging, the security shield and the zero-trust
+        manager. It is always present when the engine runs them; a missing one
+        means the plugin was driven by hand, and failing here with a message is
+        better than an AttributeError on None at some later line.
+        """
+        rotator = self.metadata.get("rotator")
+        if rotator is None:
+            raise RuntimeError("plugin requires 'rotator' in the plugin context metadata")
+        return rotator
+
 
 # Default timeout for raw function plugins (ms)
 # 500ms is a reasonable compromise: strict enough to protect the event loop,

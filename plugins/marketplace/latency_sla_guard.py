@@ -28,10 +28,15 @@ Config (via manifest ui_schema):
 
 import time
 from collections import deque
-from typing import Any
+from typing import Any, TypedDict
 
 from core.plugin_engine import PluginContext
 from core.plugin_sdk import BasePlugin, PluginHook, PluginResponse
+
+
+class _Latency(TypedDict):
+    total_ms: float
+    ttft_ms: float | None  # None until the first byte arrives
 
 
 class LatencySlaGuard(BasePlugin):
@@ -58,7 +63,7 @@ class LatencySlaGuard(BasePlugin):
         self._sla_warnings: int = 0
         self._sla_breaches: int = 0
 
-    def _compute_latency(self, ctx: PluginContext) -> dict[str, float]:
+    def _compute_latency(self, ctx: PluginContext) -> _Latency:
         """Extract latency measurements from request timestamps."""
         now = time.time()
 

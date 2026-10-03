@@ -10,7 +10,7 @@ async def compress(ctx: PluginContext):
     if not messages:
         return
 
-    rotator = ctx.metadata.get("rotator")
+    rotator = ctx.require_rotator()
     modified = False
 
     # Process the last message (usually the prompt containing file context)
