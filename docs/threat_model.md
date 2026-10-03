@@ -85,6 +85,14 @@ deliberate: signature evasion at one layer is caught by scoring at the next.
   an append-only **hash chain** verifiable via `/api/v1/audit/verify` (a broken
   link is detectable); `ResponseSigner` HMAC-signs outgoing responses so a
   consumer can prove the payload transited the proxy unmodified.
+- **Legitimate deletions are recorded, not invisible.** The retention purge and
+  GDPR erasure remove audit rows; each leaves a gap record (the hash before the
+  removed run and the hash of its last row, no row content) in `app_state` under
+  `audit_chain_gaps`, and `/api/v1/audit/verify` bridges exactly those and
+  reports how many rows it bridged (`rows_removed`). A row removed any other way
+  still breaks the chain. The chain is keyless SHA-256: it detects corruption
+  and unrecorded edits, not someone with write access to the database who
+  recomputes it.
 
 ### 3.4 Information disclosure
 **Threats:** PII regurgitation; secret/stack-trace leakage.

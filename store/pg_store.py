@@ -8,6 +8,7 @@ import asyncpg
 
 from models import EndpointStatus, LLMEndpoint
 
+from . import audit_chain
 from .base import BaseRepository
 from .schema import MIGRATIONS, POSTGRES, iter_create_statements
 
@@ -436,19 +437,81 @@ class PostgresStore:
 
         return {"total": total, "items": items}
 
-    async def purge_expired(self, retention_days: int = 90) -> dict:
-        import time
+    #: Same key log_audit locks on, so a purge or erasure cannot interleave with
+    #: an append from this process or any other replica.
+    _AUDIT_ADVISORY_LOCK = 987654321
 
-        cutoff_ts = int(time.time()) - (retention_days * 86400)
+    async def _record_audit_gaps(self, conn, segments: list[dict]) -> None:
+        """Add deletion records to app_state, inside the caller's transaction."""
+        if not segments:
+            return
+        raw = await conn.fetchval(
+            "SELECT value FROM app_state WHERE key = $1", audit_chain.GAPS_KEY
+        )
+        existing = audit_chain.load_gaps(json.loads(raw) if raw else None)
+        merged = audit_chain.merge_gaps(existing, segments)
+        await conn.execute(
+            """
+            INSERT INTO app_state (key, value) VALUES ($1, $2)
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+            """,
+            audit_chain.GAPS_KEY,
+            json.dumps(merged),
+        )
+
+    async def purge_expired(self, retention_days: int = 90) -> dict:
+        """Delete audit/spend records older than retention_days.
+
+        Audit rows go as the oldest run of the chain, and the run's boundary
+        hashes are recorded in the same transaction so verify_audit_chain can
+        tell this from tampering (see store/audit_chain.py).
+        """
+        cutoff_ts = int(_time.time()) - (retention_days * 86400)
 
         pool = await self.init_pool()
-        async with pool.acquire() as conn:
-            # We run both deletes in a single connection transaction
+        async with self._audit_lock, pool.acquire() as conn:
+            # Both deletes and the gap record commit together.
             async with conn.transaction():
-                audit_res = await conn.execute(
-                    "DELETE FROM audit_log WHERE ts < $1", cutoff_ts
+                await conn.fetchval(
+                    "SELECT pg_advisory_xact_lock($1)", self._AUDIT_ADVISORY_LOCK
                 )
+                first_kept = await conn.fetchval(
+                    "SELECT MIN(id) FROM audit_log WHERE ts >= $1", cutoff_ts
+                )
+                # Nothing inside the window: the whole chain is expired and the
+                # next append starts a new one at GENESIS.
+                if first_kept is None:
+                    where, params = "TRUE", []
+                else:
+                    where, params = "id < $1", [first_kept]
+
+                first = await conn.fetchval(
+                    f"SELECT prev_hash FROM audit_log WHERE {where} "
+                    "AND COALESCE(entry_hash, '') != '' ORDER BY id ASC LIMIT 1",
+                    *params,
+                )
+                last = await conn.fetchval(
+                    f"SELECT entry_hash FROM audit_log WHERE {where} "
+                    "AND COALESCE(entry_hash, '') != '' ORDER BY id DESC LIMIT 1",
+                    *params,
+                )
+
+                audit_res = await conn.execute(f"DELETE FROM audit_log WHERE {where}", *params)
                 audit_deleted = int(audit_res.split(" ")[1]) if " " in audit_res else 0
+
+                if first_kept is not None and first and last:
+                    await self._record_audit_gaps(
+                        conn,
+                        [
+                            {
+                                "start": first,
+                                "end": last,
+                                "rows": audit_deleted,
+                                "reason": "retention",
+                                "at": int(_time.time()),
+                            }
+                        ],
+                    )
 
                 spend_res = await conn.execute(
                     "DELETE FROM spend_log WHERE ts < $1", cutoff_ts
@@ -459,14 +522,34 @@ class PostgresStore:
 
     async def delete_subject_data(self, subject: str) -> dict:
         pool = await self.init_pool()
-        async with pool.acquire() as conn:
+        async with self._audit_lock, pool.acquire() as conn:
             async with conn.transaction():
+                await conn.fetchval(
+                    "SELECT pg_advisory_xact_lock($1)", self._AUDIT_ADVISORY_LOCK
+                )
+                rows = await conn.fetch(
+                    "SELECT id, prev_hash, entry_hash FROM audit_log "
+                    "WHERE session_id = $1 OR key_prefix = $2 ORDER BY id ASC",
+                    subject,
+                    subject,
+                )
+                removed = [
+                    {
+                        "id": r["id"],
+                        "prev_hash": r["prev_hash"] or "",
+                        "entry_hash": r["entry_hash"] or "",
+                    }
+                    for r in rows
+                ]
                 r1 = await conn.execute(
                     "DELETE FROM audit_log WHERE session_id = $1 OR key_prefix = $2",
                     subject,
                     subject,
                 )
                 audit_deleted = int(r1.split(" ")[1]) if " " in r1 else 0
+                await self._record_audit_gaps(
+                    conn, audit_chain.segments_from_rows(removed, reason="erasure")
+                )
 
                 r2 = await conn.execute(
                     "DELETE FROM spend_log WHERE key_prefix = $1", subject
@@ -509,60 +592,19 @@ class PostgresStore:
         }
 
     async def verify_audit_chain(self) -> dict:
-        import hashlib
+        """Verify the audit hash chain with the same rules as the SQLite store.
 
+        Both backends call store.audit_chain.verify_rows. This one used to carry
+        its own copy that reset the expected link on a blank entry_hash, the
+        case the SQLite copy had been changed to treat as a break.
+        """
         pool = await self.init_pool()
-        _MAX_VERIFY_ROWS = 100_000
         rows = await pool.fetch(
-            "SELECT * FROM audit_log ORDER BY id ASC LIMIT $1", _MAX_VERIFY_ROWS
+            "SELECT * FROM audit_log ORDER BY id ASC LIMIT $1",
+            audit_chain.MAX_VERIFY_ROWS,
         )
-
-        expected_prev = "GENESIS"
-        verified = 0
-
-        for row in rows:
-            stored_hash = row.get("entry_hash", "")
-            stored_prev = row.get("prev_hash", "")
-
-            if not stored_hash:
-                expected_prev = "GENESIS"
-                continue
-
-            if stored_prev != expected_prev:
-                return {
-                    "valid": False,
-                    "total": len(rows),
-                    "verified": verified,
-                    "broken_at": row.get("id"),
-                    "error": f"prev_hash mismatch at id={row.get('id')}",
-                }
-
-            payload = (
-                f"{stored_prev}|{row['ts']}|{row['req_id']}|{row['session_id']}|"
-                f"{row['key_prefix']}|{row['model']}|{row['provider']}|{row['status']}|"
-                f"{row['prompt_tokens']}|{row['completion_tokens']}|{row['cost_usd']}|"
-                f"{row['latency_ms']}|{row['blocked']}|{row['block_reason']}|{row['metadata']}"
-            )
-            recomputed = hashlib.sha256(payload.encode("utf-8")).hexdigest()
-
-            if recomputed != stored_hash:
-                return {
-                    "valid": False,
-                    "total": len(rows),
-                    "verified": verified,
-                    "broken_at": row.get("id"),
-                    "error": f"entry_hash mismatch at id={row.get('id')} (tamper detected)",
-                }
-
-            expected_prev = stored_hash
-            verified += 1
-
-        return {
-            "valid": True,
-            "total": len(rows),
-            "verified": verified,
-            "broken_at": None,
-        }
+        gaps = audit_chain.load_gaps(await self.get_state(audit_chain.GAPS_KEY))
+        return audit_chain.verify_rows([dict(r) for r in rows], gaps)
 
     async def health_check(self) -> bool:
         try:

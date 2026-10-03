@@ -9,6 +9,7 @@ import aiosqlite
 
 from models import EndpointStatus, LLMEndpoint
 
+from . import audit_chain
 from .schema import MIGRATIONS, SQLITE, iter_create_statements
 
 logger = logging.getLogger(__name__)
@@ -485,20 +486,87 @@ class SQLiteStore:
 
     # ── GDPR: Data Subject Rights ──
 
+    async def _record_audit_gaps(self, conn, segments: list[dict]) -> None:
+        """Add deletion records to app_state. Caller commits, in the same transaction."""
+        if not segments:
+            return
+        async with conn.execute(
+            "SELECT value FROM app_state WHERE key = ?", (audit_chain.GAPS_KEY,)
+        ) as cursor:
+            row = await cursor.fetchone()
+        existing = audit_chain.load_gaps(json.loads(row[0]) if row else None)
+        merged = audit_chain.merge_gaps(existing, segments)
+        await conn.execute(
+            "INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)",
+            (audit_chain.GAPS_KEY, json.dumps(merged)),
+        )
+
     async def purge_expired(self, retention_days: int = 90) -> dict:
-        """Delete audit/spend records older than retention_days."""
+        """Delete audit/spend records older than retention_days.
+
+        Audit rows are removed as the oldest *run* of the chain: everything
+        before the first row that is still inside the window. The removed run's
+        boundary hashes are recorded in the same transaction, so
+        verify_audit_chain can tell this deletion from tampering. Holding
+        _audit_lock keeps an append from reading a last-hash that the delete is
+        about to take away.
+        """
         import time
 
         cutoff_ts = int(time.time()) - (retention_days * 86400)
 
         conn = await self._get_conn()
-        cursor = await conn.execute("DELETE FROM audit_log WHERE ts < ?", (cutoff_ts,))
-        audit_deleted = cursor.rowcount
+        async with self._audit_lock:
+            try:
+                async with conn.execute(
+                    "SELECT MIN(id) FROM audit_log WHERE ts >= ?", (cutoff_ts,)
+                ) as cursor:
+                    first_kept = (await cursor.fetchone())[0]
 
-        cursor = await conn.execute("DELETE FROM spend_log WHERE ts < ?", (cutoff_ts,))
-        spend_deleted = cursor.rowcount
+                # Nothing inside the window: the whole chain is expired and the
+                # next append starts a new one at GENESIS, so there is no
+                # surviving row to bridge to.
+                where, params = ("1=1", ()) if first_kept is None else ("id < ?", (first_kept,))
 
-        await conn.commit()
+                async with conn.execute(
+                    f"SELECT prev_hash FROM audit_log WHERE {where} "
+                    "AND COALESCE(entry_hash, '') != '' ORDER BY id ASC LIMIT 1",
+                    params,
+                ) as cursor:
+                    first = await cursor.fetchone()
+                async with conn.execute(
+                    f"SELECT entry_hash FROM audit_log WHERE {where} "
+                    "AND COALESCE(entry_hash, '') != '' ORDER BY id DESC LIMIT 1",
+                    params,
+                ) as cursor:
+                    last = await cursor.fetchone()
+
+                cursor = await conn.execute(f"DELETE FROM audit_log WHERE {where}", params)
+                audit_deleted = cursor.rowcount
+
+                if first_kept is not None and first and last:
+                    await self._record_audit_gaps(
+                        conn,
+                        [
+                            {
+                                "start": first[0],
+                                "end": last[0],
+                                "rows": audit_deleted,
+                                "reason": "retention",
+                                "at": int(time.time()),
+                            }
+                        ],
+                    )
+
+                cursor = await conn.execute(
+                    "DELETE FROM spend_log WHERE ts < ?", (cutoff_ts,)
+                )
+                spend_deleted = cursor.rowcount
+
+                await conn.commit()
+            except Exception:
+                await conn.rollback()
+                raise
 
         return {"audit_deleted": audit_deleted, "spend_deleted": spend_deleted}
 
@@ -506,27 +574,47 @@ class SQLiteStore:
         """Right to erasure: delete all data for a subject.
 
         Matches on session_id, key_prefix (audit/spend), and subject/email (user_roles).
+        The subject's audit rows can sit anywhere in the chain; their boundary
+        hashes are recorded in the same transaction so the rows around them
+        still verify.
         """
         conn = await self._get_conn()
-        cursor = await conn.execute(
-            "DELETE FROM audit_log WHERE session_id = ? OR key_prefix = ?",
-            (subject, subject),
-        )
-        audit_deleted = cursor.rowcount
+        async with self._audit_lock:
+            try:
+                async with conn.execute(
+                    "SELECT id, prev_hash, entry_hash FROM audit_log "
+                    "WHERE session_id = ? OR key_prefix = ? ORDER BY id ASC",
+                    (subject, subject),
+                ) as cursor:
+                    removed = [
+                        {"id": r[0], "prev_hash": r[1] or "", "entry_hash": r[2] or ""}
+                        for r in await cursor.fetchall()
+                    ]
+                cursor = await conn.execute(
+                    "DELETE FROM audit_log WHERE session_id = ? OR key_prefix = ?",
+                    (subject, subject),
+                )
+                audit_deleted = cursor.rowcount
+                await self._record_audit_gaps(
+                    conn, audit_chain.segments_from_rows(removed, reason="erasure")
+                )
 
-        cursor = await conn.execute(
-            "DELETE FROM spend_log WHERE key_prefix = ?",
-            (subject,),
-        )
-        spend_deleted = cursor.rowcount
+                cursor = await conn.execute(
+                    "DELETE FROM spend_log WHERE key_prefix = ?",
+                    (subject,),
+                )
+                spend_deleted = cursor.rowcount
 
-        cursor = await conn.execute(
-            "DELETE FROM user_roles WHERE subject = ? OR email = ?",
-            (subject, subject),
-        )
-        roles_deleted = cursor.rowcount
+                cursor = await conn.execute(
+                    "DELETE FROM user_roles WHERE subject = ? OR email = ?",
+                    (subject, subject),
+                )
+                roles_deleted = cursor.rowcount
 
-        await conn.commit()
+                await conn.commit()
+            except Exception:
+                await conn.rollback()
+                raise
 
         return {
             "audit_deleted": audit_deleted,
@@ -566,86 +654,26 @@ class SQLiteStore:
 
         Walks every entry in order and recomputes its hash from the stored fields
         + previous hash. If any recomputed hash doesn't match the stored hash,
-        the chain is broken (tamper detected).
+        the chain is broken (tamper detected). Rows removed by a recorded
+        retention purge or erasure are bridged (see store/audit_chain.py).
         """
-        import hashlib
-
         conn = await self._get_conn()
-        # R2-12: Limit to last 100k rows to prevent OOM on large audit logs.
-        # Verifying the most recent entries is sufficient for tamper detection.
-        _MAX_VERIFY_ROWS = 100_000
+        # R2-12: Limit rows to prevent OOM on large audit logs. This reads the
+        # FIRST MAX_VERIFY_ROWS rows by id, not the most recent: rows past the
+        # limit are not verified (audit finding LLMPRO-DATA-02, still open).
         async with self._row_factory_lock:
             conn.row_factory = aiosqlite.Row
             try:
                 async with conn.execute(
                     "SELECT * FROM audit_log ORDER BY id ASC LIMIT ?",
-                    (_MAX_VERIFY_ROWS,),
+                    (audit_chain.MAX_VERIFY_ROWS,),
                 ) as cursor:
                     rows = [dict(r) for r in await cursor.fetchall()]
             finally:
                 conn.row_factory = None
 
-        expected_prev = "GENESIS"
-        verified = 0
-
-        for row in rows:
-            stored_hash = row.get("entry_hash", "")
-            stored_prev = row.get("prev_hash", "")
-
-            # Blank entry_hash: tolerate ONLY for leading legacy rows written
-            # before the hash-chain migration (no hashed row seen yet). A blank
-            # hash AFTER hashed rows is an attacker blanking a row to truncate
-            # the tail and re-anchor the chain to GENESIS — treat it as a break,
-            # not a reset.
-            if not stored_hash:
-                if verified == 0:
-                    expected_prev = "GENESIS"
-                    continue
-                return {
-                    "valid": False,
-                    "total": len(rows),
-                    "verified": verified,
-                    "broken_at": row.get("id"),
-                    "error": f"blank entry_hash at id={row.get('id')} after hashed rows (tamper detected)",
-                }
-
-            # Verify prev_hash link
-            if stored_prev != expected_prev:
-                return {
-                    "valid": False,
-                    "total": len(rows),
-                    "verified": verified,
-                    "broken_at": row.get("id"),
-                    "error": f"prev_hash mismatch at id={row.get('id')}",
-                }
-
-            # Recompute entry hash
-            payload = (
-                f"{stored_prev}|{row['ts']}|{row['req_id']}|{row['session_id']}|"
-                f"{row['key_prefix']}|{row['model']}|{row['provider']}|{row['status']}|"
-                f"{row['prompt_tokens']}|{row['completion_tokens']}|{row['cost_usd']}|"
-                f"{row['latency_ms']}|{row['blocked']}|{row['block_reason']}|{row['metadata']}"
-            )
-            recomputed = hashlib.sha256(payload.encode("utf-8")).hexdigest()
-
-            if recomputed != stored_hash:
-                return {
-                    "valid": False,
-                    "total": len(rows),
-                    "verified": verified,
-                    "broken_at": row.get("id"),
-                    "error": f"entry_hash mismatch at id={row.get('id')} (tamper detected)",
-                }
-
-            expected_prev = stored_hash
-            verified += 1
-
-        return {
-            "valid": True,
-            "total": len(rows),
-            "verified": verified,
-            "broken_at": None,
-        }
+        gaps = audit_chain.load_gaps(await self.get_state(audit_chain.GAPS_KEY))
+        return audit_chain.verify_rows(rows, gaps)
 
     async def health_check(self) -> bool:
         """Verify the database connection is alive via a lightweight PRAGMA."""
