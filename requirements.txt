@@ -14,7 +14,7 @@ asyncpg>=0.31.0
 prometheus-client==0.25.0
 
 # Security & Identity
-cryptography==50.0.1
+cryptography==50.0.2
 PyJWT==2.15.0
 
 # Export & Observability
