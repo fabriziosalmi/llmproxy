@@ -21,6 +21,7 @@ Usage:
     python scripts/backup_db.py --db path/to.db --out /backups
     python scripts/backup_db.py --keep 14            # prune older than the last 14
     python scripts/backup_db.py --verify-only FILE   # check a backup is readable
+    python scripts/backup_db.py --restore FILE       # put a backup in place (proxy stopped)
 
 Exit codes: 0 on success, 1 on failure. Prints the backup path on success so a
 caller can act on it.
@@ -30,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import sqlite3
 import sys
 import time
@@ -128,18 +130,95 @@ def prune(out_dir: Path, db_name: str, keep: int) -> list[Path]:
     return removed
 
 
+def _sidecars(db: Path) -> list[Path]:
+    """The WAL and shared-memory files SQLite keeps beside a database."""
+    return [db.with_name(db.name + suffix) for suffix in ("-wal", "-shm")]
+
+
+def restore(source: Path, db: Path, out_dir: Path) -> Path | None:
+    """Replace `db` with the backup `source`. Returns where the old files went.
+
+    Copying a backup over endpoints.db is not a restore. The database runs in
+    WAL mode, so the live file is only half of its state: a stale -wal left
+    beside the restored file is replayed on the next open, and the rows written
+    after the backup reappear on top of it. A backup of 5 rows restored over a
+    database whose WAL held 500 later ones opened as 505. So the old database and
+    its -wal/-shm are moved aside together, as a set that still opens, and only
+    then is the verified backup put in place.
+
+    The proxy must be stopped: a running process holds the old files open.
+    """
+    if not verify(source):
+        raise ValueError(f"{source} is not a usable backup; nothing was changed")
+    db.parent.mkdir(parents=True, exist_ok=True)
+
+    # Stage next to the target first, so a failed copy leaves the live database
+    # exactly as it was.
+    staged = db.with_name(db.name + ".restoring")
+    shutil.copyfile(source, staged)
+    fd = os.open(staged, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    os.chmod(staged, 0o600)
+
+    stash: Path | None = None
+    existing = [p for p in (db, *_sidecars(db)) if p.exists()]
+    if existing:
+        stash = out_dir / f"pre-restore.{int(time.time())}"
+        stash.mkdir(parents=True, exist_ok=True)
+        for path in existing:
+            shutil.move(str(path), stash / path.name)
+
+    os.replace(staged, db)
+    dir_fd = os.open(db.parent, os.O_RDONLY)
+    try:
+        os.fsync(dir_fd)
+    finally:
+        os.close(dir_fd)
+    return stash
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--db", default=DEFAULT_DB, help=f"default: {DEFAULT_DB}")
     parser.add_argument("--out", default=DEFAULT_OUT, help=f"default: {DEFAULT_OUT}")
     parser.add_argument(
-        "--keep", type=int, default=7, help="how many backups to retain (default: 7)"
+        "--keep",
+        type=int,
+        default=None,
+        help="how many backups to retain after taking one (default: 7)",
     )
     parser.add_argument("--verify-only", metavar="FILE", help="verify a backup and exit")
+    parser.add_argument(
+        "--restore",
+        metavar="FILE",
+        help="replace the database with this backup; stop the proxy first",
+    )
     args = parser.parse_args()
+
+    # --verify-only used to swallow --keep: a crontab line carrying both ran,
+    # checked the newest old backup, exited 0 and never took one.
+    if args.verify_only and (args.keep is not None or args.restore):
+        parser.error("--verify-only only checks one file; it takes no other action")
+    if args.restore and args.keep is not None:
+        parser.error("--restore does not take --keep")
 
     if args.verify_only:
         return 0 if verify(Path(args.verify_only)) else 1
+
+    if args.restore:
+        try:
+            stash = restore(Path(args.restore), Path(args.db), Path(args.out))
+        except (OSError, ValueError, sqlite3.Error) as exc:
+            print(f"ERROR: restore failed: {exc}", file=sys.stderr)
+            return 1
+        if stash:
+            print(f"previous database set aside in {stash}")
+        return 0 if verify(Path(args.db)) else 1
+
+    keep = 7 if args.keep is None else args.keep
 
     db = Path(args.db)
     out_dir = Path(args.out)
@@ -152,7 +231,7 @@ def main() -> int:
     if not verify(target):
         return 1
 
-    for removed in prune(out_dir, db.name, args.keep):
+    for removed in prune(out_dir, db.name, keep):
         print(f"pruned: {removed}")
 
     print(target)

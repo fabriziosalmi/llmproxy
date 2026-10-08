@@ -10,6 +10,7 @@ These tests back up a populated database, put it back, and assert the rows
 survived — the round trip, not just the artefact.
 """
 
+import re
 import sqlite3
 import subprocess
 import sys
@@ -172,3 +173,126 @@ def test_the_backup_is_not_world_readable(tmp_path):
     assert _run("--db", str(db), "--out", str(out)).returncode == 0
     backup_file = next(out.glob("endpoints.db.bak.*"))
     assert backup_file.stat().st_mode & 0o077 == 0, "backup must be 0600"
+
+
+# ── restore ───────────────────────────────────────────────────────────────────
+
+
+def _count(path: Path, table: str = "audit_log") -> int:
+    conn = sqlite3.connect(path)
+    try:
+        return conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+    finally:
+        conn.close()
+
+
+def test_restore_over_a_live_wal_does_not_resurrect_later_rows(tmp_path):
+    """The failure a plain `cp` has: the stale -wal is replayed onto the backup.
+
+    The live database keeps 500 rows in its WAL (never checkpointed, as after a
+    crash). Copying the 5-row backup over endpoints.db leaves that WAL beside it
+    and the database opens with 505 rows. --restore must end with exactly 5.
+    """
+    db = tmp_path / "endpoints.db"
+    _populate(db, audit_rows=5)
+    out = tmp_path / "backups"
+    assert _run("--db", str(db), "--out", str(out)).returncode == 0
+    backup_file = next(out.glob("endpoints.db.bak.*"))
+
+    live = sqlite3.connect(db)
+    live.execute("PRAGMA journal_mode=WAL")
+    live.execute("PRAGMA wal_autocheckpoint=0")
+    for i in range(500):
+        live.execute(
+            "INSERT INTO audit_log (req_id, entry_hash) VALUES (?, ?)", (f"late{i}", "b" * 64)
+        )
+    live.commit()
+    wal = db.with_name(db.name + "-wal")
+    assert wal.exists() and wal.stat().st_size > 0  # the situation under test
+
+    try:
+        result = _run("--restore", str(backup_file), "--db", str(db), "--out", str(out))
+    finally:
+        live.close()
+    assert result.returncode == 0, result.stderr
+
+    assert _count(db) == 5
+    stashes = list(out.glob("pre-restore.*"))
+    assert len(stashes) == 1
+    assert _count(stashes[0] / "endpoints.db") == 505  # the old set still opens
+
+
+def test_restore_refuses_a_corrupt_backup_and_touches_nothing(tmp_path):
+    db = tmp_path / "endpoints.db"
+    _populate(db, audit_rows=4)
+    bad = tmp_path / "bad.bak"
+    bad.write_bytes(b"this is not a database" * 100)
+
+    result = _run("--restore", str(bad), "--db", str(db), "--out", str(tmp_path / "b"))
+
+    assert result.returncode == 1
+    assert _count(db) == 4
+    assert not list(tmp_path.glob("**/pre-restore.*"))
+    assert not db.with_name(db.name + ".restoring").exists()
+
+
+def test_restore_into_an_empty_place_just_installs_the_backup(tmp_path):
+    src = tmp_path / "src.db"
+    _populate(src, audit_rows=2)
+    out = tmp_path / "backups"
+    assert _run("--db", str(src), "--out", str(out)).returncode == 0
+    backup_file = next(out.glob("src.db.bak.*"))
+
+    target = tmp_path / "data" / "endpoints.db"
+    result = _run("--restore", str(backup_file), "--db", str(target), "--out", str(out))
+
+    assert result.returncode == 0, result.stderr
+    assert _count(target) == 2
+    assert (target.stat().st_mode & 0o777) == 0o600
+
+
+def test_verify_only_cannot_be_combined_with_keep(tmp_path):
+    """It used to accept --keep and ignore it, which is how a crontab line that
+    never took a backup ran green for as long as an old backup existed."""
+    db = tmp_path / "endpoints.db"
+    _populate(db)
+    out = tmp_path / "backups"
+    assert _run("--db", str(db), "--out", str(out)).returncode == 0
+    backup_file = next(out.glob("endpoints.db.bak.*"))
+
+    result = _run("--keep", "14", "--verify-only", str(backup_file))
+
+    assert result.returncode == 2
+    assert "--verify-only" in result.stderr
+
+
+# ── the documented schedule ───────────────────────────────────────────────────
+
+
+def test_the_documented_cron_line_takes_a_backup(tmp_path):
+    """Run the crontab line from docs/guide/deployment.md, not a paraphrase of it.
+
+    The documented line used to pass --verify-only: it checked the newest
+    existing backup, exited 0 and took nothing, so once any backup existed the
+    schedule reported green indefinitely.
+    """
+    doc = (REPO / "docs" / "guide" / "deployment.md").read_text()
+    block = re.search(r"```cron\n(.*?)```", doc, re.S)
+    assert block, "deployment.md no longer documents a cron schedule"
+    lines = [ln for ln in block.group(1).splitlines() if ln and not ln.startswith("#")]
+    assert len(lines) == 1
+    command = lines[0].split(None, 5)[5]  # drop the five time fields
+
+    data = tmp_path / "data"
+    data.mkdir()
+    _populate(data / "endpoints.db")
+    assert "backup_db.py" in command and "cd /opt/llmproxy" in command
+    command = command.replace("cd /opt/llmproxy", f"cd {tmp_path}").replace(
+        "python scripts/backup_db.py", f"{sys.executable} {SCRIPT}"
+    )
+
+    result = subprocess.run(["sh", "-c", command], capture_output=True, text=True)
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "" and result.stderr == ""  # quiet unless it fails
+    assert len(list((data / "backups").glob("endpoints.db.bak.*"))) == 1

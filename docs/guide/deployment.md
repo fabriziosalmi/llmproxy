@@ -190,6 +190,7 @@ proxy is stopped — do not delete it and do not let a rebuild discard it.
 python scripts/backup_db.py                    # data/endpoints.db -> data/backups/
 python scripts/backup_db.py --keep 14          # retain the newest 14
 python scripts/backup_db.py --verify-only FILE # check a backup is readable
+python scripts/backup_db.py --restore FILE     # put a backup in place (proxy stopped)
 ```
 
 It uses SQLite's backup API rather than copying the file, so it is safe to run
@@ -199,24 +200,39 @@ outcome for an audit chain, which would then verify as *broken* rather than as
 absent. Each backup is integrity-checked immediately, written `0600`, and the
 row counts are printed so you can see it holds what you expect.
 
-Restoring is copying the file back into place:
+Restore with the script, with the proxy stopped:
 
 ```bash
 systemctl stop llmproxy        # or: docker stop llmproxy
-cp data/backups/endpoints.db.bak.<timestamp> data/endpoints.db
+python scripts/backup_db.py --restore data/backups/endpoints.db.bak.<timestamp>
 systemctl start llmproxy
 ```
 
-The round trip is exercised in `tests/test_backup_db.py` — the backup is taken,
-the live database is deleted, the backup is restored and the rows are asserted
-to have survived. An untested restore is not a backup.
+Do not restore with a plain `cp`. The database runs in WAL mode, so
+`endpoints.db` is only part of its state: a `-wal` file left beside the restored
+copy is replayed on the next open, and the rows written after the backup come
+back on top of it. A 5-row backup copied over a database whose WAL held 500
+later rows opened as 505. `--restore` verifies the backup first, then moves the
+old `endpoints.db`, `-wal` and `-shm` together into `data/backups/pre-restore.<timestamp>/`
+(as a set that still opens, in case the restore was the wrong call) and puts the
+backup in place. If the backup does not verify, nothing is touched.
 
-Schedule it — a documented command nobody runs is not a backup either:
+The round trip is exercised in `tests/test_backup_db.py`, including a restore
+over a database with an unflushed WAL. An untested restore is not a backup.
+
+Schedule it. `--verify-only` checks a file that already exists and takes no
+backup, so it is not a schedule; the plain command below takes one, verifies it
+immediately, and prunes. Its normal output goes to `/dev/null` so that cron
+(`MAILTO`) mails you only when something is written to stderr, which is when it
+fails:
 
 ```cron
-# Daily 03:00 backup, keep 14, verify the newest; mail on failure (cron MAILTO).
-0 3 * * * cd /opt/llmproxy && python scripts/backup_db.py --keep 14 --verify-only data/backups/$(ls -t data/backups | head -1)
+# Daily 03:00: back up, keep the newest 14.
+0 3 * * * cd /opt/llmproxy && python scripts/backup_db.py --keep 14 >/dev/null
 ```
+
+The line above is run by `tests/test_backup_db.py`, so the documented command
+cannot drift into one that does nothing.
 
 Host hygiene around the proxy: secret-adjacent files must be `0600`
 (`backup_db.py` already writes backups that way — extend the habit to `.env`,
