@@ -18,6 +18,7 @@ Cache key composition (computed AFTER PII masking in PRE_FLIGHT):
 """
 
 import asyncio
+import functools
 import hashlib
 import json
 import logging
@@ -134,16 +135,43 @@ class NegativeCache:
         }
 
 
-def _find_semantic_match(cache_rows: list, current_prompt: str, threshold: float) -> str | None:
+#: Prompts longer than this are never compared by similarity. The cost of a miss
+#: is the trigram sets of up to 200 stored prompts, and it grows with their length
+#: (about 10 ms at 50 words, 70 ms at 400, 260 ms at 1200 per miss); near-duplicate
+#: detection on multi-page prompts is not what this feature is for.
+SEMANTIC_MAX_PROMPT_CHARS = 4000
+
+
+@functools.lru_cache(maxsize=256)
+def _stored_trigrams(prompt: str) -> frozenset[str]:
+    """Trigram set of a STORED prompt, remembered across lookups.
+
+    Each miss used to rebuild the sets of every candidate row, and the same rows
+    come back on the next miss; only the incoming prompt is new.
+    """
+    from core.semantic_analyzer import _to_trigrams
+
+    return frozenset(_to_trigrams(prompt))
+
+
+def _find_semantic_match(
+    cache_rows: list,
+    current_prompt: str,
+    threshold: float,
+    max_chars: int = SEMANTIC_MAX_PROMPT_CHARS,
+) -> str | None:
     from core.semantic_analyzer import _jaccard, _to_trigrams
 
+    if len(current_prompt) > max_chars:
+        return None
     current_trigrams = _to_trigrams(current_prompt)
     best_sim = 0.0
     best_res = None
 
     for res_str, cached_prompt in cache_rows:
-        cached_trigrams = _to_trigrams(cached_prompt)
-        sim = _jaccard(current_trigrams, cached_trigrams)
+        if len(cached_prompt) > max_chars:
+            continue
+        sim = _jaccard(current_trigrams, _stored_trigrams(cached_prompt))
         if sim > best_sim:
             best_sim = sim
             best_res = res_str

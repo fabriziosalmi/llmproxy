@@ -416,7 +416,7 @@ def create_app(agent) -> FastAPI:
     # malformed-body guard rather than a WAF signature, and the failure it
     # prevents — RecursionError escaping the JSON parser as an unhandled 500 —
     # happens whether or not injection scanning is switched on.
-    from core.firewall_asgi import DEFAULT_MAX_NESTING_DEPTH
+    from core.firewall_asgi import DEFAULT_BODY_TIMEOUT_S, DEFAULT_MAX_NESTING_DEPTH
 
     app.add_middleware(
         ByteLevelFirewallMiddleware,
@@ -425,6 +425,11 @@ def create_app(agent) -> FastAPI:
         enabled=firewall_enabled,
         max_nesting_depth=agent.config.get("security", {}).get(
             "max_nesting_depth", DEFAULT_MAX_NESTING_DEPTH
+        ),
+        body_timeout_s=float(
+            (agent.config.get("security", {}).get("firewall", {}) or {}).get(
+                "body_timeout_seconds", DEFAULT_BODY_TIMEOUT_S
+            )
         ),
     )
     app.add_middleware(RateLimitMiddleware, config=agent.config, agent=agent)

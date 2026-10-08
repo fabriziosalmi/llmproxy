@@ -1,6 +1,5 @@
 """Chat completion route: /v1/chat/completions — the core proxy endpoint."""
 
-import asyncio
 import datetime as _dt
 import json
 import logging
@@ -20,6 +19,7 @@ from core.session_id import (
 from core.tokenizer import count_messages_tokens
 from core.tracing import TraceManager
 from core.webhooks import EventType
+from proxy.audit_backlog import submit as submit_audit
 from proxy.auth_helpers import authenticate_data_plane
 from proxy.routes.deps import ChatAgent
 from proxy.schemas import ChatCompletionRequest
@@ -222,13 +222,7 @@ def create_router(agent: ChatAgent) -> APIRouter:
                     MetricsTracker.track_audit_persistence("chat", "fail")
                     logger.warning(f"Chat audit log failed: {e}")
 
-            task = agent._spawn_task(_persist_logs())
-
-            def _on_audit_error(t: asyncio.Task) -> None:
-                if t.exception():
-                    logger.warning(f"Audit log persistence failed: {t.exception()}")
-
-            task.add_done_callback(_on_audit_error)
+            await submit_audit(agent, _persist_logs(), route="chat")
 
             return response
         except Exception as e:

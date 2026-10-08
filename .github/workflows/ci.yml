@@ -294,6 +294,9 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-asyncio pytest-cov pytest-benchmark httpx hypothesis
       - name: Run tests with coverage
+        # Branch coverage is on: a line counted as covered when only one side of
+        # its `if` ran hid the untaken branch (error paths above all). Measured
+        # 77% with branches (80% by line); the floor is 73.
         # The floor tracks the measurement rather than trailing it. It sat at
         # 68 against a measured 70.1, so roughly 220 statements of coverage
         # could drain away unnoticed — and the modules with room to fall are
@@ -307,9 +310,9 @@ jobs:
         # integrated_test.py stays out: it skips without external services.
         run: |
           python -m pytest tests/ -v --tb=short \
-            --cov=core --cov=proxy --cov=plugins --cov=store \
+            --cov=core --cov=proxy --cov=plugins --cov=store --cov-branch \
             --cov-report=term-missing \
-            --cov-fail-under=71 \
+            --cov-fail-under=73 \
             --ignore=tests/integrated_test.py \
             --ignore=tests/test_benchmarks.py
         env:

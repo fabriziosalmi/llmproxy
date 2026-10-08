@@ -32,7 +32,9 @@ async def main():
 
     if not verify_all(strict=False):
         logger.critical("Supply chain integrity check FAILED. Aborting startup.")
-        return
+        # Non-zero: this returned normally, so the process exited 0 and a supervisor
+        # (systemd, Docker, Kubernetes) read an aborted start as a clean one.
+        raise SystemExit(1)
 
     config_file = os.environ.get("CONFIG_FILE", "config.yaml")
     with open(config_file) as f:

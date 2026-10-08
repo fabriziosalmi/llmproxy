@@ -2,6 +2,95 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.37.21] — 2026-10-09
+
+### Audit Tier 2: streaming, security, robustness, operations (patch)
+
+From the second audit of 1.37.19. Every fix below has a test that fails on the
+previous code (the exceptions are noted).
+
+**Security**
+- **Admin-tier tokens were signed with an inference key.** The SSE log token (admits
+  `/api/v1/logs`) and the config confirm token fell back to `keys[0]` of the inference
+  bag; anyone holding the lowest credential could forge one, and the SSE verifier
+  accepted any expiry. They now use a per-process random secret (or
+  `security.sse.signing_secret` / `security.confirm.signing_secret`) and refuse an
+  expiry beyond what the proxy mints. A restart drops outstanding tokens.
+- **The "redacted" config view returned secrets**: `scrub_dict` hid exact names only,
+  so `jwt_secret`, `signing_secret`, a DSN and `redis_url` came back verbatim. It
+  redacts by what the name says and hides credentials in any URL. The Redis URL (with
+  its password) is no longer logged at INFO on three paths nor returned by
+  `/api/v1/rate-limit/config`.
+- **Revoking a subject now also refuses their identity-provider token**, which kept
+  authenticating directly and could be exchanged for a fresh session. A token issued
+  after the revocation (a new login) is unaffected.
+- **The default `user` role no longer reads the control plane.** It held
+  `registry:read` and `logs:read`, so every directory user could read upstream URLs,
+  other users' audit rows and the plugin list. **Upgrading**: grant `viewer` through
+  `role_mappings` to anyone who needs read access.
+
+**Streaming and capacity**
+- Adapters no longer override the session timeout with a hard-coded 60 s
+  (`server.timeout` / `total_timeout` now work; long generations and SSE streams are
+  not cut, and a timeout is not retried against a second paying provider).
+- The admission slot is held until the response **body** is sent, so streams count
+  against `max_in_flight`.
+- A finished stream is accounted in a shielded task: a client disconnect no longer
+  loses its spend/audit rows. Rows carry the real outcome (blocked + reason, 502
+  upstream failure, 499 client abort), `llm_proxy_stream_outcomes_total` counts how
+  streams end, and streams now feed the token/cost counters.
+- The firewall bounds how long a request body may take (`408` after
+  `security.firewall.body_timeout_seconds`, default 30) and inspects bodies of 32 KiB
+  or more in a worker thread instead of freezing the event loop (~80 ms for 512 KiB).
+- Queued audit writes are bounded (`audit.max_pending_writes`, default 1000); past it
+  the request awaits its own write. `llm_proxy_audit_backlog` shows the depth.
+- Semantic cache: stored prompts' trigram sets are remembered across misses and
+  prompts over 4000 characters are not compared.
+- Infisical: an unavailable SDK or missing credentials are noticed once, not on every
+  lookup.
+
+**Robustness**
+- Any exception from a plugin follows its fail policy (five exception types were
+  caught; others became a 502 and never tripped the plugin breaker). Plugin errors,
+  timeouts, blocks and quarantine skips are `llm_proxy_plugin_events_total`, with
+  `PluginQuarantined` / `PluginErrors` alerts.
+- An unhandled exception on `/v1` is the OpenAI envelope (it was `text/plain`); a
+  post-flight block raises with the plugin's status instead of a bare 403; the
+  admission 503 uses the envelope (`code: overloaded`).
+- `server.tls.*` and `server.keep_alive` configure the listener (`tls.enabled: true`
+  served plain HTTP before); enabled TLS with a missing cert or key refuses to start;
+  `min_version` is enforced; `server.shutdown_timeout` (default 30 s) bounds the
+  graceful shutdown.
+- The validator no longer crashes on an empty YAML section; SQLite `add_endpoint` is
+  `ON CONFLICT(id)` (it deleted another endpoint with the same URL) and the registry
+  route answers 409; one unreadable endpoint row no longer fails every read; a bad
+  audit date filter is a 400; `main.py` runs the `CONFIG_FILE` it validated and exits
+  non-zero when the supply-chain check fails.
+
+**Operations and documentation**
+- New `GET /ready` (503 when the verdict is `down`); the Helm readiness probe uses it.
+  The chart uses `Recreate` (one SQLite writer on a ReadWriteOnce volume) and a
+  `checksum/config` pod annotation so a config-only upgrade restarts the pod.
+- `mypy.ini` is the single source for CI, `make typecheck` and the pre-commit hook
+  (`make typecheck` reported 23 errors on a main CI passed). CI measures **branch**
+  coverage; the floor is 73 (77 measured).
+- `bump_version.py` moves and `--check` verifies the image tags pinned in the README
+  and the deployment guide (`:1.35.0` / `:1.33.0` at 1.37.19).
+- README and guides: static test/coverage badges removed (1755 vs 2157), "immutable
+  audit ledger" and "Redis-backed distributed ring pipeline" corrected, conflicting
+  layer and plugin counts fixed, a malformed `curl` header fixed; tests check what can
+  be checked. `install.sh` creates `.env` as `0600`.
+- Tests: the budget-saturation test no longer ends in `assert True`; the health prober
+  has tests, and receives its adapter resolver instead of importing `proxy/` (a layering
+  test keeps `core/`, `store/` and `plugins/` from importing it).
+
+**Not in this release** (audit findings left open on purpose): the hot-path complexity
+of `process_proxy_request` (CCN 38; a refactor of the most exercised function, better
+done alone), the unmeasured-health sentinel (a fresh endpoint scores as the fastest),
+the bare-metal install being unhashed (the lock is Linux/3.12), required CI checks for
+the UI jobs and UI coverage thresholds (repository settings), and the quota table
+still living in the working-directory `endpoints.db`.
+
 ## [1.37.20] — 2026-10-08
 
 ### Audit Tier 1: data loss and false assurance (patch)
