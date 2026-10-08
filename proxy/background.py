@@ -210,6 +210,26 @@ async def metrics_history_loop(agent, interval: int = 3600):
             logger.warning(f"metrics_history snapshot error: {e}")
 
 
+async def budget_rollover_loop(agent, interval: int = 30):
+    """Roll the daily budget over at midnight even when no request arrives.
+
+    Requests roll it over themselves (proxy/budget.roll_over_if_new_day), which is
+    what the limit depends on. This keeps what is shown without traffic honest:
+    the dashboard, the forecast and the consumed-budget gauge the alerts watch
+    would otherwise show yesterday's spend until the first request of the day.
+    """
+    from .budget import roll_over_if_new_day
+
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            async with agent._budget_lock:
+                roll_over_if_new_day(agent)
+            _iteration_ok("budget_rollover")
+        except Exception as e:
+            logger.error(f"Budget rollover error: {e}")
+
+
 async def cache_eviction_loop(cache_backend, interval: int = 3600):
     """Evict expired cache entries periodically."""
     while True:
