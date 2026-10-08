@@ -264,7 +264,10 @@ class PipelineAgent:
             self.rings_executed.append("POST_FLIGHT")
             await self.plugin_manager.execute_ring(PluginHook.POST_FLIGHT, ctx)
             if ctx.stop_chain:
-                return JSONResponse(content={"error": ctx.error}, status_code=403)
+                # Mirrors proxy/request_pipeline.py: the plugin's status, raised.
+                raise HTTPException(
+                    status_code=ctx.metadata.get("_block_status", 403), detail=ctx.error
+                )
 
             # RING 5: BACKGROUND
             self.rings_executed.append("BACKGROUND")
@@ -512,7 +515,7 @@ class TestPluginStopChain:
             },
         )
         assert resp.status_code == 403
-        assert "SEC_ERR" in resp.json()["error"]
+        assert "SEC_ERR" in resp.json()["detail"]
         # Forwarder WAS called (POST_FLIGHT is after forwarding)
         pipeline_agent.forwarder.forward_with_fallback.assert_awaited_once()
 

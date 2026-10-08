@@ -59,12 +59,27 @@ def test_enabled_tls_without_files_refuses_to_start(tls):
         uvicorn_kwargs({"server": {"tls": tls}})
 
 
-def test_the_startup_validator_reports_it_as_a_startup_error(monkeypatch):
+def test_the_startup_validator_reports_unset_paths_as_a_startup_error(monkeypatch):
     monkeypatch.setenv("LLM_PROXY_API_KEYS", "sk-proxy-test")
-    cfg = {"server": {"port": 8090, "tls": {"enabled": True, "cert_file": "/x", "key_file": "/y"}}}
+    cfg = {"server": {"port": 8090, "tls": {"enabled": True}}}
 
     with pytest.raises(StartupError, match="server.tls"):
         validate_config(cfg)
+
+
+def test_the_validator_does_not_probe_the_filesystem_for_named_paths(monkeypatch):
+    """It also runs on configuration submitted through the API; checking whether a
+    caller-named path exists would turn that endpoint into a file-existence oracle.
+    The listener checks the files when it starts."""
+    monkeypatch.setenv("LLM_PROXY_API_KEYS", "sk-proxy-test")
+
+    def forbidden(path):
+        raise AssertionError(f"validate_config touched the filesystem: {path!r}")
+
+    monkeypatch.setattr("core.uvicorn_options.os.path.isfile", forbidden)
+    cfg = {"server": {"port": 8090, "tls": {"enabled": True, "cert_file": "/x", "key_file": "/y"}}}
+
+    assert isinstance(validate_config(cfg), list)  # no error, no probe
 
 
 @needs_openssl

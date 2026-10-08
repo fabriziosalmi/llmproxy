@@ -67,9 +67,28 @@ def test_ready_is_reachable_without_credentials_like_health():
 # ── the chart ─────────────────────────────────────────────────────────────────
 
 
-def _render(*extra):
+@pytest.fixture(scope="module")
+def chart_dir(tmp_path_factory):
+    """The chart without its Redis subchart.
+
+    The dependency is downloaded (and git-ignored), so a fresh checkout cannot
+    `helm template` the chart as-is; nothing asserted here concerns Redis.
+    """
+    import pathlib
+    import shutil
+
+    src = pathlib.Path(__file__).resolve().parent.parent / "charts" / "llmproxy"
+    dst = tmp_path_factory.mktemp("chart") / "llmproxy"
+    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("charts", "Chart.lock"))
+    chart = yaml.safe_load((dst / "Chart.yaml").read_text())
+    chart.pop("dependencies", None)
+    (dst / "Chart.yaml").write_text(yaml.safe_dump(chart))
+    return dst
+
+
+def _render(chart_dir, *extra):
     out = subprocess.run(
-        ["helm", "template", "t", "charts/llmproxy", *extra],
+        ["helm", "template", "t", str(chart_dir), *extra],
         capture_output=True, text=True, check=True,
     ).stdout
     return [d for d in yaml.safe_load_all(out) if d]
@@ -80,24 +99,24 @@ def _deployment(docs):
 
 
 @helm
-def test_the_deployment_recreates_rather_than_rolls():
-    deployment = _deployment(_render())
+def test_the_deployment_recreates_rather_than_rolls(chart_dir):
+    deployment = _deployment(_render(chart_dir))
 
     assert deployment["spec"]["strategy"] == {"type": "Recreate"}
 
 
 @helm
-def test_readiness_uses_ready_and_liveness_keeps_health():
-    container = _deployment(_render())["spec"]["template"]["spec"]["containers"][0]
+def test_readiness_uses_ready_and_liveness_keeps_health(chart_dir):
+    container = _deployment(_render(chart_dir))["spec"]["template"]["spec"]["containers"][0]
 
     assert container["readinessProbe"]["httpGet"]["path"] == "/ready"
     assert container["livenessProbe"]["httpGet"]["path"] == "/health"
 
 
 @helm
-def test_a_config_change_changes_the_pod_template():
+def test_a_config_change_changes_the_pod_template(chart_dir):
     def checksum(config):
-        deployment = _deployment(_render("--set-string", f"config={config}"))
+        deployment = _deployment(_render(chart_dir, "--set-string", f"config={config}"))
         return deployment["spec"]["template"]["metadata"]["annotations"]["checksum/config"]
 
     assert checksum("server:\n  port: 8090\n") == checksum("server:\n  port: 8090\n")
@@ -105,8 +124,8 @@ def test_a_config_change_changes_the_pod_template():
 
 
 @helm
-def test_pod_annotations_still_render_beside_the_checksum():
-    deployment = _deployment(_render("--set", "podAnnotations.team=platform"))
+def test_pod_annotations_still_render_beside_the_checksum(chart_dir):
+    deployment = _deployment(_render(chart_dir, "--set", "podAnnotations.team=platform"))
     annotations = deployment["spec"]["template"]["metadata"]["annotations"]
 
     assert annotations["team"] == "platform" and "checksum/config" in annotations
