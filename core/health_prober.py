@@ -33,10 +33,18 @@ def _looks_unconfigured(url: str) -> bool:
 class EndpointHealthProber:
     """Background health prober for configured endpoints."""
 
-    def __init__(self, config: dict[str, Any], circuit_manager, get_session_fn):
+    def __init__(
+        self, config: dict[str, Any], circuit_manager, get_session_fn, *, adapter_for
+    ):
+        """``adapter_for(provider)`` returns the provider's adapter.
+
+        Passed in, not imported: the adapters live in proxy/, and core/ importing
+        proxy/ was the one upward dependency in an otherwise inward-pointing graph.
+        """
         self.config = config
         self.circuit_manager = circuit_manager
         self._get_session = get_session_fn
+        self._adapter_for = adapter_for
         self._running = False
         # Track the last-logged state per endpoint so we warn on the transition
         # (OK→FAIL and FAIL→OK) and stay silent on steady-state repeats. This is
@@ -149,9 +157,8 @@ class EndpointHealthProber:
     async def _probe_one(self, ep_name: str, provider: str, base_url: str, model: str):
         """Probe a single endpoint with a minimal request."""
         from core.endpoint_stats import update_endpoint_stats
-        from proxy.adapters.registry import get_adapter
 
-        adapter = get_adapter(provider)
+        adapter = self._adapter_for(provider)
         cb = await self.circuit_manager.get_breaker(ep_name)
 
         # Build minimal probe request

@@ -35,11 +35,14 @@ DEFAULT_PERMISSIONS: dict[str, set[str]] = {
         "plugins:manage",
         "features:toggle",
     },
+    # An API consumer: it may call the data plane and nothing else. It used to hold
+    # registry:read and logs:read too, and "user" is the role every directory user
+    # gets by default, so any account in the configured IdP could read the upstream
+    # URLs, other users' audit rows and the plugin list. Reading the control plane
+    # is what "viewer" is for; grant it deliberately through role_mappings.
     "user": {
         "proxy:use",
-        "registry:read",
         "chat:use",
-        "logs:read",
     },
     "viewer": {
         "registry:read",

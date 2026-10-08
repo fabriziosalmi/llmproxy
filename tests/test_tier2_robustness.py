@@ -157,3 +157,19 @@ def test_main_runs_the_config_file_it_validated():
         assert any(k.arg == "config_path" for k in call.keywords), (
             "ProxyOrchestrator(store) loads config.yaml whatever CONFIG_FILE says"
         )
+
+
+async def test_a_failed_supply_chain_check_exits_non_zero(monkeypatch):
+    """An aborted start returned normally, so the process exited 0 and a supervisor
+    read it as a clean exit."""
+    import importlib
+
+    import scripts.verify_deps as verify_deps
+
+    monkeypatch.setattr(verify_deps, "verify_all", lambda strict=False: False)
+    main_module = importlib.import_module("main")
+
+    with pytest.raises(SystemExit) as caught:
+        await main_module.main()
+
+    assert caught.value.code == 1

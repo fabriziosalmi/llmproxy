@@ -14,6 +14,9 @@ logger = logging.getLogger(__name__)
 
 # Lazy-loaded SDK client (thread-safe)
 _client = None
+# Set once the SDK or its credentials are known to be absent, so a lookup stops
+# retrying (and logging) on every call. clear_cache() resets it.
+_unavailable = False
 
 #: Resolved secrets, with the monotonic deadline each entry expires at.
 #
@@ -61,14 +64,18 @@ def _cache_ttl() -> float:
 
 def _get_client():
     """Initialize the Infisical SDK client (singleton, thread-safe)."""
-    global _client
+    global _client, _unavailable
     if _client is not None:
         return _client
+    if _unavailable:
+        return None
 
     with _lock:
         # Double-check after acquiring lock
         if _client is not None:
             return _client
+        if _unavailable:
+            return None
 
         try:
             from infisical_sdk import InfisicalSDKClient
@@ -77,6 +84,10 @@ def _get_client():
                 "infisical-python-sdk not installed. "
                 "Install with: pip install infisical-python-sdk"
             )
+            # Said once, not on every lookup: without this each request that read
+            # a secret repeated the failed import and logged this line again
+            # (5,000 warnings and ~32 us each in a 5,000-call loop).
+            _unavailable = True
             return None
 
         site_url = os.environ.get("INFISICAL_SITE_URL", "https://app.infisical.com")
@@ -88,6 +99,7 @@ def _get_client():
                 "INFISICAL_CLIENT_ID and INFISICAL_CLIENT_SECRET not set. "
                 "Falling back to environment variables."
             )
+            _unavailable = True  # the environment does not change under a running process
             return None
 
         try:
@@ -204,8 +216,9 @@ def get_secrets_batch(
 
 def clear_cache():
     """Clear the in-memory secrets cache (useful for rotation)."""
-    global _secrets_cache
+    global _secrets_cache, _unavailable
     _secrets_cache = {}
+    _unavailable = False  # rotation is when someone installs the SDK or sets credentials
 
 
 def is_connected() -> bool:

@@ -249,7 +249,8 @@ def test_the_coverage_floor_is_not_far_below_reality():
         ci = f.read()
 
     floor = int(re.search(r"--cov-fail-under=(\d+)", ci).group(1))
-    assert floor >= 71, f"floor is {floor}; raise it when coverage rises"
+    assert floor >= 73, f"floor is {floor}; raise it when coverage rises"
+    assert "--cov-branch" in ci, "line coverage alone counts a half-taken `if` as covered"
 
 
 # ── session ids are derived, not hashed ─────────────────────────────────────

@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import binascii
 import codecs
@@ -21,6 +22,13 @@ logger = logging.getLogger(__name__)
 #
 # 64 is generous: a chat completion with tool definitions nests maybe ten deep.
 DEFAULT_MAX_NESTING_DEPTH = 64
+
+#: Seconds the whole request body may take to arrive (408 beyond it).
+DEFAULT_BODY_TIMEOUT_S = 30.0
+
+#: Bodies at least this big are inspected in a worker thread; smaller ones are
+#: faster inline than the thread hop.
+_INSPECT_IN_THREAD_BYTES = 32 * 1024
 
 
 def max_nesting_depth(body: bytes) -> int:
@@ -163,8 +171,10 @@ class ByteLevelFirewallMiddleware:
         signature_store=None,
         enabled: bool = True,
         max_nesting_depth: int = DEFAULT_MAX_NESTING_DEPTH,
+        body_timeout_s: float = DEFAULT_BODY_TIMEOUT_S,
     ):
         self.app = app
+        self.body_timeout_s = body_timeout_s
         self.max_body_bytes = max_body_bytes
         self._signature_store = signature_store
         self.enabled = enabled
@@ -397,6 +407,14 @@ class ByteLevelFirewallMiddleware:
 
         return False, "", ""
 
+    def _inspect(self, body: bytes) -> tuple[bool, tuple[bool, str, str]]:
+        """(too deeply nested, scan verdict) for a buffered body. Pure CPU."""
+        if self.max_nesting_depth and max_nesting_depth(body) > self.max_nesting_depth:
+            return True, (False, "", "")
+        if self.enabled:
+            return False, self._scan_payload(body)
+        return False, (False, "", "")
+
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
@@ -416,9 +434,45 @@ class ByteLevelFirewallMiddleware:
         # client is not left hanging.
         body_parts: list[bytes] = []
         total_bytes = 0
+        # One deadline for the whole body. This middleware reads the body before
+        # authentication and before the rate limiter, and the admission slot is
+        # already taken; with no bound, a client that opens a request and then
+        # sends nothing (or one byte a minute) holds a slot, and enough of them
+        # hold all of them. Slowloris against the one component every request
+        # must pass.
+        deadline = time.monotonic() + self.body_timeout_s if self.body_timeout_s else None
 
         while True:
-            message = await receive()
+            try:
+                if deadline is None:
+                    message = await receive()
+                else:
+                    message = await asyncio.wait_for(
+                        receive(), timeout=max(deadline - time.monotonic(), 0.001)
+                    )
+            except TimeoutError:
+                logger.warning(
+                    "FIREWALL: request body not received within %.0fs — closing",
+                    self.body_timeout_s,
+                )
+                await send(
+                    {
+                        "type": "http.response.start",
+                        "status": 408,
+                        "headers": [
+                            (b"content-type", b"application/json"),
+                            (b"connection", b"close"),
+                        ],
+                    }
+                )
+                await send(
+                    {
+                        "type": "http.response.body",
+                        "body": b'{"error": "request_timeout", "message": "Request body not received in time"}',
+                        "more_body": False,
+                    }
+                )
+                return
             if message["type"] != "http.request":
                 # Client disconnected before sending the full body (e.g.
                 # http.disconnect mid-accumulation).  Abort without forwarding —
@@ -458,12 +512,22 @@ class ByteLevelFirewallMiddleware:
 
         full_body = b"".join(body_parts)
 
+        # The shape check and the signature scan are pure CPU, ~80 ms for a 512 KiB
+        # body, and they ran on the event loop: every other request in the process
+        # waited, before any authentication. Large bodies are inspected in a worker
+        # thread (the GIL still serialises the bytecode, but the loop gets its
+        # turn every few milliseconds instead of once the scan is over).
+        _scan_start = time.perf_counter()
+        if len(full_body) >= _INSPECT_IN_THREAD_BYTES:
+            too_deep, scan = await asyncio.to_thread(self._inspect, full_body)
+        else:
+            too_deep, scan = self._inspect(full_body)
+        _scan_ms = (time.perf_counter() - _scan_start) * 1000
+
         # Shape, not just size. A body under the byte cap can still be nested
         # deeply enough to make the JSON parser raise RecursionError out of the
         # handler — an unhandled 500 on a path any caller can reach.
-        if self.max_nesting_depth and max_nesting_depth(full_body) > (
-            self.max_nesting_depth
-        ):
+        if too_deep:
             logger.warning(
                 "FIREWALL: body exceeds max nesting depth %d — rejecting",
                 self.max_nesting_depth,
@@ -487,12 +551,7 @@ class ByteLevelFirewallMiddleware:
             )
             return
 
-        _scan_start = time.perf_counter()
-        if self.enabled:
-            blocked, sig, encoding = self._scan_payload(full_body)
-        else:
-            blocked, sig, encoding = False, "", ""
-        _scan_ms = (time.perf_counter() - _scan_start) * 1000
+        blocked, sig, encoding = scan
 
         cls = ByteLevelFirewallMiddleware
         with cls._metrics_lock:

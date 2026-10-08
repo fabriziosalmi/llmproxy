@@ -285,3 +285,80 @@ async def test_revocation_applies_to_the_control_plane_principal():
     agent.identity.revocations.revoke_subject("root")
 
     assert await resolve_control_plane_principal(agent, token) is None
+
+
+# ── the provider's own token ─────────────────────────────────────────────────
+
+
+def _idp(subject="alice", iat_offset=0):
+    """A provider token signed with a real RSA key, and a manager that trusts it."""
+    import time
+    from types import SimpleNamespace
+
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    from core.identity import OIDCProvider
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    now = int(time.time())
+    token = jwt.encode(
+        {
+            "iss": "https://idp.example.com",
+            "aud": "llmproxy",
+            "sub": subject,
+            "email": f"{subject}@example.com",
+            "iat": now + iat_offset,
+            "exp": now + 3600,
+        },
+        key,
+        algorithm="RS256",
+    )
+    mgr = IdentityManager(
+        {"identity": {"enabled": True, "default_role": "user", "providers": []}}
+    )
+    mgr.providers["idp"] = OIDCProvider(
+        name="idp",
+        issuer="https://idp.example.com",
+        jwks_uri="https://idp.example.com/jwks",
+        client_id="llmproxy",
+        audience="llmproxy",
+    )
+
+    async def signing_key(provider, tok):
+        return SimpleNamespace(key=key.public_key())
+
+    mgr._signing_key = signing_key
+    return mgr, token
+
+
+async def test_a_provider_token_is_accepted_until_its_subject_is_revoked():
+    mgr, token = _idp()
+
+    assert (await mgr.verify_token(token)).subject == "alice"
+
+
+async def test_revoking_a_subject_refuses_their_provider_token_too():
+    """Only proxy sessions were checked: the revoked user's IdP token kept working,
+    directly and as the input to a fresh exchange."""
+    mgr, token = _idp()
+    mgr.revocations.revoke_subject("alice", at=__import__("time").time() + 1)
+
+    with pytest.raises(ValueError, match="revoked"):
+        await mgr.verify_token(token)
+
+
+async def test_a_provider_token_issued_after_the_revocation_is_valid():
+    """A new login is the provider's decision, not ours."""
+    import time
+
+    mgr, token = _idp(iat_offset=0)
+    mgr.revocations.revoke_subject("alice", at=time.time() - 60)
+
+    assert (await mgr.verify_token(token)).subject == "alice"
+
+
+async def test_revoking_one_subject_leaves_another_alone():
+    mgr, token = _idp(subject="bob")
+    mgr.revocations.revoke_subject("alice", at=__import__("time").time() + 1)
+
+    assert (await mgr.verify_token(token)).subject == "bob"

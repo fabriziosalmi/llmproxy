@@ -11,10 +11,12 @@ everyone.
 Two ways to revoke, both enforced inside verify_proxy_jwt:
 
 * by ``jti``: one specific token (every proxy JWT now carries a random one);
-* by subject: every token for that person issued up to now. A token minted
-  afterwards, by a fresh exchange against the identity provider, is not
-  affected, so this ends sessions without deciding who may log in again; that
-  is the identity provider's and the RBAC table's job.
+* by subject: every token for that person issued up to now, the proxy's own
+  and the identity provider's (a revoked user's provider token would otherwise
+  still authenticate directly, or be exchanged for a fresh session). A token
+  issued afterwards, by a new login at the provider, is not affected, so this
+  ends sessions without deciding who may log in again; that is the identity
+  provider's and the RBAC table's job.
 
 The list is small and in memory, so the check costs a dictionary lookup per
 request; it is persisted by the caller (app_state) and reloaded at startup so a

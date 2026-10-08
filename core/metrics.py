@@ -132,6 +132,12 @@ PLUGIN_EVENTS = Counter(
     ["plugin", "event"],
 )
 
+AUDIT_BACKLOG = Gauge(
+    "llm_proxy_audit_backlog",
+    "Spend/audit writes accepted but not yet stored. Past audit.max_pending_writes "
+    "requests wait for their own write instead of queueing another.",
+)
+
 BACKGROUND_LAST_SUCCESS = Gauge(
     "llm_proxy_background_last_success_timestamp",
     "Unix timestamp of the last successful iteration of a background loop",
@@ -255,6 +261,10 @@ class MetricsTracker:
     @staticmethod
     def track_plugin_event(plugin: str, event: str):
         PLUGIN_EVENTS.labels(plugin=plugin, event=event).inc()
+
+    @staticmethod
+    def set_audit_backlog(depth: int):
+        AUDIT_BACKLOG.set(depth)
 
     @staticmethod
     def track_stream_outcome(outcome: str):

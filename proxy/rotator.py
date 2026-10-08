@@ -439,7 +439,7 @@ class ProxyOrchestrator(BaseAgent):
         from core.health_prober import EndpointHealthProber
 
         self._health_prober = EndpointHealthProber(
-            self.config, self.circuit_manager, self._get_session
+            self.config, self.circuit_manager, self._get_session, adapter_for=get_adapter
         )
         self._spawn_task(self._health_prober.start())
 

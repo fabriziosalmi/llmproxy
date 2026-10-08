@@ -320,6 +320,17 @@ class IdentityManager:
         except InvalidTokenError as e:
             raise ValueError(f"Invalid token: {e}") from e
 
+        # A revocation ends every token for the subject issued up to that moment,
+        # the provider's own as well as the proxy's. Only proxy sessions were
+        # checked, so a revoked user's IdP token kept authenticating directly, and
+        # could be exchanged for a fresh proxy session. A token the provider issues
+        # after the revocation (a new login) is unaffected.
+        if self.revocations.is_revoked(claims):
+            logger.info(
+                "Identity: refused revoked provider token sub=%s", claims.get("sub")
+            )
+            raise ValueError("Token revoked")
+
         # Extract identity from claims
         email = claims.get(provider.email_claim)
         name = claims.get(provider.name_claim)
