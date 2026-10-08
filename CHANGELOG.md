@@ -60,6 +60,10 @@ fix has tests that fail on the previous code.
   when they change or after five minutes. **Upgrading**: roles recorded in the old
   file are not migrated; they are rewritten on each user's next authenticated
   request. The quota table stays where it was.
+- **Dependencies (pip-audit)**: `multidict 6.7.1 → 6.9.1` (CVE-2026-104874,
+  transitive via aiohttp/yarl), published after the previous release's green run.
+  `requirements.lock` is regenerated with its header command and
+  `--upgrade-package multidict`; only that pin (and its hashes) changes.
 
 ## [1.37.19] — 2026-10-03
 
