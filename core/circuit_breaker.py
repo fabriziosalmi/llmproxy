@@ -5,6 +5,8 @@ from collections.abc import Callable
 from enum import Enum
 from typing import Any
 
+from core.redis_client import redact_url
+
 try:
     import redis.asyncio as redis
 except ImportError:
@@ -366,7 +368,7 @@ class CircuitManager:
                 # Timeouts: can_execute() issues one evalsha per endpoint on
                 # the routing ring, so an untimed client stalls every request.
                 self.redis_client = _redis_connect(redis, redis_url, config)
-                logger.info(f"CircuitManager using Redis: {redis_url}")
+                logger.info(f"CircuitManager using Redis: {redact_url(redis_url)}")
             except Exception as e:
                 logger.error(f"Failed to connect to Redis for CB: {e}")
         elif redis_url and not redis:

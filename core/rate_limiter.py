@@ -16,6 +16,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from core.redis_client import redact_url
+
 try:
     import redis.asyncio as redis
 except ImportError:
@@ -181,7 +183,7 @@ class RateLimiter:
             # acquire in the outermost middleware. The local-RAM fallback below
             # catches the resulting TimeoutError; it never caught a hang.
             self.redis_client = _redis_connect(redis, redis_url, config)
-            logger.info(f"RateLimiter configured with Redis backend: {redis_url}")
+            logger.info(f"RateLimiter configured with Redis backend: {redact_url(redis_url)}")
         elif redis_url and not redis:
             logger.warning("Redis URL provided for rate limiting but 'redis' package is not installed. Falling back to local RAM.")
 
@@ -318,7 +320,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             "burst": burst,
             "default_capacity": cap,
             "default_rate_per_second": rate,
-            "redis_url": self.limiter.redis_url,
+            "redis_url": redact_url(self.limiter.redis_url),
         }
 
     async def dispatch(self, request: Request, call_next):

@@ -172,10 +172,6 @@ class VerifiesApiKeys(Protocol):
     def _verify_api_key(self, token: str) -> bool: ...
 
 
-class ListsApiKeys(Protocol):
-    def _get_api_keys(self) -> list[str]: ...
-
-
 class CanProxy(Protocol):
     async def proxy_request(
         self, request: Request, body: dict[str, Any] | None = None, session_id: str = "default"
@@ -261,7 +257,6 @@ class ConfigAgent(
     HasJwtAuthenticator,
     CanLog,
     VerifiesAdminKeys,
-    ListsApiKeys,
     Protocol,
 ):
     pass
@@ -276,7 +271,6 @@ class TelemetryAgent(
     HasEventLogger,
     CanLog,
     VerifiesAdminKeys,
-    ListsApiKeys,
     Protocol,
 ):
     pass

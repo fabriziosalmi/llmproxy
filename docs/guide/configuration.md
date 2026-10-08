@@ -220,9 +220,14 @@ curl -X POST http://localhost:8090/api/v1/config/confirm-token \
 # 2. Apply with the token (single-use, ~120s TTL, hash-bound)
 curl -X POST http://localhost:8090/api/v1/config/apply \
   -H "Authorization: Bearer your-admin-key" \
-  -H "Content-Type": "application/json" \
+  -H "Content-Type: application/json" \
   -d '{"yaml": "...same text...", "confirm_token": "exp.sha.nonce.sig"}'
 ```
+
+The token is signed with a random per-process secret, never with an API key, so
+a restart invalidates outstanding tokens (they live two minutes). To share them
+across workers set `security.confirm.signing_secret`; the live-log token
+(`/api/v1/logs/token`) works the same way with `security.sse.signing_secret`.
 
 Scope note: this is confirmation-of-intent, not a second privilege tier — a
 stolen admin bearer can still mint (two requests instead of one). Real

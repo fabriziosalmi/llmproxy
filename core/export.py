@@ -37,6 +37,13 @@ logger = logging.getLogger(__name__)
 # Specific Amex pattern is listed before the generic 16-digit one because
 # 16-digit credit cards do not match the 15-digit Amex shape.
 PII_PATTERNS = [
+    # Credentials embedded in a URL (scheme://user:password@host). Must run before
+    # the e-mail pattern, which would otherwise take "password@host.tld" for an
+    # address and leave "scheme://user:<EMAIL>" behind.
+    (
+        re.compile(r"([a-zA-Z][a-zA-Z0-9+.\-]*://)[^\s/:@]*:[^\s/@]+@"),
+        r"\1<CREDENTIALS>@",
+    ),
     # Communications / identifiers
     (re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"), "<EMAIL>"),
     (re.compile(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b"), "<IP>"),
@@ -98,6 +105,27 @@ _SENSITIVE_FIELDS = frozenset(
 )
 
 
+# A field is sensitive by what its name says, not only by being on the exact list
+# above: `jwt_secret`, `signing_secret`, `database_dsn` and `redis_password` were
+# returned verbatim by the "redacted" config view because only `secret` itself
+# was listed. A name that points at an environment variable (`api_key_env`) holds
+# no secret and is left readable, since that is what an operator needs to see.
+_SENSITIVE_NAME_RE = re.compile(
+    r"secret|passw(or)?d|private[_-]?key|signing[_-]?key|credential|api[_-]?key"
+    r"|dsn$|(^|[_-])token$|^authorization$",
+    re.IGNORECASE,
+)
+
+
+def _is_sensitive_key(key: str) -> bool:
+    lowered = key.lower()
+    if lowered in _SENSITIVE_FIELDS:
+        return True
+    if lowered.endswith(("_env", "-env")):
+        return False
+    return bool(_SENSITIVE_NAME_RE.search(lowered))
+
+
 def scrub_pii(text: str) -> str:
     """Remove PII patterns from text."""
     for pattern, replacement in PII_PATTERNS:
@@ -110,7 +138,7 @@ def scrub_dict(d: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for k, v in d.items():
         # Redact known sensitive fields regardless of value type
-        if k.lower() in _SENSITIVE_FIELDS:
+        if _is_sensitive_key(k):
             result[k] = "<REDACTED>"
         elif isinstance(v, str):
             result[k] = scrub_pii(v)
