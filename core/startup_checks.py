@@ -262,7 +262,7 @@ def validate_config(config: dict) -> list[str]:
         from core.uvicorn_options import TLSConfigError, uvicorn_kwargs
 
         try:
-            uvicorn_kwargs(config, check_files=False)
+            uvicorn_kwargs(config)
         except TLSConfigError as exc:
             raise StartupError(str(exc)) from exc
     if server_cfg.get("host") == "0.0.0.0" and not tls_cfg.get("enabled"):

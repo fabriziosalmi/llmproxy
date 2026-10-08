@@ -9,7 +9,6 @@ uvicorn options and refuses a TLS configuration it cannot honour.
 
 from __future__ import annotations
 
-import os
 import ssl
 from typing import Any
 
@@ -50,13 +49,14 @@ def tls_min_version(server_cfg: dict[str, Any]) -> ssl.TLSVersion | None:
         ) from None
 
 
-def uvicorn_kwargs(config: dict[str, Any], *, check_files: bool = True) -> dict[str, Any]:
+def uvicorn_kwargs(config: dict[str, Any]) -> dict[str, Any]:
     """Keyword arguments for ``uvicorn.Config`` from the ``server`` block.
 
-    ``check_files`` makes a missing certificate or key an error here, at start. The
-    config validator passes False: it also runs on configuration submitted through
-    the API, where probing for the existence of a caller-named path would make the
-    endpoint a file-existence oracle. There the paths only have to be present.
+    The certificate and key paths are required to be set, not probed: this also
+    runs from the config validator, which handles configuration submitted through
+    the API, and checking whether a caller-named path exists would make that
+    endpoint a file-existence oracle. Whether the files load is found out when the
+    listener starts (see enforce_min_tls), which refuses to start if they do not.
     """
     server_cfg = config.get("server") or {}
     kwargs: dict[str, Any] = {
@@ -75,12 +75,6 @@ def uvicorn_kwargs(config: dict[str, Any], *, check_files: bool = True) -> dict[
                     f"server.tls.enabled is true but server.tls.{label} is not set; "
                     "refusing to start without the encryption that was asked for."
                 )
-            if check_files and not os.path.isfile(path):
-                raise TLSConfigError(
-                    f"server.tls.enabled is true but server.tls.{label} "
-                    "does not name a readable file; refusing to start without the "
-                    "encryption that was asked for."
-                )
         tls_min_version(server_cfg)  # validates min_version
         kwargs["ssl_certfile"] = cert
         kwargs["ssl_keyfile"] = key
@@ -92,6 +86,13 @@ def enforce_min_tls(uvicorn_config: Any, server_cfg: dict[str, Any]) -> None:
     minimum = tls_min_version(server_cfg)
     if minimum is None:
         return
-    uvicorn_config.load()  # builds .ssl; idempotent, serve() would do the same
+    try:
+        uvicorn_config.load()  # builds .ssl; idempotent, serve() would do the same
+    except (OSError, ssl.SSLError) as exc:
+        raise TLSConfigError(
+            "server.tls.cert_file / key_file could not be loaded "
+            f"({type(exc).__name__}); refusing to start without the encryption "
+            "that was asked for."
+        ) from exc
     if uvicorn_config.ssl is not None:
         uvicorn_config.ssl.minimum_version = minimum
