@@ -731,9 +731,25 @@ def create_router(agent: AdminAgent) -> APIRouter:
         offset = _parse_int_param(
             params.get("offset"), default=0, minimum=0, maximum=1_000_000
         )
+        def _iso(name: str) -> str:
+            # The store parses these with fromisoformat; a malformed value raised
+            # ValueError there and reached the caller as a 500.
+            value = params.get(name, "")
+            if value:
+                import datetime as _dt
+
+                try:
+                    _dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+                except ValueError:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"'{name}' must be an ISO 8601 date or datetime",
+                    ) from None
+            return value
+
         return await agent.store.query_audit(
-            date_from=params.get("from", ""),
-            date_to=params.get("to", ""),
+            date_from=_iso("from"),
+            date_to=_iso("to"),
             model=params.get("model", ""),
             key_prefix=params.get("key_prefix", ""),
             status=status,

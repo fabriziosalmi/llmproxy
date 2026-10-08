@@ -493,13 +493,17 @@ class ProxyOrchestrator(BaseAgent):
             )
         except Exception as e:  # banner is informational — never fail startup on it
             self.logger.debug("Ready banner skipped: %s", e)
+        from core.uvicorn_options import enforce_min_tls, uvicorn_kwargs
+
         config = uvicorn.Config(
             self.app,
             host=host,
             port=port,
             log_level="info",
             server_header=False,  # strip `Server: uvicorn` banner; security_headers middleware sets its own
+            **uvicorn_kwargs(self.config),
         )
+        enforce_min_tls(config, self.config.get("server") or {})
         server = uvicorn.Server(config)
         await server.serve()
 

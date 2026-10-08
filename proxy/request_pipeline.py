@@ -26,7 +26,7 @@ import uuid
 from typing import Any
 
 from fastapi import HTTPException
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 
 from core.endpoint_stats import update_endpoint_stats
 from core.log_context import reset_request_id, set_request_id
@@ -282,7 +282,13 @@ async def process_proxy_request(
         await orchestrator.plugin_manager.execute_ring(PluginHook.POST_FLIGHT, ctx)
         MetricsTracker.track_ring_latency("post_flight", time.perf_counter() - r4_start)
         if ctx.stop_chain:
-            return JSONResponse(content={"error": ctx.error}, status_code=403)
+            # Same path as a pre-flight block: the OpenAI envelope and the status
+            # the plugin asked for. This returned a bare {"error": "<text>"} 403
+            # outside the documented shape, whatever status the plugin set.
+            raise HTTPException(
+                status_code=ctx.metadata.get("_block_status", 403),
+                detail=ctx.error or "Response blocked by post-flight plugin",
+            )
 
         # RING 5: BACKGROUND (telemetry, export, cache write)
         async def _bg_ring():

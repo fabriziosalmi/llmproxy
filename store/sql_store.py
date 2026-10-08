@@ -12,6 +12,7 @@ from models import EndpointStatus, LLMEndpoint, split_endpoint_stats
 
 from . import audit_chain
 from .pool_cache import PoolCache
+from .rows import endpoints_from_rows
 from .schema import MIGRATIONS, SQLITE, iter_create_statements
 
 logger = logging.getLogger(__name__)
@@ -143,7 +144,16 @@ class SQLiteStore:
     async def add_endpoint(self, endpoint: LLMEndpoint):
         async with self._write() as conn:
             await conn.execute(
-                "INSERT OR REPLACE INTO endpoints (id, url, status, metadata, latency_ms, success_rate) VALUES (?, ?, ?, ?, ?, ?)",
+                # ON CONFLICT (id), as Postgres does, not INSERT OR REPLACE: REPLACE
+                # also deletes whichever *other* row holds the same url (the
+                # column is UNIQUE), so adding a new id for an existing URL
+                # silently destroyed the other endpoint on SQLite while Postgres
+                # raised. Now both refuse, and only the same id is updated.
+                "INSERT INTO endpoints (id, url, status, metadata, latency_ms, success_rate) "
+                "VALUES (?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(id) DO UPDATE SET url = excluded.url, status = excluded.status, "
+                "metadata = excluded.metadata, latency_ms = excluded.latency_ms, "
+                "success_rate = excluded.success_rate",
                 (
                     endpoint.id,
                     str(endpoint.url),
@@ -205,18 +215,7 @@ class SQLiteStore:
             "SELECT id, url, status, metadata, latency_ms, success_rate FROM endpoints WHERE status = ?",
             (status.value,),
         ) as cursor:
-            rows = await cursor.fetchall()
-            return [
-                LLMEndpoint(
-                    id=r[0],
-                    url=r[1],
-                    status=EndpointStatus(int(r[2])),
-                    metadata=json.loads(r[3]),
-                    latency_ms=r[4],
-                    success_rate=r[5],
-                )
-                for r in rows
-            ]
+            return endpoints_from_rows(await cursor.fetchall())
 
     async def get_all(self) -> list[LLMEndpoint]:
         """Returns all endpoints in the database."""
@@ -224,18 +223,7 @@ class SQLiteStore:
         async with conn.execute(
             "SELECT id, url, status, metadata, latency_ms, success_rate FROM endpoints"
         ) as cursor:
-            rows = await cursor.fetchall()
-            return [
-                LLMEndpoint(
-                    id=r[0],
-                    url=r[1],
-                    status=EndpointStatus(int(r[2])),
-                    metadata=json.loads(r[3]),
-                    latency_ms=r[4],
-                    success_rate=r[5],
-                )
-                for r in rows
-            ]
+            return endpoints_from_rows(await cursor.fetchall())
 
     async def remove_endpoint(self, endpoint_id: str):
         async with self._write() as conn:

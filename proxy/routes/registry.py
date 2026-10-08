@@ -317,6 +317,14 @@ def create_router(agent: RegistryAgent) -> APIRouter:
             raise HTTPException(
                 status_code=409, detail=f"Endpoint '{ep_id}' already exists"
             )
+        # The store keeps one row per URL. Say so, rather than let the insert fail
+        # (Postgres) or, before 1.37.21, replace the other endpoint (SQLite).
+        for stored in await agent.store.get_all():
+            if stored.id != ep_id and str(stored.url).rstrip("/") == url.rstrip("/"):
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"URL already registered as endpoint '{stored.id}'",
+                )
 
         entry: dict[str, Any] = {
             "provider": provider,

@@ -165,3 +165,105 @@ async def test_a_missing_key_on_each_data_plane_route_is_an_openai_error(path, b
     assert resp.json()["error"]["type"] == "authentication_error"
     assert resp.json()["error"]["message"] == "Unauthorized: Missing API key"
     assert resp.json()["detail"] == "Unauthorized: Missing API key"
+
+
+# ── what no route anticipated, and the two responses that bypassed the envelope ──
+
+
+def _crashing_app():
+    app = FastAPI()
+    install_error_handlers(app)
+
+    @app.get("/v1/crash")
+    async def crash():
+        raise KeyError("internal detail that must not leak")
+
+    @app.get("/api/v1/crash")
+    async def control_crash():
+        raise KeyError("internal detail")
+
+    return app
+
+
+@pytest.mark.asyncio
+async def test_an_unexpected_exception_on_v1_is_still_the_envelope():
+    """It used to be text/plain 'Internal Server Error', which an OpenAI SDK
+    cannot parse, against a documented contract of JSON errors."""
+    transport = ASGITransport(app=_crashing_app(), raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="http://t") as c:
+        resp = await c.get("/v1/crash")
+
+    assert resp.status_code == 500
+    assert resp.headers["content-type"].startswith("application/json")
+    body = resp.json()
+    assert body["error"]["type"] == "server_error"
+    assert body["error"]["code"] == "internal_error"
+    assert "internal detail" not in resp.text  # nothing about the exception leaks
+
+
+@pytest.mark.asyncio
+async def test_the_control_plane_keeps_its_plain_500():
+    transport = ASGITransport(app=_crashing_app(), raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="http://t") as c:
+        resp = await c.get("/api/v1/crash")
+
+    assert resp.status_code == 500
+    assert resp.text == "Internal Server Error"
+
+
+@pytest.mark.asyncio
+async def test_a_post_flight_block_uses_the_plugins_status_and_the_envelope():
+    """Ring 4 returned {"error": "<text>"} with a hard-coded 403."""
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, MagicMock
+
+    from fastapi import Request
+
+    from core.plugin_engine import PluginState
+    from proxy.request_pipeline import process_proxy_request
+
+    orchestrator = MagicMock()
+    orchestrator.config = {"budget": {"daily_limit": 50.0}}
+    orchestrator.total_cost_today = 0.0
+    orchestrator._budget_date = None
+    import asyncio
+
+    orchestrator._budget_lock = asyncio.Lock()
+    orchestrator.security.inspect = AsyncMock(return_value=None)
+    orchestrator.negative_cache.check = MagicMock(return_value=None)
+    orchestrator._add_log = AsyncMock()
+    orchestrator._get_session = AsyncMock()
+    orchestrator.enqueue_write = MagicMock()
+    orchestrator.plugin_state = PluginState(
+        cache=None, metrics=MagicMock(), config={}, extra={}
+    )
+
+    async def ring(hook, ctx):
+        if hook.value == "post_flight":
+            ctx.stop_chain = True
+            ctx.error = "response refused"
+            ctx.metadata["_block_status"] = 503
+
+    orchestrator.plugin_manager.execute_ring = AsyncMock(side_effect=ring)
+
+    async def forward(ctx, target, headers, session, cost_ref=None):
+        from starlette.responses import Response
+
+        ctx.response = Response(content=b"{}", status_code=200)
+        return ctx.response
+
+    orchestrator.forwarder.forward_with_fallback = AsyncMock(side_effect=forward)
+    request = MagicMock(spec=Request)
+    request.json = AsyncMock(
+        return_value={"model": "gpt-4o", "messages": [{"role": "user", "content": "hi"}]}
+    )
+    request.headers = {}
+    request.state = SimpleNamespace(quota_exceeded=False)
+
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as caught:
+        await process_proxy_request(orchestrator, request)
+
+    assert caught.value.status_code == 503, repr(caught.value.__cause__)
+    assert caught.value.detail == "response refused"
