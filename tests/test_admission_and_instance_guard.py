@@ -294,3 +294,71 @@ async def test_the_count_is_published_as_a_metric(monkeypatch):
         s.value for m in INSTANCE_COUNT.collect() for s in m.samples
     )
     assert value == 2
+
+
+@pytest.mark.asyncio
+async def test_a_stream_holds_its_slot_until_the_body_has_been_sent():
+    """call_next returns when the StreamingResponse exists, long before the
+    upstream has sent a byte. Releasing the slot there left streams, the
+    longest-lived requests, outside max_in_flight entirely."""
+    from fastapi.responses import StreamingResponse
+
+    agent = _agent({"max_in_flight": 1, "max_queued": 0})
+    gate = asyncio.Event()
+
+    @agent.app.get("/v1/test-stream")
+    async def slow_stream():
+        async def body():
+            yield b"first"
+            await gate.wait()
+            yield b"last"
+
+        return StreamingResponse(body(), media_type="text/event-stream")
+
+    first_sent = asyncio.Event()
+    sent: list[bytes] = []
+
+    async def send(message):
+        if message["type"] == "http.response.body" and message.get("body"):
+            sent.append(message["body"])
+            if message["body"] == b"first":
+                first_sent.set()
+
+    request_sent = False
+
+    async def receive():
+        nonlocal request_sent
+        if not request_sent:
+            request_sent = True
+            return {"type": "http.request", "body": b"", "more_body": False}
+        await asyncio.sleep(3600)  # then the client stays connected
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "GET",
+        "path": "/v1/test-stream",
+        "raw_path": b"/v1/test-stream",
+        "query_string": b"",
+        "root_path": "",
+        "scheme": "http",
+        "headers": [],
+        "server": ("test", 80),
+        "client": ("127.0.0.1", 1234),
+    }
+    task = asyncio.create_task(agent.app(scope, receive, send))
+    try:
+        await asyncio.wait_for(first_sent.wait(), 5)
+        assert agent.admission.in_flight == 1  # still streaming: still counted
+        assert await agent.admission.acquire() is False  # and a second is shed
+
+        gate.set()
+        await asyncio.wait_for(task, 5)
+    finally:
+        gate.set()
+        if not task.done():
+            task.cancel()
+
+    assert sent == [b"first", b"last"]
+    assert agent.admission.in_flight == 0

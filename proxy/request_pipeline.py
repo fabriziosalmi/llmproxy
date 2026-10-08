@@ -79,6 +79,11 @@ async def process_proxy_request(
         },
         state=orchestrator.plugin_state,
     )
+    # Which data-plane route this is, for the token/cost series a stream feeds
+    # after the fact (the matched template, never an arbitrary caller string).
+    _route = getattr(getattr(request, "url", None), "path", None)
+    if _route in ("/v1/chat/completions", "/v1/completions"):
+        ctx.metadata["_route"] = _route
 
     try:
         # L1: Negative Cache — drop repeated attacks in <0.1ms

@@ -234,8 +234,6 @@ class AnthropicAdapter(BaseModelAdapter):
 
         return "".join(output_lines).encode("utf-8") if output_lines else b""
 
-    _REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=60, sock_read=55)
-
     async def request(
         self,
         url: str,
@@ -243,9 +241,7 @@ class AnthropicAdapter(BaseModelAdapter):
         headers: dict[str, str],
         session: aiohttp.ClientSession,
     ) -> Response:
-        async with session.post(
-            url, json=body, headers=headers, timeout=self._REQUEST_TIMEOUT
-        ) as resp:
+        async with session.post(url, json=body, headers=headers) as resp:
             content = await resp.read()
             status = resp.status
 
@@ -269,9 +265,7 @@ class AnthropicAdapter(BaseModelAdapter):
         headers: dict[str, str],
         session: aiohttp.ClientSession,
     ) -> AsyncGenerator[bytes, None]:
-        async with session.post(
-            url, json=body, headers=headers, timeout=self._REQUEST_TIMEOUT
-        ) as resp:
+        async with session.post(url, json=body, headers=headers) as resp:
             await raise_for_stream_status(resp)
             async for chunk in resp.content.iter_any():
                 translated = self.translate_stream_chunk(chunk)

@@ -111,6 +111,15 @@ LOAD_SHED = Counter(
     "Requests refused by admission control because the proxy was at capacity",
 )
 
+# A stream's 200 status line is sent before its body, so request counters see
+# every stream that started as a success. This is where how it ended is counted.
+STREAM_OUTCOMES = Counter(
+    "llm_proxy_stream_outcomes_total",
+    "How streaming responses ended",
+    # completed | blocked (guardrail or gate overflow) | upstream_error | client_disconnect
+    ["outcome"],
+)
+
 BACKGROUND_LAST_SUCCESS = Gauge(
     "llm_proxy_background_last_success_timestamp",
     "Unix timestamp of the last successful iteration of a background loop",
@@ -230,6 +239,10 @@ class MetricsTracker:
     @staticmethod
     def track_load_shed():
         LOAD_SHED.inc()
+
+    @staticmethod
+    def track_stream_outcome(outcome: str):
+        STREAM_OUTCOMES.labels(outcome=outcome).inc()
 
     @staticmethod
     def mark_background_iteration(loop: str):

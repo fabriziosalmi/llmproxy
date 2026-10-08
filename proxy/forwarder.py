@@ -23,6 +23,16 @@ from .adapters.base import UpstreamStatusError
 
 logger = logging.getLogger("llmproxy.forwarder")
 
+#: Strong references to in-flight stream accounting tasks (an unreferenced task
+#: can be collected mid-run).
+_STREAM_FINALIZERS: set[asyncio.Task] = set()
+
+
+def _log_finalizer_failure(task: asyncio.Task) -> None:
+    if not task.cancelled() and task.exception() is not None:
+        logger.warning("Stream accounting failed: %s", task.exception())
+
+
 #: Upstream statuses that count against the endpoint and send the request to
 #: the next provider. Everything else is the caller's answer and is relayed.
 _RETRYABLE_UPSTREAM_STATUSES = frozenset({429, 500, 502, 503, 504})
@@ -513,9 +523,164 @@ class RequestForwarder:
         held_chunks: list[bytes] = []
         held_bytes = 0
 
+        stream_usage: dict[str, Any] = {}
+        # How the stream ended, for the spend/audit rows and the outcome counter.
+        # The status line already said 200, so this is the only place the truth
+        # is kept: a guardrail kill, an upstream failure mid-stream and a client
+        # abort were all recorded as an ordinary 200.
+        outcome: dict[str, Any] = {"status": 200, "blocked": False, "reason": ""}
+
+        async def _finalize_stream():
+            """Charge, log and count a finished stream.
+
+            Runs as a task of its own (see the generator's ``finally``): a client
+            that disconnects cancels the generator, and the first real await in
+            this block (the budget lock, the spend and audit writes) would be
+            interrupted, so abandoned streams were charged to the in-memory
+            budget, which does not suspend when uncontended, but never written to
+            the spend ledger or the audit chain.
+            """
+            if outcome["blocked"]:
+                label = "blocked"
+            elif outcome["status"] == 499:
+                label = "client_disconnect"
+            elif outcome["status"] >= 500:
+                label = "upstream_error"
+            else:
+                label = "completed"
+            MetricsTracker.track_stream_outcome(label)
+
+            # Post-stream: update budget with real token cost
+            # In finally block to charge even on client disconnect
+            from core.pricing import estimate_cost
+            from core.tokenizer import count_tokens
+
+            model_name = ctx.body.get("model", "")
+            if stream_usage:
+                p_tok = stream_usage.get("prompt_tokens") or stream_usage.get(
+                    "promptTokenCount", 0
+                )
+                c_tok = stream_usage.get("completion_tokens") or stream_usage.get(
+                    "candidatesTokenCount", 0
+                )
+            else:
+                # Fallback: estimate tokens from accumulated text when
+                # provider omits usage chunk (prevents budget bypass).
+                prompt_text = " ".join(
+                    str(m.get("content", "")) for m in ctx.body.get("messages", [])
+                )
+                p_tok = count_tokens(prompt_text, model_name)
+                sample_text = stream_buf.text()
+                sample_tok = count_tokens(sample_text, model_name)
+                # Scale up if the bounded buffer dropped earlier chunks:
+                # token rate per char is ~uniform within a single response,
+                # so total ≈ sample × (total_chars / sample_chars).
+                if sample_text and stream_buf.total_chars > len(sample_text):
+                    scale = stream_buf.total_chars / max(1, len(sample_text))
+                    c_tok = int(sample_tok * scale)
+                else:
+                    c_tok = sample_tok
+                logger.info(
+                    f"Stream usage missing — estimated {p_tok}+{c_tok} tokens "
+                    f"for model={model_name} endpoint={endpoint_id} "
+                    f"(buf={len(sample_text)}/total={stream_buf.total_chars})"
+                )
+            if p_tok or c_tok:
+                real_cost = estimate_cost(model_name, p_tok, c_tok)
+                # The non-streaming routes feed these counters from the response
+                # body; a stream never has one, so without this the token and
+                # cost series (and the cost-per-hour alert and top-models panel
+                # built on them) saw none of the streaming traffic.
+                from core.model_resolver import known_model_names
+
+                MetricsTracker.track_usage(
+                    endpoint=ctx.metadata.get("_route", "/v1/chat/completions"),
+                    model=model_name,
+                    prompt_tokens=p_tok,
+                    completion_tokens=c_tok,
+                    cost=real_cost,
+                    known_models=known_model_names(self._live_config()),
+                )
+                # Accumulate only the delta for this request; the rotator
+                # adds it atomically under budget_lock. No lock needed here
+                # because cost_ref is per-request and not shared.
+                cost_ref["delta"] = cost_ref.get("delta", 0.0) + real_cost
+                ctx.metadata["_stream_usage"] = {
+                    "prompt_tokens": p_tok,
+                    "completion_tokens": c_tok,
+                }
+                ctx.metadata["_stream_cost_usd"] = round(real_cost, 6)
+
+                # Charge budget atomically + persist. The rotator cannot
+                # do this earlier because it runs before the generator —
+                # cost_ref["delta"] was still 0.0 at that point and
+                # chat.py's post-call enqueue ran before this finally
+                # block fires.
+                _budget_lock = cost_ref.get("_budget_lock")
+                _rotator = cost_ref.get("_rotator")
+                if _budget_lock and _rotator:
+                    from .budget import charge_and_persist
+
+                    await charge_and_persist(_rotator, _budget_lock, real_cost)
+
+                # Log spend + audit for streaming requests directly here.
+                # chat.py / completions.py cannot read response.body for
+                # streaming, so the forwarder is the only chokepoint that
+                # has both the real token counts AND sees every route
+                # (chat, completions legacy, embeddings if they ever stream).
+                import datetime as _dt
+                import time as _time
+
+                from core.metrics import MetricsTracker as _MT
+
+                store = ctx.state.extra.get("store") if ctx.state else None
+                if store and hasattr(store, "log_spend"):
+                    _now = int(_time.time())
+                    _date = _dt.date.today().isoformat()
+                    _key = ctx.metadata.get("_key_prefix", "")
+                    _provider = ctx.metadata.get("_provider", "")
+                    _req_id = ctx.metadata.get("req_id", "")
+                    _session = (getattr(ctx, "session_id", "") or "")[:16]
+                    _latency_ms = round(ctx.metadata.get("duration", 0) * 1000, 1)
+                    try:
+                        await store.log_spend(
+                            ts=_now,
+                            date=_date,
+                            key_prefix=_key,
+                            model=model_name,
+                            provider=_provider,
+                            prompt_tokens=p_tok,
+                            completion_tokens=c_tok,
+                            cost_usd=real_cost,
+                            latency_ms=_latency_ms,
+                            status=outcome["status"],
+                        )
+                    except Exception as e:
+                        logger.warning(f"Stream spend log failed: {e}")
+                    if hasattr(store, "log_audit"):
+                        try:
+                            await store.log_audit(
+                                ts=_now,
+                                req_id=_req_id,
+                                session_id=_session,
+                                key_prefix=_key,
+                                model=model_name,
+                                provider=_provider,
+                                status=outcome["status"],
+                                prompt_tokens=p_tok,
+                                completion_tokens=c_tok,
+                                cost_usd=real_cost,
+                                latency_ms=_latency_ms,
+                                blocked=outcome["blocked"],
+                                block_reason=outcome["reason"],
+                                metadata="{}",
+                            )
+                            _MT.track_audit_persistence("forwarder_stream", "ok")
+                        except Exception as e:
+                            _MT.track_audit_persistence("forwarder_stream", "fail")
+                            logger.warning(f"Stream audit log failed: {e}")
         async def stream_generator():
             nonlocal first_chunk_seen, circuit_success_reported, held_bytes
-            stream_usage = {}
             try:
                 async for chunk in upstream_chunks():
                     # Abort stream if speculative guardrail fired
@@ -523,6 +688,7 @@ class RequestForwarder:
                         logger.warning(
                             f"STREAM ABORTED by speculative guardrail (endpoint={endpoint_id})"
                         )
+                        outcome.update(blocked=True, reason="stream_blocked")
                         yield (
                             b'data: {"error":"stream_blocked",'
                             b'"message":"Response blocked by content policy"}\n\n'
@@ -549,7 +715,8 @@ class RequestForwarder:
                                     d = json.loads(line[6:])
                                     u = d.get("usage") or d.get("usageMetadata", {})
                                     if u:
-                                        stream_usage = u
+                                        stream_usage.clear()
+                                    stream_usage.update(u)
                         except (json.JSONDecodeError, KeyError, UnicodeDecodeError):
                             logger.debug(
                                 "Stream usage chunk parse skipped", exc_info=True
@@ -572,6 +739,9 @@ class RequestForwarder:
                                 hold_limit,
                                 tenant_id,
                             )
+                            outcome.update(
+                                blocked=True, reason="stream_buffer_overflow"
+                            )
                             yield (
                                 b'data: {"error":"stream_buffer_overflow",'
                                 b'"message":"Buffered security gate overflow"}\n\n'
@@ -583,6 +753,7 @@ class RequestForwarder:
                     # Release buffered chunks only after full upstream completion
                     # and after speculative guardrail had the full response.
                     if kill_event.is_set():
+                        outcome.update(blocked=True, reason="stream_blocked")
                         yield (
                             b'data: {"error":"stream_blocked",'
                             b'"message":"Response blocked by content policy"}\n\n'
@@ -590,128 +761,30 @@ class RequestForwarder:
                         return
                     for c in held_chunks:
                         yield c
-            except (TimeoutError, OSError, RuntimeError) as e:
+            except (TimeoutError, OSError, RuntimeError, aiohttp.ClientError) as e:
+                outcome.update(status=502, reason="upstream_error")
                 if not circuit_success_reported:
                     await cb.report_failure()
                 raise e
+            except (asyncio.CancelledError, GeneratorExit):
+                # The client went away: the response already said 200, but the
+                # record should say how it ended.
+                outcome.update(status=499, reason="client_disconnect")
+                raise
             finally:
                 # Signal speculative task to stop and cancel if still running
                 kill_event.set()
                 if speculative_task is not None and not speculative_task.done():
                     speculative_task.cancel()
-                # Post-stream: update budget with real token cost
-                # In finally block to charge even on client disconnect
-                from core.pricing import estimate_cost
-                from core.tokenizer import count_tokens
-
-                model_name = ctx.body.get("model", "")
-                if stream_usage:
-                    p_tok = stream_usage.get("prompt_tokens") or stream_usage.get(
-                        "promptTokenCount", 0
-                    )
-                    c_tok = stream_usage.get("completion_tokens") or stream_usage.get(
-                        "candidatesTokenCount", 0
-                    )
-                else:
-                    # Fallback: estimate tokens from accumulated text when
-                    # provider omits usage chunk (prevents budget bypass).
-                    prompt_text = " ".join(
-                        str(m.get("content", "")) for m in ctx.body.get("messages", [])
-                    )
-                    p_tok = count_tokens(prompt_text, model_name)
-                    sample_text = stream_buf.text()
-                    sample_tok = count_tokens(sample_text, model_name)
-                    # Scale up if the bounded buffer dropped earlier chunks:
-                    # token rate per char is ~uniform within a single response,
-                    # so total ≈ sample × (total_chars / sample_chars).
-                    if sample_text and stream_buf.total_chars > len(sample_text):
-                        scale = stream_buf.total_chars / max(1, len(sample_text))
-                        c_tok = int(sample_tok * scale)
-                    else:
-                        c_tok = sample_tok
-                    logger.info(
-                        f"Stream usage missing — estimated {p_tok}+{c_tok} tokens "
-                        f"for model={model_name} endpoint={endpoint_id} "
-                        f"(buf={len(sample_text)}/total={stream_buf.total_chars})"
-                    )
-                if p_tok or c_tok:
-                    real_cost = estimate_cost(model_name, p_tok, c_tok)
-                    # Accumulate only the delta for this request; the rotator
-                    # adds it atomically under budget_lock. No lock needed here
-                    # because cost_ref is per-request and not shared.
-                    cost_ref["delta"] = cost_ref.get("delta", 0.0) + real_cost
-                    ctx.metadata["_stream_usage"] = {
-                        "prompt_tokens": p_tok,
-                        "completion_tokens": c_tok,
-                    }
-                    ctx.metadata["_stream_cost_usd"] = round(real_cost, 6)
-
-                    # Charge budget atomically + persist. The rotator cannot
-                    # do this earlier because it runs before the generator —
-                    # cost_ref["delta"] was still 0.0 at that point and
-                    # chat.py's post-call enqueue ran before this finally
-                    # block fires.
-                    _budget_lock = cost_ref.get("_budget_lock")
-                    _rotator = cost_ref.get("_rotator")
-                    if _budget_lock and _rotator:
-                        from .budget import charge_and_persist
-
-                        await charge_and_persist(_rotator, _budget_lock, real_cost)
-
-                    # Log spend + audit for streaming requests directly here.
-                    # chat.py / completions.py cannot read response.body for
-                    # streaming, so the forwarder is the only chokepoint that
-                    # has both the real token counts AND sees every route
-                    # (chat, completions legacy, embeddings if they ever stream).
-                    import datetime as _dt
-                    import time as _time
-
-                    from core.metrics import MetricsTracker as _MT
-
-                    store = ctx.state.extra.get("store") if ctx.state else None
-                    if store and hasattr(store, "log_spend"):
-                        _now = int(_time.time())
-                        _date = _dt.date.today().isoformat()
-                        _key = ctx.metadata.get("_key_prefix", "")
-                        _provider = ctx.metadata.get("_provider", "")
-                        _req_id = ctx.metadata.get("req_id", "")
-                        _session = (getattr(ctx, "session_id", "") or "")[:16]
-                        _latency_ms = round(ctx.metadata.get("duration", 0) * 1000, 1)
-                        try:
-                            await store.log_spend(
-                                ts=_now,
-                                date=_date,
-                                key_prefix=_key,
-                                model=model_name,
-                                provider=_provider,
-                                prompt_tokens=p_tok,
-                                completion_tokens=c_tok,
-                                cost_usd=real_cost,
-                                latency_ms=_latency_ms,
-                                status=200,
-                            )
-                        except Exception as e:
-                            logger.warning(f"Stream spend log failed: {e}")
-                        if hasattr(store, "log_audit"):
-                            try:
-                                await store.log_audit(
-                                    ts=_now,
-                                    req_id=_req_id,
-                                    session_id=_session,
-                                    key_prefix=_key,
-                                    model=model_name,
-                                    provider=_provider,
-                                    status=200,
-                                    prompt_tokens=p_tok,
-                                    completion_tokens=c_tok,
-                                    cost_usd=real_cost,
-                                    latency_ms=_latency_ms,
-                                    metadata="{}",
-                                )
-                                _MT.track_audit_persistence("forwarder_stream", "ok")
-                            except Exception as e:
-                                _MT.track_audit_persistence("forwarder_stream", "fail")
-                                logger.warning(f"Stream audit log failed: {e}")
+                # Account in a task of its own and wait for it shielded: when the
+                # client disconnects this generator is cancelled, and the first
+                # real await in an inline block would be interrupted. The task
+                # carries on without us; a module-level set keeps it alive.
+                task = asyncio.ensure_future(_finalize_stream())
+                _STREAM_FINALIZERS.add(task)
+                task.add_done_callback(_STREAM_FINALIZERS.discard)
+                task.add_done_callback(_log_finalizer_failure)
+                await asyncio.shield(task)
 
         ctx.response = StreamingResponse(
             stream_generator(), media_type="text/event-stream"
