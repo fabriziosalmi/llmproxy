@@ -115,7 +115,7 @@ TABLES: dict[str, list[Column]] = {
         _int("status", "DEFAULT 200"),
     ],
     # Persistent audit log (R2.10). entry_hash/prev_hash form the tamper-evident
-    # chain — see SQLiteStore._audit_lock for why appends must be serialised.
+    # chain — see SQLiteStore._write for why appends must be serialised.
     "audit_log": [
         _pk_autoinc(),
         _bigint("ts", "NOT NULL"),

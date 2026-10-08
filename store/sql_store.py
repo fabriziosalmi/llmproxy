@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -20,10 +21,13 @@ class SQLiteStore:
     """Robust Asynchronous SQLite-based storage for LLM endpoints and metadata.
 
     Uses a single persistent connection (like CacheBackend) instead of
-    opening a new connection per query.  All write operations are
-    serialised through the connection's internal WAL lock; the explicit
-    _audit_lock additionally guarantees hash-chain linearity for the
-    audit log.
+    opening a new connection per query. That connection is also one
+    transaction: a statement that runs while another writer is between its
+    statement and its commit joins that writer's transaction, and the first
+    ``commit()`` ends it for both. So every write goes through ``_write()``,
+    which holds ``_write_lock`` for the whole statement-to-commit span. It also
+    gives the audit log's hash chain its linearity (the last hash is read and
+    the next row inserted with nobody else writing in between).
     """
 
     def __init__(self, db_path: str = "data/endpoints.db"):
@@ -34,11 +38,11 @@ class SQLiteStore:
         # in aiosqlite, so concurrent queries that toggle it would corrupt each
         # other's result types.
         self._row_factory_lock = asyncio.Lock()
-        # Serialises concurrent log_audit calls so the hash chain is always
-        # linear. Without this, two simultaneous requests read the same
-        # prev_hash, compute diverging entry_hashes, and the chain splits —
-        # verify_audit_chain() then reports permanent tamper-detection failure.
-        self._audit_lock = asyncio.Lock()
+        # One writer at a time on the shared connection (see _write). This also
+        # keeps the audit chain linear: without it two simultaneous requests
+        # read the same prev_hash, compute diverging entry_hashes, and the chain
+        # splits, so verify_audit_chain() reports permanent tamper detection.
+        self._write_lock = asyncio.Lock()
         self._pool_cache = PoolCache()
 
     async def _get_conn(self) -> aiosqlite.Connection:
@@ -60,6 +64,31 @@ class SQLiteStore:
                 await self._conn.execute("PRAGMA busy_timeout=5000")
             return self._conn
 
+    @contextlib.asynccontextmanager
+    async def _write(self):
+        """Exclusive use of the connection for one write transaction.
+
+        Commits when the block finishes and rolls back when it raises, so a
+        method cannot leave a transaction open by returning early. A writer
+        cancelled between its statement and its commit (a client disconnecting
+        mid-request) never reaches either; its half-done transaction would make
+        the next ``BEGIN`` fail with "cannot start a transaction within a
+        transaction" on every later request, so whatever is pending when the
+        lock is taken is rolled back first. Nobody else holds the lock, so it
+        cannot be anyone's live work.
+        """
+        async with self._write_lock:
+            conn = await self._get_conn()
+            if conn.in_transaction:
+                await conn.rollback()
+            try:
+                yield conn
+                await conn.commit()
+            except BaseException:
+                with contextlib.suppress(Exception):
+                    await conn.rollback()
+                raise
+
     async def init_db(self):
         """Build the schema from the single declaration in store/schema.py.
 
@@ -68,11 +97,10 @@ class SQLiteStore:
         had already drifted. Rendering them from one declaration means a
         column added for one backend is added for both.
         """
-        conn = await self._get_conn()
-        for stmt in iter_create_statements(SQLITE):
-            await conn.execute(stmt)
-        await self._run_migrations(conn)
-        await conn.commit()
+        async with self._write() as conn:
+            for stmt in iter_create_statements(SQLITE):
+                await conn.execute(stmt)
+            await self._run_migrations(conn)
 
     async def _run_migrations(self, conn) -> None:
         """Apply pending migrations, recording only the ones that succeeded.
@@ -113,19 +141,18 @@ class SQLiteStore:
             )
 
     async def add_endpoint(self, endpoint: LLMEndpoint):
-        conn = await self._get_conn()
-        await conn.execute(
-            "INSERT OR REPLACE INTO endpoints (id, url, status, metadata, latency_ms, success_rate) VALUES (?, ?, ?, ?, ?, ?)",
-            (
-                endpoint.id,
-                str(endpoint.url),
-                endpoint.status.value,
-                json.dumps(split_endpoint_stats(endpoint.metadata)[0]),
-                endpoint.latency_ms,
-                endpoint.success_rate,
-            ),
-        )
-        await conn.commit()
+        async with self._write() as conn:
+            await conn.execute(
+                "INSERT OR REPLACE INTO endpoints (id, url, status, metadata, latency_ms, success_rate) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    endpoint.id,
+                    str(endpoint.url),
+                    endpoint.status.value,
+                    json.dumps(split_endpoint_stats(endpoint.metadata)[0]),
+                    endpoint.latency_ms,
+                    endpoint.success_rate,
+                ),
+            )
         self._pool_cache.invalidate()
 
     async def update_status(
@@ -138,28 +165,27 @@ class SQLiteStore:
         carries only those stats updates the columns and leaves the stored
         metadata (provider, models, priority) as it was.
         """
-        conn = await self._get_conn()
         clean, stats = split_endpoint_stats(metadata)
         latency_ms = stats.get("latency_ms")
         success_rate = stats.get("success_rate")
 
-        if clean:
-            await conn.execute(
-                "UPDATE endpoints SET status = ?, metadata = ?, latency_ms = COALESCE(?, latency_ms), success_rate = COALESCE(?, success_rate), last_verified = CURRENT_TIMESTAMP WHERE id = ?",
-                (
-                    status.value,
-                    json.dumps(clean),
-                    latency_ms,
-                    success_rate,
-                    endpoint_id,
-                ),
-            )
-        else:
-            await conn.execute(
-                "UPDATE endpoints SET status = ?, latency_ms = COALESCE(?, latency_ms), success_rate = COALESCE(?, success_rate), last_verified = CURRENT_TIMESTAMP WHERE id = ?",
-                (status.value, latency_ms, success_rate, endpoint_id),
-            )
-        await conn.commit()
+        async with self._write() as conn:
+            if clean:
+                await conn.execute(
+                    "UPDATE endpoints SET status = ?, metadata = ?, latency_ms = COALESCE(?, latency_ms), success_rate = COALESCE(?, success_rate), last_verified = CURRENT_TIMESTAMP WHERE id = ?",
+                    (
+                        status.value,
+                        json.dumps(clean),
+                        latency_ms,
+                        success_rate,
+                        endpoint_id,
+                    ),
+                )
+            else:
+                await conn.execute(
+                    "UPDATE endpoints SET status = ?, latency_ms = COALESCE(?, latency_ms), success_rate = COALESCE(?, success_rate), last_verified = CURRENT_TIMESTAMP WHERE id = ?",
+                    (status.value, latency_ms, success_rate, endpoint_id),
+                )
         self._pool_cache.invalidate()
 
     async def get_pool(self) -> list[LLMEndpoint]:
@@ -212,19 +238,17 @@ class SQLiteStore:
             ]
 
     async def remove_endpoint(self, endpoint_id: str):
-        conn = await self._get_conn()
-        await conn.execute("DELETE FROM endpoints WHERE id = ?", (endpoint_id,))
-        await conn.commit()
+        async with self._write() as conn:
+            await conn.execute("DELETE FROM endpoints WHERE id = ?", (endpoint_id,))
         self._pool_cache.invalidate()
 
     # App State Persistence
     async def set_state(self, key: str, value: Any):
-        conn = await self._get_conn()
-        await conn.execute(
-            "INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)",
-            (key, json.dumps(value)),
-        )
-        await conn.commit()
+        async with self._write() as conn:
+            await conn.execute(
+                "INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)",
+                (key, json.dumps(value)),
+            )
 
     async def get_state(self, key: str, default: Any = None) -> Any:
         conn = await self._get_conn()
@@ -238,12 +262,11 @@ class SQLiteStore:
         self, endpoint_id: str, latency_ms: float, success_rate: float
     ):
         """Updates latency and success rate for an endpoint."""
-        conn = await self._get_conn()
-        await conn.execute(
-            "UPDATE endpoints SET latency_ms = ?, success_rate = ? WHERE id = ?",
-            (latency_ms, success_rate, endpoint_id),
-        )
-        await conn.commit()
+        async with self._write() as conn:
+            await conn.execute(
+                "UPDATE endpoints SET latency_ms = ?, success_rate = ? WHERE id = ?",
+                (latency_ms, success_rate, endpoint_id),
+            )
         self._pool_cache.invalidate()
 
     # ── Spend Log (R2.3) ──
@@ -262,23 +285,22 @@ class SQLiteStore:
         status: int,
     ):
         """Record a spend entry for analytics."""
-        conn = await self._get_conn()
-        await conn.execute(
-            "INSERT INTO spend_log (ts, date, key_prefix, model, provider, prompt_tokens, completion_tokens, cost_usd, latency_ms, status) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (
-                ts,
-                date,
-                key_prefix,
-                model,
-                provider,
-                prompt_tokens,
-                completion_tokens,
-                cost_usd,
-                latency_ms,
-                status,
-            ),
-        )
-        await conn.commit()
+        async with self._write() as conn:
+            await conn.execute(
+                "INSERT INTO spend_log (ts, date, key_prefix, model, provider, prompt_tokens, completion_tokens, cost_usd, latency_ms, status) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (
+                    ts,
+                    date,
+                    key_prefix,
+                    model,
+                    provider,
+                    prompt_tokens,
+                    completion_tokens,
+                    cost_usd,
+                    latency_ms,
+                    status,
+                ),
+            )
 
     async def query_spend(
         self,
@@ -388,56 +410,49 @@ class SQLiteStore:
 
         blocked_int = 1 if blocked else 0
 
-        async with self._audit_lock:
-            conn = await self._get_conn()
+        async with self._write() as conn:
+            # Explicit, so another *process* writing the file cannot slip in
+            # between reading the last hash and inserting the next row.
             await conn.execute("BEGIN IMMEDIATE")
-            try:
-                # Get the hash of the last entry (chain link)
-                async with conn.execute(
-                    "SELECT entry_hash FROM audit_log ORDER BY id DESC LIMIT 1"
-                ) as cursor:
-                    row = await cursor.fetchone()
-                    prev_hash = row[0] if row and row[0] else "GENESIS"
+            # Get the hash of the last entry (chain link)
+            async with conn.execute(
+                "SELECT entry_hash FROM audit_log ORDER BY id DESC LIMIT 1"
+            ) as cursor:
+                row = await cursor.fetchone()
+                prev_hash = row[0] if row and row[0] else "GENESIS"
 
-                # Compute deterministic hash: SHA256(prev_hash|ts|req_id|session_id|...)
-                payload = (
-                    f"{prev_hash}|{ts}|{req_id}|{session_id}|{key_prefix}|"
-                    f"{model}|{provider}|{status}|{prompt_tokens}|{completion_tokens}|"
-                    f"{cost_usd}|{latency_ms}|{blocked_int}|{block_reason}|{metadata}"
-                )
-                entry_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+            # Compute deterministic hash: SHA256(prev_hash|ts|req_id|session_id|...)
+            payload = (
+                f"{prev_hash}|{ts}|{req_id}|{session_id}|{key_prefix}|"
+                f"{model}|{provider}|{status}|{prompt_tokens}|{completion_tokens}|"
+                f"{cost_usd}|{latency_ms}|{blocked_int}|{block_reason}|{metadata}"
+            )
+            entry_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
-                await conn.execute(
-                    "INSERT INTO audit_log (ts, req_id, session_id, key_prefix, model, provider, "
-                    "status, prompt_tokens, completion_tokens, cost_usd, latency_ms, blocked, "
-                    "block_reason, metadata, entry_hash, prev_hash) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                    (
-                        ts,
-                        req_id,
-                        session_id,
-                        key_prefix,
-                        model,
-                        provider,
-                        status,
-                        prompt_tokens,
-                        completion_tokens,
-                        cost_usd,
-                        latency_ms,
-                        blocked_int,
-                        block_reason,
-                        metadata,
-                        entry_hash,
-                        prev_hash,
-                    ),
-                )
-                await conn.commit()
-            except Exception as e:
-                try:
-                    await conn.rollback()
-                except Exception:
-                    pass
-                raise e
+            await conn.execute(
+                "INSERT INTO audit_log (ts, req_id, session_id, key_prefix, model, provider, "
+                "status, prompt_tokens, completion_tokens, cost_usd, latency_ms, blocked, "
+                "block_reason, metadata, entry_hash, prev_hash) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    ts,
+                    req_id,
+                    session_id,
+                    key_prefix,
+                    model,
+                    provider,
+                    status,
+                    prompt_tokens,
+                    completion_tokens,
+                    cost_usd,
+                    latency_ms,
+                    blocked_int,
+                    block_reason,
+                    metadata,
+                    entry_hash,
+                    prev_hash,
+                ),
+            )
 
     async def query_audit(
         self,
@@ -526,67 +541,60 @@ class SQLiteStore:
         Audit rows are removed as the oldest *run* of the chain: everything
         before the first row that is still inside the window. The removed run's
         boundary hashes are recorded in the same transaction, so
-        verify_audit_chain can tell this deletion from tampering. Holding
-        _audit_lock keeps an append from reading a last-hash that the delete is
+        verify_audit_chain can tell this deletion from tampering. Holding the
+        write lock keeps an append from reading a last-hash that the delete is
         about to take away.
         """
         import time
 
         cutoff_ts = int(time.time()) - (retention_days * 86400)
 
-        conn = await self._get_conn()
-        async with self._audit_lock:
-            try:
-                async with conn.execute(
-                    "SELECT MIN(id) FROM audit_log WHERE ts >= ?", (cutoff_ts,)
-                ) as cursor:
-                    row = await cursor.fetchone()
-                first_kept = row[0] if row else None
+        async with self._write() as conn:
+            async with conn.execute(
+                "SELECT MIN(id) FROM audit_log WHERE ts >= ?", (cutoff_ts,)
+            ) as cursor:
+                row = await cursor.fetchone()
+            first_kept = row[0] if row else None
 
-                # Nothing inside the window: the whole chain is expired and the
-                # next append starts a new one at GENESIS, so there is no
-                # surviving row to bridge to.
-                where, params = ("1=1", ()) if first_kept is None else ("id < ?", (first_kept,))
+            # Nothing inside the window: the whole chain is expired and the
+            # next append starts a new one at GENESIS, so there is no
+            # surviving row to bridge to.
+            where, params = ("1=1", ()) if first_kept is None else ("id < ?", (first_kept,))
 
-                async with conn.execute(
-                    f"SELECT prev_hash FROM audit_log WHERE {where} "
-                    "AND COALESCE(entry_hash, '') != '' ORDER BY id ASC LIMIT 1",
-                    params,
-                ) as cursor:
-                    first = await cursor.fetchone()
-                async with conn.execute(
-                    f"SELECT entry_hash FROM audit_log WHERE {where} "
-                    "AND COALESCE(entry_hash, '') != '' ORDER BY id DESC LIMIT 1",
-                    params,
-                ) as cursor:
-                    last = await cursor.fetchone()
+            async with conn.execute(
+                f"SELECT prev_hash FROM audit_log WHERE {where} "
+                "AND COALESCE(entry_hash, '') != '' ORDER BY id ASC LIMIT 1",
+                params,
+            ) as cursor:
+                first = await cursor.fetchone()
+            async with conn.execute(
+                f"SELECT entry_hash FROM audit_log WHERE {where} "
+                "AND COALESCE(entry_hash, '') != '' ORDER BY id DESC LIMIT 1",
+                params,
+            ) as cursor:
+                last = await cursor.fetchone()
 
-                cursor = await conn.execute(f"DELETE FROM audit_log WHERE {where}", params)
-                audit_deleted = cursor.rowcount
+            cursor = await conn.execute(f"DELETE FROM audit_log WHERE {where}", params)
+            audit_deleted = cursor.rowcount
 
-                if first_kept is not None and first and last:
-                    await self._record_audit_gaps(
-                        conn,
-                        [
-                            {
-                                "start": first[0],
-                                "end": last[0],
-                                "rows": audit_deleted,
-                                "reason": "retention",
-                                "at": int(time.time()),
-                            }
-                        ],
-                    )
-
-                cursor = await conn.execute(
-                    "DELETE FROM spend_log WHERE ts < ?", (cutoff_ts,)
+            if first_kept is not None and first and last:
+                await self._record_audit_gaps(
+                    conn,
+                    [
+                        {
+                            "start": first[0],
+                            "end": last[0],
+                            "rows": audit_deleted,
+                            "reason": "retention",
+                            "at": int(time.time()),
+                        }
+                    ],
                 )
-                spend_deleted = cursor.rowcount
 
-                await conn.commit()
-            except Exception:
-                await conn.rollback()
-                raise
+            cursor = await conn.execute(
+                "DELETE FROM spend_log WHERE ts < ?", (cutoff_ts,)
+            )
+            spend_deleted = cursor.rowcount
 
         return {"audit_deleted": audit_deleted, "spend_deleted": spend_deleted}
 
@@ -598,43 +606,36 @@ class SQLiteStore:
         hashes are recorded in the same transaction so the rows around them
         still verify.
         """
-        conn = await self._get_conn()
-        async with self._audit_lock:
-            try:
-                async with conn.execute(
-                    "SELECT id, prev_hash, entry_hash FROM audit_log "
-                    "WHERE session_id = ? OR key_prefix = ? ORDER BY id ASC",
-                    (subject, subject),
-                ) as cursor:
-                    removed = [
-                        {"id": r[0], "prev_hash": r[1] or "", "entry_hash": r[2] or ""}
-                        for r in await cursor.fetchall()
-                    ]
-                cursor = await conn.execute(
-                    "DELETE FROM audit_log WHERE session_id = ? OR key_prefix = ?",
-                    (subject, subject),
-                )
-                audit_deleted = cursor.rowcount
-                await self._record_audit_gaps(
-                    conn, audit_chain.segments_from_rows(removed, reason="erasure")
-                )
+        async with self._write() as conn:
+            async with conn.execute(
+                "SELECT id, prev_hash, entry_hash FROM audit_log "
+                "WHERE session_id = ? OR key_prefix = ? ORDER BY id ASC",
+                (subject, subject),
+            ) as cursor:
+                removed = [
+                    {"id": r[0], "prev_hash": r[1] or "", "entry_hash": r[2] or ""}
+                    for r in await cursor.fetchall()
+                ]
+            cursor = await conn.execute(
+                "DELETE FROM audit_log WHERE session_id = ? OR key_prefix = ?",
+                (subject, subject),
+            )
+            audit_deleted = cursor.rowcount
+            await self._record_audit_gaps(
+                conn, audit_chain.segments_from_rows(removed, reason="erasure")
+            )
 
-                cursor = await conn.execute(
-                    "DELETE FROM spend_log WHERE key_prefix = ?",
-                    (subject,),
-                )
-                spend_deleted = cursor.rowcount
+            cursor = await conn.execute(
+                "DELETE FROM spend_log WHERE key_prefix = ?",
+                (subject,),
+            )
+            spend_deleted = cursor.rowcount
 
-                cursor = await conn.execute(
-                    "DELETE FROM user_roles WHERE subject = ? OR email = ?",
-                    (subject, subject),
-                )
-                roles_deleted = cursor.rowcount
-
-                await conn.commit()
-            except Exception:
-                await conn.rollback()
-                raise
+            cursor = await conn.execute(
+                "DELETE FROM user_roles WHERE subject = ? OR email = ?",
+                (subject, subject),
+            )
+            roles_deleted = cursor.rowcount
 
         return {
             "audit_deleted": audit_deleted,
