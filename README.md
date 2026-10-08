@@ -1,11 +1,9 @@
 # LLMProxy
 
-Security gateway for Large Language Models. Routes requests across 24 providers with automatic fallback, cost-aware smart routing, and a 6-layer defense pipeline. Drop-in replacement for the OpenAI API.
+Security gateway for Large Language Models. Routes requests across 24 providers with automatic fallback, cost-aware smart routing, and a byte-level firewall plus a 5-ring plugin pipeline. Drop-in replacement for the OpenAI API.
 
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-1755%20passing-brightgreen)
-![Coverage](https://img.shields.io/badge/coverage-72%25-yellowgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 [![CI](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml/badge.svg)](https://github.com/fabriziosalmi/llmproxy/actions/workflows/ci.yml)
 
@@ -14,9 +12,9 @@ Security gateway for Large Language Models. Routes requests across 24 providers 
 ## Why LLMProxy
 
 - **One endpoint, 24 providers** -- Send OpenAI-compatible requests and let the proxy handle translation, failover, and cost optimization across 23 dedicated providers (OpenAI, Anthropic, Google, Azure, Ollama, Groq, Together, Mistral, DeepSeek, xAI, Perplexity, Fireworks, OpenRouter, SambaNova, Cohere, Hugging Face, Cloudflare Workers AI, Cerebras AI, Nebius AI, Hyperbolic AI, Novita AI, Lambda Labs, and AI/ML API) plus a generic OpenAI-compatible adapter.
-- **Security by default** -- Byte-level ASGI firewall, injection scoring, PII masking, cross-session threat intelligence, immutable audit ledger, HMAC response signing. Fail-closed auth middleware denies all admin paths unless explicitly whitelisted.
+- **Security by default** -- Byte-level ASGI firewall, injection scoring, PII masking, cross-session threat intelligence, a hash-chained audit log (tamper-evident, not immutable: export its head and verify against your copy), HMAC response signing. Fail-closed auth middleware denies all admin paths unless explicitly whitelisted.
 - **Cost control** -- Per-model pricing for 30+ models, daily budget limits with automatic downgrade across fallback chains (Predictive FinOps Routing with HTTP 402 rejection), per-session spend tracking, cost-efficiency analytics.
-- **Extensible** -- 18 marketplace plugins (budget guard, A/B routing, schema enforcement, canary detection, ...) with a Redis-backed distributed ring pipeline. Write your own in Python or WASM.
+- **Extensible** -- 18 marketplace plugins (budget guard, A/B routing, schema enforcement, canary detection, ...) with a ring pipeline (rate limiting and circuit breaking can share state through Redis; the pipeline itself runs per process). Write your own in Python or WASM.
 
 ---
 
@@ -51,7 +49,7 @@ docker run -d --name llmproxy -p 8090:8090 \
   -e LLM_PROXY_ADMIN_KEYS=sk-admin-test \
   -e OPENAI_API_KEY=$OPENAI_API_KEY \
   -v llmproxy-data:/app/data \
-  ghcr.io/fabriziosalmi/llmproxy:1.35.0
+  ghcr.io/fabriziosalmi/llmproxy:1.37.21
 ```
 
 Each release publishes `:latest`, the full semver (`:X.Y.Z`), the minor (`:X.Y`), plus a per-commit short SHA tag for reproducible deploys. Pin the newest release rather than copying the number above — it ages, and this example pinned `1.32.0` for two releases, which meant anyone following it literally deployed the version *before* the control-plane key tier, the salt relocation and the Redis timeouts landed.
@@ -237,7 +235,7 @@ Full API reference in the [docs](docs/).
 
 ## Plugins
 
-Ring-based pipeline with 18 marketplace plugins and 9 built-in defaults (plus a backward-compatibility shim).
+Ring-based pipeline with 18 marketplace plugins and the built-in defaults in `plugins/default/` (plus a backward-compatibility shim).
 
 | Plugin                | Ring        | Description                                          |
 | --------------------- | ----------- | ---------------------------------------------------- |
@@ -332,7 +330,7 @@ Keyboard shortcuts: `Cmd+K` (command palette), `F` (cinema mode). URL hash routi
 
 ## Observability
 
-- **Prometheus** -- 10 metrics (requests, errors, latency percentiles, TTFT, tokens, cost, budget, circuit state, injection blocks, auth failures). Pre-built Grafana dashboard and alert rules in `monitoring/`.
+- **Prometheus** -- requests, errors, latency, TTFT, tokens, cost, budget, circuit state, injection blocks, auth failures, plugin failures, stream outcomes, load shedding. Pre-built Grafana dashboard and alert rules in `monitoring/`.
 - **OpenTelemetry** -- Distributed tracing via OTLP. Graceful degradation when not installed.
 - **Sentry** -- Exception tracking with PII filtering and sampling.
 - **Webhooks** -- Slack, Teams, Discord, Generic (JSON). HMAC-SHA256 signed. SSRF-protected.
@@ -350,7 +348,7 @@ make lint       # ruff
 make typecheck  # mypy
 ```
 
-The suite spans 50+ modules: unit, HTTP integration, pipeline E2E, property-based fuzz (Hypothesis), 31 mathematical invariant proofs, concurrency stress tests, and performance benchmarks. The count and coverage are in the badges at the top of this file, which CI updates — this paragraph used to carry its own copy of the number and drifted two releases behind them.
+The suite spans 50+ modules: unit, HTTP integration, pipeline E2E, property-based fuzz (Hypothesis), 31 mathematical invariant proofs, concurrency stress tests, and performance benchmarks. The count is whatever `make test` reports, and CI fails below the coverage gate; there are no static badges for either, because a number typed into a badge goes stale the day after (it said 1755 tests when 2157 were collected).
 
 The invariant suite proves correctness properties (Jaccard axioms, normalize idempotence, token conservation, budget accounting, adapter determinism) and blocks merge on violation.
 

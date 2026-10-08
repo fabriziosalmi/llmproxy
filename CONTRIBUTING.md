@@ -17,14 +17,14 @@ make test           # Run the test suite
 1. **Fork** the repository and create a feature branch from `main`
 2. **Write code** following the conventions below
 3. **Add tests** for any new functionality
-4. **Run checks**: `make test && make lint && make syntax`
+4. **Run checks**: `make test && make lint-ci && make typecheck && make syntax` (the same commands CI runs)
 5. **Submit a PR** with a clear description of what and why
 
 ## Code Conventions
 
 ### Python
 - **Version**: Python 3.12+
-- **Linter**: `ruff` (config in `pyproject.toml`)
+- **Linter**: `ruff` (config in `ruff.toml`); **types**: `mypy` (config in `mypy.ini`)
 - **Type hints**: Required on all public function signatures
 - **Logging**: Use `logging.getLogger(__name__)`, never `print()`
 - **Async**: All I/O operations must be async. Protect shared state with `asyncio.Lock()`

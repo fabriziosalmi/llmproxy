@@ -13,13 +13,9 @@ else
     echo "Warning: ruff not installed, skipping lint"
 fi
 
-# Type check with mypy (core + proxy only, ~2s)
+# Type check with mypy, same scope and config (mypy.ini) as CI and `make typecheck`
 if command -v mypy &> /dev/null; then
-    mypy core/ proxy/ --ignore-missing-imports \
-        --disable-error-code=misc \
-        --disable-error-code=assignment \
-        --disable-error-code=no-any-return \
-        --no-error-summary --quiet 2>/dev/null || {
+    mypy core/ proxy/ store/ plugins/ --no-error-summary --quiet 2>/dev/null || {
         echo "mypy found type errors — fix before committing"
         exit 1
     }

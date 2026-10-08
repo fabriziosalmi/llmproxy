@@ -277,7 +277,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             redis_url=redis_url,
             config=config,
         )
-        self.exempt_paths = set(cfg.get("exempt_paths", ["/health", "/metrics"]))
+        self.exempt_paths = set(cfg.get("exempt_paths", ["/health", "/ready", "/metrics"]))
         # Active preset name — None means "raw config values, no preset applied".
         self.preset: str | None = None
         self.agent = agent

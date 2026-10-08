@@ -200,6 +200,9 @@ gen_proxy_key() {
     elif [[ -r /dev/urandom ]] && command -v hexdump >/dev/null 2>&1; then
         printf 'sk-proxy-%s' "$(hexdump -n16 -e '16/1 "%02x"' /dev/urandom)"
     else
+        # Last resort only: the clock is guessable, so this key is. Every branch
+        # above is a CSPRNG; reaching here means none of them exist. Say so.
+        warn "No secure random source found; generated a weak key. Replace LLM_PROXY_API_KEYS." >&2
         printf 'sk-proxy-%s' "$(date +%s%N | cksum | awk '{print $1}')"
     fi
 }
@@ -213,7 +216,10 @@ bootstrap_env() {
         err ".env.example missing — cannot bootstrap"
         return 1
     fi
-    cp .env.example .env
+    # Created 0600 from the start: it receives the generated proxy key and, later,
+    # provider keys. `cp` alone leaves it at the umask (typically world-readable).
+    ( umask 077 && cp .env.example .env )
+    chmod 600 .env
     local key
     key="$(gen_proxy_key)"
     # Replace the placeholder value using awk — works identically on BSD and

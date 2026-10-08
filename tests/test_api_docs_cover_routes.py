@@ -29,7 +29,7 @@ def _documented_paths() -> set[str]:
     text = "".join(open(f).read() for f in glob.glob(DOCS))
     return {
         _normalise(p)
-        for p in re.findall(r"(/(?:api/v1|v1|health|metrics)[A-Za-z0-9_/{}.\-]*)", text)
+        for p in re.findall(r"(/(?:api/v1|v1|health|ready|metrics)[A-Za-z0-9_/{}.\-]*)", text)
     }
 
 

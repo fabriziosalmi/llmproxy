@@ -157,6 +157,24 @@ def create_router(agent: TelemetryAgent) -> APIRouter:
 
     @router.get("/health")
     async def health():
+        return await _health_report()
+
+    @router.get("/ready")
+    async def ready():
+        """Readiness: the /health verdict as an HTTP status.
+
+        /health is 200 whatever it finds (the verdict is in the body, which
+        pollers read), so an orchestrator probing it with a status check could
+        never mark a pod unready. This is 503 when the verdict is "down" (the
+        store or the HTTP session is gone) and 200 otherwise: "degraded" still
+        serves requests, so it stays in rotation.
+        """
+        from fastapi.responses import JSONResponse
+
+        report = await _health_report()
+        return JSONResponse(report, status_code=503 if report["status"] == "down" else 200)
+
+    async def _health_report():
         """Per-component health (M.3).
 
         Top-level fields preserved for backward compat with existing pollers.
