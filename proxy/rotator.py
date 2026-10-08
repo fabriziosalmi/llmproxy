@@ -333,6 +333,7 @@ class ProxyOrchestrator(BaseAgent):
 
         from .background import (
             audit_head_loop,
+            budget_rollover_loop,
             cache_eviction_loop,
             config_watch_loop,
             dedup_cleanup_loop,
@@ -405,6 +406,7 @@ class ProxyOrchestrator(BaseAgent):
 
         self._spawn_task(config_watch_loop(self, 30))
         self._spawn_task(write_flush_loop(self, 0.25))
+        self._spawn_task(budget_rollover_loop(self, 30))
         # Q.3 — hourly snapshot loop; interval configurable for ops who want
         # finer-grain KPI sparklines (10-min slots = 4h trailing) or coarser.
         history_interval = int(

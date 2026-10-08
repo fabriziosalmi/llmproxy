@@ -36,7 +36,7 @@ from core.plugin_engine import PluginContext, PluginHook
 from core.stream_faker import fake_stream
 from core.tracing import TraceManager
 from core.webhooks import EventType
-from proxy.budget import charge_and_persist
+from proxy.budget import charge_and_persist, roll_over_if_new_day
 
 logger = logging.getLogger("llmproxy.request_pipeline")
 
@@ -176,6 +176,7 @@ async def process_proxy_request(
         predictive_cost = estimate_cost_pre_flight(body.get("model", ""), input_tokens)
 
         async with orchestrator._budget_lock:
+            roll_over_if_new_day(orchestrator)
             # Block if the expected cost of this request would push us over the limit
             global_over_budget = (orchestrator.total_cost_today + predictive_cost) >= daily_limit
 

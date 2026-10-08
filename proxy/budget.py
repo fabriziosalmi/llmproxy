@@ -49,6 +49,7 @@ async def charge_and_persist(
     if amount == 0:
         return
     async with lock:
+        roll_over_if_new_day(rotator)
         rotator.total_cost_today += amount
         try:
             rotator.enqueue_write(
@@ -76,6 +77,48 @@ async def charge_and_persist(
             MetricsTracker.set_budget(rotator.total_cost_today, daily_limit)
         except Exception as e:  # noqa: BLE001 — a gauge must never fail a request
             logger.debug(f"Budget gauge update skipped: {e}")
+
+
+def roll_over_if_new_day(rotator: Any) -> bool:
+    """Start a new budget day when the local date has changed. True if it did.
+
+    The daily total was reset only at boot (hydrate_daily_total). A process that
+    ran past midnight kept counting into the previous day's total: the limit was
+    effectively cumulative since the last restart, so once spend crossed it every
+    request answered 402 until someone restarted the proxy, and a restart after
+    midnight reset the total in a way no running instance ever did.
+
+    No awaits, so it cannot interleave with another coroutine; callers that
+    already hold the budget lock call it inside it. An orchestrator that was
+    never hydrated (``_budget_date`` unset) adopts today without zeroing a total
+    it did not load.
+    """
+    last = getattr(rotator, "_budget_date", None)
+    if last is not None and not isinstance(last, str):
+        return False  # not a real orchestrator (a test double)
+    today = _dt.date.today().isoformat()
+    if last == today:
+        return False
+    rotator._budget_date = today
+    if last is None:
+        return False
+    rotator.total_cost_today = 0.0
+    try:
+        rotator.enqueue_write("budget:daily_date", today)
+        rotator.enqueue_write("budget:daily_total", 0.0)
+    except Exception as e:  # noqa: BLE001 — persistence must not fail the request
+        logger.debug(f"Budget rollover enqueue skipped: {e}")
+    try:
+        from core.metrics import MetricsTracker
+
+        daily_limit = (getattr(rotator, "config", None) or {}).get("budget", {}).get(
+            "daily_limit", 0.0
+        )
+        MetricsTracker.set_budget(0.0, daily_limit)
+    except Exception as e:  # noqa: BLE001
+        logger.debug(f"Budget gauge reset skipped: {e}")
+    logger.info("Budget day rolled over to %s (previous total: %s)", today, last)
+    return True
 
 
 async def hydrate_daily_total(store: Any) -> tuple[float, str]:

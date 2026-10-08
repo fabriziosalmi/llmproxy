@@ -54,6 +54,7 @@ def test_each_slow_loop_has_a_rule_with_a_threshold_longer_than_its_interval():
 LOOP_FUNCTIONS = {
     "config_watch": "config_watch_loop",
     "write_flush": "write_flush_loop",
+    "budget_rollover": "budget_rollover_loop",
     "metrics_history": "metrics_history_loop",
     "cache_eviction": "cache_eviction_loop",
     "dedup_cleanup": "dedup_cleanup_loop",
