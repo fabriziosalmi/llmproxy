@@ -11,6 +11,7 @@ from models import EndpointStatus, LLMEndpoint, split_endpoint_stats
 from . import audit_chain
 from .base import BaseRepository
 from .pool_cache import PoolCache
+from .rows import endpoints_from_rows
 from .schema import MIGRATIONS, POSTGRES, iter_create_statements
 
 logger = logging.getLogger("llmproxy.store.pg")
@@ -153,34 +154,14 @@ class PostgresStore:
             "SELECT id, url, status, metadata, latency_ms, success_rate FROM endpoints WHERE status = $1",
             status.value,
         )
-        return [
-            LLMEndpoint(
-                id=r[0],
-                url=r[1],
-                status=EndpointStatus(int(r[2])),
-                metadata=json.loads(r[3]),
-                latency_ms=r[4],
-                success_rate=r[5],
-            )
-            for r in rows
-        ]
+        return endpoints_from_rows(rows)
 
     async def get_all(self) -> list[LLMEndpoint]:
         pool = await self.init_pool()
         rows = await pool.fetch(
             "SELECT id, url, status, metadata, latency_ms, success_rate FROM endpoints"
         )
-        return [
-            LLMEndpoint(
-                id=r[0],
-                url=r[1],
-                status=EndpointStatus(int(r[2])),
-                metadata=json.loads(r[3]),
-                latency_ms=r[4],
-                success_rate=r[5],
-            )
-            for r in rows
-        ]
+        return endpoints_from_rows(rows)
 
     async def remove_endpoint(self, endpoint_id: str):
         pool = await self.init_pool()

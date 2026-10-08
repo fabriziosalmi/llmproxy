@@ -28,6 +28,7 @@ from typing import Any
 import yaml
 
 from core.atomic_io import atomic_write
+from core.metrics import MetricsTracker
 from core.plugin_sdk import BasePlugin, PluginResponse, PluginResponseError
 from core.wasm_runner import WasmRunner
 
@@ -836,6 +837,7 @@ class PluginManager:
                     )
                     if stats:
                         stats["blocks"] += 1
+                    MetricsTracker.track_plugin_event(name, "quarantine_block")
                     context.error = f"Plugin {name} unavailable (quarantined)"
                     context.metadata["_block_status"] = 503
                     context.metadata["_block_error_type"] = "plugin_unavailable"
@@ -843,6 +845,7 @@ class PluginManager:
                     break
                 # Fail-open skip: say so once per quarantine window at WARNING
                 # (a per-request warning would drown the log), then at DEBUG.
+                MetricsTracker.track_plugin_event(name, "quarantine_skip")
                 skips = (stats or {}).get("quarantine_skips", 0)
                 if stats is not None:
                     stats["quarantine_skips"] = skips + 1
@@ -855,6 +858,8 @@ class PluginManager:
 
             t0 = time.perf_counter()
             errors_before = stats["errors"] if stats else 0
+            timeouts_before = stats["timeouts"] if stats else 0
+            blocks_before = stats["blocks"] if stats else 0
 
             try:
                 if p["type"] == "class":
@@ -943,8 +948,17 @@ class PluginManager:
                     context.error = str(e)
                     context.stop_chain = True
 
-            except (TimeoutError, AttributeError, TypeError, RuntimeError, ValueError) as e:
-                self.logger.error(f"Error executing plugin {name} in {hook.value}: {e}")
+            except Exception as e:
+                # Any failure of a plugin is that plugin's failure. This used to
+                # name five exception types; a plugin raising anything else
+                # (KeyError, IndexError, a library's own error) escaped the fail
+                # policy: the error counters stayed at zero, so the plugin breaker
+                # recorded a success and never quarantined it, and the request
+                # became a 502 whatever the plugin was configured to do.
+                self.logger.error(
+                    f"Error executing plugin {name} in {hook.value}: "
+                    f"{type(e).__name__}: {e}"
+                )
                 context.error = str(e)
                 if stats:
                     stats["errors"] += 1
@@ -956,6 +970,12 @@ class PluginManager:
                 if stats:
                     stats["invocations"] += 1
                     stats["total_latency_ms"] += elapsed_ms
+                    if stats["timeouts"] > timeouts_before:
+                        MetricsTracker.track_plugin_event(name, "timeout")
+                    if stats["errors"] > errors_before:
+                        MetricsTracker.track_plugin_event(name, "error")
+                    if stats["blocks"] > blocks_before:
+                        MetricsTracker.track_plugin_event(name, "block")
                     # Plugin circuit breaker: track consecutive error streaks
                     if stats["errors"] > errors_before:
                         self._plugin_failure(name)

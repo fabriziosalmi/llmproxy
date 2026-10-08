@@ -106,7 +106,9 @@ async def main():
         )
 
     # Launch the security gateway
-    rotator = ProxyOrchestrator(store)
+    # The same file that was validated and read above (CONFIG_FILE), not a default:
+    # `make run-minimal` validated config.minimal.yaml and then ran config.yaml.
+    rotator = ProxyOrchestrator(store, config_path=config_file)
     port = config.get("server", {}).get("port", 8090)
     logger.info(f"LLMProxy Security Gateway starting on port {port}")
 

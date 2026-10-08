@@ -137,7 +137,8 @@ async def test_a_shed_request_gets_503_and_retry_after():
     agent.admission.release()
 
     assert resp.status_code == 503
-    assert resp.json()["error"] == "overloaded"
+    assert resp.json()["error"]["code"] == "overloaded"
+    assert resp.json()["error"]["type"] == "server_error"
     assert resp.headers["Retry-After"] == "1"
 
 

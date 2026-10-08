@@ -120,6 +120,18 @@ STREAM_OUTCOMES = Counter(
     ["outcome"],
 )
 
+# Plugin failures used to live only in the in-memory per-plugin stats. A fail-open
+# security plugin (the sanitizer, PII masking) that started erroring was skipped
+# or quarantined with one log line per cooldown window, and nothing a dashboard or
+# alert could see said so: the request carried on without the control.
+PLUGIN_EVENTS = Counter(
+    "llm_proxy_plugin_events_total",
+    "Plugin failures and refusals, by plugin",
+    # timeout | error | block | quarantine_skip (fail-open plugin skipped)
+    # | quarantine_block (fail-closed plugin refused the request)
+    ["plugin", "event"],
+)
+
 BACKGROUND_LAST_SUCCESS = Gauge(
     "llm_proxy_background_last_success_timestamp",
     "Unix timestamp of the last successful iteration of a background loop",
@@ -239,6 +251,10 @@ class MetricsTracker:
     @staticmethod
     def track_load_shed():
         LOAD_SHED.inc()
+
+    @staticmethod
+    def track_plugin_event(plugin: str, event: str):
+        PLUGIN_EVENTS.labels(plugin=plugin, event=event).inc()
 
     @staticmethod
     def track_stream_outcome(outcome: str):

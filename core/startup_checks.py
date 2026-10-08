@@ -122,12 +122,30 @@ def _require_number(
     return value
 
 
+def _section(parent: dict, name: str) -> dict:
+    """A config section as a dict. An empty YAML section is ``None``, not ``{}``.
+
+    ``endpoints:`` with nothing under it (the natural state while commenting
+    entries out) parses as None, and ``.get("endpoints", {})`` returns that None,
+    so the next ``.items()`` raised AttributeError: at boot the process exited
+    blaming "a defect in the validator" instead of reading its own config.
+    """
+    value = parent.get(name)
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise StartupError(
+            f"'{name}' must be a mapping (key: value pairs), got {type(value).__name__}."
+        )
+    return value
+
+
 def validate_config(config: dict) -> list[str]:
     """Validate config and return warnings. Raises StartupError on critical issues."""
     warnings = []
 
     # 1. Auth keys (required)
-    auth_cfg = config.get("server", {}).get("auth", {}) or {}
+    auth_cfg = _section(_section(config, "server"), "auth")
     if auth_enabled(config):
         keys_env = auth_cfg.get("api_keys_env", "LLM_PROXY_API_KEYS")
         if _has_invalid_keys(keys_env):
@@ -165,7 +183,7 @@ def validate_config(config: dict) -> list[str]:
     # installer, authenticates to the admin UI, and adds the first provider
     # through the onboarding wizard. We warn loudly but do NOT abort —
     # the UI and /health must stay reachable so the wizard can finish.
-    endpoints = config.get("endpoints", {})
+    endpoints = _section(config, "endpoints")
     if not endpoints:
         warnings.append(
             "No LLM endpoints configured — starting in ONBOARDING MODE.\n"
@@ -202,13 +220,13 @@ def validate_config(config: dict) -> list[str]:
         )
 
     # 4. Config file sanity
-    server_cfg = config.get("server", {})
+    server_cfg = _section(config, "server")
     port = server_cfg.get("port", 8090)
     if not isinstance(port, int) or port < 1 or port > 65535:
         raise StartupError(f"Invalid server port: {port}. Must be 1-65535.")
 
     # 5. Security config
-    security_cfg = config.get("security", {})
+    security_cfg = _section(config, "security")
     max_payload = security_cfg.get("max_payload_size_kb", 512)
     # Type-checked before comparing, like the port check three lines above.
     # `max_payload_size_kb: "512"` is a natural thing to write and parses as a
@@ -228,7 +246,7 @@ def validate_config(config: dict) -> list[str]:
         )
 
     # 6. Caching config
-    cache_cfg = config.get("caching", {})
+    cache_cfg = _section(config, "caching")
     if cache_cfg.get("enabled") and not cache_cfg.get("db_path"):
         warnings.append("Caching enabled but no db_path set — using 'cache.db'")
 
@@ -237,13 +255,22 @@ def validate_config(config: dict) -> list[str]:
     # The compose file binds 8090 to 0.0.0.0 with TLS off by default, which is
     # correct only behind a reverse proxy. A bare 0.0.0.0 without TLS and
     # without segregated admin keys is how the 1.35.0 audit finding happened.
-    tls_cfg = server_cfg.get("tls", {}) or {}
+    tls_cfg = _section(server_cfg, "tls")
+    # TLS that is enabled must be possible: the listener refuses to start on a
+    # missing certificate rather than fall back to plain HTTP.
+    if tls_cfg.get("enabled"):
+        from core.uvicorn_options import TLSConfigError, uvicorn_kwargs
+
+        try:
+            uvicorn_kwargs(config)
+        except TLSConfigError as exc:
+            raise StartupError(str(exc)) from exc
     if server_cfg.get("host") == "0.0.0.0" and not tls_cfg.get("enabled"):
         warnings.append(
             "server.host is 0.0.0.0 with TLS disabled — put a reverse proxy "
             "with TLS in front for any non-local deployment."
         )
-    metrics_cfg = server_cfg.get("metrics", {}) or {}
+    metrics_cfg = _section(server_cfg, "metrics")
     if metrics_cfg.get("enabled") and metrics_cfg.get("bind", "127.0.0.1") != "127.0.0.1":
         warnings.append(
             "Metrics exporter is bound beyond loopback — it serves outside "

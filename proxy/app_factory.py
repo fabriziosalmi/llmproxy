@@ -469,15 +469,17 @@ def create_app(agent) -> FastAPI:
                 controller.in_flight,
                 controller.queued,
             )
+            from proxy.error_envelope import error_body
+
+            shed_body = error_body(
+                "The proxy is at capacity. Retry shortly, or raise "
+                "connection_pool.max_connections.",
+                503,
+            )
+            shed_body["error"]["code"] = "overloaded"  # more specific than the 503 default
             return JSONResponse(
                 status_code=503,
-                content={
-                    "error": "overloaded",
-                    "message": (
-                        "The proxy is at capacity. Retry shortly, or raise "
-                        "connection_pool.max_connections."
-                    ),
-                },
+                content=shed_body,
                 headers={"Retry-After": str(controller.retry_after_s)},
             )
         # The slot is held until the response BODY has been sent, not until the

@@ -14,6 +14,7 @@ other path (the ``/api/v1/`` control plane) keeps FastAPI's default response.
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -24,8 +25,10 @@ from fastapi.exception_handlers import (
     request_validation_exception_handler as _default_validation_handler,
 )
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
+logger = logging.getLogger("llmproxy.errors")
 
 #: Path prefix of the OpenAI-compatible data plane.
 DATA_PLANE_PREFIX = "/v1/"
@@ -108,7 +111,26 @@ async def _validation_exception_handler(request: Request, exc: Exception):
     )
 
 
+async def _unhandled_exception_handler(request: Request, exc: Exception):
+    """An exception no route anticipated.
+
+    Starlette's default for these is a plain-text ``Internal Server Error``, which
+    broke the documented contract exactly where a client needs it (an OpenAI SDK
+    parses the body of a failed call and found no JSON). Nothing about the
+    exception is put in the body: the traceback is logged by the server, and a
+    message could leak internals.
+    """
+    logger.error(
+        "Unhandled %s on %s %s", type(exc).__name__, request.method, request.url.path,
+        exc_info=exc,
+    )
+    if not _is_data_plane(request):
+        return PlainTextResponse("Internal Server Error", status_code=500)
+    return JSONResponse(error_body("Internal server error", 500), status_code=500)
+
+
 def install_error_handlers(app: FastAPI) -> None:
     """Register the data-plane error shape on ``app``."""
     app.add_exception_handler(StarletteHTTPException, _http_exception_handler)
     app.add_exception_handler(RequestValidationError, _validation_exception_handler)
+    app.add_exception_handler(Exception, _unhandled_exception_handler)

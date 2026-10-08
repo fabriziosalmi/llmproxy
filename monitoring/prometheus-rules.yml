@@ -147,6 +147,34 @@ groups:
           summary: "More than one live instance sharing state"
           description: "Daily budget is enforced independently per instance — the fleet can overspend. Intended only for Redis-backed HA."
 
+      # ── Plugins ──
+      # A fail-open plugin that errors is skipped and then quarantined; the request
+      # carries on without the control (sanitizer, PII masking). These make that
+      # visible: llm_proxy_plugin_events_total.
+      - alert: PluginQuarantined
+        expr: >
+          sum by (plugin) (
+            rate(llm_proxy_plugin_events_total{event=~"quarantine_skip|quarantine_block"}[5m])
+          ) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Plugin {{ $labels.plugin }} is quarantined"
+          description: "A fail-closed plugin refuses requests while quarantined; a fail-open one is skipped. See llm_proxy_plugin_events_total for its errors."
+
+      - alert: PluginErrors
+        expr: >
+          sum by (plugin) (
+            rate(llm_proxy_plugin_events_total{event=~"error|timeout"}[5m])
+          ) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Plugin {{ $labels.plugin }} is failing"
+          description: "Errors or timeouts for 10 minutes; the plugin is quarantined after 10 consecutive failures."
+
   - name: llmproxy-recording
     rules:
       # Pre-compute frequently queried metrics
