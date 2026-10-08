@@ -4,14 +4,14 @@ LLMProxy is a **security-first proxy** for Large Language Models. It sits betwee
 
 ## Architecture Overview
 
-The request pipeline processes every LLM call through 10 security layers:
+The request pipeline processes every LLM call through these stages:
 
 1. **Multi-Provider Translation** — 24 providers with automatic request/response format translation
 2. **Cross-Provider Fallback** — Configurable fallback chains (e.g. GPT-4o fails → Claude Sonnet → Gemini Pro)
 3. **Smart Routing** — EMA-weighted endpoint selection based on latency and success rate
 4. **ASGI Firewall** — Byte-level L7 request filtering
 5. **SecurityShield** — Injection scoring, PII masking, trajectory detection
-6. **Ring Plugin Pipeline** — 5-ring plugin engine with 14 marketplace plugins
+6. **Ring Plugin Pipeline** — 5-ring plugin engine with 18 marketplace plugins
 7. **WASM Sandbox** — Extism-based sandboxed execution for untrusted plugins
 8. **Per-Model Pricing** — Accurate cost tracking for 30+ models
 9. **Active Health Probing** — Background endpoint liveness checks with circuit breakers

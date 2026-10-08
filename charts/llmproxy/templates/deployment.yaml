@@ -8,15 +8,25 @@ spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
+  # Recreate, not the RollingUpdate default: the pod holds a single SQLite writer
+  # on a ReadWriteOnce volume. A rolling update starts the new pod while the old
+  # one still runs, so on one node two processes write the same database file and
+  # on several the new pod waits forever on a Multi-Attach error.
+  strategy:
+    {{- toYaml .Values.strategy | nindent 4 }}
   selector:
     matchLabels:
       {{- include "llmproxy.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- with .Values.podAnnotations }}
       annotations:
+        # config.yaml reaches the pod through a subPath mount, which Kubernetes
+        # never refreshes in place; without this a config-only `helm upgrade`
+        # neither restarted the pod nor changed the file it reads.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- end }}
       labels:
         {{- include "llmproxy.selectorLabels" . | nindent 8 }}
     spec:
@@ -40,6 +50,11 @@ spec:
             - name: metrics
               containerPort: {{ .Values.service.metricsPort }}
               protocol: TCP
+          # /health answers 200 whatever its verdict (it reports "down" in the
+          # body), so a probe on it can never fail for anything but a hung
+          # process. That is right for liveness: a failing store is not cured by
+          # a restart. Readiness uses /ready, which is 503 when the verdict is
+          # "down", so a pod that cannot serve is taken out of the Service.
           livenessProbe:
             httpGet:
               path: /health
@@ -48,7 +63,7 @@ spec:
             periodSeconds: 20
           readinessProbe:
             httpGet:
-              path: /health
+              path: /ready
               port: http
             initialDelaySeconds: 10
             periodSeconds: 10

@@ -18,7 +18,7 @@ hero:
 
 features:
   - title: Security Pipeline
-    details: 10-layer defense with ASGI firewall, injection scoring, PII masking (Presidio NLP + regex), and multi-turn trajectory detection.
+    details: Layered defense with an ASGI firewall, injection scoring, PII masking (Presidio NLP + regex), and multi-turn trajectory detection.
   - title: Ring Plugin Engine
     details: 5-ring pipeline (Ingress, Pre-Flight, Routing, Post-Flight, Background) with 18 marketplace plugins and WASM sandbox support.
   - title: 15 Providers

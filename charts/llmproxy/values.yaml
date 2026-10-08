@@ -11,6 +11,12 @@
 # (see core/rate_limiter.py for the Redis-backed pattern already used here).
 replicaCount: 1
 
+# Recreate: the single SQLite writer sits on a ReadWriteOnce volume, so the old
+# pod must be gone before the new one starts (see templates/deployment.yaml).
+# Change to RollingUpdate only with an external database and shared state.
+strategy:
+  type: Recreate
+
 # data/ is the only state that cannot be reconstructed: the endpoint registry,
 # app_state (including the persisted daily budget), the spend ledger, the RBAC
 # subjects, the tamper-evident audit chain and the PBKDF2 salt that decrypts

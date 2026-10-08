@@ -158,7 +158,7 @@ docker run -d --name llmproxy \
   -p 8090:8090 \
   -v llmproxy-data:/app/data \
   --env-file /path/to/keys.env \
-  ghcr.io/fabriziosalmi/llmproxy:1.33.0
+  ghcr.io/fabriziosalmi/llmproxy:1.37.21
 ```
 
 Mounting that volume is not optional. Without it the database is written into
@@ -248,6 +248,16 @@ already caps at `10m x3`; for bare-metal, a minimal logrotate:
   create 0600 llmproxy llmproxy
 }
 ```
+
+### What is hash-pinned
+
+The Docker image installs from `requirements.lock` with `--require-hashes`, so what
+runs in the container is exactly what CI audited. `install.sh` and `make setup`
+(the bare-metal path) install `requirements.txt` instead, unhashed and resolved
+fresh, because the lock is compiled for Linux/Python 3.12 and does not install on
+other platforms. If you run bare-metal in production, resolve your own lock on your
+platform (`uv pip compile requirements.txt --generate-hashes --output-file
+requirements.lock`) and install it with `pip install --require-hashes -r`.
 
 ## Upgrading and rolling back
 

@@ -31,6 +31,13 @@ VERSION_FILE = "VERSION"
 CHART_FILE = os.path.join("charts", "llmproxy", "Chart.yaml")
 UI_PACKAGE_FILE = os.path.join("ui", "package.json")
 
+# Documents that tell the reader which image to pull. They are release pins like
+# any other and went stale for the same reason the chart and UI once did: nothing
+# moved them. README.md said :1.35.0 and deployment.md :1.33.0 at 1.37.19, and
+# the 1.33.0 pin predates the admin-key tier it tells operators to configure.
+DOC_PIN_FILES = ("README.md", os.path.join("docs", "guide", "deployment.md"))
+_DOC_PIN = re.compile(r"(ghcr\.io/fabriziosalmi/llmproxy:)(\d+\.\d+\.\d+)")
+
 _SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 
 
@@ -88,6 +95,33 @@ def _write_ui(new_version: str) -> bool:
     return True
 
 
+def read_doc_pins() -> dict:
+    """{file: [pinned versions]} for the documents in DOC_PIN_FILES."""
+    pins = {}
+    for path in DOC_PIN_FILES:
+        if not os.path.exists(path):
+            continue  # a layout without these documents has nothing to pin
+        with open(path) as f:
+            pins[path] = [m.group(2) for m in _DOC_PIN.finditer(f.read())]
+    return pins
+
+
+def _write_doc_pins(new_version: str) -> bool:
+    """Rewrite every pinned tag; True when each document ends up pinned and current."""
+    ok = True
+    for path in DOC_PIN_FILES:
+        if not os.path.exists(path):
+            continue
+        with open(path) as f:
+            text = f.read()
+        updated = _DOC_PIN.sub(rf"\g<1>{new_version}", text)
+        if updated != text:
+            with open(path, "w") as f:
+                f.write(updated)
+        ok = ok and bool(_DOC_PIN.search(updated))
+    return ok
+
+
 def check() -> int:
     """Report disagreement between the three declarations. No writes."""
     version = read_version()
@@ -101,6 +135,12 @@ def check() -> int:
         problems.append(f"{CHART_FILE} appVersion={chart_app} (VERSION={version})")
     if ui_version != version:
         problems.append(f"{UI_PACKAGE_FILE} version={ui_version} (VERSION={version})")
+    for path, pinned in read_doc_pins().items():
+        if not pinned:
+            problems.append(f"{path} pins no image tag (expected {version})")
+        for tag in pinned:
+            if tag != version:
+                problems.append(f"{path} pins llmproxy:{tag} (VERSION={version})")
 
     if problems:
         print("Version declarations disagree:", file=sys.stderr)
@@ -142,6 +182,7 @@ def bump() -> int:
     failed = [path for path, ok in (
         (CHART_FILE, _write_chart(new_version)),
         (UI_PACKAGE_FILE, _write_ui(new_version)),
+        ("image pins in " + ", ".join(DOC_PIN_FILES), _write_doc_pins(new_version)),
     ) if not ok]
     if failed:
         print(
@@ -152,7 +193,10 @@ def bump() -> int:
         return 1
 
     print(f"LLMPROXY VERSION: {new_version}")
-    print(f"  {VERSION_FILE}, {CHART_FILE} (version + appVersion), {UI_PACKAGE_FILE}")
+    print(
+        f"  {VERSION_FILE}, {CHART_FILE} (version + appVersion), {UI_PACKAGE_FILE}, "
+        f"image pins in {', '.join(DOC_PIN_FILES)}"
+    )
     return 0
 
 

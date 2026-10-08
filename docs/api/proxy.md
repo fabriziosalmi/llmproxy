@@ -154,9 +154,16 @@ errors are FastAPI's default `{"detail": ...}`.
 
 ```
 GET /health
+GET /ready
 ```
 
-Liveness/readiness probe with pool stats.
+Both return the same body (overall `status`, pool stats, per-component state) and
+need no credentials. `/health` is **always `200`**: the verdict is in the body's
+`status` (`ok`, `degraded` or `down`), which is what pollers and the Docker
+healthcheck read. `/ready` carries the same verdict as a status code, **`503` when
+`status` is `down`** (the store or the HTTP session is gone) and `200` otherwise
+(`degraded` still serves requests). Use `/health` for liveness and `/ready` for
+readiness; the Helm chart does.
 
 ```
 GET /metrics

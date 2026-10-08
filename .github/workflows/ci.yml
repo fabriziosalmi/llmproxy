@@ -119,7 +119,7 @@ jobs:
         # plugins/ holds the routing and security plugins that run on every
         # request. It was left out while it reported 13 errors (eleven were
         # "rotator may be None" attribute accesses); those are fixed, so it is in.
-        run: python -m mypy core/ proxy/ store/ plugins/ --ignore-missing-imports --disable-error-code misc --disable-error-code assignment --disable-error-code no-any-return
+        run: python -m mypy core/ proxy/ store/ plugins/
 
   security:
     name: Dependency Audit

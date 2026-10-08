@@ -69,7 +69,7 @@ logger = logging.getLogger("llmproxy.app_factory")
 # Paths that must remain reachable WITHOUT credentials even when auth is on.
 # Keep this list as SHORT as possible — every entry is a potential exposure.
 #
-#   /health                   — liveness probe (no operational secrets)
+#   /health, /ready           — liveness / readiness probes (no operational secrets)
 #   /api/v1/identity/config   — tells SSO clients which provider to redirect to
 #   /api/v1/identity/exchange — token exchange: JWT validated inside the route
 #   /api/v1/identity/me       — returns {"authenticated": false} for callers
@@ -77,6 +77,7 @@ logger = logging.getLogger("llmproxy.app_factory")
 _PUBLIC_EXACT: frozenset = frozenset(
     {
         "/health",
+        "/ready",
         "/api/v1/identity/config",
         "/api/v1/identity/exchange",
         "/api/v1/identity/me",
