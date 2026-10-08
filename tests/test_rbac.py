@@ -3,14 +3,18 @@
 import pytest
 
 from core.rbac import RBACManager
+from store.store import SQLiteRepository
 
 
 @pytest.fixture
 async def rbac(tmp_path):
     db_path = str(tmp_path / "test_rbac.db")
-    manager = RBACManager(db_path)
+    store = SQLiteRepository(str(tmp_path / "store.db"))
+    await store.init()
+    manager = RBACManager(db_path, store=store)
     yield manager
     await manager.close()
+    await store.close()
 
 
 def test_admin_has_all_permissions(rbac):

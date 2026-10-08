@@ -670,6 +670,26 @@ class SQLiteStore:
                 conn.row_factory = None
         return {"audit": audit, "spend": spend, "roles": roles}
 
+    async def set_user_roles(
+        self, subject: str, email: str | None, roles: list[str]
+    ) -> None:
+        import time
+
+        now = int(time.time())
+        async with self._write() as conn:
+            await conn.execute("DELETE FROM user_roles WHERE subject = ?", (subject,))
+            await conn.executemany(
+                "INSERT INTO user_roles (subject, email, role, granted_at) VALUES (?,?,?,?)",
+                [(subject, email or "", role, now) for role in roles],
+            )
+
+    async def get_user_roles(self, subject: str) -> list[str]:
+        conn = await self._get_conn()
+        async with conn.execute(
+            "SELECT role FROM user_roles WHERE subject = ? ORDER BY id", (subject,)
+        ) as cursor:
+            return [row[0] for row in await cursor.fetchall()]
+
     async def get_audit_head(self) -> dict:
         """Id and hash of the newest audit row, and the row count, in one read."""
         conn = await self._get_conn()

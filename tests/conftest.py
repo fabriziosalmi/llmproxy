@@ -40,9 +40,16 @@ class InMemoryRepository(BaseRepository):
     def __init__(self):
         self._endpoints: dict[str, LLMEndpoint] = {}
         self._state: dict[str, Any] = {}
+        self._roles: dict[str, list[str]] = {}
 
     async def init(self):
         pass
+
+    async def set_user_roles(self, subject, email, roles):
+        self._roles[subject] = list(roles)
+
+    async def get_user_roles(self, subject):
+        return list(self._roles.get(subject, []))
 
     async def add_endpoint(self, endpoint: LLMEndpoint):
         self._endpoints[endpoint.id] = endpoint

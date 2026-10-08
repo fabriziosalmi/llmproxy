@@ -136,3 +136,15 @@ class BaseRepository(ABC):
         """The newest audit row's id and hash plus the row count: the value to
         record outside the database. {"id": 0, "hash": "GENESIS", "count": 0} when empty."""
         raise NotImplementedError(f"{type(self).__name__} does not implement get_audit_head")
+
+    # Roles belong here, in the same user_roles table that erasure and export read.
+    # RBACManager used to keep them in a table of its own, in a file of its own,
+    # so Article 15/17 requests looked at a table nothing wrote to.
+
+    async def set_user_roles(self, subject: str, email: str | None, roles: list[str]) -> None:
+        """Replace the roles recorded for ``subject`` (one user_roles row per role)."""
+        raise NotImplementedError(f"{type(self).__name__} does not implement set_user_roles")
+
+    async def get_user_roles(self, subject: str) -> list[str]:
+        """The roles recorded for ``subject``; empty when none are."""
+        raise NotImplementedError(f"{type(self).__name__} does not implement get_user_roles")
