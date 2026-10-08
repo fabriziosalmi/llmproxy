@@ -19,7 +19,7 @@ from typing import Any
 import aiohttp
 from starlette.responses import Response
 
-from .base import BaseModelAdapter
+from .base import BaseModelAdapter, raise_for_stream_status
 
 
 class AnthropicAdapter(BaseModelAdapter):
@@ -272,6 +272,7 @@ class AnthropicAdapter(BaseModelAdapter):
         async with session.post(
             url, json=body, headers=headers, timeout=self._REQUEST_TIMEOUT
         ) as resp:
+            await raise_for_stream_status(resp)
             async for chunk in resp.content.iter_any():
                 translated = self.translate_stream_chunk(chunk)
                 if translated:

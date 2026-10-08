@@ -15,11 +15,17 @@ from typing import Any
 
 import aiohttp
 from fastapi import HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 
 from core.metrics import MetricsTracker
 
+from .adapters.base import UpstreamStatusError
+
 logger = logging.getLogger("llmproxy.forwarder")
+
+#: Upstream statuses that count against the endpoint and send the request to
+#: the next provider. Everything else is the caller's answer and is relayed.
+_RETRYABLE_UPSTREAM_STATUSES = frozenset({429, 500, 502, 503, 504})
 
 
 def _endpoint_provider(endpoint: Any) -> str | None:
@@ -225,7 +231,7 @@ class RequestForwarder:
         response = await adapter.request(
             target_url, translated_body, translated_headers, session
         )
-        if response.status_code in (429, 500, 502, 503, 504):
+        if response.status_code in _RETRYABLE_UPSTREAM_STATUSES:
             await cb.report_failure()
             # Provider hint surfaces an actionable next-step (key dashboard /
             # billing) on 429 — rate-limited or quota-exhausted is the most
@@ -432,6 +438,44 @@ class RequestForwarder:
         if cost_ref is None:
             cost_ref = {}
 
+        # Open the upstream and read its first chunk *before* building the
+        # response. Once a StreamingResponse is returned its 200 status line is
+        # committed, so an upstream 429/503 discovered afterwards could only be
+        # relayed as stream content: the client saw a success, the circuit
+        # breaker saw a successful first chunk, and the fallback chain was never
+        # tried. Failing here lets forward_with_fallback treat a stream exactly
+        # like a non-streaming call.
+        upstream = adapter.stream(target_url, translated_body, translated_headers, session)
+        try:
+            first_upstream_chunk = await anext(upstream, None)
+        except UpstreamStatusError as e:
+            if e.status in _RETRYABLE_UPSTREAM_STATUSES:
+                await cb.report_failure()
+                provider = _endpoint_provider(ctx.metadata.get("target_endpoint"))
+                hint = _actionable_hint(provider, e.status)
+                raise HTTPException(
+                    status_code=e.status,
+                    detail=f"Upstream {endpoint_id} returned {e.status}{hint}",
+                ) from e
+            # Any other status passes through with the upstream's own body, as
+            # it does for a non-streaming call (a 401 or 400 is the caller's).
+            ctx.response = Response(
+                content=e.content, status_code=e.status, media_type=e.media_type
+            )
+            return ctx.response
+        except (TimeoutError, aiohttp.ClientError, OSError, RuntimeError):
+            await cb.report_failure()
+            raise
+
+        async def upstream_chunks():
+            try:
+                if first_upstream_chunk is not None:
+                    yield first_upstream_chunk
+                async for chunk in upstream:
+                    yield chunk
+            finally:
+                await upstream.aclose()
+
         # Mid-stream speculative guardrail: launch analyze_speculative() as a
         # background task that monitors the accumulating response text for PII
         # leakage or injection patterns.  Previously this method existed but
@@ -473,9 +517,7 @@ class RequestForwarder:
             nonlocal first_chunk_seen, circuit_success_reported, held_bytes
             stream_usage = {}
             try:
-                async for chunk in adapter.stream(
-                    target_url, translated_body, translated_headers, session
-                ):
+                async for chunk in upstream_chunks():
                     # Abort stream if speculative guardrail fired
                     if kill_event.is_set():
                         logger.warning(
