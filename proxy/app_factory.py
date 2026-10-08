@@ -480,10 +480,40 @@ def create_app(agent) -> FastAPI:
                 },
                 headers={"Retry-After": str(controller.retry_after_s)},
             )
+        # The slot is held until the response BODY has been sent, not until the
+        # headers are ready. call_next returns as soon as a StreamingResponse
+        # exists, which for an SSE completion is before the upstream has sent a
+        # byte; releasing there meant streams, the longest-lived requests the
+        # proxy serves, were never counted against max_in_flight and a hundred
+        # concurrent streams left the "bounded" proxy unbounded.
+        released = False
+
+        def release_once() -> None:
+            nonlocal released
+            if not released:
+                released = True
+                controller.release()
+
         try:
-            return await call_next(request)
-        finally:
-            controller.release()
+            response = await call_next(request)
+        except BaseException:
+            release_once()
+            raise
+
+        body = getattr(response, "body_iterator", None)
+        if body is None:
+            release_once()
+            return response
+
+        async def hold_slot_until_sent():
+            try:
+                async for chunk in body:
+                    yield chunk
+            finally:
+                release_once()
+
+        response.body_iterator = hold_slot_until_sent()
+        return response
 
     # ── Request accounting ──────────────────────────────────────────────────
     # Added last, so it is the OUTERMOST middleware and measures the whole
