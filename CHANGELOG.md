@@ -2,6 +2,65 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.37.20] — 2026-10-08
+
+### Audit Tier 1: data loss and false assurance (patch)
+
+From the second audit of 1.37.19 (score 59, capped by the first item below). Each
+fix has tests that fail on the previous code.
+
+- **Audit rows were lost under load on SQLite** (`store/sql_store.py`).
+  `log_audit` opened `BEGIN IMMEDIATE` on the one shared connection holding only
+  the audit lock, while `log_spend`, `set_state`, `add_endpoint` and the other
+  writers executed and committed on that connection without it. Interleaved, a
+  writer's commit ended the audit transaction early, or the audit `BEGIN` failed
+  with "cannot start a transaction within a transaction". The request path logs a
+  store failure and carries on, so the row was gone, and `verify_audit_chain` still
+  said valid (a row that was never linked leaves no break). All writers now go
+  through `SQLiteStore._write()`: one lock from statement to commit, commit on
+  success, rollback on any exception, and a rollback of whatever a cancelled
+  writer left open. Postgres uses a pool and was not affected.
+- **An upstream error on a stream reached the client as a 200**
+  (`proxy/adapters/*`, `proxy/forwarder.py`). The `StreamingResponse` had already
+  committed its status when the upstream's 429/503 arrived, so the body was
+  relayed as content, the circuit breaker saw a first chunk and reported success,
+  the fallback chain never ran, and the audit and spend rows said 200. Adapters now
+  raise `UpstreamStatusError` before yielding, and `_handle_streaming` reads the
+  first upstream chunk before building the response: 429/5xx count against the
+  endpoint and walk the fallback chain like a non-streaming call, other statuses
+  (401, 400) are relayed with the upstream's own body, and a connection failure at
+  stream start now falls back too.
+- **The documented backup schedule took no backup** (`docs/guide/deployment.md`,
+  `scripts/backup_db.py`). The crontab line passed `--verify-only`, which returns
+  before backing up or pruning and silently ignored `--keep`; it stayed green for
+  as long as one old backup existed. The line now runs the plain command with
+  stdout discarded (cron mails only on failure) and a test executes it exactly as
+  documented. `--verify-only` combined with `--keep` or `--restore` is a usage error.
+- **The documented restore resurrected rows** (same files). `cp` over
+  `endpoints.db` leaves a stale `-wal` that is replayed on the next open: a 5-row
+  backup restored over a database whose WAL held 500 later rows opened as 505. New
+  `backup_db.py --restore FILE` verifies the backup, stages it, moves the old
+  database with its `-wal`/`-shm` aside as a set (`data/backups/pre-restore.<ts>/`)
+  and puts the backup in place; a backup that does not verify changes nothing.
+- **The daily budget rolled over only at boot** (`proxy/budget.py`).
+  `hydrate_daily_total` was the only place the date was compared, so a process
+  running past midnight kept counting into yesterday's total: once spend crossed
+  the limit every request got 402 until a restart. `roll_over_if_new_day()` now
+  runs where the limit is evaluated and where a charge is added (both under the
+  budget lock), and a 30-second `budget_rollover_loop` keeps the dashboard,
+  forecast and consumed-budget gauge honest without traffic.
+- **Roles were recorded where GDPR export and erasure did not look**
+  (`core/rbac.py`). `RBACManager` wrote a `user_roles` table of its own, shaped
+  differently from the store's, into `endpoints.db` relative to the working
+  directory (the store uses `data/endpoints.db`): export returned no roles,
+  erasure reported `roles_deleted: 0` while the row survived, and the data sat
+  outside the volume. Roles now go through the repository
+  (`set_user_roles`/`get_user_roles`, SQLite and Postgres), one row per role, in
+  the table `store/schema.py` declares; the manager rewrites a subject's roles only
+  when they change or after five minutes. **Upgrading**: roles recorded in the old
+  file are not migrated; they are rewritten on each user's next authenticated
+  request. The quota table stays where it was.
+
 ## [1.37.19] — 2026-10-03
 
 ### CI fixes for the audit remediation PR (patch)
