@@ -75,7 +75,7 @@ class ProxyOrchestrator(BaseAgent):
         # Security subsystems
         self.security = SecurityShield(self.config, assistant=assistant)
         self.zt_manager = ZeroTrustManager(self.config)
-        self.rbac = RBACManager()
+        self.rbac = RBACManager(store=self.store)
         self.identity = IdentityManager(self.config)
 
         from core.auth.oidc import JWTAuthenticator

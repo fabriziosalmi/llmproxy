@@ -96,6 +96,12 @@ class SQLiteRepository(BaseRepository):
     async def get_audit_head(self) -> dict:
         return await self.sql.get_audit_head()
 
+    async def set_user_roles(self, subject: str, email: str | None, roles: list[str]) -> None:
+        await self.sql.set_user_roles(subject, email, roles)
+
+    async def get_user_roles(self, subject: str) -> list[str]:
+        return await self.sql.get_user_roles(subject)
+
     async def close(self):
         """Close the underlying SQLite store connection."""
         await self.sql.close()

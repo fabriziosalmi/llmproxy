@@ -613,6 +613,28 @@ class PostgresStore:
             "roles": [dict(r) for r in roles_rows],
         }
 
+    async def set_user_roles(
+        self, subject: str, email: str | None, roles: list[str]
+    ) -> None:
+        import time
+
+        pool = await self.init_pool()
+        now = int(time.time())
+        async with pool.acquire() as conn, conn.transaction():
+            await conn.execute("DELETE FROM user_roles WHERE subject = $1", subject)
+            await conn.executemany(
+                "INSERT INTO user_roles (subject, email, role, granted_at) "
+                "VALUES ($1, $2, $3, $4)",
+                [(subject, email or "", role, now) for role in roles],
+            )
+
+    async def get_user_roles(self, subject: str) -> list[str]:
+        pool = await self.init_pool()
+        rows = await pool.fetch(
+            "SELECT role FROM user_roles WHERE subject = $1 ORDER BY id", subject
+        )
+        return [r[0] for r in rows]
+
     async def get_audit_head(self) -> dict:
         """Id and hash of the newest audit row, and the row count, in one read."""
         pool = await self.init_pool()
@@ -742,3 +764,9 @@ class PostgresRepository(BaseRepository):
 
     async def get_audit_head(self) -> dict:
         return await self.sql.get_audit_head()
+
+    async def set_user_roles(self, subject: str, email: str | None, roles: list[str]) -> None:
+        await self.sql.set_user_roles(subject, email, roles)
+
+    async def get_user_roles(self, subject: str) -> list[str]:
+        return await self.sql.get_user_roles(subject)

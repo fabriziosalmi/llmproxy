@@ -54,8 +54,18 @@ class RBACManager:
     Uses aiosqlite connection sharing for fast, non-blocking async operations.
     """
 
-    def __init__(self, db_path: str = "endpoints.db"):
+    #: A subject's roles are written again after this long even when unchanged.
+    #: It bounds the writes (set_user_roles runs on every identity-authenticated
+    #: request) while letting an erased subject be recorded afresh on next use.
+    ROLE_REFRESH_SECONDS = 300
+    _ROLE_CACHE_MAX = 10_000
+
+    def __init__(self, db_path: str = "endpoints.db", store: Any | None = None):
+        """``db_path`` holds the quota table. Roles are kept by ``store`` (the
+        repository), in the user_roles table that erasure and export read."""
         self.db_path = db_path
+        self._store = store
+        self._role_written: dict[str, tuple[str | None, tuple[str, ...], float]] = {}
         self.permissions = dict(DEFAULT_PERMISSIONS)
         self._conn: Any | None = None
         self._conn_lock = asyncio.Lock()
@@ -71,14 +81,6 @@ class RBACManager:
                     monthly_budget REAL,
                     consumed_budget REAL DEFAULT 0.0,
                     hard_limit BOOLEAN DEFAULT 1
-                )
-            """)
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS user_roles (
-                    subject TEXT PRIMARY KEY,
-                    email TEXT,
-                    roles TEXT DEFAULT 'user',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
             conn.commit()
@@ -156,21 +158,40 @@ class RBACManager:
     async def set_user_roles(
         self, subject: str, email: str | None, roles: list[str]
     ):
-        """Persist user->role mapping."""
-        conn = await self._get_conn()
-        await conn.execute(
-            "INSERT OR REPLACE INTO user_roles (subject, email, roles) VALUES (?, ?, ?)",
-            (subject, email, ",".join(roles)),
-        )
-        await conn.commit()
+        """Persist user->role mapping (in the repository's user_roles table).
+
+        This used to write a ``user_roles`` table of its own, with a different
+        shape, into ``endpoints.db`` relative to the working directory: not the
+        store's file, not the data volume, not backed up, and not the table GDPR
+        export and erasure read. Both returned empty for a user the proxy had
+        recorded, and erasure reported zero roles deleted.
+        """
+        import time
+
+        store = self._require_store()
+        key = (email, tuple(roles))
+        previous = self._role_written.get(subject)
+        now = time.monotonic()
+        if (
+            previous
+            and previous[:2] == key
+            and now - previous[2] < self.ROLE_REFRESH_SECONDS
+        ):
+            return
+        await store.set_user_roles(subject, email, roles)
+        if len(self._role_written) >= self._ROLE_CACHE_MAX:
+            self._role_written.clear()
+        self._role_written[subject] = (*key, now)
+
+    def _require_store(self) -> Any:
+        if self._store is None:
+            raise RuntimeError(
+                "RBACManager was built without a store; roles are kept by the "
+                "repository. Pass RBACManager(store=...)."
+            )
+        return self._store
 
     async def get_user_roles(self, subject: str) -> list[str]:
-        """Look up persisted roles for a user subject."""
-        conn = await self._get_conn()
-        async with conn.execute(
-            "SELECT roles FROM user_roles WHERE subject = ?", (subject,)
-        ) as cursor:
-            row = await cursor.fetchone()
-            if row and row[0]:
-                return [r.strip() for r in row[0].split(",") if r.strip()]
-        return ["user"]
+        """Look up persisted roles for a user subject ("user" when none)."""
+        roles = await self._require_store().get_user_roles(subject)
+        return roles or ["user"]
