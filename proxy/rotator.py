@@ -29,6 +29,7 @@ from core.identity import IdentityManager
 from core.metrics import MetricsTracker
 from core.plugin_engine import PluginManager, PluginState
 from core.rbac import RBACManager
+from core.redis_client import redact_url
 from core.security import SecurityShield
 from core.webhooks import EventType, WebhookDispatcher
 from core.zero_trust import ZeroTrustManager
@@ -91,7 +92,9 @@ class ProxyOrchestrator(BaseAgent):
                 from core.redis_client import connect as _redis_connect
 
                 self.redis_client = _redis_connect(aioredis, redis_url, self.config)
-                logger.info(f"Orchestrator shared Redis client initialized: {redis_url}")
+                logger.info(
+                    f"Orchestrator shared Redis client initialized: {redact_url(redis_url)}"
+                )
             except Exception as e:
                 logger.warning(f"Failed to connect to shared Redis: {e}")
 

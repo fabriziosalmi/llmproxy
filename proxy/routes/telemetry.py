@@ -37,6 +37,7 @@ _sse_connections_lock = asyncio.Lock()
 # A random per-process value costs only that subscribers reconnect after a
 # restart, and tokens live at most 600 seconds anyway.
 _FALLBACK_SSE_SECRET = secrets.token_urlsafe(32)
+_SSE_MAX_TTL_S = 600
 
 
 def _sanitize_log(log: dict) -> dict:
@@ -61,11 +62,15 @@ def create_router(agent: TelemetryAgent) -> APIRouter:
         )
         if cfg_secret:
             return str(cfg_secret)
-        keys = agent._get_api_keys()
-        return keys[0] if keys else _FALLBACK_SSE_SECRET
+        # Never an API key: the token opens an admin-tier route, and an
+        # inference key is the lowest credential the proxy issues. Anyone
+        # holding one could sign a token for /api/v1/logs. The per-process
+        # random secret means a restart drops outstanding tokens (they live two
+        # minutes); set security.sse.signing_secret to share them across workers.
+        return _FALLBACK_SSE_SECRET
 
     def _mint_sse_token(ttl_s: int = 120) -> str:
-        exp = int(time.time()) + max(10, min(ttl_s, 600))
+        exp = int(time.time()) + max(10, min(ttl_s, _SSE_MAX_TTL_S))
         nonce = hashlib.sha256(
             f"{time.time()}:{id(agent)}".encode()
         ).hexdigest()[:16]
@@ -83,7 +88,10 @@ def create_router(agent: TelemetryAgent) -> APIRouter:
         if not exp_s.isdigit() or len(nonce) < 8 or len(sig) != 64:
             return False
         exp = int(exp_s)
-        if exp < int(time.time()):
+        now = int(time.time())
+        # _mint_sse_token never issues more than 600 s; a longer-lived token is
+        # not one of ours however well it is signed.
+        if exp < now or exp - now > _SSE_MAX_TTL_S:
             return False
         payload = f"{exp}.{nonce}"
         expected = hmac.new(

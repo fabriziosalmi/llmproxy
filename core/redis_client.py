@@ -31,8 +31,35 @@ from __future__ import annotations
 import logging
 import os
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 logger = logging.getLogger("llmproxy.redis_client")
+
+
+def redact_url(url: Any) -> Any:
+    """``redis://user:secret@host:6379/0`` -> ``redis://user:***@host:6379/0``.
+
+    A Redis URL carries the password when one is set (the compose file documents
+    ``redis://:password@redis:6379``), and the URL used to be logged at INFO on
+    three start-up paths and returned by the rate-limit config endpoint. Only the
+    password is hidden; host and database stay, because they are what an operator
+    reading the log needs.
+    """
+    if not isinstance(url, str) or "@" not in url:
+        return url
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return "<unparseable url>"
+    if parts.password is None:
+        return url
+    host = parts.hostname or ""
+    if ":" in host:  # IPv6
+        host = f"[{host}]"
+    if parts.port:
+        host = f"{host}:{parts.port}"
+    userinfo = f"{parts.username}:***" if parts.username else ":***"
+    return urlunsplit(parts._replace(netloc=f"{userinfo}@{host}"))
 
 #: Seconds to wait for a reply before giving up on a Redis operation.
 DEFAULT_SOCKET_TIMEOUT_S = 2.0

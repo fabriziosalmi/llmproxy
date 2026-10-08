@@ -42,6 +42,7 @@ _MAX_CONFIG_BYTES = 256 * 1024
 # Real privilege separation stays where it is: segregated admin keys,
 # rotation, and never exposing the control plane without auth.
 _CONFIRM_TTL_S = 120
+_CONFIRM_MAX_TTL_S = 600
 _CONFIRM_USED_MAX = 1024
 
 
@@ -176,16 +177,14 @@ def create_router(agent: ConfigAgent) -> APIRouter:
         override = _nested(agent.config, "security", "confirm", "signing_secret")
         if override:
             return str(override)
-        try:
-            keys = agent._get_api_keys() or []
-        except Exception:  # noqa: BLE001 — test doubles may not implement it
-            keys = []
-        if keys:
-            return str(keys[0])
+        # Never an API key (see the SSE token secret): the confirm token gates
+        # config changes that lower the security posture, and an inference key is
+        # the lowest credential issued. Per-process random; a restart drops
+        # outstanding tokens, which is the safe direction.
         return _FALLBACK_CONFIRM_SECRET
 
     def _mint_confirm_token(config_sha: str, ttl_s: int = _CONFIRM_TTL_S) -> str:
-        exp = int(time.time()) + max(10, min(ttl_s, 600))
+        exp = int(time.time()) + max(10, min(ttl_s, _CONFIRM_MAX_TTL_S))
         nonce = secrets.token_hex(8)
         payload = f"{exp}.{config_sha}.{nonce}"
         sig = hmac.new(
@@ -207,7 +206,8 @@ def create_router(agent: ConfigAgent) -> APIRouter:
             or not hmac.compare_digest(sha, config_sha)
         ):
             return False
-        if int(exp_s) < int(time.time()):
+        remaining = int(exp_s) - int(time.time())
+        if remaining < 0 or remaining > _CONFIRM_MAX_TTL_S:
             return False
         payload = f"{exp_s}.{sha}.{nonce}"
         expected = hmac.new(
