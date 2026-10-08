@@ -50,13 +50,19 @@ def test_tls_disabled_adds_no_ssl_options():
     assert "ssl_certfile" not in uvicorn_kwargs({"server": {"tls": {"enabled": False}}})
 
 
-@pytest.mark.parametrize("tls", [
-    {"enabled": True},
-    {"enabled": True, "cert_file": "/nope/c.pem", "key_file": "/nope/k.pem"},
-])
-def test_enabled_tls_without_files_refuses_to_start(tls):
+def test_enabled_tls_without_paths_refuses_to_start():
+    for tls in ({"enabled": True}, {"enabled": True, "cert_file": "x"}):
+        with pytest.raises(TLSConfigError, match="refusing to start"):
+            uvicorn_kwargs({"server": {"tls": tls}})
+
+
+def test_enabled_tls_with_unloadable_files_refuses_to_start(tmp_path):
+    """Found out when the listener starts, not by probing the path in the validator."""
+    cfg = {"server": {"tls": {"enabled": True, "cert_file": "/nope/c.pem", "key_file": "/nope/k.pem"}}}
+    config = uvicorn.Config(FastAPI(), **uvicorn_kwargs(cfg))
+
     with pytest.raises(TLSConfigError, match="refusing to start"):
-        uvicorn_kwargs({"server": {"tls": tls}})
+        enforce_min_tls(config, cfg["server"])
 
 
 def test_the_startup_validator_reports_unset_paths_as_a_startup_error(monkeypatch):
@@ -73,10 +79,17 @@ def test_the_validator_does_not_probe_the_filesystem_for_named_paths(monkeypatch
     The listener checks the files when it starts."""
     monkeypatch.setenv("LLM_PROXY_API_KEYS", "sk-proxy-test")
 
-    def forbidden(path):
-        raise AssertionError(f"validate_config touched the filesystem: {path!r}")
+    import os
 
-    monkeypatch.setattr("core.uvicorn_options.os.path.isfile", forbidden)
+    real = os.path.isfile
+
+    def forbidden(path):
+        if path in ("/x", "/y"):
+            raise AssertionError(f"validate_config touched the filesystem: {path!r}")
+        return real(path)
+
+    monkeypatch.setattr(os.path, "isfile", forbidden)
+    monkeypatch.setattr(os.path, "exists", lambda p: forbidden(p) if p in ("/x", "/y") else True)
     cfg = {"server": {"port": 8090, "tls": {"enabled": True, "cert_file": "/x", "key_file": "/y"}}}
 
     assert isinstance(validate_config(cfg), list)  # no error, no probe
