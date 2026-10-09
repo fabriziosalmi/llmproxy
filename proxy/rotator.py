@@ -76,7 +76,13 @@ class ProxyOrchestrator(BaseAgent):
         # Security subsystems
         self.security = SecurityShield(self.config, assistant=assistant)
         self.zt_manager = ZeroTrustManager(self.config)
-        self.rbac = RBACManager(store=self.store)
+        # Quotas live under data/ (the volume). Earlier releases kept them in
+        # ./endpoints.db, outside it; they are adopted from there once.
+        self.rbac = RBACManager(
+            db_path=(self.config.get("rbac") or {}).get("db_path", RBACManager.DEFAULT_DB_PATH),
+            store=self.store,
+            legacy_db_path="endpoints.db",
+        )
         self.identity = IdentityManager(self.config)
 
         from core.auth.oidc import JWTAuthenticator

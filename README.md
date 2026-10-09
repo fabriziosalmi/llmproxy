@@ -1,6 +1,8 @@
 # LLMProxy
 
-Security gateway for Large Language Models. Routes requests across 24 providers with automatic fallback, cost-aware smart routing, and a byte-level firewall plus a 5-ring plugin pipeline. Drop-in replacement for the OpenAI API.
+A self-hosted security gateway for Large Language Models, for teams that must be able to **show** what went through it. Drop-in replacement for the OpenAI API: it screens prompts and responses (firewall, injection scoring, PII masking), records every request in a hash-chained audit log you can verify against a copy kept elsewhere, and ships the GDPR tooling (export, erasure, retention) that leaves that log verifiable. MIT licensed, one process, your data stays with you.
+
+It also routes across 24 providers with fallback and budget limits, but that is not what it is for: if routing breadth, raw throughput or a hosted service is what you need, see [When not to use it](#when-not-to-use-it).
 
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)
@@ -11,10 +13,24 @@ Security gateway for Large Language Models. Routes requests across 24 providers 
 
 ## Why LLMProxy
 
+- **A log you can prove** -- every request is a row in a hash chain; `GET /api/v1/audit/head` gives you the chain's head to record outside the database (a log line, a ticket, a monitor), and `GET /api/v1/audit/verify?anchor_id=&anchor_hash=` checks the chain against it. Retention purge and GDPR erasure leave recorded gaps that the verifier accounts for, instead of breaking the chain. See the [threat model](docs/threat_model.md) for what this does and does not protect against.
 - **One endpoint, 24 providers** -- Send OpenAI-compatible requests and let the proxy handle translation, failover, and cost optimization across 23 dedicated providers (OpenAI, Anthropic, Google, Azure, Ollama, Groq, Together, Mistral, DeepSeek, xAI, Perplexity, Fireworks, OpenRouter, SambaNova, Cohere, Hugging Face, Cloudflare Workers AI, Cerebras AI, Nebius AI, Hyperbolic AI, Novita AI, Lambda Labs, and AI/ML API) plus a generic OpenAI-compatible adapter.
 - **Security by default** -- Byte-level ASGI firewall, injection scoring, PII masking, cross-session threat intelligence, a hash-chained audit log (tamper-evident, not immutable: export its head and verify against your copy), HMAC response signing. Fail-closed auth middleware denies all admin paths unless explicitly whitelisted.
 - **Cost control** -- Per-model pricing for 30+ models, daily budget limits with automatic downgrade across fallback chains (Predictive FinOps Routing with HTTP 402 rejection), per-session spend tracking, cost-efficiency analytics.
 - **Extensible** -- 18 marketplace plugins (budget guard, A/B routing, schema enforcement, canary detection, ...) with a ring pipeline (rate limiting and circuit breaking can share state through Redis; the pipeline itself runs per process). Write your own in Python or WASM.
+
+---
+
+## When not to use it
+
+LLMProxy is a good fit for a small or regulated team that self-hosts and has to account for its LLM traffic. It is the wrong tool when:
+
+- **You need more than one instance.** It is single-process by design: the daily budget and per-session scoring live in memory. Do not run replicas (see [Scaling](#performance)).
+- **You need the highest throughput.** About 1.2k requests/s per process (how it was measured is in [Performance](#performance)); gateways written in Go or Rust (Bifrost, agentgateway) are built for far more.
+- **You need an MCP or agent gateway.** There is no MCP code in this repository. [agentgateway](https://github.com/agentgateway/agentgateway) (Linux Foundation) and Bifrost cover that ground.
+- **You want a hosted service** with nothing to operate (Cloudflare AI Gateway, OpenRouter), or the widest provider coverage (LiteLLM).
+
+It can sit behind or beside those: the screening and audit pieces are meant to be usable on their own.
 
 ---
 

@@ -40,6 +40,39 @@ _stats_lock = asyncio.Lock()
 
 
 
+#: Latency assumed for an endpoint with no measurements when no other endpoint has
+#: any either. Neutral on purpose: not the best, not the worst.
+UNMEASURED_PRIOR_LATENCY_MS = 500.0
+
+
+def _stats_with_prior(endpoints: list[Any]) -> dict[str, dict[str, Any]]:
+    """Per-endpoint stats where an unmeasured endpoint gets a neutral prior.
+
+    get_endpoint_stats answers latency 0.0 for an endpoint it has never seen, and
+    the score divides by latency (floored at 1 ms), so a brand-new endpoint scored
+    about 1.0 against about 0.003 for one measured at 300 ms: it won every
+    decision until its first response arrived, which under concurrency means the
+    whole burst, and a dead endpoint registered a moment ago took that burst. It
+    now starts at the median latency of the measured endpoints in the same pool
+    (or UNMEASURED_PRIOR_LATENCY_MS when none is measured), with an optimistic
+    success rate, so it competes on equal terms and its own numbers take over from
+    the first completed request.
+    """
+    raw = {e.id: get_endpoint_stats(e.id) for e in endpoints}
+    measured = sorted(
+        s["latency_ms"] for s in raw.values() if s.get("request_count", 0) > 0
+    )
+    prior = measured[len(measured) // 2] if measured else UNMEASURED_PRIOR_LATENCY_MS
+    return {
+        eid: (
+            s
+            if s.get("request_count", 0) > 0
+            else {**s, "latency_ms": prior, "success_rate": 1.0, "unmeasured": True}
+        )
+        for eid, s in raw.items()
+    }
+
+
 def _compute_score(
     endpoint: Any, stats: dict[str, Any], model: str = "", cost_weight: float = 0.3
 ) -> float:
@@ -164,8 +197,9 @@ async def select_endpoint(ctx: PluginContext):
         )
 
         scored = []
+        pool_stats = _stats_with_prior(healthy)
         for e in healthy:
-            stats = get_endpoint_stats(e.id)
+            stats = pool_stats[e.id]
             score = _compute_score(e, stats, model=model, cost_weight=cost_weight)
             scored.append((score, e, stats))
 
