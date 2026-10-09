@@ -169,6 +169,20 @@ exports. Keep one of those lines (or `GET /api/v1/audit/head`) somewhere the
 database's writers cannot reach, and later check the chain against it with
 `GET /api/v1/audit/verify?anchor_id=<id>&anchor_hash=<hash>`.
 
+## Quotas
+
+Per-key quotas and their consumed budget are kept in a small SQLite file:
+
+```yaml
+rbac:
+  db_path: data/rbac.db    # default; keep it inside the data volume
+```
+
+Before 1.37.22 this lived in `./endpoints.db` (outside the data volume, so a container
+restart lost it and no backup saw it). On first start the old file's quotas are copied
+into the new one, once, and never over quotas already there. Back `data/rbac.db` up
+with the rest of `data/` (see the deployment guide).
+
 ## Security
 
 ```yaml

@@ -2,6 +2,39 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.37.22] — 2026-10-09
+
+### Phase 0: the request pipeline in stages, quotas in the volume, honest positioning (patch)
+
+- **`process_proxy_request` is a sequence of named stages** (`_screen`, `_ingress`,
+  `_pre_flight`, `_resolve_model`, `_flag_budget`, `_route`, `_forward`, `_post_flight`,
+  `_background_ring`, `_decorate_response`, `_annotate_trace`) instead of one 330-line
+  function (McCabe 29, CCN 38; the largest stage is now 6). No behaviour change:
+  `tests/test_request_pipeline_characterization.py` (30 tests, written green against the
+  old function first) pins the ring order, every stop's status, charging, headers, the
+  background ring and the request-id lifecycle, and eight mutations of the new code are
+  each caught.
+- **Quotas moved into the data volume.** The quota table lived in `./endpoints.db`,
+  outside `data/`: a container restart lost every per-key quota and consumed-budget
+  figure and no backup saw them. The default is `data/rbac.db` (`rbac.db_path`); an
+  existing `./endpoints.db`'s quotas are adopted once at start, never over quotas
+  already there. **Upgrading**: nothing to do; back up `data/rbac.db` with `data/`.
+- **A brand-new endpoint no longer takes every request.** An endpoint with no
+  measurements scored ~1.0 (latency 0.0, floored at 1 ms) against ~0.003 for one at
+  300 ms, so it won every decision until its first response, which under concurrency
+  means a whole burst, a dead endpoint included. It now starts at the median latency of
+  the measured endpoints (500 ms if none is). The `fastest` model-group strategy no
+  longer picks a provider it has never measured either.
+- **README leads with what the project is for** (a self-hosted gateway whose audit log
+  can be shown to an auditor) and gains a "When not to use it" section: one process,
+  ~1.2k req/s, no MCP or agent gateway, no hosted service. The MCP spec's claim that no
+  competitor had MCP support is struck (Bifrost, agentgateway and Kong have it) and the
+  three-layer design is replaced by an MCP-lite scope (policy and audit for tool calls).
+- **`scripts/adoption_report.py`**: a snapshot of stars, forks and the issues and pull
+  requests of people who are not you (`--ignore` for your own accounts), recorded with
+  the caveat that clone and view counts are mostly CI and bots. GHCR pull counts are not
+  available from the API and are entered by hand. Nothing is added to the proxy: no telemetry.
+
 ## [1.37.21] — 2026-10-09
 
 ### Audit Tier 2: streaming, security, robustness, operations (patch)
