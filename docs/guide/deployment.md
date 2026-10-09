@@ -178,8 +178,9 @@ that decrypts every stored credential; the database is the other half. Restoring
 `endpoints.db` onto a host that lost the salt gives you back every row and no way
 to read any encrypted value in it — and the proxy will not report that clearly,
 because a value that fails to decrypt is returned as-is, so the symptom is 401s
-from every provider. `scripts/backup_db.py` captures the database only; copy the
-salt alongside it, with the same `0600` mode.
+from every provider. `scripts/backup_db.py` captures `data/endpoints.db` only; copy the
+salt alongside it, with the same `0600` mode, and `data/rbac.db` (per-key quotas and
+their consumed budget; from 1.37.22 it lives in `data/`, set `rbac.db_path` to move it).
 
 If you are upgrading from a release where the salt sat in the working directory
 (`/app/.llmproxy_salt` rather than `/app/data/.llmproxy_salt`), the proxy keeps

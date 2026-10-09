@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import sqlite3
 from typing import Any
 
@@ -63,10 +64,29 @@ class RBACManager:
     ROLE_REFRESH_SECONDS = 300
     _ROLE_CACHE_MAX = 10_000
 
-    def __init__(self, db_path: str = "endpoints.db", store: Any | None = None):
+    #: Where the quota table lives by default: under data/, the directory that is
+    #: the volume, backed up by scripts/backup_db.py and covered by retention.
+    DEFAULT_DB_PATH = "data/rbac.db"
+
+    def __init__(
+        self,
+        db_path: str = DEFAULT_DB_PATH,
+        store: Any | None = None,
+        legacy_db_path: str | None = None,
+    ):
         """``db_path`` holds the quota table. Roles are kept by ``store`` (the
-        repository), in the user_roles table that erasure and export read."""
+        repository), in the user_roles table that erasure and export read.
+
+        ``legacy_db_path`` is where earlier releases kept the quotas
+        (``endpoints.db`` relative to the working directory: outside the data
+        volume, so lost on a container restart and missing from every backup). When
+        it exists and ``db_path`` holds no quotas yet, they are copied across once.
+        """
         self.db_path = db_path
+        self._legacy_db_path = legacy_db_path
+        parent = os.path.dirname(db_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
         self._store = store
         self._role_written: dict[str, tuple[str | None, tuple[str, ...], float]] = {}
         self.permissions = dict(DEFAULT_PERMISSIONS)
@@ -87,6 +107,35 @@ class RBACManager:
                 )
             """)
             conn.commit()
+        self._adopt_legacy_quotas()
+
+    def _adopt_legacy_quotas(self) -> None:
+        """Copy quotas from the old database file into this one, once."""
+        legacy = self._legacy_db_path
+        if (
+            not legacy
+            or not os.path.isfile(legacy)
+            or os.path.abspath(legacy) == os.path.abspath(self.db_path)
+        ):
+            return
+        with sqlite3.connect(self.db_path) as conn:
+            if conn.execute("SELECT COUNT(*) FROM quotas").fetchone()[0]:
+                return  # already populated: never overwrite live data
+            conn.execute("ATTACH DATABASE ? AS legacy", (legacy,))
+            try:
+                conn.execute(
+                    "INSERT INTO quotas (api_key, team_name, monthly_budget, consumed_budget, hard_limit) "
+                    "SELECT api_key, team_name, monthly_budget, consumed_budget, hard_limit "
+                    "FROM legacy.quotas"
+                )
+                moved = conn.execute("SELECT COUNT(*) FROM quotas").fetchone()[0]
+                conn.commit()
+            except sqlite3.OperationalError:
+                return  # the legacy file has no quotas table: nothing to adopt
+            finally:
+                conn.execute("DETACH DATABASE legacy")
+        if moved:
+            logger.info("RBAC: adopted %d quota rows from %s into %s", moved, legacy, self.db_path)
 
     async def _get_conn(self):
         if not self._conn:

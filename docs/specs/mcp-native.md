@@ -13,6 +13,16 @@
 > it had landed. Re-target it before starting work rather than leaving a date
 > in the past.
 
+> **Re-scope, 2026-10-09 — read this before the rest.** The competitive claim
+> this spec was written around is no longer true (see "Wedge" below), and the
+> three-layer design (bridge + proxy + native MCP server) is **not** going to be
+> built. What remains on the roadmap is **MCP-lite**: policy and audit for tool
+> calls that already pass through `/v1/chat/completions` — allow/deny per tool
+> and per key or role, an audit row for every tool call, and injection scoring
+> of tool *results* (opt-in, text outputs only). No bridge to MCP servers and no
+> native MCP endpoint: that is the ground of agentgateway (Linux Foundation) and
+> Bifrost. Estimate: 3-4 weeks, after the audit-integrity work (see ROADMAP).
+
 > **Review 1 changelog (2026-05-20)** — Timeline reframed to 3–4 weeks for a
 > solo dev (was 2 weeks, optimistic). Streaming-tool-call state machine
 > spelled out. Tool-output threat scoring scoped (filesystem dumps are
@@ -54,8 +64,12 @@ The three layers stack: a single config file declares the MCP fleet,
 the bridge surfaces them everywhere, the proxy enforces policy on every
 byte, and the native server lets MCP clients drive the gateway itself.
 
-No competitor — LiteLLM, Portkey, Helicone, OpenRouter, Kong, Cloudflare
-AI Gateway — has all three. Most have none. This is the wedge.
+**Wedge (written 2026-05-20; false as of 2026-10-09).** This paragraph claimed
+that no competitor had MCP support. It no longer holds: Bifrost ships an MCP
+gateway (client and server, OAuth, per-key tool filtering), agentgateway
+(Linux Foundation, contributions from AWS, Cisco, IBM, Microsoft, Red Hat) is
+built around MCP and A2A, and Kong's AI Gateway has MCP support. Do not reuse
+this as positioning.
 
 ---
 
@@ -86,8 +100,8 @@ Three problems block production adoption today:
 
 LLMProxy already solves problems 2 and 3 for `/v1/chat/completions`.
 Solving them for MCP is a straight extension of the existing ring
-pipeline. Problem 1 is the marketing wedge — a single config bridges
-the entire MCP ecosystem into every OpenAI-compatible client overnight.
+pipeline. Problem 1 (the bridge) was written up as the marketing wedge; it
+is the part now covered by better-funded projects and is out of scope.
 
 ---
 

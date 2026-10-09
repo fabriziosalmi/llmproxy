@@ -160,6 +160,10 @@ def _pick_from_group(
 
         def _latency(m):
             stats = get_endpoint_stats(m.get("provider", ""))
+            # An unseen provider reports latency 0.0, which made "fastest" pick the
+            # one it knew nothing about. Unmeasured counts as slow, not as best.
+            if not stats.get("request_count", 0):
+                return 999.0
             return stats.get("latency_ms", 999.0)
 
         chosen = min(models, key=_latency)
