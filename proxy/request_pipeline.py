@@ -243,7 +243,7 @@ async def _run_ring(orchestrator: Any, hook: PluginHook, ctx: PluginContext, lab
 async def _screen(orchestrator: Any, ctx: PluginContext, request: Any, session_id: str) -> None:
     """Negative cache, then the SecurityShield (injection, trajectory, cross-session)."""
     # L1: Negative Cache — drop repeated attacks in <0.1ms
-    neg_reason = orchestrator.negative_cache.check(ctx.body)
+    neg_reason = orchestrator.negative_cache.check(ctx.body, session_id)
     if neg_reason:
         logger.debug(f"L1 Negative Cache drop: {neg_reason[:50]}")
         MetricsTracker.track_injection_blocked()
@@ -260,7 +260,7 @@ async def _screen(orchestrator: Any, ctx: PluginContext, request: Any, session_i
     if security_error:
         logger.warning(f"SecurityShield blocked: {security_error}")
         MetricsTracker.track_injection_blocked()
-        orchestrator.negative_cache.add(ctx.body, security_error)
+        orchestrator.negative_cache.add(ctx.body, security_error, session_id)
         raise HTTPException(status_code=403, detail=security_error)
 
 

@@ -287,3 +287,33 @@ async def test_the_budget_guard_starts_again_on_a_new_day(monkeypatch):
 
     _Date.current = dt.date(2026, 10, 11)
     assert (await attempt()).action == "passthrough"
+
+
+# ── one caller's refusal is not everyone's ──────────────────────────────────
+
+
+def test_a_refusal_cached_for_one_caller_does_not_refuse_another():
+    """The shield also refuses on a session's recent history. That verdict was
+    cached under the prompt alone: two attacks and then "Hello" from one key
+    had "Hello" refused for every caller for five minutes."""
+    from core.cache import NegativeCache
+
+    cache = NegativeCache()
+    hello = {"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}
+
+    cache.add(hello, "Conversation trajectory indicates security risk", "session-attacker")
+
+    assert cache.check(hello, "session-attacker")  # still dropped fast for the one who earned it
+    assert cache.check(hello, "session-victim") is None
+    assert cache.check(hello) is None
+
+
+async def test_the_pipeline_keys_the_negative_cache_by_session(h):
+    h.o.security.inspect = AsyncMock(return_value="Injection detected")
+
+    with pytest.raises(HTTPException):
+        await h.run(session_id="sess-attacker-000001")
+    await h.run_spawned()
+
+    assert h.o.negative_cache.check.call_args.args[1] == "sess-attacker-000001"
+    assert h.o.negative_cache.add.call_args.args[2] == "sess-attacker-000001"

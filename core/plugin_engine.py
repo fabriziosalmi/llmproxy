@@ -14,6 +14,7 @@ Ring-based plugin pipeline with:
 
 import ast
 import asyncio
+import contextlib
 import importlib.util
 import inspect
 import logging
@@ -151,6 +152,10 @@ ALLOWED_MODULES = {
     "transformers",
     "huggingface_hub",
 }
+
+
+class PluginLoadError(Exception):
+    """An enabled plugin could not be loaded during a reload."""
 
 
 class PluginSecurityError(Exception):
@@ -501,14 +506,23 @@ class PluginManager:
                         manifest["plugins"].append(ip)
         return manifest
 
-    async def _build_plugin_state(self):
+    async def _build_plugin_state(self, strict: bool = False):
         """Build a fresh plugin state without touching self.* — used by
         hot_swap to assemble the next state off-side, then atomically swap.
 
-        Returns (rings, meta, instances, stats). Raises if the manifest is
-        missing — callers decide how to handle (load_plugins logs and bails;
-        hot_swap propagates).
+        Returns (rings, meta, instances, stats).
+
+        ``strict`` is for a reload: any enabled plugin that does not load fails
+        the whole build, so the running set is left exactly as it was. At
+        startup (not strict) a plugin that does not load is logged and skipped:
+        one bad entry must not keep the proxy from starting. Either way every
+        kind of failure is the plugin's: only five exception types used to be
+        caught here, so a plugin refused by the loader (PluginSecurityError)
+        escaped, and since an install writes its entry before reloading, a
+        refused install left an entry that stopped every later load, the next
+        start included.
         """
+        failures: list[str] = []
         manifest = self._read_merged_manifest()
         if manifest is None:
             return (
@@ -539,15 +553,16 @@ class PluginManager:
                     instances=new_instances,
                     stats=new_stats,
                 )
-            except (
-                FileNotFoundError,
-                ImportError,
-                SyntaxError,
-                ValueError,
-                RuntimeError,
-            ) as e:
+            except Exception as e:
                 self.logger.error(f"Failed to load plugin {p_info.get('name')}: {e}")
+                failures.append(f"{p_info.get('name')}: {e}")
 
+        if strict and failures:
+            # Nothing built here goes live: release what did load.
+            for inst in new_instances.values():
+                with contextlib.suppress(Exception):
+                    await inst.on_unload()
+            raise PluginLoadError("; ".join(failures))
         return new_rings, new_meta, new_instances, new_stats
 
     async def load_plugins(self):
@@ -1054,79 +1069,50 @@ class PluginManager:
                 context.metadata["_cache_hit"] = True
 
     async def hot_swap(self):
+        """Reload the plugin set: all of it, or none of it.
+
+        The new state is built off to the side. If any enabled plugin fails to
+        load, the build raises and the running set is untouched. Otherwise four
+        pointers are swapped with no ``await`` between them, so a request in
+        flight sees the whole old state or the whole new one.
+
+        There used to be a "health check" after the swap: every ring was run on
+        an empty request with no orchestrator in its context. The default
+        plugins need the orchestrator and the ingress one is fail-closed, so the
+        check failed and the swap was rolled back, every time, with the shipped
+        manifest: toggle, install and uninstall could not take effect. Running
+        the real rings on a made-up request is not a check that can be made
+        right (they charge budgets, pick endpoints and may legitimately refuse
+        it); that every enabled plugin loaded and its ``on_load`` returned is.
         """
-        9.3: Zero-downtime RCU (Read-Copy-Update) hot-swap.
-
-        Build the new plugin state off-side (no mutation of self.* during
-        load), then atomically swap four pointers in a single (non-yielding)
-        block. In-flight requests reading self.rings either see the entire
-        old state or the entire new state — never a half-cleared dict or
-        partially-loaded ring.
-
-        On health-check failure, swap back atomically. On build failure,
-        self.* was never touched — old state remains live.
-        """
-        self.logger.info("Hot-Swap RCU initiated: building new plugin DAG off-side...")
-
-        # 1. Build new state into FRESH dicts. self.* is untouched throughout.
+        self.logger.info("Hot-swap: building the new plugin set off to the side")
         try:
             (
                 new_rings,
                 new_meta,
                 new_instances,
                 new_stats,
-            ) = await self._build_plugin_state()
+            ) = await self._build_plugin_state(strict=True)
         except Exception as e:
-            self.logger.error(f"Hot-Swap build failed (state untouched): {e}")
+            self.logger.error(f"Hot-swap refused, running plugins unchanged: {e}")
             raise
 
-        # 2. Snapshot current pointers for rollback / unload.
         old_rings = self.rings
-        old_meta = self._plugin_meta
         old_instances = self._plugin_instances
-        old_stats = self._plugin_stats
 
-        # 3. Atomic 4-pointer swap. No `await` between assignments — the
-        # event loop cannot interleave another task here, so any concurrent
-        # execute_ring observes either the full old state or the full new.
+        # No ``await`` between these assignments.
         self.rings = new_rings
         self._plugin_meta = new_meta
         self._plugin_instances = new_instances
         self._plugin_stats = new_stats
 
-        # 4. Health check on the now-live new state.
-        try:
-            test_ctx = PluginContext(body={"_health_check": True})
-            for hook in PluginHook:
-                if self.rings[hook]:
-                    await self.execute_ring(hook, test_ctx)
-                    if test_ctx.error:
-                        raise RuntimeError(
-                            f"Health check failed at ring {hook.value}: {test_ctx.error}"
-                        )
-        except Exception as e:
-            # 5a. Health check failed — swap back atomically.
-            self.logger.error(f"Hot-Swap health check failed, rolling back: {e}")
-            self.rings = old_rings
-            self._plugin_meta = old_meta
-            self._plugin_instances = old_instances
-            self._plugin_stats = old_stats
-            # Unload the failed new instances (best-effort).
-            for _name, inst in new_instances.items():
-                try:
-                    await inst.on_unload()
-                except (AttributeError, RuntimeError, asyncio.CancelledError):
-                    pass
-            raise
-
-        # 5b. Success: stash rollback target and unload superseded instances.
         self._previous_rings = old_rings
         for name, inst in old_instances.items():
             try:
                 await inst.on_unload()
             except (AttributeError, RuntimeError, asyncio.CancelledError) as e:
                 self.logger.error(f"Error unloading old plugin {name}: {e}")
-        self.logger.info("Hot-Swap RCU complete: new plugin DAG is LIVE")
+        self.logger.info("Hot-swap complete: the new plugin set is live")
 
     async def rollback(self):
         """Manually rollback to the previous plugin configuration."""
@@ -1205,11 +1191,17 @@ class PluginManager:
                             src_file.read()
                         )
 
+        previous = {"plugins": [p for p in manifest["plugins"] if p is not manifest_entry]}
         manifest["plugins"].append(manifest_entry)
 
         _atomic_manifest_write(manifest, installed_manifest)
-
-        await self.hot_swap()
+        try:
+            await self.hot_swap()
+        except Exception:
+            # The entry was refused: take it back out, or it is tried again on
+            # every later reload and at the next start.
+            _atomic_manifest_write(previous, installed_manifest)
+            raise
         return True
 
     async def uninstall_plugin(self, name: str) -> bool:
@@ -1227,8 +1219,12 @@ class PluginManager:
         if len(manifest["plugins"]) == original_count:
             return False
 
+        with open(installed_manifest) as f:
+            previous = yaml.safe_load(f) or {"plugins": []}
         _atomic_manifest_write(manifest, installed_manifest)
-
-        self._plugin_meta.pop(name, None)
-        await self.hot_swap()
+        try:
+            await self.hot_swap()
+        except Exception:
+            _atomic_manifest_write(previous, installed_manifest)
+            raise
         return True

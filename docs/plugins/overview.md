@@ -128,10 +128,9 @@ A fail-open plugin is quarantined after 10 consecutive errors and skipped for 60
 `hot_swap()` reloads the manifest without a restart:
 
 1. The new plugin set is built separately from the live one: each enabled plugin is loaded and `on_load()` is called on class plugins
-2. The live rings, metadata, instances and statistics are replaced by the new ones in a single step with no `await` in between
-3. Health check: every non-empty ring is run once with a context whose body is `{"_health_check": true}`
-4. If a ring reports an error, the previous state is restored and `on_unload()` is called on the new instances
-5. Otherwise `on_unload()` is called on the replaced instances, and the previous rings are kept for `rollback`
+2. If any enabled plugin fails to load, the reload is refused and the running set is left as it was
+3. Otherwise the live rings, metadata, instances and statistics are replaced by the new ones in a single step with no `await` in between
+4. `on_unload()` is called on the replaced instances, and the previous rings are kept for `rollback`
 
 Per-plugin statistics start again from zero after a hot-swap. `rollback` restores the previous rings only.
 
@@ -140,7 +139,4 @@ curl -X POST http://localhost:8090/api/v1/plugins/hot-swap \
   -H "Authorization: Bearer your-key"
 ```
 
-The route answers HTTP 200 in both cases: `{"status": "success", ...}` or `{"status": "rolled_back", "error": "Plugin DAG reload failed"}`.
-
-> [!WARNING]
-> With the shipped manifest the health check fails and every hot-swap is rolled back. The health-check context does not carry the orchestrator, and seven of the default plugins require it (`ctx.require_rotator()`); the Ingress Auth plugin is fail-closed, so its error fails the check. `POST /api/v1/plugins/toggle` and `POST /api/v1/plugins/install` write the manifest and then call `hot_swap()`, so the file changes but the running plugin set does not. A restart loads the manifest without the health check; so does the config watcher when `config.yaml` changes on disk (`proxy/background.py`, 30-second poll).
+The route answers `200` with `{"status": "success", ...}`, or `422` with the reason when a plugin could not be loaded; in that case nothing has changed. At startup the rule is different: a plugin that does not load is logged and skipped, so that one bad entry cannot keep the proxy from starting.

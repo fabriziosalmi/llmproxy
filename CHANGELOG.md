@@ -2,6 +2,33 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.39.3] — 2026-10-10
+
+### Plugin reloads that take effect; one caller's refusal is not everyone's (patch)
+
+**Upgrading.** Nothing to do. `POST /api/v1/plugins/hot-swap` now answers `422` when a
+reload is refused; it used to answer `200` with `"status": "rolled_back"`.
+
+- **Every plugin reload was rolled back.** After swapping in the new plugin set, the engine
+  ran each ring on an empty request with no orchestrator in its context as a "health
+  check". The default plugins need the orchestrator and the ingress one is fail-closed, so
+  with the shipped manifest the check failed every time: toggle, install and uninstall
+  changed the manifest and never the running plugins, while the route answered `200` and
+  the admin UI reported success. A reload is now all or nothing on what can actually be
+  checked: if any enabled plugin fails to load, the running set is untouched and the route
+  answers `422` with the reason; otherwise the new set goes live.
+- **A refused install no longer poisons the manifest.** The entry was written before the
+  reload and left there when the reload refused it, so every later load failed, the next
+  start included (the loader's refusal was not among the exceptions caught per plugin).
+  Install, uninstall and toggle now put the manifest back when the reload fails, and at
+  startup a plugin that does not load is logged and skipped, whatever the reason.
+- **`toggle` with an unknown name answers `404`** (it rewrote the manifest, reloaded and
+  answered `200`); a non-boolean `enabled` is a `400`.
+- **A refusal cached for one caller no longer refuses the others.** The negative cache was
+  keyed by model and messages only, and it also stored refusals that depend on a session's
+  history: two attacks followed by "Hello" from one key had "Hello" refused for every
+  caller for five minutes. The key now includes the caller's session.
+
 ## [1.39.2] — 2026-10-10
 
 ### A fallback sends the fallback provider's key; the rest of the docs checked against the code (patch)

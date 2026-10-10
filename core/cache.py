@@ -81,20 +81,26 @@ class NegativeCache:
         return dropped
 
     @staticmethod
-    def _hash_prompt(body: dict[str, Any]) -> str:
+    def _hash_prompt(body: dict[str, Any], caller: str = "") -> str:
         """Hash the raw prompt for negative cache lookup.
 
         Uses the full messages array + model (H9) to catch multi-turn
         attack patterns. Including the model prevents cross-model cache
         pollution (different models may have different safety profiles).
+
+        And the caller. A verdict is not always about the prompt: the shield
+        also refuses on a session's recent history, and that refusal was cached
+        under the prompt alone. A caller who got an ordinary prompt refused that
+        way (two attacks, then "Hello") had it refused for everyone else, for
+        the life of the entry.
         """
         raw = json.dumps(
-            [body.get("model", ""), body.get("messages", [])],
+            [caller, body.get("model", ""), body.get("messages", [])],
             separators=(",", ":"),
         ).encode("utf-8")
         return hashlib.sha256(raw).hexdigest()
 
-    def check(self, body: dict[str, Any]) -> str | None:
+    def check(self, body: dict[str, Any], caller: str = "") -> str | None:
         """Check if this prompt was previously blocked.
 
         Returns the block reason if found, None if clean.
@@ -103,14 +109,14 @@ class NegativeCache:
         if not self._enabled or self._store is None:
             return None
 
-        h = self._hash_prompt(body)
+        h = self._hash_prompt(body, caller)
         reason = self._store.get(h)
         if reason:
             self._drops += 1
             return str(reason)
         return None
 
-    def add(self, body: dict[str, Any], reason: str):
+    def add(self, body: dict[str, Any], reason: str, caller: str = ""):
         """Record a blocked prompt hash.
 
         Called after SecurityShield returns a block reason.
@@ -118,7 +124,7 @@ class NegativeCache:
         if not self._enabled or self._store is None:
             return
 
-        h = self._hash_prompt(body)
+        h = self._hash_prompt(body, caller)
         self._store[h] = reason
 
     def stats(self) -> dict[str, Any]:

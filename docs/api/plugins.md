@@ -76,19 +76,9 @@ sandbox. The SHA-256 of the source is recorded in the manifest at install, and a
 file that no longer matches it is refused at later loads.
 
 Returns `{"status": "installed", "name": "My Plugin"}`, or `422` with the reason
-when the reload fails.
-
-Two things to know:
-
-- **A `422` does not undo the manifest change.** The refused entry stays in
-  `plugins/installed/manifest.yaml`. When the refusal is a security one (no
-  `allow_inprocess`, a forbidden import, a hash mismatch), every later plugin
-  reload fails while the entry is there, and the proxy does not start. Remove the
-  entry with `DELETE /api/v1/plugins/{name}`.
-- **`installed` does not mean loaded.** If the plugin's file is missing or cannot
-  be imported, or `hook` is not one of the five names, the error is written to the
-  process log, the route still answers `installed`, and the plugin runs in no
-  ring.
+when the plugin cannot be loaded (its file is missing or cannot be imported, the
+hook is not one of the five names, the loader refuses it). On a `422` the entry is
+not kept in `plugins/installed/manifest.yaml` and the running plugins are unchanged.
 
 ## Uninstall Plugin
 
@@ -120,13 +110,13 @@ the plugins.
 
 Returns `{"name": "Smart Budget Guard", "enabled": true}`.
 
-- `name` must match the manifest `name` exactly. A name that matches nothing
-  changes nothing, and the route still answers `200` with the body above.
+- `name` must match the manifest `name` exactly; `404` when no entry has that
+  name. `enabled` must be `true` or `false` (`400` otherwise).
 - Only `plugins/manifest.yaml` is edited. An entry in the installed manifest is
   not affected by this route.
 - The file is rewritten from its parsed form, so comments in it are lost.
-- If the reload that follows fails, the route answers `500` and the manifest
-  change is kept.
+- If the reload that follows fails, the route answers `422` with the reason and
+  the manifest is put back as it was.
 
 ## Hot-Swap
 
@@ -138,18 +128,13 @@ Reloads all plugins from the two manifests without restarting:
 
 1. The new set of plugins is built separately; requests keep using the current
    set. `on_load()` runs on each new class plugin.
-2. The current set is replaced by the new one in a single step.
-3. Each non-empty ring is run once with a test request
-   (`{"_health_check": true}`).
-4. If a ring reports an error, the previous set is put back and `on_unload()` runs
-   on the new plugins.
-5. Otherwise `on_unload()` runs on the replaced plugins, and the previous set is
-   kept as the target of the next rollback.
+2. If any enabled plugin fails to load, the reload is refused: `422` with the
+   reason, and the current set stays as it is.
+3. Otherwise the current set is replaced by the new one in a single step,
+   `on_unload()` runs on the replaced plugins, and the previous set is kept as the
+   target of the next rollback.
 
-Returns `{"status": "success", "message": "Plugin DAG reloaded"}`. If the build or
-the test fails the answer is still `200`, with
-`{"status": "rolled_back", "error": "Plugin DAG reload failed"}`; the reason is in
-the process log.
+Returns `{"status": "success", "message": "Plugin set reloaded"}`.
 
 ## Rollback
 

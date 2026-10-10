@@ -37,6 +37,5 @@ The screen has no form to change a plugin's configuration, and the API has no ro
 
 ## Limits
 
-- **Hot-swap is rolled back with the shipped manifest.** The engine's health check fails on the default plugins (see [Hot-swap](/plugins/overview#hot-swap)). The API answers HTTP 200 with `{"status": "rolled_back"}`, and the Reload button shows "Plugins hot-swapped" for any 200 answer.
-- **Disable changes the file, not the running plugin set.** The toggle writes the manifest and then hot-swaps; the hot-swap is rolled back and the API answers HTTP 500. The change takes effect at the next restart.
-- **The install form cannot install a Python plugin.** It sends `type: python` without `allow_inprocess`, and the engine refuses Python plugins from the installed manifest unless that flag is set. The refused entry stays in `plugins/installed/manifest.yaml` and makes every later load of the manifests fail until it is removed (see [Developing Plugins](/plugins/developing#loading-the-plugin)).
+- **A reload is all or nothing.** If a plugin cannot be loaded the API answers `422` and nothing changes, neither the running plugins nor the manifest.
+- **The install form cannot install a Python plugin.** It sends `type: python` without `allow_inprocess`, and the engine refuses Python plugins from the installed manifest unless that flag is set. The API answers `422` and the entry is not kept.

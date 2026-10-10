@@ -250,7 +250,7 @@ async def test_hot_swap_build_failure_preserves_live_state(tmp_path):
     snap_stats = pm._plugin_stats
 
     # Force the build path to blow up.
-    async def boom():
+    async def boom(**_):
         raise RuntimeError("synthetic build failure")
 
     pm._build_plugin_state = boom  # type: ignore[assignment]
@@ -304,9 +304,9 @@ async def test_hot_swap_no_partial_clear_window(tmp_path):
     original_build = pm._build_plugin_state
     observed_during_build = []
 
-    async def spying_build():
+    async def spying_build(**kw):
         observed_during_build.append(list(pm.rings[PluginHook.PRE_FLIGHT]))
-        return await original_build()
+        return await original_build(**kw)
 
     pm._build_plugin_state = spying_build  # type: ignore[assignment]
     await pm.hot_swap()
@@ -321,51 +321,105 @@ async def test_hot_swap_no_partial_clear_window(tmp_path):
     assert len(pm.rings[PluginHook.PRE_FLIGHT]) == 1
 
 
+def _manifest(tmp_path, entries):
+    import yaml as _yaml
+
+    with open(tmp_path / "manifest.yaml", "w") as f:
+        _yaml.safe_dump({"plugins": entries}, f)
+
+
+def _entry(name, **extra):
+    return {"name": name, "hook": "pre_flight", "type": "python", "entrypoint": f"{name}:execute", **extra}
+
+
+_NEEDS_ORCHESTRATOR_SRC = """
+async def execute(ctx):
+    ctx.require_rotator()
+"""
+
+
 @pytest.mark.asyncio
-async def test_hot_swap_health_check_failure_rolls_back_atomically(tmp_path):
-    """If post-swap health check fails, all four pointers swap back."""
+async def test_a_reload_does_not_run_the_rings_on_a_made_up_request(tmp_path):
+    """The reload used to run every ring on an empty request with no
+    orchestrator in it. The default plugins need the orchestrator, so with the
+    shipped manifest every reload was rolled back: toggle, install and uninstall
+    could not take effect."""
+    from core.plugin_engine import PluginHook, PluginManager
+
+    _write_plugin_file(str(tmp_path), "needs_it", _NEEDS_ORCHESTRATOR_SRC)
+    _manifest(tmp_path, [_entry("needs_it")])
+    pm = PluginManager(plugins_dir=str(tmp_path))
+    await pm.load_plugins()
+    ran = []
+
+    async def spy(hook, context):
+        ran.append(hook)
+
+    pm.execute_ring = spy  # type: ignore[assignment]
+    before = pm.rings
+
+    await pm.hot_swap()
+
+    assert ran == []
+    assert pm.rings is not before  # the new set is live
+    assert [p["name"] for p in pm.rings[PluginHook.PRE_FLIGHT]] == ["needs_it"]
+
+
+@pytest.mark.asyncio
+async def test_a_reload_with_a_plugin_that_does_not_load_changes_nothing(tmp_path):
+    from core.plugin_engine import PluginHook, PluginLoadError, PluginManager
+
+    _write_plugin_file(str(tmp_path), "p1", _VALID_PLUGIN_SRC)
+    _manifest(tmp_path, [_entry("p1")])
+    pm = PluginManager(plugins_dir=str(tmp_path))
+    await pm.load_plugins()
+    snapshot = (pm.rings, pm._plugin_meta, pm._plugin_instances, pm._plugin_stats)
+
+    _manifest(tmp_path, [_entry("p1"), _entry("missing_file")])
+    with pytest.raises(PluginLoadError, match="missing_file"):
+        await pm.hot_swap()
+
+    assert (pm.rings, pm._plugin_meta, pm._plugin_instances, pm._plugin_stats) == snapshot
+    assert pm.rings is snapshot[0]
+    assert [p["name"] for p in pm.rings[PluginHook.PRE_FLIGHT]] == ["p1"]
+
+
+@pytest.mark.asyncio
+async def test_a_refused_install_is_taken_back_out_of_the_manifest(tmp_path):
+    """The entry was written before the reload and left there when the reload
+    refused it, to be tried again by every later load."""
     import yaml as _yaml
 
     from core.plugin_engine import PluginHook, PluginManager
 
-    plugins_dir = str(tmp_path)
-    _write_plugin_file(plugins_dir, "p1", _VALID_PLUGIN_SRC)
-    with open(tmp_path / "manifest.yaml", "w") as f:
-        _yaml.safe_dump(
-            {
-                "plugins": [
-                    {
-                        "name": "p1",
-                        "hook": "pre_flight",
-                        "type": "python",
-                        "entrypoint": "p1:execute",
-                    },
-                ]
-            },
-            f,
-        )
-    pm = PluginManager(plugins_dir=plugins_dir)
+    _write_plugin_file(str(tmp_path), "p1", _VALID_PLUGIN_SRC)
+    _manifest(tmp_path, [_entry("p1")])
+    pm = PluginManager(plugins_dir=str(tmp_path))
     await pm.load_plugins()
-    snap_rings = pm.rings
-    snap_meta = pm._plugin_meta
-    snap_instances = pm._plugin_instances
-    snap_stats = pm._plugin_stats
 
-    # Force execute_ring to mark the test_ctx with an error after the swap.
-    async def failing_execute(hook, context):
-        context.error = "simulated post-swap failure"
+    with pytest.raises(Exception):  # noqa: B017 - refused, whatever the reason
+        await pm.install_plugin(_entry("not_there"))
 
-    pm.execute_ring = failing_execute  # type: ignore[assignment]
+    with open(pm.installed_dir + "/manifest.yaml") as f:
+        assert (_yaml.safe_load(f) or {}).get("plugins") == []
+    await pm.hot_swap()  # a later reload is not poisoned
+    assert [p["name"] for p in pm.rings[PluginHook.PRE_FLIGHT]] == ["p1"]
 
-    with pytest.raises(RuntimeError, match="Health check failed"):
-        await pm.hot_swap()
 
-    # Rolled back: pointers identical to pre-swap snapshot.
-    assert pm.rings is snap_rings
-    assert pm._plugin_meta is snap_meta
-    assert pm._plugin_instances is snap_instances
-    assert pm._plugin_stats is snap_stats
-    assert any(p["name"] == "p1" for p in pm.rings[PluginHook.PRE_FLIGHT])
+@pytest.mark.asyncio
+async def test_a_plugin_the_loader_refuses_does_not_stop_the_others_at_startup(tmp_path):
+    """PluginSecurityError was not among the exceptions caught per plugin, so
+    one refused entry took the whole load, and the start, down with it."""
+    from core.plugin_engine import PluginHook, PluginManager
+
+    _write_plugin_file(str(tmp_path), "p1", _VALID_PLUGIN_SRC)
+    _write_plugin_file(str(tmp_path), "tampered", _VALID_PLUGIN_SRC)
+    _manifest(tmp_path, [_entry("tampered", sha256="0" * 64), _entry("p1")])
+    pm = PluginManager(plugins_dir=str(tmp_path))
+
+    await pm.load_plugins()
+
+    assert [p["name"] for p in pm.rings[PluginHook.PRE_FLIGHT]] == ["p1"]
 
 
 # ── S1: plugin trust gate (in-process python requires trust or opt-in) ──

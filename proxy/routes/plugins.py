@@ -68,13 +68,19 @@ def create_router(agent: PluginsAgent) -> APIRouter:
         plugin_name = data.get("name")
         enabled = data.get("enabled")
 
+        if not isinstance(enabled, bool):
+            raise HTTPException(status_code=400, detail="'enabled' must be true or false")
         with open(agent.plugin_manager.manifest_path) as f:
-            manifest = yaml.safe_load(f) or {}
+            original = f.read()
+        manifest = yaml.safe_load(original) or {}
 
         for p in manifest.get("plugins", []):
             if p["name"] == plugin_name:
                 p["enabled"] = enabled
                 break
+        else:
+            # An unknown name used to rewrite the manifest, reload and answer 200.
+            raise HTTPException(status_code=404, detail=f"Plugin '{plugin_name}' not found")
 
         # Atomic: this file carries the enabled flags and the SHA-256 pins,
         # and hot_swap() below acts on it immediately. A truncating write
@@ -89,7 +95,18 @@ def create_router(agent: PluginsAgent) -> APIRouter:
             ".manifest.",
         )
 
-        await agent.plugin_manager.hot_swap()
+        try:
+            await agent.plugin_manager.hot_swap()
+        except Exception as e:
+            # The running plugins are unchanged; put the manifest back so it
+            # says the same thing.
+            atomic_write(
+                original,
+                _manifest_path,
+                os.path.dirname(os.path.abspath(_manifest_path)) or ".",
+                ".manifest.",
+            )
+            raise HTTPException(status_code=422, detail=f"Plugin reload failed: {e}") from e
         return {"name": plugin_name, "enabled": enabled}
 
     @router.post("/api/v1/plugins/install")
@@ -113,7 +130,10 @@ def create_router(agent: PluginsAgent) -> APIRouter:
     @router.delete("/api/v1/plugins/{plugin_name}")
     async def uninstall_plugin(plugin_name: str, request: Request):
         _check_admin_auth(request)
-        removed = await agent.plugin_manager.uninstall_plugin(plugin_name)
+        try:
+            removed = await agent.plugin_manager.uninstall_plugin(plugin_name)
+        except Exception as e:
+            raise HTTPException(status_code=422, detail=f"Plugin reload failed: {e}") from e
         if not removed:
             raise HTTPException(
                 status_code=404, detail=f"Plugin '{plugin_name}' not found"
@@ -130,10 +150,14 @@ def create_router(agent: PluginsAgent) -> APIRouter:
         _check_admin_auth(request)
         try:
             await agent.plugin_manager.hot_swap()
-            return {"status": "success", "message": "Plugin DAG reloaded"}
         except Exception as e:
+            # Not a 200: the caller (and the admin UI's Reload button) must be
+            # able to tell a reload that did nothing from one that worked.
             agent.logger.error(f"Plugin hot-swap failed: {e}", exc_info=True)
-            return {"status": "rolled_back", "error": "Plugin DAG reload failed"}
+            raise HTTPException(
+                status_code=422, detail=f"Plugin reload failed, running plugins unchanged: {e}"
+            ) from e
+        return {"status": "success", "message": "Plugin set reloaded"}
 
     @router.post("/api/v1/plugins/rollback")
     async def rollback_plugins(request: Request):

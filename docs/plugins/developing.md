@@ -184,7 +184,7 @@ curl -X POST http://localhost:8090/api/v1/plugins/rollback \
   -H "Authorization: Bearer your-key"
 ```
 
-- **Hot-swap is rolled back with the shipped manifest.** Its health check fails on the default plugins (see [Hot-swap](/plugins/overview#hot-swap)). The route still answers HTTP 200, with `{"status": "rolled_back", ...}`. `toggle` writes `plugins/manifest.yaml` and then hot-swaps: the file is changed, the running plugin set is not, and the call answers HTTP 500.
-- **`toggle` does not check the name.** A name that is not in the bundled manifest changes nothing and the route still answers with the name and the flag.
-- **`POST /api/v1/plugins/install`** requires `name`, `hook` and `entrypoint`. It writes the entry to `plugins/installed/manifest.yaml` and then hot-swaps. A Python plugin from that manifest is refused unless the entry also sets `"allow_inprocess": true`. The refusal comes after the entry has been written: it stays in the file, and every later load of the manifests raises the same error until the entry is removed by hand or with `DELETE /api/v1/plugins/{name}`. That call removes the entry and then answers HTTP 500, because the hot-swap that follows it fails.
+- **A reload is all or nothing.** If any enabled plugin fails to load, `hot-swap`, `toggle`, `install` and `DELETE` answer `422` with the reason, the running plugin set is unchanged, and the manifest is put back as it was.
+- **`toggle`** answers `404` for a name that is not in the bundled manifest.
+- **`POST /api/v1/plugins/install`** requires `name`, `hook` and `entrypoint`. A Python plugin from the installed manifest is refused unless the entry also sets `"allow_inprocess": true`; a refused entry is not left in `plugins/installed/manifest.yaml`.
 - **`DELETE /api/v1/plugins/{name}`** removes entries of `plugins/installed/manifest.yaml` only. For a plugin of the bundled manifest it answers 404.
