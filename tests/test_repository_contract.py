@@ -106,7 +106,7 @@ async def test_the_retention_purge_deletes_through_the_repository(repo):
     result = await repo.purge_expired(90)
 
     assert result["audit_deleted"] == 2
-    assert await _audit_total(repo) == 2
+    assert await _audit_total(repo) == 3  # two survivors and the removal record
     assert (await repo.verify_audit_chain())["valid"] is True
 
 
@@ -118,7 +118,7 @@ async def test_erasure_erases_through_the_repository(repo):
     result = await repo.delete_subject_data("alice-session-1")
 
     assert result["audit_deleted"] == 2
-    assert await _audit_total(repo) == 1
+    assert await _audit_total(repo) == 2  # bob's row and the removal record
     assert (await repo.verify_audit_chain())["valid"] is True
 
 

@@ -8,6 +8,7 @@ Endpoints:
   POST /api/v1/gdpr/purge              — Manual trigger: purge expired records
 """
 
+import hashlib
 import json
 import logging
 import time
@@ -16,6 +17,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from core.auth_policy import auth_enabled
 from proxy.routes.deps import GdprAgent
+from store.audit_chain import RESERVED_SUBJECTS
 
 logger = logging.getLogger("llmproxy.routes.gdpr")
 
@@ -43,6 +45,20 @@ def create_router(agent: GdprAgent) -> APIRouter:
         if not agent._verify_admin_key(token):
             raise HTTPException(status_code=401, detail="GDPR: Unauthorized")
 
+    def _check_subject(subject: str) -> None:
+        # R2-09: a minimum length, so a short string cannot stand for a subject.
+        if len(subject) < 8:
+            raise HTTPException(
+                status_code=400, detail="Subject must be at least 8 characters"
+            )
+        # The audit chain's own rows (removal records, the erasure and export
+        # trail) are filed under these names. They are nobody's personal data,
+        # and erasing them would delete the record of every earlier erasure.
+        if subject in RESERVED_SUBJECTS:
+            raise HTTPException(
+                status_code=400, detail="Subject is reserved for the audit trail itself"
+            )
+
     @router.post("/api/v1/gdpr/erase/{subject}")
     async def erase_subject(subject: str, request: Request):
         """Right to erasure (GDPR Article 17).
@@ -57,20 +73,19 @@ def create_router(agent: GdprAgent) -> APIRouter:
         and the operator can investigate from the trail.
         """
         _check_admin_auth(request)
-        # R2-09: Require minimum subject length to prevent broad matches
-        # (e.g., subject="a" matching all session_ids starting with 'a').
-        if len(subject) < 8:
-            raise HTTPException(
-                status_code=400, detail="Subject must be at least 8 characters"
-            )
+        _check_subject(subject)
 
-        # 1. Pre-audit: write the intent into the immutable hash chain
-        #    BEFORE any irreversible action. Use json.dumps so the subject
-        #    string can't break the JSON structure.
+        # 1. Pre-audit: write the intent into the hash chain BEFORE any
+        #    irreversible action. The subject goes in as its SHA-256: the row
+        #    outlives the erasure, and a record of an erasure that still spells
+        #    out who was erased has kept the one thing it was asked to remove.
+        #    Whoever needs to show that a given subject was erased hashes the
+        #    identifier they hold and looks for it.
+        subject_digest = hashlib.sha256(subject.encode("utf-8")).hexdigest()
         audit_meta = json.dumps(
             {
                 "action": "erase",
-                "subject": subject,
+                "subject_sha256": subject_digest,
                 "phase": "intent",
             },
             separators=(",", ":"),
@@ -78,7 +93,7 @@ def create_router(agent: GdprAgent) -> APIRouter:
         try:
             await agent.store.log_audit(
                 ts=int(time.time()),
-                req_id=f"gdpr-erase-{subject[:16]}",
+                req_id=f"gdpr-erase-{subject_digest[:16]}",
                 session_id="GDPR_SYSTEM",
                 key_prefix="GDPR",
                 model="",
@@ -140,10 +155,7 @@ def create_router(agent: GdprAgent) -> APIRouter:
         sensitive fields (API keys, tokens). Response is JSON.
         """
         _check_admin_auth(request)
-        if len(subject) < 8:
-            raise HTTPException(
-                status_code=400, detail="Subject must be at least 8 characters"
-            )
+        _check_subject(subject)
         data = await agent.store.export_subject_data(subject)
         total_records = (
             len(data.get("audit", []))

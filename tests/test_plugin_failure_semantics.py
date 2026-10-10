@@ -83,15 +83,16 @@ async def test_errors_and_quarantine_are_counted(tmp_path):
     assert _count("counted-open", "quarantine_skip") == skips + 1
 
 
-async def test_a_fail_closed_refusal_is_counted(tmp_path):
+async def test_a_fail_closed_plugin_is_never_skipped_so_every_failure_is_counted(tmp_path):
     pm = _manager(tmp_path, "counted-closed", PluginHook.PRE_FLIGHT, KeyError("k"), "closed")
-    before = _count("counted-closed", "quarantine_block")
+    errors = _count("counted-closed", "error")
+    blocks = _count("counted-closed", "quarantine_block")
 
-    for _ in range(THRESHOLD):
+    for _ in range(THRESHOLD + 1):
         await pm.execute_ring(PluginHook.PRE_FLIGHT, PluginContext())
-    await pm.execute_ring(PluginHook.PRE_FLIGHT, PluginContext())
 
-    assert _count("counted-closed", "quarantine_block") == before + 1
+    assert _count("counted-closed", "error") == errors + THRESHOLD + 1
+    assert _count("counted-closed", "quarantine_block") == blocks
 
 
 async def test_a_timeout_is_counted(tmp_path):

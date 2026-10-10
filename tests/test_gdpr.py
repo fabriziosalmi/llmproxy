@@ -250,6 +250,34 @@ class TestRightToErasure:
         assert data["roles_deleted"] == 1
         assert all(r.get("email") != "alice@example.com" for r in gdpr_store.user_roles)
 
+    @pytest.mark.asyncio
+    async def test_the_erasure_record_does_not_keep_the_subject(self, gdpr_client, gdpr_store):
+        """The record outlives the erasure: it carries the subject's hash, not the subject."""
+        import hashlib
+
+        await gdpr_client.post("/api/v1/gdpr/erase/alice@example.com")
+        record = next(r for r in gdpr_store.audit_log if r.get("session_id") == "GDPR_SYSTEM")
+        digest = hashlib.sha256(b"alice@example.com").hexdigest()
+
+        assert "alice" not in record["metadata"] and "alice" not in record["req_id"]
+        assert digest in record["metadata"]
+        assert record["req_id"] == f"gdpr-erase-{digest[:16]}"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("subject", ["GDPR_SYSTEM", "AUDIT_SYSTEM"])
+    async def test_the_audit_trail_cannot_be_erased_or_exported_as_a_subject(
+        self, gdpr_client, gdpr_store, subject
+    ):
+        """One call used to delete the record of every earlier erasure."""
+        await gdpr_client.post("/api/v1/gdpr/erase/sk-alice")
+        before = list(gdpr_store.audit_log)
+
+        erased = await gdpr_client.post(f"/api/v1/gdpr/erase/{subject}")
+        exported = await gdpr_client.get(f"/api/v1/gdpr/export/{subject}")
+
+        assert erased.status_code == 400 and exported.status_code == 400
+        assert gdpr_store.audit_log == before
+
 
 # ══════════════════════════════════════════════════════════
 # Data Subject Access Request (Article 15)

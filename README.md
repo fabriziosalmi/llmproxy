@@ -65,7 +65,7 @@ docker run -d --name llmproxy -p 8090:8090 \
   -e LLM_PROXY_ADMIN_KEYS=sk-admin-test \
   -e OPENAI_API_KEY=$OPENAI_API_KEY \
   -v llmproxy-data:/app/data \
-  ghcr.io/fabriziosalmi/llmproxy:1.37.22
+  ghcr.io/fabriziosalmi/llmproxy:1.38.0
 ```
 
 Each release publishes `:latest`, the full semver (`:X.Y.Z`), the minor (`:X.Y`), plus a per-commit short SHA tag for reproducible deploys. Pin the newest release rather than copying the number above — it ages, and this example pinned `1.32.0` for two releases, which meant anyone following it literally deployed the version *before* the control-plane key tier, the salt relocation and the Redis timeouts landed.

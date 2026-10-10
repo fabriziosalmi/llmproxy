@@ -824,25 +824,15 @@ class PluginManager:
             # plugin, not about the request, so it must not change what the
             # plugin's fail policy says happens to the request. A fail-open
             # plugin is skipped. A fail-closed one is a control the operator
-            # declared must run: skipping it would let every request through
-            # unmasked or unmetered for the whole cooldown, and ten requests
-            # that make it error are enough to open that window. Refuse
-            # instead, as an ordinary failure of that plugin would.
-            if self._plugin_quarantined(name):
+            # declared must run, and it has been handled wrongly twice:
+            # skipped, every request went through unmasked or unmetered for the
+            # cooldown; refused outright, ten requests that made the plugin
+            # error (one caller's, on purpose or not) turned into a 503 for
+            # every caller for the next minute, renewable. So it is neither: a
+            # fail-closed plugin is never quarantined. It runs on every request
+            # and its own failure refuses that request, and only that one.
+            if self._plugin_quarantined(name) and not fail_closed:
                 remaining = self._plugin_quarantine_remaining(name)
-                if fail_closed:
-                    self.logger.warning(
-                        f"Plugin {name} is quarantined and fail-closed in "
-                        f"{hook.value}: refusing request ({remaining:.0f}s of cooldown left)"
-                    )
-                    if stats:
-                        stats["blocks"] += 1
-                    MetricsTracker.track_plugin_event(name, "quarantine_block")
-                    context.error = f"Plugin {name} unavailable (quarantined)"
-                    context.metadata["_block_status"] = 503
-                    context.metadata["_block_error_type"] = "plugin_unavailable"
-                    context.stop_chain = True
-                    break
                 # Fail-open skip: say so once per quarantine window at WARNING
                 # (a per-request warning would drown the log), then at DEBUG.
                 MetricsTracker.track_plugin_event(name, "quarantine_skip")
@@ -959,7 +949,10 @@ class PluginManager:
                     f"Error executing plugin {name} in {hook.value}: "
                     f"{type(e).__name__}: {e}"
                 )
-                context.error = str(e)
+                # What the caller is told. The exception text is in the log;
+                # sent back, it described the plugin's internals to whoever
+                # found the input that breaks it.
+                context.error = f"Plugin {name} failed"
                 if stats:
                     stats["errors"] += 1
                 if fail_closed:

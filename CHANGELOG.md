@@ -2,6 +2,99 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.38.0] — 2026-10-10
+
+### The audit chain proves what it says; refusals are on the record; the daily budget counts every request (minor)
+
+A full review (three independent passes plus a proof of concept against the chain) found
+that the feature the project is positioned on did less than the documentation said, and
+that several controls could be turned against the gateway or did not apply at all.
+
+**Upgrading.** (1) The audit chain changes format and the change is one-way: after the
+first start of this release, 1.37.x reports the chain as broken. Back up `data/` first.
+(2) `budget.daily_limit` now counts non-streaming requests, which it never did: a limit
+that looked comfortable may be reached. Check it against `spend_log` before upgrading.
+(3) Optional: set `LLM_PROXY_AUDIT_KEY` (32+ characters) to key the chain; once set it
+cannot be removed without verification failing.
+
+#### Audit chain
+
+- **A removal record outside the chain no longer excuses a deletion.** Retention and
+  erasure recorded what they removed in `app_state`, next to the table and covered by no
+  hash. Deleting any rows and writing that one value made `/api/v1/audit/verify` answer
+  `valid`, even against a head recorded outside the database. A removal is now a row of
+  the chain (`audit.rows_removed`), appended in the transaction that deletes; the verifier
+  bridges a break only when a verified row accounts for it and lists every removal
+  (`removals`, and `anchor.rows_removed_since` against a recorded head). Records left in
+  `app_state` by earlier releases are carried into the chain once, at the first start.
+- **A purge that empties the log leaves its record**, linked to the last row removed. An
+  emptied chain and a new one used to be the same thing: both started at `GENESIS`.
+- **Rows are sealed over a canonical encoding** (`chain_v` 2). The old preimage joined
+  fields with `|`, so `session_id="a|b", key_prefix="c"` and `session_id="a",
+  key_prefix="b|c"` hashed alike. Old rows are still verified in their own format; a row in
+  an older format after a newer one is a break.
+- **`LLM_PROXY_AUDIT_KEY` keys the chain** (HMAC-SHA-256, `chain_v` 3). Someone who can
+  write the database but does not hold the key cannot alter, remove or append rows without
+  verification failing. `LLM_PROXY_AUDIT_KEY_PREVIOUS` keeps rows sealed with retired keys
+  verifiable. A key shorter than 32 characters is refused at start.
+- **`POST /api/v1/gdpr/erase/GDPR_SYSTEM` deleted the record of every earlier erasure.**
+  The names the chain files its own rows under are refused as subjects (`400`).
+- **The erasure record carries the subject's SHA-256, not the subject.** It outlives the
+  erasure; it used to spell out who had been erased.
+
+#### What the audit log contains
+
+- **Refused and failed requests are recorded.** A row was written only by the code that
+  runs after a response exists, so a request the shield or a plugin blocked, a budget stop
+  and an upstream failure left nothing: the log of a security gateway held everything
+  except what it stopped. The pipeline now writes the row (`blocked`, status, the reason
+  the caller was given).
+- **`/v1/embeddings` writes audit and spend rows**, served or refused. It wrote neither.
+- **Streamed requests are attributed to a caller.** The forwarder read the caller from a
+  value nothing set, so every streamed row had an empty `key_prefix`: per-key spend,
+  export and erasure by key missed all streamed traffic.
+- **A signed-in user is recorded by identity.** `key_prefix` was the first eight characters
+  of the bearer token, which for any JWT is `eyJhbGci`.
+
+#### Accounting
+
+- **The daily budget never counted a non-streaming request.** The forwarder reports a cost
+  for a stream only; for a plain response the amount stayed 0.0 and the charge returned on
+  zero. The cap, `llm_proxy_budget_consumed_usd`, both budget alerts and
+  `/health.budget_today_usd` saw streamed traffic alone. The pipeline now prices the
+  response from the usage the upstream reported.
+- **Smart Budget Guard never started a new day.** The date was compared once per process,
+  so a key that reached its budget stayed at `429` until a restart on a later day.
+
+#### Availability and controls
+
+- **Ten requests could take the gateway from every caller.** A fail-closed plugin that
+  errored ten times was quarantined, and quarantine refused every request (`503`) for a
+  minute, renewable. A fail-closed plugin is no longer quarantined: it runs on every
+  request and its failure refuses that request only.
+- **A tool-calling turn crashed the loop breaker** (`content: null`), which with the above
+  made an ordinary agent client the trigger. Tool calls are now part of what it compares.
+- **The kill switch stopped `/v1/chat/completions` only.** `/v1/completions` and
+  `/v1/embeddings` kept serving after `POST /api/v1/panic`.
+- **PII in content parts went upstream unmasked.** Only string content was masked; the
+  same text in `[{"type": "text", ...}]` was not.
+- **An inference client chose the upstream request's headers** through a `headers` object
+  in the body (`Host`, `Content-Length`, a provider's beta or organisation header), on a
+  request carrying the operator's provider key. The key is dropped.
+- **An oversize body is refused at once.** The `413` was sent only after the rest of the
+  body had been read, in a loop with no deadline: one byte too many, then silence, held an
+  admission slot indefinitely, before authentication.
+- **A plugin's exception text is no longer sent to the caller.**
+
+#### Known and not fixed in this release
+
+Control-plane changes and pre-pipeline rejections are not in the chain; stream token
+counts are estimated from SSE framing when the upstream sends no usage (large
+overestimate); the circuit breaker cannot recover through traffic without Redis;
+`server.timeout` cuts long non-streaming completions and re-sends them down the fallback
+chain; the Helm chart references a ServiceAccount it does not create. See
+`docs/threat_model.md` for what the audit log does and does not prove.
+
 ## [1.37.22] — 2026-10-09
 
 ### Phase 0: the request pipeline in stages, quotas in the volume, honest positioning (patch)

@@ -5,6 +5,11 @@ for PLUGIN_CB_COOLDOWN seconds. It used to skip a quarantined plugin
 unconditionally, so a plugin declared fail-closed (the PII masker, the budget
 guard) stopped protecting requests once ten of them had made it fail: the next
 request passed straight through as if the plugin had approved it.
+
+It then refused every request while a fail-closed plugin was quarantined, which
+let ten requests from one caller take the gateway away from all the others for
+the cooldown. A fail-closed plugin is now never quarantined: it runs on every
+request, and a request that makes it fail is the one that is refused.
 """
 
 import logging
@@ -44,7 +49,7 @@ async def _trip(pm, hook):
     assert pm._plugin_quarantined(next(iter(pm._plugin_stats)))
 
 
-async def test_fail_closed_plugin_refuses_requests_while_quarantined(tmp_path):
+async def test_a_fail_closed_plugin_still_runs_after_ten_failures_and_refuses_what_fails(tmp_path):
     pm, calls = _manager(tmp_path, "masker", PluginHook.PRE_FLIGHT, "closed")
     await _trip(pm, PluginHook.PRE_FLIGHT)
     calls_when_tripped = calls["n"]
@@ -52,13 +57,35 @@ async def test_fail_closed_plugin_refuses_requests_while_quarantined(tmp_path):
     ctx = PluginContext()
     await pm.execute_ring(PluginHook.PRE_FLIGHT, ctx)
 
+    # It ran, it failed, and that request is refused: never skipped.
+    assert calls["n"] == calls_when_tripped + 1
     assert ctx.stop_chain is True
-    assert "masker" in ctx.error and "quarantined" in ctx.error
-    assert ctx.metadata["_block_status"] == 503
-    assert ctx.metadata["_block_error_type"] == "plugin_unavailable"
-    # The plugin itself was not called again: the refusal is the engine's.
-    assert calls["n"] == calls_when_tripped
-    assert pm._plugin_stats["masker"]["blocks"] >= 1
+    assert ctx.error == "Plugin masker failed"
+
+
+async def test_ten_requests_that_break_a_fail_closed_plugin_do_not_refuse_the_next_caller(tmp_path):
+    """The outage this used to be: no cooldown stands between one caller's
+    failing requests and another caller's healthy one."""
+    pm, calls = _manager(tmp_path, "masker", PluginHook.PRE_FLIGHT, "closed")
+    await _trip(pm, PluginHook.PRE_FLIGHT)
+    calls["healthy"] = True  # the next request is one the plugin can handle
+
+    ctx = PluginContext()
+    await pm.execute_ring(PluginHook.PRE_FLIGHT, ctx)
+
+    assert ctx.stop_chain is False
+    assert ctx.metadata.get("ran") is True
+    assert "_block_status" not in ctx.metadata
+
+
+async def test_a_plugins_exception_text_is_not_sent_to_the_caller(tmp_path):
+    pm, _ = _manager(tmp_path, "masker", PluginHook.PRE_FLIGHT, "closed")
+
+    ctx = PluginContext()
+    await pm.execute_ring(PluginHook.PRE_FLIGHT, ctx)
+
+    assert ctx.stop_chain is True
+    assert "broken" not in ctx.error
 
 
 async def test_fail_closed_default_ring_also_refuses_when_quarantined(tmp_path):

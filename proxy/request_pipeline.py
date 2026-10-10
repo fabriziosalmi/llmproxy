@@ -33,9 +33,13 @@ from core.log_context import reset_request_id, set_request_id
 from core.metrics import MetricsTracker
 from core.model_resolver import resolve_model
 from core.plugin_engine import PluginContext, PluginHook
+from core.pricing import estimate_cost
 from core.stream_faker import fake_stream
+from core.tokenizer import count_messages_tokens
 from core.tracing import TraceManager
 from core.webhooks import EventType
+from proxy.audit_backlog import submit as submit_audit
+from proxy.auth_helpers import audit_principal
 from proxy.budget import charge_and_persist, roll_over_if_new_day
 
 logger = logging.getLogger("llmproxy.request_pipeline")
@@ -60,6 +64,12 @@ async def process_proxy_request(
     tests/test_request_pipeline_characterization.py pins what each stage does.
     """
     start_total = time.time()
+    # The kill switch (POST /api/v1/panic, /api/v1/proxy/toggle) was checked by
+    # the chat route alone: with the proxy "stopped", /v1/completions ran this
+    # same pipeline against the same models. ``is False`` because the attribute
+    # is absent on the orchestrators tests build.
+    if getattr(orchestrator, "proxy_enabled", True) is False:
+        raise HTTPException(status_code=503, detail="Proxy service is currently STOPPED.")
     if body is None:
         body = await request.json()
 
@@ -91,11 +101,13 @@ async def process_proxy_request(
         _annotate_trace(orchestrator, ctx, start_total)
         return ctx.response
 
-    except HTTPException:
+    except HTTPException as stop:
+        await _audit_refusal(orchestrator, ctx, stop.status_code, stop.detail, start_total)
         raise
     except Exception as e:
         orchestrator.logger.error(f"Proxy pipeline error: {e}")
         TraceManager.capture_exception(e)
+        await _audit_refusal(orchestrator, ctx, 502, "Upstream request failed", start_total)
         raise HTTPException(status_code=502, detail="Upstream request failed") from e
     finally:
         # Unbind on every exit path, including the two raises above. Without
@@ -108,6 +120,86 @@ async def process_proxy_request(
 #: Returned by _pre_flight when the request carries on (None is a valid answer:
 #: a cache hit that produced no response).
 _CONTINUE = object()
+
+def _served_cost(ctx: PluginContext) -> float:
+    """What a non-streaming response cost, from the usage the upstream reported.
+
+    Priced as the chat route prices the same response for its spend row. An
+    upstream error is not billed; a response without usage is priced on the
+    prompt it was sent.
+    """
+    response = ctx.response
+    raw = getattr(response, "body", None)
+    if not raw or getattr(response, "status_code", 200) >= 400:
+        return 0.0
+    try:
+        usage = json.loads(raw).get("usage") or {}
+    except (ValueError, AttributeError, UnicodeDecodeError):
+        return 0.0
+    model = str(ctx.body.get("model", "") or "")
+    try:
+        prompt = int(usage.get("prompt_tokens") or 0) or count_messages_tokens(
+            ctx.body.get("messages", []), model
+        )
+        return float(estimate_cost(model, prompt, int(usage.get("completion_tokens") or 0)))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+#: Longest refusal reason kept in an audit row. The reason is the text the
+#: caller was sent; a plugin can put anything there.
+_REASON_MAX = 500
+
+
+async def _audit_refusal(
+    orchestrator: Any, ctx: PluginContext, status: int, detail: Any, started: float
+) -> None:
+    """Record a request that the pipeline did not serve.
+
+    The audit log only ever received a row from the code that runs after a
+    response exists, so it held the requests the gateway let through and none
+    of the ones it stopped: an injection blocked by the shield, a request
+    refused by a plugin, a budget stop and an upstream failure all left the
+    chain exactly as it was. For a security gateway that is the half of the
+    record an auditor asks for first.
+
+    A 4xx is the gateway refusing (``blocked``); a 5xx is the request failing.
+    Either way the request never produced a response, so tokens and cost are 0.
+    """
+    store = getattr(orchestrator, "store", None)
+    if store is None or not hasattr(store, "log_audit"):
+        return
+    refused = 400 <= status < 500
+    reason = (detail if isinstance(detail, str) else json.dumps(detail, default=str))[:_REASON_MAX]
+    row = {
+        "ts": int(time.time()),
+        "req_id": str(ctx.metadata.get("req_id", "")),
+        "session_id": (ctx.session_id or "")[:16],
+        "key_prefix": str(ctx.metadata.get("_key_prefix", "")),
+        "model": str(ctx.body.get("model", "") or ""),
+        "provider": str(ctx.metadata.get("_provider", "") or ""),
+        "status": status,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "cost_usd": 0.0,
+        "latency_ms": round((time.time() - started) * 1000, 1),
+        "blocked": refused,
+        "block_reason": reason,
+        "metadata": json.dumps(
+            {"event": "request.refused" if refused else "request.failed"},
+            separators=(",", ":"),
+        ),
+    }
+
+    async def _write() -> None:
+        try:
+            await store.log_audit(**row)
+            MetricsTracker.track_audit_persistence("pipeline", "ok")
+        except Exception as e:
+            MetricsTracker.track_audit_persistence("pipeline", "fail")
+            logger.warning("Refusal audit log failed: %s", e)
+
+    await submit_audit(orchestrator, _write(), route="pipeline")
 
 
 def _new_context(
@@ -126,6 +218,10 @@ def _new_context(
         },
         state=orchestrator.plugin_state,
     )
+    # Who the request is accounted to. The forwarder writes the audit and spend
+    # rows of a stream from this; nothing used to set it, so every streamed
+    # request was recorded with no caller.
+    ctx.metadata["_key_prefix"] = audit_principal(request)
     # Which data-plane route this is, for the token/cost series a stream feeds
     # after the fact (the matched template, never an arbitrary caller string).
     route = getattr(getattr(request, "url", None), "path", None)
@@ -275,8 +371,14 @@ async def _route(orchestrator: Any, ctx: PluginContext) -> None:
 async def _forward(orchestrator: Any, ctx: PluginContext) -> None:
     """Forward with cross-provider fallback, charge the budget, record endpoint stats."""
     target = ctx.metadata.get("target_endpoint")
-    headers = ctx.body.get("headers", {})
-    headers.update(orchestrator.zt_manager.get_identity_headers())
+    # The upstream request carries the operator's provider key. Its headers
+    # used to start from a ``headers`` object in the request body, so an
+    # inference client chose them (Host, Content-Length, a provider's beta or
+    # organisation header). The key is dropped: it is not part of any API this
+    # proxy speaks, and forwarded as a field it makes a strict upstream refuse
+    # the request.
+    ctx.body.pop("headers", None)
+    headers = dict(orchestrator.zt_manager.get_identity_headers())
 
     start_req = time.time()
     session = await orchestrator._get_session()
@@ -317,6 +419,13 @@ async def _forward(orchestrator: Any, ctx: PluginContext) -> None:
     # route call, which makes this the third and last charging site to go
     # through one helper.
     if not isinstance(ctx.response, StreamingResponse):
+        # The forwarder fills in ``delta`` for a stream only (when it ends). For
+        # a plain response it was left at 0.0 and charge_and_persist returns on
+        # a zero amount, so no non-streaming request was ever counted against
+        # the daily limit: the cap, the budget gauge and both budget alerts saw
+        # streamed traffic alone.
+        if not cost_ref["delta"]:
+            cost_ref["delta"] = _served_cost(ctx)
         await charge_and_persist(orchestrator, orchestrator._budget_lock, cost_ref["delta"])
 
     ctx.metadata["duration"] = time.time() - start_req

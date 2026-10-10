@@ -55,6 +55,8 @@ class SmartBudgetGuard(BasePlugin):
         self._spend_lock = asyncio.Lock()
         # J.5: Lazy hydration flag
         self._hydrated = False
+        # The day the totals belong to. They are daily budgets.
+        self._day = ""
         self._last_store = None  # Track store ref for on_unload persistence
         self._background_tasks: set[asyncio.Task] = set()
 
@@ -113,6 +115,24 @@ class SmartBudgetGuard(BasePlugin):
             self.logger.warning(f"Budget hydration failed (non-fatal): {e}")
             self._hydrated = True  # Don't retry on error
 
+    def _roll_over_if_new_day(self) -> None:
+        """Start the totals again when the date has changed.
+
+        The date was compared in ``_hydrate`` only, which runs once per
+        process. Past midnight the totals carried on, so a key that had reached
+        its budget stayed refused (429) until the process was restarted on a
+        later day; restarted the same day, it read the refusal back in.
+        Caller holds ``_spend_lock``.
+        """
+        import datetime as _dt
+
+        today = _dt.date.today().isoformat()
+        if today != self._day:
+            if self._day:
+                self._session_spend.clear()
+                self._team_spend.clear()
+            self._day = today
+
     async def _persist(self, store):
         """J.5: Save budget dicts to SQLite (fire-and-forget).
         Also stamps the date so hydration can detect daily reset."""
@@ -143,6 +163,7 @@ class SmartBudgetGuard(BasePlugin):
         estimated_cost = self._estimate_cost(model, input_tokens)
 
         async with self._spend_lock:
+            self._roll_over_if_new_day()
             # Check session budget
             session_spent = self._session_spend[session_id]
             if session_spent + estimated_cost > self.session_budget_usd:

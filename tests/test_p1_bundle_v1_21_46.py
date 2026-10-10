@@ -341,4 +341,8 @@ async def test_gdpr_erase_audit_intent_includes_phase_field():
     audit_meta = json.loads(store.audit_calls[0]["metadata"])
     assert audit_meta["phase"] == "intent"
     assert audit_meta["action"] == "erase"
-    assert audit_meta["subject"] == "longenough-user-id"
+    # The subject's hash, not the subject: the row outlives the erasure.
+    import hashlib
+
+    assert "subject" not in audit_meta
+    assert audit_meta["subject_sha256"] == hashlib.sha256(b"longenough-user-id").hexdigest()

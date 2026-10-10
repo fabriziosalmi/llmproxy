@@ -4,8 +4,9 @@ verify_audit_chain expected the first remaining row to link to GENESIS, so the
 first retention purge (on by default after 90 days) made it report
 ``prev_hash mismatch`` on a perfectly healthy log, permanently. GDPR erasure
 deletes rows from the middle of the chain with the same effect. A legitimate
-deletion now leaves a gap record, and the verifier bridges exactly that break
-and no other.
+deletion now leaves a removal record, and the verifier bridges exactly that
+break and no other. The record is a row of the chain itself, so the row counts
+below include one per purge or erasure.
 
 Runs against SQLite always, and against Postgres when TEST_POSTGRES_DSN is set
 (CI sets it; ``make test-pg`` starts one).
@@ -97,11 +98,12 @@ async def test_chain_is_still_valid_after_a_retention_purge(store):
 
     verdict = await store.verify_audit_chain()
     assert verdict["valid"] is True, verdict
-    assert verdict["verified"] == 2
+    assert verdict["verified"] == 3  # two survivors and the removal record
     assert verdict["rows_removed"] == 2
+    assert [(r["reason"], r["rows"]) for r in verdict["removals"]] == [("retention", 2)]
 
 
-async def test_successive_purges_stay_valid_and_collapse_to_one_record(store):
+async def test_successive_purges_stay_valid_and_the_newest_record_covers_them_all(store):
     for i, age in enumerate([300, 250, 200, 150, 10]):
         await _log(store, age, f"r{i}")
 
@@ -111,10 +113,11 @@ async def test_successive_purges_stay_valid_and_collapse_to_one_record(store):
 
     verdict = await store.verify_audit_chain()
     assert verdict["valid"] is True, verdict
-    assert verdict["verified"] == 1
+    assert verdict["verified"] == 3  # one survivor, one record per purge
     assert verdict["rows_removed"] == 4
-    gaps = audit_chain.load_gaps(await store.get_state(audit_chain.GAPS_KEY))
-    assert len(gaps) == 1 and gaps[0]["rows"] == 4
+    # The second record stands for everything removed so far: it has to, the
+    # first one is itself purged once it is older than the window.
+    assert [r["rows"] for r in verdict["removals"]] == [2, 4]
 
 
 async def test_appending_after_a_purge_keeps_the_chain_valid(store):
@@ -125,26 +128,29 @@ async def test_appending_after_a_purge_keeps_the_chain_valid(store):
 
     verdict = await store.verify_audit_chain()
     assert verdict["valid"] is True, verdict
-    assert verdict["verified"] == 2
+    assert verdict["verified"] == 3
 
 
-async def test_purging_the_whole_chain_starts_a_new_one(store):
+async def test_purging_the_whole_chain_leaves_its_record_and_the_chain_goes_on(store):
     for i, age in enumerate([200, 150]):
         await _log(store, age, f"r{i}")
     await store.purge_expired(90)
-    assert await _rows(store) == []
+    # Not an empty table: an emptied chain and a brand-new one must differ.
+    assert [req_id for _, req_id in await _rows(store)] == ["audit-removal-retention"]
 
     await _log(store, 0, "fresh")
     verdict = await store.verify_audit_chain()
     assert verdict["valid"] is True, verdict
-    assert verdict["verified"] == 1
+    assert verdict["verified"] == 2
+    assert verdict["rows_removed"] == 2
 
 
 async def test_purge_with_nothing_expired_changes_nothing(store):
     await _log(store, 1, "r0")
     assert (await store.purge_expired(90))["audit_deleted"] == 0
-    assert audit_chain.load_gaps(await store.get_state(audit_chain.GAPS_KEY)) == []
-    assert (await store.verify_audit_chain())["rows_removed"] == 0
+    verdict = await store.verify_audit_chain()
+    assert verdict["rows_removed"] == 0 and verdict["removals"] == []
+    assert verdict["verified"] == 1
 
 
 # ── GDPR erasure ────────────────────────────────────────────────────────────
@@ -162,7 +168,7 @@ async def test_chain_is_still_valid_after_erasing_a_subject_mid_chain(store):
 
     verdict = await store.verify_audit_chain()
     assert verdict["valid"] is True, verdict
-    assert verdict["verified"] == 3
+    assert verdict["verified"] == 4
     assert verdict["rows_removed"] == 2
 
 
@@ -174,8 +180,9 @@ async def test_erasing_non_adjacent_rows_records_each_run(store):
 
     verdict = await store.verify_audit_chain()
     assert verdict["valid"] is True, verdict
-    assert verdict["verified"] == 3
+    assert verdict["verified"] == 4
     assert verdict["rows_removed"] == 3  # three separate runs, each bridged
+    assert [r["rows"] for r in verdict["removals"]] == [1, 1, 1]
 
 
 async def test_erasing_the_newest_rows_then_appending_stays_valid(store):
@@ -186,7 +193,7 @@ async def test_erasing_the_newest_rows_then_appending_stays_valid(store):
 
     verdict = await store.verify_audit_chain()
     assert verdict["valid"] is True, verdict
-    assert verdict["verified"] == 2
+    assert verdict["verified"] == 3
 
 
 # ── a deletion that was not recorded is still tampering ─────────────────────
@@ -352,7 +359,7 @@ async def test_a_gap_bridge_works_when_the_break_falls_on_a_page_boundary(
     verdict = await store.verify_audit_chain()
 
     assert verdict["valid"] is True, verdict
-    assert verdict["verified"] == 5 and verdict["rows_removed"] == 3
+    assert verdict["verified"] == 6 and verdict["rows_removed"] == 3
 
 
 async def test_rows_appended_between_pages_do_not_break_verification(store, small_pages):

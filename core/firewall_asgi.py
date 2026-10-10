@@ -484,9 +484,13 @@ class ByteLevelFirewallMiddleware:
             total_bytes += len(chunk)
 
             if self.max_body_bytes and total_bytes > self.max_body_bytes:
-                # Drain remaining chunks so the peer can receive the response
-                while message.get("more_body", False):
-                    message = await receive()
+                # Answer and close. The rest of the body used to be drained
+                # first, in a loop with no deadline and no byte limit, outside
+                # the body timeout above: a client that sent one byte too many
+                # and then went quiet held its admission slot for as long as it
+                # liked, before authentication, and enough of them held every
+                # slot. ``connection: close`` tells the server to drop the
+                # connection rather than read what is left of the body.
                 await send(
                     {
                         "type": "http.response.start",

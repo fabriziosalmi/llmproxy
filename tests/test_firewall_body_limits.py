@@ -53,6 +53,30 @@ async def test_a_body_that_never_finishes_is_cut_off_with_408():
     assert time.monotonic() - started < 2
 
 
+async def test_an_oversize_body_is_refused_without_waiting_for_the_rest_of_it():
+    """The 413 used to be sent only after the remaining body had been read, in a
+    loop with no deadline: one byte too many, then silence, held the slot forever."""
+    rec = _Recorder()
+    fw = ByteLevelFirewallMiddleware(rec.app, max_body_bytes=8, body_timeout_s=30)
+    first = True
+
+    async def receive():
+        nonlocal first
+        if first:
+            first = False
+            return {"type": "http.request", "body": b"x" * 9, "more_body": True}
+        await asyncio.sleep(30)  # the client never sends the rest
+
+    started = time.monotonic()
+    await asyncio.wait_for(fw(SCOPE, receive, rec.send), timeout=2)
+
+    assert rec.status() == 413
+    assert not rec.app_called
+    assert time.monotonic() - started < 1
+    start = next(m for m in rec.sent if m["type"] == "http.response.start")
+    assert (b"connection", b"close") in start["headers"]
+
+
 async def test_a_trickle_does_not_extend_the_deadline():
     """The deadline is for the whole body, not per chunk."""
     rec = _Recorder()

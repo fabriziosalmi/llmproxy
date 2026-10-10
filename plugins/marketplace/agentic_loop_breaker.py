@@ -51,12 +51,25 @@ class AgenticLoopBreaker(BasePlugin):
         normalized = ""
         for msg in tail:
             role = msg.get("role", "")
-            content = msg.get("content", "")
+            # ``content`` is null on an assistant turn that only calls tools,
+            # which is every other message of an agent loop: the one traffic
+            # this plugin exists for. ``.get(..., "")`` does not cover a key
+            # that is present and None.
+            content = msg.get("content")
             if isinstance(content, list):
                 # Multi-modal: extract text parts
                 content = " ".join(
-                    p.get("text", "") for p in content if isinstance(p, dict)
+                    str(p.get("text") or "") for p in content if isinstance(p, dict)
                 )
+            elif not isinstance(content, str):
+                content = "" if content is None else str(content)
+            # A tool-call turn has no text; without its calls every such turn
+            # would hash alike and a healthy agent would look like a loop. The
+            # call id is new on every turn, so only what is called counts.
+            for call in msg.get("tool_calls") or []:
+                fn = call.get("function") if isinstance(call, dict) else None
+                if isinstance(fn, dict):
+                    content += f" {fn.get('name', '')}({fn.get('arguments', '')})"
             normalized += f"{role}:{content.strip()}|"
         return hashlib.sha256(normalized.encode()).hexdigest()[:16]
 

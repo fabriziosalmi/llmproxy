@@ -28,6 +28,8 @@ class PostgresStore:
         self._pool: asyncpg.Pool | None = None
         self._audit_lock = asyncio.Lock()
         self._pool_cache = PoolCache()
+        # See SQLiteStore: the sealing key and the keys the verifier accepts.
+        self._audit_key, self._audit_keys = audit_chain.keys_from_env()
 
     async def init_pool(self):
         """Initialize the connection pool if not already initialized."""
@@ -48,6 +50,11 @@ class PostgresStore:
             for stmt in iter_create_statements(POSTGRES):
                 await conn.execute(stmt)
             await self._run_migrations(conn)
+            async with conn.transaction():
+                await conn.fetchval(
+                    "SELECT pg_advisory_xact_lock($1)", self._AUDIT_ADVISORY_LOCK
+                )
+                await self._import_legacy_audit_gaps(conn)
 
     async def _run_migrations(self, conn) -> None:
         """Apply pending migrations, recording only the ones that succeeded.
@@ -325,55 +332,69 @@ class PostgresStore:
         block_reason: str = "",
         metadata: str = "{}",
     ):
-        import hashlib
-
-        blocked_int = 1 if blocked else 0
-
+        row = audit_chain.normalise(
+            {
+                "ts": ts,
+                "req_id": req_id,
+                "session_id": session_id,
+                "key_prefix": key_prefix,
+                "model": model,
+                "provider": provider,
+                "status": status,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "cost_usd": cost_usd,
+                "latency_ms": latency_ms,
+                "blocked": blocked,
+                "block_reason": block_reason,
+                "metadata": metadata,
+            }
+        )
         async with self._audit_lock:
             pool = await self.init_pool()
             async with pool.acquire() as conn:
                 async with conn.transaction():
-                    # Acquire transaction-scoped advisory lock for hash chain serialization
-                    await conn.execute("SELECT pg_advisory_xact_lock(987654321)")
-
-                    # Get the hash of the last entry (chain link)
-                    row = await conn.fetchrow(
-                        "SELECT entry_hash FROM audit_log ORDER BY id DESC LIMIT 1"
+                    # Transaction-scoped advisory lock: one appender at a time,
+                    # across every process on this database.
+                    await conn.fetchval(
+                        "SELECT pg_advisory_xact_lock($1)", self._AUDIT_ADVISORY_LOCK
                     )
-                    prev_hash = row[0] if row and row[0] else "GENESIS"
+                    await self._append_audit(conn, row)
 
-                    # Compute deterministic hash
-                    payload = (
-                        f"{prev_hash}|{ts}|{req_id}|{session_id}|{key_prefix}|"
-                        f"{model}|{provider}|{status}|{prompt_tokens}|{completion_tokens}|"
-                        f"{cost_usd}|{latency_ms}|{blocked_int}|{block_reason}|{metadata}"
-                    )
-                    entry_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
-
-                    await conn.execute(
-                        """
-                        INSERT INTO audit_log (ts, req_id, session_id, key_prefix, model, provider,
-                                               status, prompt_tokens, completion_tokens, cost_usd, latency_ms, blocked,
-                                               block_reason, metadata, entry_hash, prev_hash)
-                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-                        """,
-                        ts,
-                        req_id,
-                        session_id,
-                        key_prefix,
-                        model,
-                        provider,
-                        status,
-                        prompt_tokens,
-                        completion_tokens,
-                        cost_usd,
-                        latency_ms,
-                        blocked_int,
-                        block_reason,
-                        metadata,
-                        entry_hash,
-                        prev_hash,
-                    )
+    async def _append_audit(self, conn, row: dict, prev_hash: str | None = None) -> None:
+        """Seal ``row`` (already normalised) onto the chain, inside the caller's
+        transaction and advisory lock. See SQLiteStore._append_audit."""
+        if prev_hash is None:
+            last = await conn.fetchval(
+                "SELECT entry_hash FROM audit_log ORDER BY id DESC LIMIT 1"
+            )
+            prev_hash = last or audit_chain.GENESIS
+        version, digest = audit_chain.seal(prev_hash, row, self._audit_key)
+        await conn.execute(
+            """
+            INSERT INTO audit_log (ts, req_id, session_id, key_prefix, model, provider,
+                                   status, prompt_tokens, completion_tokens, cost_usd, latency_ms, blocked,
+                                   block_reason, metadata, entry_hash, prev_hash, chain_v)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+            """,
+            row["ts"],
+            row["req_id"],
+            row["session_id"],
+            row["key_prefix"],
+            row["model"],
+            row["provider"],
+            row["status"],
+            row["prompt_tokens"],
+            row["completion_tokens"],
+            row["cost_usd"],
+            row["latency_ms"],
+            row["blocked"],
+            row["block_reason"],
+            row["metadata"],
+            digest,
+            prev_hash,
+            version,
+        )
 
     async def query_audit(
         self,
@@ -444,36 +465,55 @@ class PostgresStore:
     #: an append from this process or any other replica.
     _AUDIT_ADVISORY_LOCK = 987654321
 
-    async def _record_audit_gaps(self, conn, segments: list[dict]) -> None:
-        """Add deletion records to app_state, inside the caller's transaction."""
-        if not segments:
+    async def _audit_removals(self, conn) -> list[dict]:
+        """The removal records the chain currently carries (its own rows)."""
+        rows = await conn.fetch(
+            "SELECT id, ts, session_id, key_prefix, metadata FROM audit_log "
+            "WHERE session_id = $1 AND key_prefix = $2 ORDER BY id ASC",
+            audit_chain.SYSTEM_SESSION,
+            audit_chain.SYSTEM_KEY_PREFIX,
+        )
+        return audit_chain.gaps_from_rows([dict(r) for r in rows])
+
+    async def _record_audit_removal(
+        self, conn, segments: list[dict], *, reason: str, prev_hash: str | None = None
+    ) -> None:
+        """Append the row(s) recording ``segments`` as removed, inside the
+        caller's transaction."""
+        for metadata in audit_chain.removal_metadata(segments, reason=reason):
+            await self._append_audit(
+                conn, audit_chain.removal_row(metadata, reason=reason), prev_hash
+            )
+            prev_hash = None
+
+    async def _import_legacy_audit_gaps(self, conn) -> None:
+        """See SQLiteStore._import_legacy_audit_gaps."""
+        if await conn.fetchval(
+            "SELECT 1 FROM audit_log WHERE chain_v >= $1 LIMIT 1", audit_chain.CHAIN_V2
+        ):
             return
         raw = await conn.fetchval(
             "SELECT value FROM app_state WHERE key = $1", audit_chain.GAPS_KEY
         )
-        existing = audit_chain.load_gaps(json.loads(raw) if raw else None)
-        merged = audit_chain.merge_gaps(existing, segments)
-        await conn.execute(
-            """
-            INSERT INTO app_state (key, value) VALUES ($1, $2)
-            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
-            """,
-            audit_chain.GAPS_KEY,
-            json.dumps(merged),
-        )
+        try:
+            legacy = audit_chain.load_gaps(json.loads(raw) if raw else None)
+        except ValueError:
+            legacy = []
+        if legacy:
+            await self._record_audit_removal(conn, legacy, reason="imported")
 
     async def purge_expired(self, retention_days: int = 90) -> dict:
         """Delete audit/spend records older than retention_days.
 
         Audit rows go as the oldest run of the chain, and the run's boundary
-        hashes are recorded in the same transaction so verify_audit_chain can
-        tell this from tampering (see store/audit_chain.py).
+        hashes are appended to the chain in the same transaction so
+        verify_audit_chain can tell this from tampering (see store/audit_chain.py).
         """
         cutoff_ts = int(_time.time()) - (retention_days * 86400)
 
         pool = await self.init_pool()
         async with self._audit_lock, pool.acquire() as conn:
-            # Both deletes and the gap record commit together.
+            # Both deletes and the removal record commit together.
             async with conn.transaction():
                 await conn.fetchval(
                     "SELECT pg_advisory_xact_lock($1)", self._AUDIT_ADVISORY_LOCK
@@ -481,8 +521,7 @@ class PostgresStore:
                 first_kept = await conn.fetchval(
                     "SELECT MIN(id) FROM audit_log WHERE ts >= $1", cutoff_ts
                 )
-                # Nothing inside the window: the whole chain is expired and the
-                # next append starts a new one at GENESIS.
+                # Nothing inside the window: the whole chain is expired.
                 if first_kept is None:
                     where, params = "TRUE", []
                 else:
@@ -499,21 +538,24 @@ class PostgresStore:
                     *params,
                 )
 
+                # Read before the delete: rows recording earlier purges are
+                # among the oldest, so some of them are about to go too.
+                known = await self._audit_removals(conn)
+
                 audit_res = await conn.execute(f"DELETE FROM audit_log WHERE {where}", *params)
                 audit_deleted = int(audit_res.split(" ")[1]) if " " in audit_res else 0
 
-                if first_kept is not None and first and last:
-                    await self._record_audit_gaps(
+                if first and last:
+                    segment = audit_chain.extend_back(
+                        {"start": first, "end": last, "rows": audit_deleted}, known
+                    )
+                    # With nothing left, the record links to the last row
+                    # removed rather than to GENESIS (see SQLiteStore).
+                    await self._record_audit_removal(
                         conn,
-                        [
-                            {
-                                "start": first,
-                                "end": last,
-                                "rows": audit_deleted,
-                                "reason": "retention",
-                                "at": int(_time.time()),
-                            }
-                        ],
+                        [segment],
+                        reason="retention",
+                        prev_hash=last if first_kept is None else None,
                     )
 
                 spend_res = await conn.execute(
@@ -524,6 +566,8 @@ class PostgresStore:
         return {"audit_deleted": audit_deleted, "spend_deleted": spend_deleted}
 
     async def delete_subject_data(self, subject: str) -> dict:
+        if subject in audit_chain.RESERVED_SUBJECTS:
+            raise ValueError(f"{subject!r} is reserved for the audit chain's own rows")
         pool = await self.init_pool()
         async with self._audit_lock, pool.acquire() as conn:
             async with conn.transaction():
@@ -550,8 +594,10 @@ class PostgresStore:
                     subject,
                 )
                 audit_deleted = int(r1.split(" ")[1]) if " " in r1 else 0
-                await self._record_audit_gaps(
-                    conn, audit_chain.segments_from_rows(removed, reason="erasure")
+                await self._record_audit_removal(
+                    conn,
+                    audit_chain.segments_from_rows(removed, reason="erasure"),
+                    reason="erasure",
                 )
 
                 r2 = await conn.execute(
@@ -634,8 +680,9 @@ class PostgresStore:
         changed to treat as a break, and read only the first 100,000 rows.
         """
         pool = await self.init_pool()
-        gaps = audit_chain.load_gaps(await self.get_state(audit_chain.GAPS_KEY))
-        verifier = audit_chain.ChainVerifier(gaps, anchor)
+        async with pool.acquire() as conn:
+            gaps = await self._audit_removals(conn)
+        verifier = audit_chain.ChainVerifier(gaps, anchor, self._audit_keys)
         last_id = -1
         while True:
             rows = await pool.fetch(

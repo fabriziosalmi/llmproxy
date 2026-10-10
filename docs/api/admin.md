@@ -234,9 +234,13 @@ All need permission `users:manage`.
 `erase` writes an intent record to the audit chain *before* deleting and refuses
 (`503`) if it cannot, so every erasure request leaves a trail even if the delete
 then fails; it answers `404` when the subject has no data (the intent record
-remains). Both `purge` and `erase` remove audit rows from the hash chain; each
-leaves a gap record, so `GET /api/v1/audit/verify` still reports a valid chain
-and says how many rows it bridged (`rows_removed`).
+remains). The record carries the SHA-256 of the subject, not the subject: to
+show that someone was erased, hash the identifier you hold and look for it.
+Both `purge` and `erase` remove audit rows from the hash chain; each appends a
+removal record to the chain itself, so `GET /api/v1/audit/verify` still reports
+a valid chain and lists what was removed (`removals`, `rows_removed`). `erase`
+and `export` answer `400` for the names the chain files its own rows under
+(`AUDIT_SYSTEM`, `GDPR_SYSTEM`).
 
 ## Audit integrity
 
@@ -245,16 +249,20 @@ GET /api/v1/audit/verify
 ```
 
 Permission `logs:read`. Walks the audit hash chain and recomputes each entry's
-SHA-256. Returns `{"valid": true, "total": N, "verified": N, "broken_at": null,
-"rows_removed": N}`, or `valid: false` with `broken_at` (row id) and `error`.
-`rows_removed` counts rows removed by a recorded retention purge or erasure and
-bridged over. It checks the whole chain, a page of 5,000 rows at a time, so the time it takes grows with the length of the audit log (about a second per 100,000 rows on a laptop); `total` is the rows examined, which on a failure is the rows up to and including the one that broke.
+hash. Returns `{"valid": true, "total": N, "verified": N, "broken_at": null,
+"rows_removed": N, "removals": [...], "formats": {"v2": N}, "keyed": false}`, or
+`valid: false` with `broken_at` (row id) and `error`. `rows_removed` counts rows
+removed by a recorded retention purge or erasure and bridged over; `removals`
+lists each recorded removal (`id` of the row recording it, `at`, `reason`,
+`rows`; the newest hundred). `formats` counts rows per chain format and `keyed`
+says whether the newest rows are sealed with `LLM_PROXY_AUDIT_KEY`. The counts
+include the chain's own rows (one per purge or erasure). It checks the whole chain, a page of 5,000 rows at a time, so the time it takes grows with the length of the audit log (about a second per 100,000 rows on a laptop); `total` is the rows examined, which on a failure is the rows up to and including the one that broke.
 
 ```
 GET /api/v1/audit/verify?anchor_id=<id>&anchor_hash=<64 hex>
 ```
 
-The chain is keyless SHA-256: someone who can write the database can edit a row and recompute every later hash, or delete the newest rows, and the chain still verifies against itself. With an **anchor**, a head you recorded earlier and kept outside the database, the chain must also still contain that row with that hash. The result gains `anchor: {"id", "status"}` where `status` is `ok`; `purged` (older than the oldest retained row, removed by the retention purge) or `erased` (removed by a recorded erasure), both fine; or a failure: `mismatch` (the rows up to it were rewritten), `truncated` (the chain now ends before it), `missing` (gone with no recorded deletion). `400` if only one of the two parameters is given or they are malformed.
+Without `LLM_PROXY_AUDIT_KEY` the chain is plain SHA-256: someone who can write the database can edit a row and recompute every later hash. With or without the key they can delete the newest rows, and the chain still verifies against itself. With an **anchor**, a head you recorded earlier and kept outside the database, the chain must also still contain that row with that hash. The result gains `anchor: {"id", "status", "rows_removed_since"}` (`rows_removed_since`: rows removed by operations recorded after the anchored row) where `status` is `ok`; `purged` (older than the oldest retained row, removed by the retention purge) or `erased` (removed by a recorded erasure), both fine; or a failure: `mismatch` (the rows up to it were rewritten), `truncated` (the chain now ends before it), `missing` (gone with no recorded deletion). `400` if only one of the two parameters is given or they are malformed.
 
 ```
 GET /api/v1/audit/head

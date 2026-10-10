@@ -196,8 +196,18 @@ async def test_postgres_log_audit_chain(mock_pool_and_conn):
     store = PostgresStore("postgresql://localhost/dummy")
     store._pool = mock_pool
 
+    last_hash = {"value": None}
+
+    async def fetchval(sql, *args):
+        # The advisory lock, then the newest row's hash.
+        return last_hash["value"] if "entry_hash" in sql else None
+
+    mock_conn.fetchval = AsyncMock(side_effect=fetchval)
+
+    def inserts():
+        return [c[0] for c in mock_conn.execute.call_args_list if "INSERT INTO audit_log" in c[0][0]]
+
     # First write (genesis)
-    mock_conn.fetchrow.return_value = None
     await store.log_audit(
         ts=1700000000,
         req_id="req1",
@@ -212,15 +222,14 @@ async def test_postgres_log_audit_chain(mock_pool_and_conn):
         latency_ms=150.0,
     )
 
-    sql = mock_conn.execute.call_args_list[1][0][0]
-    args = mock_conn.execute.call_args_list[1][0][1:]
-    assert "INSERT INTO audit_log" in sql
+    args = inserts()[0][1:]
     assert args[15] == "GENESIS"  # prev_hash is GENESIS
     first_hash = args[14]
     assert len(first_hash) == 64  # valid SHA-256 hash string
+    assert args[16] == 2  # unkeyed canonical format
 
     # Second write (linked)
-    mock_conn.fetchrow.return_value = [first_hash]
+    last_hash["value"] = first_hash
     await store.log_audit(
         ts=1700000100,
         req_id="req2",
@@ -235,7 +244,7 @@ async def test_postgres_log_audit_chain(mock_pool_and_conn):
         latency_ms=180.0,
     )
 
-    args2 = mock_conn.execute.call_args_list[3][0][1:]
+    args2 = inserts()[1][1:]
     assert args2[15] == first_hash  # prev_hash links to first entry_hash
 
 

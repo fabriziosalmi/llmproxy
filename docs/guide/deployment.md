@@ -71,6 +71,8 @@ All sensitive values are loaded via environment variables (with optional Infisic
 | `LLM_PROXY_DEV_MODE` | `1` disables authentication entirely, with a warning naming itself. Local development only. |
 | `LLM_PROXY_MASTER_KEY` | At-rest encryption master key. **Optional and currently unused** — nothing calls `SecretManager.encrypt`/`.decrypt`, because provider credentials are referenced by environment-variable name and never written to disk. |
 | `LLM_PROXY_IDENTITY_SECRET` | Internal JWT signing key |
+| `LLM_PROXY_AUDIT_KEY` | Seals audit rows with HMAC-SHA-256 (32+ characters). With it, someone who can write the database but not read this variable cannot alter or remove audit rows unnoticed. Once set it cannot be unset without `audit/verify` failing. Unset: SHA-256, which a database writer can recompute. |
+| `LLM_PROXY_AUDIT_KEY_PREVIOUS` | Comma-separated retired audit keys, kept while rows sealed with them are retained. |
 | `OPENAI_API_KEY` | OpenAI provider key |
 | `ANTHROPIC_API_KEY` | Anthropic provider key |
 | `GOOGLE_API_KEY` | Google AI provider key |
@@ -158,7 +160,7 @@ docker run -d --name llmproxy \
   -p 8090:8090 \
   -v llmproxy-data:/app/data \
   --env-file /path/to/keys.env \
-  ghcr.io/fabriziosalmi/llmproxy:1.37.22
+  ghcr.io/fabriziosalmi/llmproxy:1.38.0
 ```
 
 Mounting that volume is not optional. Without it the database is written into

@@ -98,7 +98,7 @@ async def _rewrite_and_rechain(store, row_id):
         if row["id"] == row_id:
             row["cost_usd"] = 0.0  # the edit
         row["prev_hash"] = prev
-        row["entry_hash"] = audit_chain.entry_hash(prev, row)
+        row["entry_hash"] = audit_chain.entry_hash(prev, row, audit_chain.row_version(row))
         prev = row["entry_hash"]
         await _exec(
             store,
@@ -163,7 +163,8 @@ async def test_an_untouched_chain_matches_its_own_recorded_head(store):
 
     verdict = await store.verify_audit_chain({"id": head["id"], "hash": head["hash"]})
 
-    assert verdict["valid"] is True and verdict["anchor"] == {"id": head["id"], "status": "ok"}
+    assert verdict["valid"] is True
+    assert verdict["anchor"] == {"id": head["id"], "status": "ok", "rows_removed_since": 0}
 
 
 async def test_an_older_head_still_matches_after_more_rows_are_appended(store):

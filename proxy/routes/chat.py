@@ -20,7 +20,7 @@ from core.tokenizer import count_messages_tokens
 from core.tracing import TraceManager
 from core.webhooks import EventType
 from proxy.audit_backlog import submit as submit_audit
-from proxy.auth_helpers import authenticate_data_plane
+from proxy.auth_helpers import audit_principal, authenticate_data_plane
 from proxy.routes.deps import ChatAgent
 from proxy.schemas import ChatCompletionRequest
 
@@ -151,7 +151,7 @@ def create_router(agent: ChatAgent) -> APIRouter:
             # We still log the audit entry here for all requests.
             _now = int(time.time())
             _date = _dt.date.today().isoformat()
-            _key = (token[:8] + "...") if token else ""
+            _key = audit_principal(request, token)
             _is_streaming = not hasattr(response, "body")
             # Extract metadata from response headers (set by rotator.proxy_request)
             _provider = ""

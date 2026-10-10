@@ -195,6 +195,23 @@ async def resolve_control_plane_principal(agent: Any, token: str):
     return None
 
 
+def audit_principal(request: Any, token: str = "") -> str:
+    """Who an audit or spend row is attributed to.
+
+    The first eight characters of an API key, or the signed-in user for a
+    caller admitted on an identity token. It used to be worked out per route
+    from the bearer token alone, which gave every SSO user the same value (the
+    first eight characters of any JWT are its header, ``eyJhbGci``) and gave
+    streamed requests none at all: the stream is accounted for by the
+    forwarder, which read a value nothing ever set. ``authenticate_data_plane``
+    records it once and every writer reads it from here.
+    """
+    recorded = getattr(getattr(request, "state", None), "audit_principal", None)
+    if isinstance(recorded, str):
+        return recorded
+    return (token[:8] + "...") if token else ""
+
+
 def principal_already_verified(request: Any) -> bool:
     """True when the global middleware already authenticated this request.
 
@@ -242,6 +259,7 @@ async def authenticate_data_plane(
     logger = logging.getLogger("llmproxy.auth")
 
     if not auth_enabled(agent.config):
+        request.state.audit_principal = ""
         return ""
 
     ip = request.client.host if request.client else "unknown"
@@ -332,4 +350,8 @@ async def authenticate_data_plane(
         request.state.user = getattr(request.state, "user", None) or ts_id["user"]
         request.state.node = ts_id["node"]
 
+    if identity and identity.verified:
+        request.state.audit_principal = str(identity.email or identity.subject or "")
+    else:
+        request.state.audit_principal = token[:8] + "..."
     return token

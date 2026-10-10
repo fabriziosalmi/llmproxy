@@ -134,6 +134,9 @@ TABLES: dict[str, list[Column]] = {
         _blob_text("metadata", "DEFAULT '{}'"),
         _text("entry_hash", _HASH_LEN, "DEFAULT ''"),
         _text("prev_hash", _HASH_LEN, "DEFAULT ''"),
+        # How entry_hash was computed (store/audit_chain.py). Rows from before
+        # the column existed are format 1, which is what the default says.
+        _int("chain_v", "DEFAULT 1"),
     ],
     # RBAC / GDPR — referenced by delete_subject_data / export_subject_data
     "user_roles": [
@@ -273,4 +276,16 @@ _POSTGRES_002 = [
 
 MIGRATIONS.append(
     ("002_endpoints_range_checks", {SQLITE: _SQLITE_002, POSTGRES: _POSTGRES_002})
+)
+
+# ── 003: the audit chain's row format ────────────────────────────────────────
+
+MIGRATIONS.append(
+    (
+        "003_audit_chain_format",
+        {
+            SQLITE: ["ALTER TABLE audit_log ADD COLUMN chain_v INTEGER DEFAULT 1"],
+            POSTGRES: ["ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS chain_v INTEGER DEFAULT 1"],
+        },
+    )
 )

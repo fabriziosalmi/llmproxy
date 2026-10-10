@@ -22,15 +22,28 @@ async def mask(ctx: PluginContext):
     # shield_sanitizer reads the same dict back on the post-flight ring.
     vault = ctx.metadata.setdefault("_pii_vault", {})
 
+    def _mask(text):
+        if not text or not isinstance(text, str):
+            return text, False
+        masked = rotator.security.mask_pii(text, vault=vault)
+        return masked, masked != text
+
     any_masked = False
     for msg in messages:
-        content = msg.get("content", "")
-        if not content or not isinstance(content, str):
+        if not isinstance(msg, dict):
             continue
-        masked = rotator.security.mask_pii(content, vault=vault)
-        if masked != content:
-            msg["content"] = masked
-            any_masked = True
+        content = msg.get("content")
+        if isinstance(content, str):
+            msg["content"], changed = _mask(content)
+            any_masked = any_masked or changed
+        elif isinstance(content, list):
+            # Content parts: what every vision client sends, and what any client
+            # may send. Only plain strings were masked, so the same sentence
+            # went upstream untouched once it was wrapped in a text part.
+            for part in content:
+                if isinstance(part, dict) and isinstance(part.get("text"), str):
+                    part["text"], changed = _mask(part["text"])
+                    any_masked = any_masked or changed
 
     if any_masked:
         ctx.metadata["pii_masked"] = True

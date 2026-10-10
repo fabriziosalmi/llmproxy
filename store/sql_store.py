@@ -45,6 +45,10 @@ class SQLiteStore:
         # splits, so verify_audit_chain() reports permanent tamper detection.
         self._write_lock = asyncio.Lock()
         self._pool_cache = PoolCache()
+        # The key new audit rows are sealed with (None: unkeyed) and every key
+        # the verifier accepts. Read once: a key that changed under a running
+        # process would split the chain between two keys with nothing recording it.
+        self._audit_key, self._audit_keys = audit_chain.keys_from_env()
 
     async def _get_conn(self) -> aiosqlite.Connection:
         """Return the persistent connection, creating it if needed.
@@ -102,6 +106,7 @@ class SQLiteStore:
             for stmt in iter_create_statements(SQLITE):
                 await conn.execute(stmt)
             await self._run_migrations(conn)
+            await self._import_legacy_audit_gaps(conn)
 
     async def _run_migrations(self, conn) -> None:
         """Apply pending migrations, recording only the ones that succeeded.
@@ -388,59 +393,74 @@ class SQLiteStore:
         block_reason: str = "",
         metadata: str = "{}",
     ):
-        """Record an audit entry with hash chain for tamper detection.
+        """Append an audit entry to the hash chain.
 
-        Each entry's hash includes the previous entry's hash, forming an
-        append-only chain. If any entry is modified or deleted, the chain
-        breaks and verify_audit_chain() will detect it.
+        Each entry's hash covers the previous entry's hash. A row that is
+        altered, or removed without a removal record in the chain, breaks it
+        and verify_audit_chain() says where. See store/audit_chain.py.
         """
-        import hashlib
-
-        blocked_int = 1 if blocked else 0
-
+        row = audit_chain.normalise(
+            {
+                "ts": ts,
+                "req_id": req_id,
+                "session_id": session_id,
+                "key_prefix": key_prefix,
+                "model": model,
+                "provider": provider,
+                "status": status,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "cost_usd": cost_usd,
+                "latency_ms": latency_ms,
+                "blocked": blocked,
+                "block_reason": block_reason,
+                "metadata": metadata,
+            }
+        )
         async with self._write() as conn:
             # Explicit, so another *process* writing the file cannot slip in
             # between reading the last hash and inserting the next row.
             await conn.execute("BEGIN IMMEDIATE")
-            # Get the hash of the last entry (chain link)
+            await self._append_audit(conn, row)
+
+    async def _append_audit(self, conn, row: dict, prev_hash: str | None = None) -> None:
+        """Seal ``row`` (already normalised) onto the chain. Caller holds the write lock.
+
+        ``prev_hash`` is given only when the rows it would be read from have
+        just been deleted in this transaction (a purge that emptied the table).
+        """
+        if prev_hash is None:
             async with conn.execute(
                 "SELECT entry_hash FROM audit_log ORDER BY id DESC LIMIT 1"
             ) as cursor:
-                row = await cursor.fetchone()
-                prev_hash = row[0] if row and row[0] else "GENESIS"
-
-            # Compute deterministic hash: SHA256(prev_hash|ts|req_id|session_id|...)
-            payload = (
-                f"{prev_hash}|{ts}|{req_id}|{session_id}|{key_prefix}|"
-                f"{model}|{provider}|{status}|{prompt_tokens}|{completion_tokens}|"
-                f"{cost_usd}|{latency_ms}|{blocked_int}|{block_reason}|{metadata}"
-            )
-            entry_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
-
-            await conn.execute(
-                "INSERT INTO audit_log (ts, req_id, session_id, key_prefix, model, provider, "
-                "status, prompt_tokens, completion_tokens, cost_usd, latency_ms, blocked, "
-                "block_reason, metadata, entry_hash, prev_hash) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (
-                    ts,
-                    req_id,
-                    session_id,
-                    key_prefix,
-                    model,
-                    provider,
-                    status,
-                    prompt_tokens,
-                    completion_tokens,
-                    cost_usd,
-                    latency_ms,
-                    blocked_int,
-                    block_reason,
-                    metadata,
-                    entry_hash,
-                    prev_hash,
-                ),
-            )
+                last = await cursor.fetchone()
+            prev_hash = last[0] if last and last[0] else audit_chain.GENESIS
+        version, digest = audit_chain.seal(prev_hash, row, self._audit_key)
+        await conn.execute(
+            "INSERT INTO audit_log (ts, req_id, session_id, key_prefix, model, provider, "
+            "status, prompt_tokens, completion_tokens, cost_usd, latency_ms, blocked, "
+            "block_reason, metadata, entry_hash, prev_hash, chain_v) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                row["ts"],
+                row["req_id"],
+                row["session_id"],
+                row["key_prefix"],
+                row["model"],
+                row["provider"],
+                row["status"],
+                row["prompt_tokens"],
+                row["completion_tokens"],
+                row["cost_usd"],
+                row["latency_ms"],
+                row["blocked"],
+                row["block_reason"],
+                row["metadata"],
+                digest,
+                prev_hash,
+                version,
+            ),
+        )
 
     async def query_audit(
         self,
@@ -508,27 +528,60 @@ class SQLiteStore:
 
     # ── GDPR: Data Subject Rights ──
 
-    async def _record_audit_gaps(self, conn, segments: list[dict]) -> None:
-        """Add deletion records to app_state. Caller commits, in the same transaction."""
-        if not segments:
-            return
+    async def _audit_removals(self, conn) -> list[dict]:
+        """The removal records the chain currently carries (its own rows)."""
+        async with conn.execute(
+            "SELECT id, ts, session_id, key_prefix, metadata FROM audit_log "
+            "WHERE session_id = ? AND key_prefix = ? ORDER BY id ASC",
+            (audit_chain.SYSTEM_SESSION, audit_chain.SYSTEM_KEY_PREFIX),
+        ) as cursor:
+            rows = [
+                {"id": r[0], "ts": r[1], "session_id": r[2], "key_prefix": r[3], "metadata": r[4]}
+                for r in await cursor.fetchall()
+            ]
+        return audit_chain.gaps_from_rows(rows)
+
+    async def _record_audit_removal(
+        self, conn, segments: list[dict], *, reason: str, prev_hash: str | None = None
+    ) -> None:
+        """Append the row(s) recording ``segments`` as removed. Caller commits,
+        in the transaction that deleted them."""
+        for metadata in audit_chain.removal_metadata(segments, reason=reason):
+            await self._append_audit(
+                conn, audit_chain.removal_row(metadata, reason=reason), prev_hash
+            )
+            prev_hash = None
+
+    async def _import_legacy_audit_gaps(self, conn) -> None:
+        """Carry removal records written to app_state by earlier releases into
+        the chain, once.
+
+        Only while the chain holds no row in the current formats: after that,
+        app_state is not a source of removal records any more, so writing one
+        there cannot excuse a deletion.
+        """
+        async with conn.execute(
+            "SELECT 1 FROM audit_log WHERE chain_v >= ? LIMIT 1", (audit_chain.CHAIN_V2,)
+        ) as cursor:
+            if await cursor.fetchone():
+                return
         async with conn.execute(
             "SELECT value FROM app_state WHERE key = ?", (audit_chain.GAPS_KEY,)
         ) as cursor:
             row = await cursor.fetchone()
-        existing = audit_chain.load_gaps(json.loads(row[0]) if row else None)
-        merged = audit_chain.merge_gaps(existing, segments)
-        await conn.execute(
-            "INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)",
-            (audit_chain.GAPS_KEY, json.dumps(merged)),
-        )
+        try:
+            legacy = audit_chain.load_gaps(json.loads(row[0]) if row else None)
+        except ValueError:
+            legacy = []
+        if legacy:
+            await self._record_audit_removal(conn, legacy, reason="imported")
 
     async def purge_expired(self, retention_days: int = 90) -> dict:
         """Delete audit/spend records older than retention_days.
 
         Audit rows are removed as the oldest *run* of the chain: everything
         before the first row that is still inside the window. The removed run's
-        boundary hashes are recorded in the same transaction, so
+        boundary hashes are appended to the chain in the same transaction, so
         verify_audit_chain can tell this deletion from tampering. Holding the
         write lock keeps an append from reading a last-hash that the delete is
         about to take away.
@@ -544,9 +597,7 @@ class SQLiteStore:
                 row = await cursor.fetchone()
             first_kept = row[0] if row else None
 
-            # Nothing inside the window: the whole chain is expired and the
-            # next append starts a new one at GENESIS, so there is no
-            # surviving row to bridge to.
+            # Nothing inside the window: the whole chain is expired.
             where, params = ("1=1", ()) if first_kept is None else ("id < ?", (first_kept,))
 
             async with conn.execute(
@@ -562,21 +613,25 @@ class SQLiteStore:
             ) as cursor:
                 last = await cursor.fetchone()
 
+            # Read before the delete: the rows recording earlier purges are
+            # among the oldest, so some of them are about to go too.
+            known = await self._audit_removals(conn)
+
             cursor = await conn.execute(f"DELETE FROM audit_log WHERE {where}", params)
             audit_deleted = cursor.rowcount
 
-            if first_kept is not None and first and last:
-                await self._record_audit_gaps(
+            if first and last:
+                segment = audit_chain.extend_back(
+                    {"start": first[0], "end": last[0], "rows": audit_deleted}, known
+                )
+                # With nothing left, the record is the chain's first row and
+                # links to the last row removed, not to GENESIS: an emptied
+                # chain and a new one are then different things.
+                await self._record_audit_removal(
                     conn,
-                    [
-                        {
-                            "start": first[0],
-                            "end": last[0],
-                            "rows": audit_deleted,
-                            "reason": "retention",
-                            "at": int(time.time()),
-                        }
-                    ],
+                    [segment],
+                    reason="retention",
+                    prev_hash=last[0] if first_kept is None else None,
                 )
 
             cursor = await conn.execute(
@@ -591,9 +646,11 @@ class SQLiteStore:
 
         Matches on session_id, key_prefix (audit/spend), and subject/email (user_roles).
         The subject's audit rows can sit anywhere in the chain; their boundary
-        hashes are recorded in the same transaction so the rows around them
-        still verify.
+        hashes are appended to the chain in the same transaction so the rows
+        around them still verify. The chain's own rows are nobody's data.
         """
+        if subject in audit_chain.RESERVED_SUBJECTS:
+            raise ValueError(f"{subject!r} is reserved for the audit chain's own rows")
         async with self._write() as conn:
             async with conn.execute(
                 "SELECT id, prev_hash, entry_hash FROM audit_log "
@@ -609,8 +666,8 @@ class SQLiteStore:
                 (subject, subject),
             )
             audit_deleted = cursor.rowcount
-            await self._record_audit_gaps(
-                conn, audit_chain.segments_from_rows(removed, reason="erasure")
+            await self._record_audit_removal(
+                conn, audit_chain.segments_from_rows(removed, reason="erasure"), reason="erasure"
             )
 
             cursor = await conn.execute(
@@ -694,13 +751,15 @@ class SQLiteStore:
         Walks every entry in order, a page at a time, and recomputes its hash
         from the stored fields + previous hash. If any recomputed hash doesn't
         match the stored hash, the chain is broken (tamper detected). Rows
-        removed by a recorded retention purge or erasure are bridged (see
-        store/audit_chain.py). With ``anchor`` (``{"id", "hash"}``, a head
+        removed by a retention purge or erasure are bridged when a verified
+        row of the chain records the removal (see store/audit_chain.py). With
+        ``anchor`` (``{"id", "hash"}``, a head
         recorded outside the database) the chain must also still contain that row.
         """
         conn = await self._get_conn()
-        gaps = audit_chain.load_gaps(await self.get_state(audit_chain.GAPS_KEY))
-        verifier = audit_chain.ChainVerifier(gaps, anchor)
+        verifier = audit_chain.ChainVerifier(
+            await self._audit_removals(conn), anchor, self._audit_keys
+        )
         last_id = -1
         while True:
             # Keyset paging: no OFFSET, and rows appended meanwhile are simply

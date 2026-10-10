@@ -82,8 +82,8 @@ deliberate: signature evasion at one layer is caught by scoring at the next.
 ### 3.3 Repudiation
 **Threats:** a malicious action (e.g. budget drain) with no provable trail.
 - **Controls:** `EventLogger` records SECURITY/SYSTEM events; the audit ledger is
-  an append-only **hash chain** verifiable via `/api/v1/audit/verify` (a broken
-  link is detectable); `ResponseSigner` HMAC-signs outgoing responses so a
+  a **hash chain** verifiable via `/api/v1/audit/verify` (what it does and does
+  not prove is spelled out below); `ResponseSigner` HMAC-signs outgoing responses so a
   consumer can prove the payload transited the proxy unmodified.
 - **Sessions can be revoked.** A proxy-issued session JWT carries its roles until
   it expires, so an administrator can end one early: `POST /api/v1/identity/revoke`
@@ -92,24 +92,55 @@ deliberate: signature evasion at one layer is caught by scoring at the next.
   both the data plane and the control plane use. It does not reach the identity
   provider: the person can obtain a new session by signing in again unless their
   access is also removed there.
-- **Legitimate deletions are recorded, not invisible.** The retention purge and
-  GDPR erasure remove audit rows; each leaves a gap record (the hash before the
-  removed run and the hash of its last row, no row content) in `app_state` under
-  `audit_chain_gaps`, and `/api/v1/audit/verify` bridges exactly those and
-  reports how many rows it bridged (`rows_removed`). A row removed any other way
-  still breaks the chain. The chain is keyless SHA-256: it detects corruption
-  and unrecorded edits, not someone with write access to the database who
-  recomputes it.
+- **What the audit log holds.** One row per request that reached the pipeline,
+  served or not: a request the shield or a plugin refused is a row with
+  `blocked = 1`, its status and the reason the caller was given; a request that
+  failed upstream is a row with its 5xx. `/v1/embeddings` is recorded like chat.
+  Rows carry metadata (who, model, provider, status, tokens, cost, latency), not
+  prompts or responses. **Not in the chain:** requests rejected before the
+  pipeline (a missing or wrong key, the rate limiter, the byte-level firewall,
+  which runs before authentication) and control-plane changes (a configuration
+  apply, a feature toggle, a plugin install). Those go to the security log and
+  the SIEM export, which is not tamper-evident.
+- **Who a row is attributed to.** `key_prefix` is the first eight characters of
+  the API key, or the signed-in user's email (or subject) for an identity token;
+  `session_id` is an HMAC of the credential. Two keys that share their first
+  eight characters share a `key_prefix`, and `session_id` is stable across
+  restarts only when `LLM_PROXY_IDENTITY_SECRET` is set.
+- **Legitimate deletions are recorded in the chain.** The retention purge and
+  GDPR erasure remove audit rows; each appends a row (`audit.rows_removed`) with
+  the hash before the removed run and the hash of its last row, no row content.
+  `/api/v1/audit/verify` bridges a break only when such a row, itself verified,
+  accounts for it, and lists every removal with its reason, time and row count
+  (`removals`, `rows_removed`). The record used to be a value in `app_state`,
+  beside the table and covered by no hash: whoever could delete a row could
+  write the record that excused it. It is no longer read from there.
+- **Without a key the chain detects accidents, not a database writer.** Rows
+  are sealed with SHA-256 over a canonical encoding (format 2). Someone who can
+  write the database can recompute it, and can append a well-formed removal
+  record for rows they deleted: the verifier then answers `valid`, with the
+  removal listed. That is evidence for whoever reads the list, not a refusal.
+- **With `LLM_PROXY_AUDIT_KEY` the chain is keyed** (HMAC-SHA-256, format 3).
+  Someone who can write the database and does not hold the key cannot alter a
+  row, remove one, or append one (a removal record included) without
+  `/api/v1/audit/verify` failing. The key must live where the database's
+  writers cannot read it; kept in the same place, it adds nothing. A keyed
+  chain cannot be continued unkeyed: a row in an older format after a newer one
+  is a break, so removing the key is itself detected. Retired keys go in
+  `LLM_PROXY_AUDIT_KEY_PREVIOUS` for as long as rows sealed with them are
+  retained.
 - **The head can be kept outside the database.** `GET /api/v1/audit/head` and an
   hourly `AUDIT HEAD` security-log line (exported to the SIEM) give a copy of the
   chain's newest row that the database's writers cannot alter;
   `/api/v1/audit/verify?anchor_id=&anchor_hash=` checks the chain against one. That
   catches a consistent rewrite of rows before the anchor and a truncation of the
-  tail. It does not catch rows forged *after* the newest anchor you hold, nor a
-  rollback of the whole database to an earlier state that matches an older
-  anchor; a keyed hash (HMAC under a key held outside the database) would stop
-  forged appends but needs a key-custody decision and a chain-format change, and
-  is not done.
+  tail, keyed or not, and reports how many rows have been removed since
+  (`anchor.rows_removed_since`). It does not catch rows forged *after* the
+  newest anchor on an unkeyed chain, nor a rollback of the whole database to an
+  earlier state that matches an older anchor.
+- **The process itself is trusted.** Whoever can run code as the proxy, or read
+  its environment, holds the key and can write any row. The chain is evidence
+  against the database and its backups being edited, not against the host.
 
 ### 3.4 Information disclosure
 **Threats:** PII regurgitation; secret/stack-trace leakage.

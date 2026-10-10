@@ -87,19 +87,22 @@ async def test_a_sanitizer_failure_refuses_the_response_under_its_declared_polic
     assert pm._plugin_stats["Post-Flight Sanitizer"]["errors"] == 1
 
 
-async def test_the_same_failure_counts_toward_quarantine(tmp_path):
+async def test_after_ten_failures_the_sanitizer_still_runs_on_the_next_response(tmp_path):
     def boom(text, vault=None):
         raise ValueError("sanitizer is broken")
 
     pm = _ring(tmp_path, cleanse, "Post-Flight Sanitizer", "closed")
     for _ in range(PluginManager.PLUGIN_CB_THRESHOLD):
-        await pm.execute_ring(PluginHook.POST_FLIGHT, _ctx(_completion(), boom))
+        ctx = _ctx(_completion(), boom)
+        await pm.execute_ring(PluginHook.POST_FLIGHT, ctx)
+        assert ctx.stop_chain is True  # each failing response is refused
 
-    assert pm._plugin_quarantined("Post-Flight Sanitizer")
-    # Quarantined and fail-closed: refused, not passed through.
-    ctx = _ctx(_completion("unsanitized"), lambda text, vault=None: text)
+    # Fail-closed: neither skipped (the response would go out unsanitized) nor
+    # refused for everyone. The next response is sanitized like any other.
+    ctx = _ctx(_completion("raw"), lambda text, vault=None: text.upper())
     await pm.execute_ring(PluginHook.POST_FLIGHT, ctx)
-    assert ctx.stop_chain is True
+    assert ctx.stop_chain is False
+    assert json.loads(ctx.response.body)["choices"][0]["message"]["content"] == "RAW"
 
 
 async def test_a_working_sanitizer_still_cleans_the_response(tmp_path):

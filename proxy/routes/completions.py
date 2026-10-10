@@ -28,7 +28,7 @@ from core.session_id import (
 from core.session_id import (
     from_token as session_id_from_token,
 )
-from proxy.auth_helpers import authenticate_data_plane
+from proxy.auth_helpers import audit_principal, authenticate_data_plane
 from proxy.routes.deps import CompletionsAgent
 from proxy.schemas import CompletionRequest
 
@@ -137,7 +137,7 @@ def create_router(agent: CompletionsAgent) -> APIRouter:
             try:
                 _now = int(time.time())
                 _date = _dt.date.today().isoformat()
-                _key = (token[:8] + "...") if token else ""
+                _key = audit_principal(request, token)
                 _provider = ""
                 _req_id = ""
                 if hasattr(response, "headers"):
