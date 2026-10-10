@@ -3,97 +3,39 @@ layout: home
 
 hero:
   name: "LLMProxy"
-  text: "AI Security Gateway"
-  tagline: Security-first proxy for Large Language Models with multi-provider routing, ring-based plugin pipeline, and real-time threat monitoring.
+  text: "A self-hosted LLM gateway with an audit log you can verify"
+  tagline: OpenAI-compatible. Records every request it handles in a hash chain, applies policy to what a response may do, and runs as one process on your infrastructure.
   image:
     src: /logo.svg
-    alt: LLMProxy Logo
+    alt: LLMProxy logo
   actions:
     - theme: brand
-      text: Get Started
+      text: Quick start
       link: /guide/quickstart
     - theme: alt
-      text: View on GitHub
+      text: What the audit log proves
+      link: /threat_model
+    - theme: alt
+      text: GitHub
       link: https://github.com/fabriziosalmi/llmproxy
 
 features:
-  - title: Security Pipeline
-    details: Layered defense with an ASGI firewall, injection scoring, PII masking (Presidio NLP + regex), and multi-turn trajectory detection.
-  - title: Ring Plugin Engine
-    details: 5-ring pipeline (Ingress, Pre-Flight, Routing, Post-Flight, Background) with 18 marketplace plugins and WASM sandbox support.
-  - title: 15 Providers
-    details: OpenAI, Anthropic, Google, Azure, Ollama, Groq, Together, Mistral, DeepSeek, xAI, Perplexity, OpenRouter, Fireworks, SambaNova.
-  - title: SOC Dashboard
-    details: Real-time Security Operations Center with threat monitoring, guard controls, plugin management, spend analytics, and live terminal logs.
-  - title: PII Detection
-    details: Dual-mode PII masking with Presidio NLP engine (18 entity types) and regex fallback. Vault-based tokenization with reversible demasking.
-  - title: Smart Routing
-    details: EMA-weighted latency routing, cross-provider fallback chains, model aliases, budget-aware downgrading, and A/B model experimentation.
+  - title: Verifiable audit log
+    details: Served, refused and failed requests are rows of a hash chain. The chain can be keyed with HMAC, its head recorded outside the database, and retention and erasure leave a record in the chain.
+    link: /api/admin#audit-integrity
+  - title: Tool policy
+    details: Which tools a response may call, and which may follow a tool result. It stops the call an injected instruction asks for without having to recognise the instruction.
+    link: /security/tool-policy
+  - title: Measured detection
+    details: The firewall and the shield are lexical. What they stop on public datasets is measured, published and regenerated from a results file, misses included.
+    link: /security/benchmark
+  - title: Provider translation and fallback
+    details: Adapters for OpenAI, Anthropic, Google, Azure OpenAI and Ollama, plus OpenAI-compatible providers. Fallback chains, a circuit breaker per endpoint, a daily budget limit.
+    link: /guide/configuration
+  - title: PII masking
+    details: Regular expressions by default, Presidio when installed. Masked before the request leaves, restored in the response.
+    link: /security/pii-detection
+  - title: One process, your infrastructure
+    details: SQLite by default, Postgres optional. No hosted component and no telemetry. Not built to run as several replicas.
+    link: /guide/deployment
 ---
-
-<style>
-.architecture-section {
-  margin-top: 80px;
-  padding: 48px 24px;
-  text-align: center;
-}
-.architecture-section .section-title {
-  font-size: 2rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--vp-c-text-1);
-  margin: 0 0 40px 0;
-}
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 24px;
-  max-width: 800px;
-  margin: 0 auto;
-}
-.stat-card {
-  padding: 24px;
-  border-radius: 16px;
-  border: 1px solid var(--vp-c-divider);
-  background: var(--vp-c-bg-soft);
-}
-.dark .stat-card {
-  background: rgba(255,255,255,0.03);
-  border-color: rgba(255,255,255,0.06);
-}
-.stat-card .number {
-  font-size: 2.5rem;
-  font-weight: 800;
-  color: var(--vp-c-brand-1);
-}
-.stat-card .label {
-  font-size: 0.85rem;
-  color: var(--vp-c-text-2);
-  margin-top: 4px;
-}
-@media (max-width: 640px) {
-  .stats-grid { grid-template-columns: repeat(2, 1fr); }
-}
-</style>
-
-<div class="architecture-section">
-  <div class="section-title">Built for Security at Scale</div>
-  <div class="stats-grid">
-    <div class="stat-card">
-      <div class="number">15</div>
-      <div class="label">LLM Providers</div>
-    </div>
-    <div class="stat-card">
-      <div class="number">5</div>
-      <div class="label">Security Rings</div>
-    </div>
-    <div class="stat-card">
-      <div class="number">18</div>
-      <div class="label">Marketplace Plugins</div>
-    </div>
-    <div class="stat-card">
-      <div class="number">564</div>
-      <div class="label">Tests Passing</div>
-    </div>
-  </div>
-</div>

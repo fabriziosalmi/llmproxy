@@ -6,7 +6,7 @@ LLMProxy includes dual-mode PII detection that prevents sensitive personal infor
 
 ### Presidio NLP (opt-in)
 
-When `presidio-analyzer` is installed, LLMProxy uses Microsoft Presidio for NLP-powered entity recognition. Supports 18 entity types including names, addresses, and context-dependent patterns.
+When `presidio-analyzer` is installed, LLMProxy uses Microsoft Presidio for NLP-powered entity recognition. Supports 11 entity types including names, addresses, and context-dependent patterns.
 
 ```bash
 pip install presidio-analyzer presidio-anonymizer

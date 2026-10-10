@@ -1,6 +1,6 @@
 # Marketplace Plugins
 
-18 optional plugins using the BasePlugin SDK. All are disabled by default -- enable via `manifest.yaml` or the SOC UI.
+18 plugins using the BasePlugin SDK. Two are enabled in the shipped manifest (Agentic Loop Breaker and Smart Budget Guard, the latter with a 5 USD daily budget per API key); the others are off. Enable or disable them in `manifest.yaml` or the admin UI.
 
 ## Pre-Flight Ring
 

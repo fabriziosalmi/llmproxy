@@ -23,6 +23,29 @@ _MAX_SIG_LEN = 500
 _MAX_PATTERN_LEN = 200
 _MAX_TOTAL_PATTERNS = 10_000
 
+#: Where the image keeps a second copy of the reference files (see the
+#: Dockerfile). ``data/`` is where an operator mounts a volume: a bind mount or
+#: an empty PVC over it hides the files shipped beside the databases, and the
+#: firewall then ran on its 28 built-in signatures instead of the 178 in the
+#: file, with a line at DEBUG as the only sign.
+SHIPPED_DIR = Path(__file__).resolve().parents[1] / "defaults"
+
+
+def _resolve(configured: str) -> Path:
+    """The file to read: the configured one, or the shipped copy when it is absent."""
+    path = Path(configured)
+    if path.exists():
+        return path
+    shipped = SHIPPED_DIR / path.name
+    if shipped.exists():
+        logger.warning(
+            "%s is not there (a volume mounted over its directory hides it); "
+            "using the copy shipped with this release, %s",
+            path, shipped,
+        )
+        return shipped
+    return path
+
 
 class SignatureStore:
     """Loads and hot-reloads firewall signatures and pricing from YAML files."""
@@ -33,9 +56,9 @@ class SignatureStore:
         corpus_path: str = "data/injection_corpus.yaml",
         pricing_path: str = "data/pricing.yaml",
     ):
-        self._sig_path = Path(signatures_path)
-        self._corpus_path = Path(corpus_path)
-        self._pricing_path = Path(pricing_path)
+        self._sig_path = _resolve(signatures_path)
+        self._corpus_path = _resolve(corpus_path)
+        self._pricing_path = _resolve(pricing_path)
         self._lock = threading.Lock()
 
         # Active state (read via properties — lock-free)
@@ -129,7 +152,12 @@ class SignatureStore:
     def _load_signatures(self) -> tuple[list[bytes], list[bytes]]:
         """Load banned + ROT13 signatures from YAML."""
         if not self._sig_path.exists():
-            logger.debug(f"Signatures file not found: {self._sig_path}")
+            # At WARNING: without the file the firewall runs on a short
+            # built-in list, and nothing else says so.
+            logger.warning(
+                "Signatures file not found: %s. The firewall is running on its "
+                "built-in fallback list.", self._sig_path,
+            )
             return [], []
 
         try:

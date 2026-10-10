@@ -14,7 +14,7 @@ For requests that reach a route handler, LLMProxy tries authentication methods i
 
 1. **JWT** — Bearer token verified via OIDC JWKS
 2. **API Key** — Static key from `LLM_PROXY_API_KEYS`
-3. **Tailscale** — Machine/user identity via LocalAPI socket
+3. **Tailscale** — not a credential: when the peer is on the tailnet its user and node are added to the log
 
 ## OIDC Providers
 
@@ -70,9 +70,9 @@ identity:
 
 Roles are also persisted in the SQLite `user_roles` table.
 
-## Zero-Trust
+## Tailscale identity
 
-- **Tailscale LocalAPI**: Verifies machine/user identity via Unix socket (`whois` API)
+- **Tailscale LocalAPI**: looks up the peer's user and node via the Unix socket (`whois`) and records them. It never grants or denies access
 - **URL Injection Prevention**: All user-supplied IPs/URLs escaped via `urllib.parse.quote()`
 
 ## Frontend OAuth

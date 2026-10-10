@@ -75,6 +75,13 @@ COPY . .
 # Drop the built UI bundle on top of the source tree so app_factory mounts it.
 COPY --from=ui-builder /ui/dist /app/ui/dist
 
+# A second copy of the reference data, outside /app/data. /app/data is where the
+# data volume is mounted; a bind mount or an empty PVC there hides the files
+# shipped in it, and the firewall then falls back to a short built-in list.
+# core/signature_loader.py reads these when the ones in data/ are absent.
+RUN mkdir -p /app/defaults \
+    && cp /app/data/signatures.yaml /app/data/injection_corpus.yaml /app/data/pricing.yaml /app/defaults/
+
 RUN chown -R llmproxy:llmproxy /app
 
 USER llmproxy

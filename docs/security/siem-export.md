@@ -1,7 +1,7 @@
 # SIEM export
 
-LLMProxy emits its security events (injection blocks, auth failures, kill-switch,
-budget/circuit events) to your SOC in the two formats every SIEM already ingests.
+LLMProxy can send its security events (injection blocks, auth failures, kill switch,
+budget and circuit events) to a collector as ECS JSON over HTTP.
 
 ## ECS (Elastic Common Schema) — over HTTP
 
@@ -39,15 +39,11 @@ Example event:
 Outbound webhook URLs are SSRF-validated (private/reserved ranges rejected at load
 and at resolve time) — see `core/webhooks.py`.
 
-## CEF (ArcSight Common Event Format) — for syslog SIEMs
+## CEF
 
-For QRadar / ArcSight / on-prem syslog collectors, `core.siem.to_cef()` produces a
-standards-compliant `CEF:0|…` line with spec-correct escaping (a crafted event
-field cannot forge a second field or break the parser). Wire it to your syslog
-transport of choice:
+`core.siem.to_cef()` formats an event as a `CEF:0|...` line with field escaping, for
+QRadar, ArcSight or a syslog collector. **Nothing in the proxy calls it**: there is no
+syslog transport and no webhook target that emits CEF. It is a formatter you can use
+from your own code, not an export the proxy performs.
 
-```
-CEF:0|llmproxy|llmproxy|1.24.1|injection_blocked|Prompt injection blocked|8|src=203.0.113.9 reason=multilingual-override
-```
-
-Both formatters are pure functions with full test coverage in `tests/test_siem.py`.
+The audit chain's hourly `AUDIT HEAD` line goes to the process log, not to this export.

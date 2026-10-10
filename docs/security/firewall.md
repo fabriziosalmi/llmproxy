@@ -1,53 +1,62 @@
-# ASGI Firewall
+# ASGI firewall
 
-The ASGI firewall (`core/firewall_asgi.py`) is the first line of defense -- a byte-level L7 request filter running as ASGI middleware.
+`core/firewall_asgi.py`. A filter on the raw bytes of the request body, run as ASGI
+middleware before authentication and before the body is parsed.
 
-## How It Works
+## What it does
 
-The firewall scans raw request body bytes for injection signatures **before** any JSON parsing or routing occurs. Malicious requests are terminated with an instant 403 response, preventing any LLM cost.
-
-## Patterns
-
-The firewall matches against 11 known injection patterns:
-
-1. `ignore previous instructions`
-2. `ignore all previous`
-3. `disregard previous instructions`
-4. `bypass guardrails`
-5. `bypass safety`
-6. `you are a developer mode`
-7. `you are now in developer mode`
-8. `ignore your instructions`
-9. `override your system prompt`
-10. `reveal your system prompt`
-11. `print your system prompt`
-
-Matching is case-insensitive and operates on raw bytes.
-
-## Response
-
-When a pattern is matched:
+- Reads the whole body, within a deadline (30 s by default) and a size limit
+  (512 KiB by default). A body that is too slow gets `408`, one that is too large
+  `413`, one nested deeper than the permitted depth `400`.
+- Matches the body against the signatures in `data/signatures.yaml`: 162 phrases
+  and 16 ROT13 forms. Before matching it decodes URL encoding, Unicode escapes,
+  Base64, hex and ROT13, repeatedly, so a phrase wrapped in several encodings is
+  still found.
+- On a match, answers without invoking the application:
 
 ```json
-{
-  "error": "Request blocked by firewall",
-  "type": "firewall_block"
-}
+{"error": "request_blocked", "message": "Blocked by injection guard"}
 ```
 
-HTTP status: **403 Forbidden**
+HTTP status `403`, and the connection is closed.
 
-## Limitations
+## What it does not do
 
-::: warning
-The ASGI firewall uses **static pattern matching only**. It is not a substitute for ML-based injection detection. Sophisticated prompt injection can bypass static patterns. Use it as the first layer in a defense-in-depth strategy alongside SecurityShield's injection scoring and the Topic Blocklist plugin.
-:::
+- **It is a list of known phrases.** A reworded attack does not match. On the
+  [benchmark](/security/benchmark) the firewall and the shield together stop about
+  one attack in five.
+- **It matches bytes, not parsed text.** A phrase split across message parts, or
+  written with JSON escapes it does not decode, is not seen here. The shield, which
+  works on the parsed request, is the second chance.
+- **A blocked request is not in the audit chain.** The firewall runs before
+  authentication, so there is no caller to attribute the request to. Blocks are
+  counted in the metrics and written to the process log.
+- **It can refuse legitimate text** that quotes one of the phrases, such as a
+  question about prompt injection.
 
 ## Configuration
 
-The firewall is always enabled when the security module is active. No additional configuration is needed.
+On by default. To turn it off (for example behind another WAF):
+
+```bash
+LLM_PROXY_FIREWALL_ENABLED=0
+```
+
+or
 
 ```yaml
 security:
-  enabled: true
+  firewall:
+    enabled: false
 ```
+
+The admin UI shows whether it is on. It cannot be switched off from the UI.
+
+The signatures are read from `data/signatures.yaml`. That directory is also where the
+data volume is mounted, and a bind mount or an empty volume hides the file shipped in
+the image; the image therefore keeps a second copy in `/app/defaults`, which is used
+when the one in `data/` is absent (the proxy says so at start). A file you place in
+`data/` takes precedence and is reloaded when it changes. Note that a Docker *named*
+volume is filled from the image when it is first created and never again: after an
+upgrade it still holds the previous release's file, so delete `data/signatures.yaml`
+from the volume to return to the shipped one.

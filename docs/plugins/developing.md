@@ -133,7 +133,7 @@ python -m pytest tests/test_my_plugin.py -v
 2. **Use PluginResponse** — Never set `ctx.stop_chain` directly
 3. **Config via manifest** — All tunables in `config` + `ui_schema` for SOC UI
 4. **No blocking I/O** — `requests`, `urllib`, `sqlite3`, `time.sleep()` are blocked by AST scanner
-5. **Fail gracefully** — PRE_FLIGHT/POST_FLIGHT rings are FAIL_OPEN by default
+5. **Declare what a failure means** — Ingress, Pre-Flight and Routing are fail-closed by default (an error or timeout refuses the request); Post-Flight and Background are fail-open. Set `fail_policy` in the manifest to change it
 6. **Use metadata** — Communicate with other plugins via `ctx.metadata["_your_prefix"]`
 7. **Persist via DI** — Use `ctx.state.extra["store"]` for SQLite persistence
 

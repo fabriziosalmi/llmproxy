@@ -1,55 +1,69 @@
-# <img src="/logo.svg" style="height: 48px; display: inline; vertical-align: middle; margin-right: 12px; border-radius: 8px;"> What is LLMProxy?
+# What is LLMProxy?
 
-LLMProxy is a **security-first proxy** for Large Language Models. It sits between your applications and LLM providers, adding layered security, intelligent routing, cost controls, and real-time monitoring.
+LLMProxy is a self-hosted gateway between your applications and LLM providers. It
+speaks the OpenAI API, so existing clients point at it unchanged, and it keeps a
+record of the traffic that can be verified afterwards.
 
-## Architecture Overview
+It is meant for a small or regulated team that hosts its own tooling and has to be
+able to account for what went to a model: who called, which model, when, at what
+cost, and what the gateway refused.
 
-The request pipeline processes every LLM call through these stages:
+## What it does
 
-1. **Multi-Provider Translation** — 24 providers with automatic request/response format translation
-2. **Cross-Provider Fallback** — Configurable fallback chains (e.g. GPT-4o fails → Claude Sonnet → Gemini Pro)
-3. **Smart Routing** — EMA-weighted endpoint selection based on latency and success rate
-4. **ASGI Firewall** — Byte-level L7 request filtering
-5. **SecurityShield** — Injection scoring, PII masking, trajectory detection
-6. **Ring Plugin Pipeline** — 5-ring plugin engine with 18 marketplace plugins
-7. **WASM Sandbox** — Extism-based sandboxed execution for untrusted plugins
-8. **Per-Model Pricing** — Accurate cost tracking for 30+ models
-9. **Active Health Probing** — Background endpoint liveness checks with circuit breakers
-10. **Request Deduplication** — X-Idempotency-Key support
+- **Records requests in a hash chain.** Each request that reaches the pipeline is a
+  row whose hash covers the row before it. The chain can be keyed, checked against a
+  head recorded elsewhere, and survives retention purges and GDPR erasure because
+  those are recorded in it. See the [threat model](/threat_model) for what this
+  proves and what it does not.
+- **Applies policy to responses.** The [tool policy](/security/tool-policy) decides
+  which tools a response may call; PII is masked on the way out and restored on the
+  way back.
+- **Screens requests.** A byte-level firewall and a scoring shield refuse known
+  attack phrasings. They are lexical; the [benchmark](/security/benchmark) says how
+  much they stop.
+- **Translates and routes.** Adapters for OpenAI, Anthropic, Google, Azure OpenAI
+  and Ollama, and an OpenAI-compatible adapter for others. Fallback chains, a
+  circuit breaker per endpoint and a daily budget limit.
 
-![SOC Dashboard](/screenshots/soc-dashboard.png)
+## What it is not
 
-## Route Architecture
+- **Not horizontally scalable.** Budget totals, per-session scoring and control
+  state live in the process. Run one instance.
+- **Not a high-throughput gateway.** About 1.2k requests per second per process.
+- **Not an MCP or agent gateway.**
+- **Not a compliance product.** It produces evidence (an audit log, exports,
+  erasure records). Whether a deployment is compliant is for the operator to
+  establish.
+- **Not a guarantee against prompt injection.** No filter is. The measured figures
+  are published so the decision can be made on numbers.
 
-The `RotatorAgent` orchestrates 9 route modules under `proxy/routes/`:
+## How a request flows
 
-| Module | Routes | Responsibility |
-|--------|--------|----------------|
-| `chat.py` | `/v1/chat/completions` | Core proxy with auth, identity, RBAC, budget |
-| `completions.py` | `/v1/completions` | Legacy text completion endpoint |
-| `embeddings.py` | `/v1/embeddings` | Embedding endpoint with PII check |
-| `models.py` | `/v1/models` | OpenAI-compatible model discovery |
-| `admin.py` | `/api/v1/proxy/*` | Proxy control, features, analytics, audit |
-| `registry.py` | `/api/v1/registry/*` | Endpoint CRUD, SSE telemetry |
-| `identity.py` | `/api/v1/identity/*` | SSO config, token exchange |
-| `plugins.py` | `/api/v1/plugins/*` | Plugin lifecycle management |
-| `telemetry.py` | `/health`, `/metrics` | Health probes, Prometheus metrics |
+```
+client
+  rate limiter           off by default
+  byte firewall          before authentication
+  authentication         inference keys on /v1/*, admin keys on /api/v1/*
+  shield                 injection scoring, per-session trajectory
+  plugin rings           ingress, pre-flight (PII masking, budget), routing
+  upstream provider      translation, fallback, circuit breaker
+  tool policy            on the response's tool calls
+  plugin rings           post-flight (sanitisation), background
+client
+```
 
-## Tech Stack
+## Components
 
-| Layer | Technology |
-|-------|-----------|
-| Backend | Python 3.12+, FastAPI, uvicorn, aiohttp |
-| Frontend | Vanilla JS (ES Modules), Tailwind CSS, Chart.js, xterm.js |
-| Database | SQLite (aiosqlite) + Redis (Rate Limiting & Circuit Breakers) |
-| Observability | OpenTelemetry, Prometheus, Sentry |
-| Security | PyJWT, OIDC/JWKS, mTLS, Tailscale Zero-Trust |
-| Secrets | Infisical SDK + env fallback |
+| Area | Where |
+|---|---|
+| Request pipeline | `proxy/request_pipeline.py`, `proxy/forwarder.py` |
+| Provider adapters | `proxy/adapters/` |
+| Firewall, shield, PII | `core/firewall_asgi.py`, `core/security.py` |
+| Tool policy | `core/tool_policy.py` |
+| Audit chain | `store/audit_chain.py` |
+| Stores | `store/` (SQLite, Postgres) |
+| Plugins | `core/plugin_engine.py`, `plugins/` |
+| Admin UI | `ui/` |
 
-## Why LLMProxy?
-
-- **Security-first**: Every request passes through injection detection, PII masking, and trajectory analysis before reaching any LLM
-- **Provider-agnostic**: Single API endpoint supporting 24 providers with automatic format translation
-- **Cost control**: Per-model pricing, Predictive FinOps (HTTP 402 budget enforcement), automatic model downgrading for simple prompts
-- **Observable**: Prometheus metrics, OpenTelemetry traces, real-time SOC dashboard, webhook alerts
-- **Extensible**: Ring-based plugin pipeline with Python SDK and WASM sandbox for untrusted code
+Python 3.12, FastAPI, aiohttp. SQLite by default; Postgres as the store and Redis
+for shared rate-limit and circuit state are optional.

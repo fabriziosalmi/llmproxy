@@ -8,7 +8,7 @@ Every request flows through the rings in order:
 
 | Ring | Stage | Purpose |
 |------|-------|---------|
-| 1 | **Ingress** | Auth, Zero-Trust, Global Rate Limiting |
+| 1 | **Ingress** | Identity enrichment, rate limiting |
 | 2 | **Pre-Flight** | PII Masking, Prompt Mutation, Budget Guard, Loop Breaker, Cache Lookup |
 | 3 | **Routing** | Dynamic Model Selection, Load Balancing, Priority Steering |
 | 4 | **Post-Flight** | JSON Healing, Response Sanitization, Quality Gate, SLA Guard |
@@ -52,31 +52,31 @@ The engine **auto-detects** the type: if the entrypoint is a `BasePlugin` subcla
 
 Built-in function plugins, always enabled:
 
-- Ingress Auth & Zero-Trust
-- PII Neural Masker
+- Ingress Auth & Zero-Trust (attaches the caller's identity; it does not deny)
+- PII Neural Masker (regular expressions, or Presidio when installed)
 - WAF-Aware Cache Lookup
-- Enterprise Neural Router
+- Enterprise Neural Router (endpoint selection by success rate, latency and price)
 - Post-Flight Sanitizer
 - Unified Telemetry & FinOps
 - Aider Context Minifier
 - Speculative Kill-Switch
 - JSON Auto-Healer
 
-### Marketplace Plugins (14)
+### Marketplace Plugins
 
-Optional `BasePlugin` class plugins, opt-in via manifest or SOC UI:
+18 `BasePlugin` class plugins. Two are enabled in the shipped manifest (Agentic Loop Breaker, Smart Budget Guard); the rest are opt-in via the manifest or the admin UI:
 
 [See all marketplace plugins →](/plugins/marketplace)
 
 ### WASM Plugins
 
-Rust/Go/C plugins compiled to WebAssembly, running in memory-safe sandbox:
+Rust/Go/C plugins compiled to WebAssembly and run through Extism. The `extism` package is not part of the published image, so WASM plugins are skipped there unless you add it:
 
 [See WASM plugins →](/plugins/wasm)
 
-## Security & Sandboxing
+## What the loader checks
 
-All Python plugins are **AST-scanned** before loading:
+Python plugins run inside the proxy's process with its privileges. They are **not sandboxed**. Before loading, the source is scanned (AST) as a check against mistakes; it is not a security boundary and is easy to get around on purpose:
 
 - **Blocked imports**: `os`, `subprocess`, `socket`, `ctypes`, `sys`
 - **Blocked calls**: `exec()`, `eval()`, `__import__()`, `.system()`, `.popen()`, `time.sleep()`
@@ -84,7 +84,7 @@ All Python plugins are **AST-scanned** before loading:
 
 > [!WARNING]
 > **Removed: Legacy Sync Plugins**
-> Legacy synchronous plugins (function plugins without `async def`) have been permanently removed to eliminate the Thread Exhaustion Risk. All Python plugins must now be `async`. **For untrusted or external code, ALWAYS use WASM Plugins** which run in a deeply isolated, memory-bounded, and CPU-instruction-counted Extism sandbox.
+> Legacy synchronous plugins (function plugins without `async def`) have been permanently removed to eliminate the Thread Exhaustion Risk. All Python plugins must now be `async`. Do not install Python plugins you have not read. WASM plugins have no access to the host filesystem or network; the runner sets no memory or instruction limit of its own.
 
 ## Timeout Enforcement
 
@@ -92,8 +92,8 @@ Every plugin runs under `asyncio.wait_for(timeout)`:
 
 - **Function plugins**: 500ms default
 - **Class plugins**: 50ms default (configurable per-plugin via `timeout_ms`)
-- Ingress/Routing timeouts are fatal (stop chain)
-- Pre-Flight/Post-Flight timeouts are FAIL_OPEN by default
+- A timeout or error in the Ingress, Pre-Flight or Routing ring refuses the request (fail-closed) unless the plugin sets `fail_policy: open`
+- In the Post-Flight and Background rings it lets the request through (fail-open) unless the plugin sets `fail_policy: closed`
 
 ## Hot-Swap (Zero-Downtime)
 

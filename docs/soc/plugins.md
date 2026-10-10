@@ -8,7 +8,7 @@ The Plugins view shows the ring-based plugin pipeline with management controls.
 
 Plugins are displayed grouped by their ring assignment:
 
-1. **Ingress** — Auth, Zero-Trust
+1. **Ingress** — identity enrichment
 2. **Pre-Flight** — Budget, Loop Breaker, PII, Cache
 3. **Routing** — Model Selection, A/B Router
 4. **Post-Flight** — Sanitization, Quality Gate, SLA Guard

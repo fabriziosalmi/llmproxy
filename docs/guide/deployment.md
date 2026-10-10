@@ -160,7 +160,7 @@ docker run -d --name llmproxy \
   -p 8090:8090 \
   -v llmproxy-data:/app/data \
   --env-file /path/to/keys.env \
-  ghcr.io/fabriziosalmi/llmproxy:1.39.0
+  ghcr.io/fabriziosalmi/llmproxy:1.39.1
 ```
 
 Mounting that volume is not optional. Without it the database is written into
@@ -309,12 +309,16 @@ proxy looks for its own state.
 
 ### Prometheus
 
-Metrics are exposed at `/metrics` (port 8090):
+Metrics are exposed at `/metrics` (port 8090). The route requires an admin key, so
+the scrape has to send one:
 
 ```yaml
 # prometheus.yml
 scrape_configs:
   - job_name: llmproxy
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/llmproxy-admin-key
     static_configs:
       - targets: ['localhost:8090']
 ```
@@ -352,8 +356,8 @@ Event types: `circuit_open`, `budget_threshold`, `injection_blocked`, `endpoint_
 # Liveness/readiness
 curl http://localhost:8090/health
 
-# Detailed metrics
-curl http://localhost:8090/metrics
+# Detailed metrics (admin key)
+curl -H "Authorization: Bearer $LLM_PROXY_ADMIN_KEY" http://localhost:8090/metrics
 
 # Guard status
 curl http://localhost:8090/api/v1/guards/status \

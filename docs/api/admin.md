@@ -118,7 +118,7 @@ POST /api/v1/features/toggle
 
 ```json
 {
-  "feature": "injection_guard",
+  "name": "injection_guard",
   "enabled": true
 }
 ```

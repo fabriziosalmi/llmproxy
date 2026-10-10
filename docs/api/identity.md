@@ -127,5 +127,5 @@ Returns the complete role permission matrix.
 |------|-----------|--------------|----------------|------|-----------|----------------|--------------|---------------|
 | admin | yes | yes | yes | yes | yes | yes | yes | yes |
 | operator | yes | yes | yes | yes | yes | yes | - | - |
-| user | yes | yes | - | yes | yes | - | - | - |
+| user | yes | - | - | yes | - | - | - | - |
 | viewer | - | yes | - | - | yes | - | - | - |

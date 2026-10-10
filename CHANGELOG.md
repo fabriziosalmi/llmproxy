@@ -2,6 +2,36 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.39.1] — 2026-10-10
+
+### The firewall keeps its signatures under a mounted volume; README and docs rewritten from the code (patch)
+
+**Upgrading.** Nothing to do. If you bind-mount a directory or an empty volume on
+`/app/data`, the firewall goes from its 28 built-in signatures back to the 178 shipped.
+
+- **A volume mounted on `/app/data` hid the firewall's signatures.** The signatures, the
+  trigram corpus and the pricing table ship in `data/`, where the data volume is mounted.
+  A bind mount or an empty PVC hides them: the firewall fell back to a 28-entry built-in
+  list and the shield to a shorter corpus, announced only at DEBUG. The image now keeps a
+  second copy in `/app/defaults`, used when the file in `data/` is absent, and both
+  fallbacks are logged at WARNING. A file placed in `data/` still takes precedence.
+- **README rewritten.** Every figure and feature statement was checked against the code;
+  what could not be shown was removed. Among the corrections: five providers have their
+  own adapter and eighteen go through the OpenAI-compatible one (not "23 dedicated");
+  mutual TLS is not implemented and the Tailscale lookup does not grant or deny access;
+  rate limiting and response signing are off by default; CORS defaults to localhost, not
+  `*`; reaching the daily limit refuses with `402`, it does not downgrade; the CI gate is
+  73%, not 65%; the published image is `linux/amd64` only. It gains a table of what the
+  audit chain records and what it does not, a copy-paste check of the chain including an
+  edited row, and a "before production" list.
+- **Docs.** The landing page, the introduction, the security overview and the firewall
+  page are rewritten. Corrected elsewhere: pre-flight plugins are fail-closed by default
+  (the docs said fail-open); two marketplace plugins are enabled in the shipped manifest
+  (the docs said none); Presidio covers 11 entity types (not 18); Python plugins are not
+  sandboxed; nothing emits CEF (the formatter exists, no transport calls it);
+  `features/toggle` takes `name`, not `feature`; the `user` role has no read access to the
+  control plane; `/metrics` needs an admin key, so the Prometheus example now sends one.
+
 ## [1.39.0] — 2026-10-10
 
 ### The detection figures are measured; a tool policy that stops indirect injection without detecting it (minor)
