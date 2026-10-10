@@ -1,4 +1,4 @@
-# FQDN Risk Scoring — lexical domain scoring
+# FQDN Risk Scoring
 
 **Module:** `core/fqdn_risk.py` · **Used by:** `SecurityShield._check_links` (requests) and `sanitize_response` (non-streaming responses) · **Default:** disabled
 

@@ -1,4 +1,4 @@
-# Security overview
+# Security Overview
 
 What stands between a request and a provider, in the order it runs, and what each
 part does and does not do. Defaults are the shipped configuration.
@@ -75,7 +75,7 @@ sanitised.** A mid-stream guard scans the text as it arrives and can cut the str
 
 Every request that reaches the pipeline is recorded, served or not. What the chain
 proves, with and without a key, and what stays outside it, is set out in the
-[threat model](/threat_model#_3-3-repudiation).
+[threat model](/security/threat-model#_3-3-repudiation).
 
 ## Plugins
 

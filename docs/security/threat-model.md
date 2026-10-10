@@ -1,4 +1,4 @@
-# LLMProxy — Threat Model
+# Threat Model
 
 A threat model for LLMProxy. Each control names the module that implements it,
 and defaults are those of the shipped configuration. Where a control is partial,
@@ -9,7 +9,7 @@ off by default or absent, this page says so.
 - How much the detection stops is measured in the
   [detection benchmark](/security/benchmark). This page does not give coverage
   figures of its own.
-- Regression corpus: [OWASP_LLM_COVERAGE.md](OWASP_LLM_COVERAGE.md), written by
+- Regression corpus: [Regression corpus](/security/regression-corpus), written by
   `pytest tests/test_owasp_corpus.py`. See §5 for what it is and is not.
 
 ---
@@ -278,7 +278,7 @@ embedding weaknesses) and LLM09 (misinformation) are not addressed by the proxy.
 
 `tests/corpus/owasp_llm_top10.yaml` is a set of attack and benign prompts written
 together with the detector. `tests/test_owasp_corpus.py` runs each entry and
-writes the result to [OWASP_LLM_COVERAGE.md](OWASP_LLM_COVERAGE.md). An entry
+writes the result to [Regression corpus](/security/regression-corpus). An entry
 counts as blocked when one of these holds:
 
 1. the firewall's signature scan matches, **or**

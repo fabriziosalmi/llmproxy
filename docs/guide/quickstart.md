@@ -192,4 +192,4 @@ The body-size limit, the body deadline and the nesting-depth limit stay active w
 - [Endpoints](/reference/endpoints) — Provider matrix and env-based endpoint syntax
 - [Security](/security/overview) — The security pipeline
 - [Plugins](/plugins/overview) — Enable marketplace plugins
-- [Admin UI](/soc/overview) — Monitoring views
+- [Admin UI](/admin-ui/overview) — Monitoring views

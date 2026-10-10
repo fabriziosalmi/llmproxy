@@ -1,4 +1,4 @@
-# ASGI firewall
+# ASGI Firewall
 
 `core/firewall_asgi.py`. A filter on the raw bytes of the request body, run as ASGI
 middleware before authentication and before the body is parsed.

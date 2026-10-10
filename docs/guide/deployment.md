@@ -203,7 +203,7 @@ docker run -d --name llmproxy \
   -p 8090:8090 \
   -v llmproxy-data:/app/data \
   --env-file /path/to/keys.env \
-  ghcr.io/fabriziosalmi/llmproxy:1.39.3
+  ghcr.io/fabriziosalmi/llmproxy:1.39.4
 ```
 
 Without that volume the database is written into the container's writable

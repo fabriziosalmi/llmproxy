@@ -14,14 +14,14 @@ The sidebar has ten entries.
 
 | Screen | Content |
 |--------|---------|
-| [Home](/soc/threats) | Counters, budget, firewall statistics, ring latency, security event feed. Its page title is "Threats" |
-| [Guards](/soc/guards) | Proxy on/off switch, priority steering, guard switches, cache statistics, reset actions |
-| [Plugins](/soc/plugins) | A card for each loaded plugin, with statistics and actions |
-| [Models](/soc/models) | The models returned by `/v1/models` |
-| [Analytics](/soc/analytics) | Spend by model and by provider |
+| [Home](/admin-ui/threats) | Counters, budget, firewall statistics, ring latency, security event feed. Its page title is "Threats" |
+| [Guards](/admin-ui/guards) | Proxy on/off switch, priority steering, guard switches, cache statistics, reset actions |
+| [Plugins](/admin-ui/plugins) | A card for each loaded plugin, with statistics and actions |
+| [Models](/admin-ui/models) | The models returned by `/v1/models` |
+| [Analytics](/admin-ui/analytics) | Spend by model and by provider |
 | Security | Audit chain check, GDPR export and erase, the semantic pattern list, audit log query |
-| [Endpoints](/soc/endpoints) | The endpoint registry, with test, toggle and delete actions |
-| [Live Logs](/soc/logs) | A terminal fed by the log stream |
+| [Endpoints](/admin-ui/endpoints) | The endpoint registry, with test, toggle and delete actions |
+| [Live Logs](/admin-ui/logs) | A terminal fed by the log stream |
 | Settings | Configuration (guided editor and raw YAML), access and identity, rate limits and routing, webhooks and API reference, version, health and data export, appearance |
 | Docs | A short built-in help page |
 
@@ -51,7 +51,7 @@ The command palette filters its commands by substring. Typing `>` switches it to
 - The Settings screen has "Audit trail" and "Mask PII in audit log" switches bound to `logging.audit_trail.enabled` and `logging.audit_trail.mask_pii`. No backend code reads these keys. The switches change the file and nothing else.
 - A configuration change that lowers the security posture cannot be applied from the UI. The backend asks for a confirm token for such a change (`proxy/routes/config.py`), and the UI sends only the YAML.
 - The "Verify Chain" button on the Security screen calls `GET /api/v1/audit/verify` without an anchor.
-- The Plugins screen lists loaded plugins only, and its Reload button reports success when the hot-swap was rolled back (see [Plugins](/soc/plugins)).
-- The "PII Masked" counter on Home does not count masked PII (see [Home](/soc/threats)).
+- The Plugins screen lists loaded plugins only (see [Plugins](/admin-ui/plugins)).
+- The "PII Masked" counter on Home does not count masked PII (see [Home](/admin-ui/threats)).
 - The header labels `ENV: PROD`, `SCOPE: ADMIN` and `WORKSPACE: DEFAULT` are fixed text.
 - `ui/chat.html` is built and served at `/ui/chat.html`, but no screen links to it.

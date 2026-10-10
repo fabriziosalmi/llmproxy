@@ -14,7 +14,7 @@ responses and the audit log stay on your infrastructure.
 - **A verifiable audit log.** Each request that reaches the pipeline, served, refused
   or failed, is a row in a hash chain. The chain can be keyed (HMAC), its head can be
   recorded outside the database, and retention and GDPR erasure leave a record in the
-  chain instead of breaking it. [What it proves and what it does not](docs/threat_model.md).
+  chain instead of breaking it. [How to read and verify it, and what it does not show](docs/security/audit-log.md).
 - **Controls on what a response may do.** A [tool policy](docs/security/tool-policy.md)
   decides which tools a response may call and when; PII masking and response
   sanitisation are applied in the request path.
@@ -48,7 +48,7 @@ docker run -d --name llmproxy -p 8090:8090 \
   -e LLM_PROXY_ADMIN_KEYS=sk-admin-change-me \
   -e OPENAI_API_KEY=$OPENAI_API_KEY \
   -v llmproxy-data:/app/data \
-  ghcr.io/fabriziosalmi/llmproxy:1.39.3
+  ghcr.io/fabriziosalmi/llmproxy:1.39.4
 ```
 
 - `LLM_PROXY_API_KEYS` is required: the shipped configuration authenticates every
@@ -160,7 +160,7 @@ attack. Per-dataset results, method and reproduction:
 [docs/security/benchmark.md](docs/security/benchmark.md).
 
 The regression corpus in `tests/corpus/` (report in
-[docs/OWASP_LLM_COVERAGE.md](docs/OWASP_LLM_COVERAGE.md)) was written alongside the
+[docs/security/regression-corpus.md](docs/security/regression-corpus.md)) was written alongside the
 detector. It shows that a build did not get worse on prompts the detector already
 knew; it is not a measure of detection.
 
@@ -202,7 +202,7 @@ not a guarantee:
 | `/health` | 1,313 | 7 ms | 28 ms | wrk, 2 threads, 10 connections, 20 s |
 
 The per-request cost of the security checks is in
-[docs/PERFORMANCE.md](docs/PERFORMANCE.md). A real request is dominated by the
+[docs/reference/performance.md](docs/reference/performance.md). A real request is dominated by the
 provider's latency.
 
 **Run one instance.** The daily budget total, per-session scoring, the kill switch

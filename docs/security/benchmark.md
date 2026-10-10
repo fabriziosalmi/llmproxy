@@ -1,4 +1,4 @@
-# Detection benchmark
+# Detection Benchmark
 
 What the proxy's detection layer stops, measured on data it was not written
 against. The numbers on this page and in the README are generated from

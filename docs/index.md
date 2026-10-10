@@ -14,7 +14,7 @@ hero:
       link: /guide/quickstart
     - theme: alt
       text: What the audit log proves
-      link: /threat_model
+      link: /security/audit-log
     - theme: alt
       text: GitHub
       link: https://github.com/fabriziosalmi/llmproxy

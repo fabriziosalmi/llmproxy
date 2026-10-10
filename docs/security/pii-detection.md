@@ -4,7 +4,7 @@ Before a chat request is forwarded, personal data that the proxy recognises in t
 messages is replaced by placeholders. In a non-streaming response the placeholders
 are replaced by the original values again.
 
-Masking is on by default. It is done by the plugin named `PII Neural Masker` in
+Masking is on by default. It is done by the plugin named `PII Masker` in
 `plugins/manifest.yaml`. The name is historical: detection is by regular
 expressions, or by Presidio when that is installed.
 
@@ -100,7 +100,7 @@ the plugin:
 curl -X POST http://localhost:8090/api/v1/plugins/toggle \
   -H "Authorization: Bearer your-admin-key" \
   -H "Content-Type: application/json" \
-  -d '{"name": "PII Neural Masker", "enabled": false}'
+  -d '{"name": "PII Masker", "enabled": false}'
 ```
 
 `plugins/manifest.yaml` also contains `ONNX PII Masker`, an alternative masker that

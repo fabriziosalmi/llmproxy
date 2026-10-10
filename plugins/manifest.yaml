@@ -5,14 +5,14 @@
 # opt-in), because the AST scan is a lint, not a sandbox. The safe path for
 # untrusted code is a WASM plugin (type: wasm).
 plugins:
-  - name: "Ingress Auth & Zero-Trust"
+  - name: "Ingress Identity"
     hook: "ingress"
     priority: 10
     enabled: true
     version: "1.0.0"
     entrypoint: "default.ingress_auth:verify"
 
-  - name: "PII Neural Masker"
+  - name: "PII Masker"
     hook: "pre_flight"
     priority: 20
     enabled: true
@@ -162,7 +162,7 @@ plugins:
 
   # ── Community: ONNX PII Masker (opt-in) ──
   # Contributed by Francesco Stimola (llmproxy-extended). Disabled by default:
-  # enable it AND disable the default "PII Neural Masker" above to swap Presidio
+  # enable it AND disable the default "PII Masker" above to swap Presidio
   # for the OpenAI Privacy Filter NER model. Requires the optional ONNX deps in
   # requirements.txt and a local model download. Passes through if unavailable.
 

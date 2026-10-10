@@ -8,9 +8,9 @@ All default plugins are **enabled by default** and form the security backbone of
 
 | Priority | Plugin | Ring | What It Does |
 |----------|--------|------|-------------|
-| 10 | `ingress_auth.py` | INGRESS | Zero-Trust identity enrichment (Tailscale verification) |
+| 10 | `ingress_auth.py` | INGRESS | Identity enrichment: adds the peer's Tailscale user and node when available; never denies |
 | 15 | `context_minifier.py` | PRE_FLIGHT | Compresses large contexts (strips comments, whitespace) |
-| 20 | `pii_masker.py` | PRE_FLIGHT | Neural PII detection and masking (Presidio NLP + regex) |
+| 20 | `pii_masker.py` | PRE_FLIGHT | PII detection and masking (regular expressions, or Presidio when installed) |
 | 30 | `cache_check.py` | PRE_FLIGHT | Exact-match cache lookup with tenant isolation |
 | 50 | `smart_router.py` | ROUTING | EMA-weighted endpoint selection with circuit breakers + cost-aware scoring |
 | 70 | `kill_switch.py` | POST_FLIGHT | Detects model infinite loops (word repetition, stuttering) |

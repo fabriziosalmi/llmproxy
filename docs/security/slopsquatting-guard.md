@@ -1,4 +1,4 @@
-# AI Dependency Guard — slopsquatting check
+# AI Dependency Guard
 
 **Plugin:** `AI Dependency Guard` (`installed.ai_dependency_guard:AiDependencyGuard`) · **Hook:** `post_flight` · **Default:** disabled
 

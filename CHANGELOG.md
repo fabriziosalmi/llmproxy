@@ -2,6 +2,34 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.39.4] — 2026-10-10
+
+### The documentation site reorganised around the audit log; two plugins renamed (patch)
+
+**Upgrading.** Two default plugins have new names. A call to
+`POST /api/v1/plugins/toggle` must use them: `PII Neural Masker` is now `PII Masker` and
+`Ingress Auth & Zero-Trust` is now `Ingress Identity`. Their behaviour is unchanged.
+Documentation URLs under `/soc/` moved to `/admin-ui/`, and `/threat_model` to
+`/security/threat-model`.
+
+- **A page for the audit log** (`docs/security/audit-log.md`): what is recorded and what is
+  not, how to read and verify the log, the head and the anchor, the key, retention and
+  erasure, and the limits, with a copy-paste check that includes an edited row. It was
+  spread over the threat model, the API reference and the configuration guide.
+- **Every page is in the navigation.** Eight pages could not be reached from the menu, four
+  of them from anywhere: the threat model, the performance figures, SIEM export, FQDN risk
+  scoring, the dependency guard, the admin-UI contributing guide and the regression corpus
+  are now in the sidebar. The MCP design note stays in the repository and is no longer
+  published.
+- **Site description.** The meta description and link-preview text still described a
+  "security-first proxy" with a "real-time SOC dashboard"; they now say what the project
+  is.
+- **Screenshots removed.** The nine images under `docs/public/screenshots` were the same
+  picture from March.
+- **Plugin names say what the plugins do.** `PII Masker` uses regular expressions (or
+  Presidio when installed), nothing neural; `Ingress Identity` attaches a Tailscale
+  identity to the request and never denies one.
+
 ## [1.39.3] — 2026-10-10
 
 ### Plugin reloads that take effect; one caller's refusal is not everyone's (patch)

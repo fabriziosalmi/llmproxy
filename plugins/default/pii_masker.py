@@ -2,7 +2,7 @@ from core.plugin_engine import PluginContext
 
 
 async def mask(ctx: PluginContext):
-    """Ring 2: Pre-Flight PII Neural Masking.
+    """Ring 2: Pre-Flight PII masking.
 
     H2: Masks PII in ALL messages, not just the last. An attacker can
     hide PII (SSN, credit card) in earlier messages which are forwarded
@@ -48,5 +48,5 @@ async def mask(ctx: PluginContext):
     if any_masked:
         ctx.metadata["pii_masked"] = True
         await rotator._add_log(
-            "SHIELD: Neural PII Masking applied to messages", level="SYSTEM"
+            "SHIELD: PII masking applied to messages", level="SYSTEM"
         )

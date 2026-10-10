@@ -1,4 +1,4 @@
-# SIEM export
+# SIEM Export
 
 LLMProxy can send its security events (injection blocks, auth failures, kill switch,
 budget and circuit events) to a collector as ECS JSON over HTTP.

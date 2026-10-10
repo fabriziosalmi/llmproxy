@@ -8,8 +8,8 @@ A request passes through the rings in order. Within a ring, plugins run in ascen
 
 | Ring | Hook | Enabled in the shipped manifest (priority) |
 |------|------|--------------------------------------------|
-| 1 | `ingress` | Ingress Auth & Zero-Trust (10) |
-| 2 | `pre_flight` | Smart Budget Guard (11), Agentic Loop Breaker (12), Aider Context Minifier (15), PII Neural Masker (20), WAF-Aware Cache Lookup (30) |
+| 1 | `ingress` | Ingress Identity (10) |
+| 2 | `pre_flight` | Smart Budget Guard (11), Agentic Loop Breaker (12), Aider Context Minifier (15), PII Masker (20), WAF-Aware Cache Lookup (30) |
 | 3 | `routing` | Smart Router (50) |
 | 4 | `post_flight` | Speculative Kill-Switch (70), Post-Flight Sanitizer (80), JSON Auto-Healer (90) |
 | 5 | `background` | Unified Telemetry & FinOps (100) |
@@ -67,8 +67,8 @@ The shipped manifest declares 30 plugins.
 
 Async functions in `plugins/default/`. All nine are enabled in the shipped manifest:
 
-- Ingress Auth & Zero-Trust (attaches the caller's Tailscale identity to the context; it does not deny)
-- PII Neural Masker (regular expressions, or Presidio when installed)
+- Ingress Identity (attaches the caller's Tailscale identity to the context; it does not deny)
+- PII Masker (regular expressions, or Presidio when installed)
 - WAF-Aware Cache Lookup
 - Smart Router (endpoint selection by success rate, latency and price)
 - Post-Flight Sanitizer

@@ -13,7 +13,7 @@ cost, and what the gateway refused.
 - **Records requests in a hash chain.** Each request that reaches the pipeline is a
   row whose hash covers the row before it. The chain can be keyed, checked against a
   head recorded elsewhere, and survives retention purges and GDPR erasure because
-  those are recorded in it. See the [threat model](/threat_model) for what this
+  those are recorded in it. See the [threat model](/security/threat-model) for what this
   proves and what it does not.
 - **Applies policy to responses.** The [tool policy](/security/tool-policy) decides
   which tools a response may call; PII is masked on the way out and restored on the

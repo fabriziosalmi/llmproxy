@@ -68,7 +68,7 @@ make bench          # Performance benchmarks
 
 ## UI / Frontend Development
 
-See **[docs/ui/contributing.md](docs/ui/contributing.md)** for the full UI guide — the architecture (primitives + views + strangler-fig), how to add a primitive, how to migrate a tab, test patterns, conventions. The TL;DR:
+See **[docs/admin-ui/contributing.md](docs/admin-ui/contributing.md)** for the full UI guide — the architecture (primitives + views + strangler-fig), how to add a primitive, how to migrate a tab, test patterns, conventions. The TL;DR:
 
 ```bash
 make build-ui       # Install + Vite production build

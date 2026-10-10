@@ -10,7 +10,7 @@ Request → [Ring 1: INGRESS] → [Ring 2: PRE_FLIGHT] → [Ring 3: ROUTING] →
 
 | Ring | Name | Purpose | Fail Policy |
 |------|------|---------|-------------|
-| 1 | `ingress` | Auth, Zero-Trust, rate limiting | FAIL_CLOSED |
+| 1 | `ingress` | Identity enrichment | FAIL_CLOSED |
 | 2 | `pre_flight` | PII masking, cache lookup, budget, mutation | FAIL_OPEN |
 | 3 | `routing` | Endpoint selection, load balancing | FAIL_CLOSED |
 | 4 | `post_flight` | Response sanitization, JSON healing | FAIL_OPEN |

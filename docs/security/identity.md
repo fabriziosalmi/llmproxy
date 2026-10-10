@@ -150,4 +150,3 @@ consulted to authorise a request.
 5. If a credential is required and none is valid, a login overlay is shown.
    Entering an API key by hand is always available.
 
-![Admin UI settings](/screenshots/soc-settings.png)

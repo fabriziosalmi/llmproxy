@@ -1,9 +1,9 @@
 """
-Ingress Auth — Ring 1: Zero-Trust Identity Enrichment
+Ingress Identity — Ring 1: identity enrichment
 
 HTTP-layer authentication (API key / JWT) is handled in chat.py before
 proxy_request() is called. This ring's sole responsibility is to enrich
-the PluginContext with Tailscale Zero-Trust metadata for downstream plugins.
+the PluginContext with Tailscale identity metadata for downstream plugins.
 
 It does NOT re-check API keys — doing so would block JWT-authenticated users
 whose tokens are not in the static key list.

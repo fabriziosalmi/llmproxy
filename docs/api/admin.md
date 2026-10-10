@@ -288,7 +288,7 @@ Permission `logs:read`.
 Returns `{"total": N, "items": [...]}`. Rows hold request metadata (time, caller,
 model, provider, status, tokens, cost, latency, whether and why the request was
 refused), not prompts or responses. What is and is not recorded is set out in the
-[threat model](/threat_model#_3-3-repudiation).
+[threat model](/security/threat-model#_3-3-repudiation).
 
 ## Injection Corpus
 

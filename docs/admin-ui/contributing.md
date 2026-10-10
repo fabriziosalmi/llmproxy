@@ -1,4 +1,4 @@
-# UI Contributing Guide
+# Contributing to the Admin UI
 
 > Audience: anyone changing the admin UI (`ui/`). Covers the build, the primitive components, the pattern for moving a view to TypeScript, and the tests. Backend contribution rules live in [`CONTRIBUTING.md`](https://github.com/fabriziosalmi/llmproxy/blob/main/CONTRIBUTING.md) at the repo root.
 

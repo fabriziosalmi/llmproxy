@@ -1,4 +1,4 @@
-# Tool policy
+# Tool Policy
 
 Which tools a model's response may call, and when. Off by default.
 

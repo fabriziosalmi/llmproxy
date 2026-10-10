@@ -5,9 +5,11 @@ export default defineConfig({
   // The hostname carries the base path on purpose: VitePress joins it with each
   // page's route, so without it every URL in the sitemap would point at a 404.
   sitemap: { hostname: 'https://fabriziosalmi.github.io/llmproxy/' },
-  srcExclude: ['**/node_modules/**', '**/venv/**', '**/dist/**'],
+  // specs/ holds design notes for work that is not built; they stay in the
+  // repository and off the site.
+  srcExclude: ['**/node_modules/**', '**/venv/**', '**/dist/**', 'specs/**'],
   title: 'LLMProxy',
-  description: 'LLM Security Gateway — Security-first proxy for Large Language Models',
+  description: 'A self-hosted, OpenAI-compatible LLM gateway with an audit log you can verify.',
   head: [
     // Self-hosted fonts (docs/public/fonts) — no request to Google.
     ['link', { href: '/llmproxy/fonts/fonts.css', rel: 'stylesheet' }],
@@ -15,8 +17,8 @@ export default defineConfig({
     ['link', { rel: 'icon', type: 'image/png', sizes: '32x32', href: '/llmproxy/favicon.png' }],
     ['meta', { name: 'theme-color', content: '#f43f5e' }],
     ['meta', { property: 'og:type', content: 'website' }],
-    ['meta', { property: 'og:title', content: 'LLMProxy — LLM Security Gateway' }],
-    ['meta', { property: 'og:description', content: 'Security-first proxy for Large Language Models with multi-provider support, ring-based plugin pipeline, and real-time SOC dashboard.' }],
+    ['meta', { property: 'og:title', content: 'LLMProxy' }],
+    ['meta', { property: 'og:description', content: 'A self-hosted, OpenAI-compatible LLM gateway. It records every request it handles in a hash chain you can verify, applies policy to what a response may do, and runs as one process on your infrastructure.' }],
   ],
 
   cleanUrls: true,
@@ -30,13 +32,14 @@ export default defineConfig({
       { text: 'Security', link: '/security/overview' },
       { text: 'Plugins', link: '/plugins/overview' },
       { text: 'API', link: '/api/proxy' },
-      { text: 'Admin UI', link: '/soc/overview' },
+      { text: 'Admin UI', link: '/admin-ui/overview' },
       {
         text: 'Reference',
         items: [
           { text: 'Configuration', link: '/reference/config' },
           { text: 'Endpoints', link: '/reference/endpoints' },
           { text: 'Metrics', link: '/reference/metrics' },
+          { text: 'Performance', link: '/reference/performance' },
         ]
       }
     ],
@@ -63,12 +66,28 @@ export default defineConfig({
           text: 'Security',
           items: [
             { text: 'Overview', link: '/security/overview' },
-            { text: 'ASGI Firewall', link: '/security/firewall' },
-            { text: 'PII Detection', link: '/security/pii-detection' },
-            { text: 'Injection Scoring', link: '/security/injection-scoring' },
-            { text: 'Detection Benchmark', link: '/security/benchmark' },
+            { text: 'Audit Log', link: '/security/audit-log' },
             { text: 'Tool Policy', link: '/security/tool-policy' },
+            { text: 'ASGI Firewall', link: '/security/firewall' },
+            { text: 'Injection Scoring', link: '/security/injection-scoring' },
+            { text: 'PII Detection', link: '/security/pii-detection' },
             { text: 'Identity & SSO', link: '/security/identity' },
+            { text: 'SIEM Export', link: '/security/siem-export' },
+          ]
+        },
+        {
+          text: 'Optional Checks',
+          items: [
+            { text: 'FQDN Risk Scoring', link: '/security/fqdn-risk-scoring' },
+            { text: 'AI Dependency Guard', link: '/security/slopsquatting-guard' },
+          ]
+        },
+        {
+          text: 'Evidence',
+          items: [
+            { text: 'Threat Model', link: '/security/threat-model' },
+            { text: 'Detection Benchmark', link: '/security/benchmark' },
+            { text: 'Regression Corpus', link: '/security/regression-corpus' },
           ]
         }
       ],
@@ -95,18 +114,19 @@ export default defineConfig({
           ]
         }
       ],
-      '/soc/': [
+      '/admin-ui/': [
         {
           text: 'Admin UI',
           items: [
-            { text: 'Overview', link: '/soc/overview' },
-            { text: 'Home (Threats)', link: '/soc/threats' },
-            { text: 'Guards', link: '/soc/guards' },
-            { text: 'Plugins', link: '/soc/plugins' },
-            { text: 'Models', link: '/soc/models' },
-            { text: 'Analytics', link: '/soc/analytics' },
-            { text: 'Endpoints', link: '/soc/endpoints' },
-            { text: 'Live Logs', link: '/soc/logs' },
+            { text: 'Overview', link: '/admin-ui/overview' },
+            { text: 'Home (Threats)', link: '/admin-ui/threats' },
+            { text: 'Guards', link: '/admin-ui/guards' },
+            { text: 'Plugins', link: '/admin-ui/plugins' },
+            { text: 'Models', link: '/admin-ui/models' },
+            { text: 'Analytics', link: '/admin-ui/analytics' },
+            { text: 'Endpoints', link: '/admin-ui/endpoints' },
+            { text: 'Live Logs', link: '/admin-ui/logs' },
+            { text: 'Contributing', link: '/admin-ui/contributing' },
           ]
         }
       ],
@@ -117,6 +137,7 @@ export default defineConfig({
             { text: 'Configuration', link: '/reference/config' },
             { text: 'Endpoints', link: '/reference/endpoints' },
             { text: 'Metrics', link: '/reference/metrics' },
+          { text: 'Performance', link: '/reference/performance' },
           ]
         }
       ],
