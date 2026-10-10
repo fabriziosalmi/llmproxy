@@ -1,6 +1,6 @@
 # Configuration Reference
 
-Complete reference for `config.yaml`. All fields with their types, defaults, and descriptions.
+Reference for the `config.yaml` keys listed below, with their types, defaults and descriptions. A value shown is the one the code uses when the key is absent, unless the comment says otherwise. Keys that belong to one feature (plugins, tool policy details, link risk scoring) are documented on that feature's page. [Keys that no code reads](#keys-that-no-code-reads) lists entries of the shipped `config.yaml` that have no effect.
 
 ## Server
 
@@ -16,63 +16,69 @@ server:
                               # expiry: 504, and no fallback to the next
                               # provider (the request was delivered and is
                               # probably being billed).
-  keep_alive: 60s             # Keep-alive duration
+  keep_alive: 60s             # HTTP keep-alive timeout of the listener. 60s is
+                              # the shipped value; 5 seconds when absent.
+  shutdown_timeout: 30        # Seconds open connections get to finish after a
+                              # stop signal.
+  cors_origins: null          # List of allowed CORS origins. null: only
+                              # http://localhost:<port> and
+                              # http://127.0.0.1:<port>.
   tls:
-    enabled: false            # Enable TLS
+    enabled: false            # Serve HTTPS. When true, cert_file and key_file
+                              # must be set and loadable or the proxy does not
+                              # start.
     cert_file: ""             # Path to TLS certificate
     key_file: ""              # Path to TLS private key
-    min_version: "1.2"        # Minimum TLS version
+    min_version: "1.2"        # "1.2" or "1.3". The shipped config sets "1.3".
   auth:
-    enabled: true             # Require authentication. An ABSENT key also means
-                              # true (core/auth_policy.py) — a security gateway
-                              # that omits this must authenticate, not open.
-                              # LLM_PROXY_DEV_MODE=1 overrides it, loudly.
+    enabled: true             # Require authentication. An absent key also means
+                              # true (core/auth_policy.py). LLM_PROXY_DEV_MODE=1
+                              # overrides it and logs a warning.
     api_keys_env: "LLM_PROXY_API_KEYS"   # Inference keys — what /v1/* accepts
-    admin_keys_env: "LLM_PROXY_ADMIN_KEYS"  # Control-plane keys — the ONLY keys
-                              # /api/v1/* and /admin/* accept. When the named
-                              # variable is unset the proxy falls back to the
-                              # inference bag, so every client key can apply
-                              # config, install plugins and purge the audit
-                              # log. Startup warns; it does not refuse.
+    admin_keys_env: "LLM_PROXY_ADMIN_KEYS"  # Control-plane keys — the only keys
+                              # /api/v1/*, /admin/* and /metrics accept. When
+                              # the named variable is unset the proxy falls
+                              # back to the inference keys, so every client key
+                              # can apply config, install plugins and purge the
+                              # audit log. Startup warns; it does not refuse.
   total_timeout: null         # Overall ceiling on an upstream request, seconds.
-                              # Default none, deliberately: a single value
-                              # shared with sock_read truncates any completion
-                              # whose generation runs longer, and the forwarder
-                              # then retries the truncated request against the
-                              # next provider — so the caller waits twice and
-                              # two providers bill. server.timeout (streams)
-                              # and server.response_timeout (everything else)
-                              # are the bounds that matter. Set this only if
-                              # you want a hard cap and accept that.
+                              # Default none: a ceiling on the whole operation
+                              # cuts any completion whose generation runs
+                              # longer. server.timeout (streams) and
+                              # server.response_timeout (everything else) are
+                              # the bounds that apply by default.
   metrics:
     enabled: false            # Enable the standalone Prometheus exporter
     port: 9091                # Metrics port
     bind: "127.0.0.1"         # Loopback by default. This listener is opened
-                              # OUTSIDE the ASGI app, so no middleware guards
+                              # outside the ASGI app, so no middleware guards
                               # it — not auth, not the rate limiter, not the
                               # firewall — while it serves the same registry
                               # that GET /metrics keeps behind the admin
                               # credential. Widen it only where the network
                               # restricts the port (a scraped pod), and prefer
                               # the authenticated /metrics on the main port.
-  # No admin section: the admin API is served on the main port and is gated by
-  # the admin credential tier, not by a separate listener. `server.admin.port`
-  # existed in the config and was read by nothing.
-  vllm:
-    enabled: false            # Enable local vLLM integration
-    model_path: ""            # Local model path
-    fallback_threshold: 0.1   # Budget threshold to fallback to local
   storage:
-    type: "sqlite"            # Storage type (sqlite or postgres)
-    dsn_env: "DATABASE_URL"   # Environment variable containing the database DSN
-    dsn: ""                   # Fallback database DSN if env var is empty
+    type: "sqlite"            # sqlite or postgres
+    db_path: "data/endpoints.db"  # SQLite file. LLM_PROXY_DB_PATH overrides it.
+    dsn_env: "DATABASE_URL"   # Postgres: environment variable holding the DSN
+    dsn: "postgresql://postgres:postgres@localhost:5432/llmproxy"
+                              # Postgres: DSN used when that variable is empty
 ```
+
+There is no admin section: the admin API is served on the main port and is gated by the admin credential tier, not by a separate listener.
 
 ## Security
 
 ```yaml
 security:
-  enabled: true               # Enable security pipeline
+  enabled: true               # SecurityShield inspection of requests
+  firewall:
+    enabled: true             # Byte-level signature scan of request bodies.
+                              # LLM_PROXY_FIREWALL_ENABLED overrides it. Read
+                              # at startup.
+    body_timeout_seconds: 30  # Seconds the whole request body may take to
+                              # arrive; 408 beyond it.
   tool_policy:                # Which tools a response may call, and when
     enabled: false            # (see /security/tool-policy). Off by default.
     mode: enforce             # log_only: record what would be refused
@@ -81,16 +87,26 @@ security:
     after_tool_result: null   # Tools callable in a turn that follows a tool
                               # result. null: no restriction. List the
                               # read-only tools to stop an indirect injection.
-  max_payload_size_kb: 512    # Maximum request body size
+  max_payload_size_kb: 512    # Maximum request body size; 413 beyond it
   max_messages: 50            # Maximum messages per request
-  max_nesting_depth: 64       # Deepest {/[ nesting a body may contain. Size
-                              # alone is not enough: 100k nested arrays is
-                              # ~200 KB, under the cap above, and made the JSON
-                              # parser raise RecursionError out of the handler
-                              # as an unhandled 500. 0 disables the check.
+  max_nesting_depth: 64       # Deepest {/[ nesting a body may contain; 400
+                              # beyond it. 0 disables the check. Applies even
+                              # when the firewall is disabled.
   link_sanitization:
     enabled: true             # Enable URL sanitization
     blocked_domains: []       # Domains to block
+  response_signing:
+    secret: ""                # Signs non-streaming responses when set.
+                              # LLM_PROXY_SIGNING_KEY is used when this is
+                              # empty. Off when both are empty. Streams are
+                              # never signed.
+  confirm:
+    signing_secret: ""        # Secret for config confirm tokens. Empty: a
+                              # random per-process secret.
+  sse:
+    signing_secret: ""        # Secret for the live-log token. Empty: a random
+                              # per-process secret.
+    token_ttl_seconds: 120    # Lifetime of that token (10 to 600)
 ```
 
 ## Identity
@@ -98,30 +114,32 @@ security:
 ```yaml
 identity:
   enabled: false              # Enable SSO/JWT authentication
-  default_role: "user"        # Default role for new users
-  providers:                  # OIDC providers
+  default_role: "user"        # Role given to a user with no mapping
+  providers:                  # OIDC providers. Default: none.
     - name: google
       client_id_env: "OIDC_GOOGLE_CLIENT_ID"
     - name: microsoft
       client_id_env: "OIDC_MICROSOFT_CLIENT_ID"
     - name: apple
       client_id_env: "OIDC_APPLE_CLIENT_ID"
-  role_mappings: {}           # email → role mappings
+  role_mappings: {}           # email → list of roles
   session_ttl: 3600           # Session token TTL (seconds)
 ```
+
+`client_id_env` defaults to `OIDC_<NAME>_CLIENT_ID`. The three providers above are the ones listed in the shipped `config.yaml`.
 
 ## Endpoints
 
 ```yaml
 endpoints:
   <name>:
-    provider: "<provider>"    # Provider adapter name
+    provider: "<provider>"    # Adapter name; the endpoint name when absent
     base_url: "<url>"         # Provider API base URL
-    api_key_env: "<env>"      # Environment variable for API key
-    models: []                # Available models
-    rate_limit:               # Optional rate limits
-      rpm: 3500               # Requests per minute
-      tpm: 60000              # Tokens per minute
+    api_key_env: "<env>"      # Environment variable holding the API key
+    auth_type: "bearer"       # "none" for a server that takes no key
+    models: []                # Models this endpoint serves. An empty list
+                              # makes it a candidate for any model that no
+                              # other endpoint lists.
 ```
 
 ## Fallback Chains
@@ -129,7 +147,7 @@ endpoints:
 ```yaml
 fallback_chains:
   "<model>":                  # Primary model name
-    - provider: "<provider>"  # Fallback provider
+    - provider: "<provider>"  # Endpoint id or provider name
       model: "<model>"        # Fallback model
 ```
 
@@ -145,35 +163,32 @@ model_aliases:
 ```yaml
 model_groups:
   "<group-name>":
-    strategy: "cheapest"      # cheapest, fastest, weighted, random
+    strategy: "random"        # cheapest, fastest, weighted, random
     models:
       - model: "<model>"
         provider: "<provider>"
-        weight: 0.5           # For weighted strategy
+        weight: 1.0           # For the weighted strategy
 ```
 
-## Rotation
+## Routing
 
 ```yaml
-rotation:
-  strategy: "round_robin"    # round_robin, weighted, least_used, random
-  failover:
-    enabled: true
-    max_retries: 3
-    retry_delay: 1s
-    switch_on_status: [429, 500, 503]
+routing:
+  cost_weight: 0.3            # 0.0 ignores model price when scoring
+                              # endpoints, 1.0 weighs it fully. Overridden by
+                              # a value set through
+                              # POST /api/v1/routing/cost-weight.
 ```
 
-## Logging
+## Discovery
 
 ```yaml
-logging:
-  level: "info"              # debug, info, warning, error
-  format: "json"             # json or text
-  output: ""                 # Log file path (empty = stdout)
-  audit_trail:
-    enabled: true            # Enable persistent audit log
-    mask_pii: true           # Mask PII in audit entries
+discovery:
+  local_scan: true            # Probe local Ollama / LM Studio / vLLM /
+                              # LiteLLM. LLM_PROXY_LOCAL_DISCOVERY overrides it.
+  peers: []                   # Extra hosts ("host" or "host:port").
+                              # LLM_PROXY_DISCOVERY_PEERS, when set, replaces it.
+  scan_interval_s: 300        # Seconds between re-probes; 0 disables them
 ```
 
 ## Caching
@@ -181,44 +196,48 @@ logging:
 ```yaml
 caching:
   enabled: true
-  db_path: "cache.db"        # SQLite cache database path
+  db_path: "data/cache.db"   # SQLite cache database path
   ttl: 3600                  # Cache TTL (seconds)
-  eviction_interval: 3600    # Eviction check interval
+  eviction_interval: 3600    # Eviction check interval (seconds)
   negative_cache:
     maxsize: 50000           # Max negative cache entries
-    ttl: 300                 # Negative cache TTL
+    ttl: 300                 # Negative cache TTL (seconds)
+  redis_url: null            # Redis for circuit-breaker state and shared
+                             # endpoint statistics. The REDIS_URL environment
+                             # variable is used when this is absent.
   redis_socket_timeout: 2.0  # Seconds to wait for a Redis reply
   redis_connect_timeout: 2.0 # Seconds to wait for the Redis connection
 ```
 
 `redis_socket_timeout` and `redis_connect_timeout` apply to every Redis client
 in the proxy — the rate limiter, the circuit breakers and the shared
-orchestrator client. Without them redis-py waits indefinitely, so a Redis that
-is *slow* rather than down hangs the request path: the fallbacks to local
-in-memory state are triggered by exceptions, and a hang raises nothing. Each of
-these operations is a single Lua invocation or one `HGETALL`, so the two-second
-default is already generous; raise it only on a heavily shared Redis. A value of
-zero or below is ignored rather than honoured, because to redis-py it means
-"wait forever". `LLM_PROXY_REDIS_TIMEOUT` sets both where no config file is in
-reach.
+orchestrator client. A value of zero or below is ignored, because to redis-py
+it means "wait forever". `LLM_PROXY_REDIS_TIMEOUT` sets both when the config
+keys are absent.
 
 ## Observability
 
 ```yaml
 observability:
   tracing:
-    enabled: true
+    enabled: false            # Initialise OpenTelemetry tracing (and Sentry,
+                              # see below). The shipped config sets true.
     service_name: "llmproxy"  # OpenTelemetry service name
-    otlp_endpoint: null       # OTLP collector endpoint
-    console_exporter: true    # Print traces to console
+    otlp_endpoint: null       # OTLP gRPC collector endpoint
+    console_export: false     # Print spans to the console
   sentry:
-    dsn_env: "SENTRY_DSN"    # Sentry DSN environment variable
+    dsn_env: null             # Environment variable holding the Sentry DSN.
+                              # The shipped config sets "SENTRY_DSN". Read
+                              # only when tracing.enabled is true.
   export:
     enabled: false
     output_dir: "exports"     # JSONL export directory
-    scrub_pii: true          # Remove PII from exports
-    compress_on_rotate: true  # Gzip on daily rotation
+    scrub_pii: true           # Remove PII from exports
+    compress_on_rotate: true  # Compress on daily rotation
 ```
+
+The connection to `otlp_endpoint` is plaintext only when the value starts with
+`localhost:`, `127.0.0.1:` or `::1:`; any other endpoint is contacted over TLS.
 
 ## Webhooks
 
@@ -227,27 +246,31 @@ webhooks:
   enabled: false
   endpoints:
     - name: "<name>"
-      target: "<type>"        # slack, teams, discord, generic
-      url_env: "<env>"        # Webhook URL environment variable
-      events: []              # Event types to send
+      target: "generic"       # slack, teams, discord, generic, siem
+      url_env: "<env>"        # Environment variable holding the webhook URL
+      events: ["*"]           # Event types to send; "*" is all of them
+      secret_env: "<env>"     # Optional: variable holding an HMAC signing secret
 ```
 
-**Event types:** `circuit_open`, `budget_threshold`, `injection_blocked`, `endpoint_down`, `endpoint_recovered`, `auth_failure`, `panic_activated`
+**Event types:** `circuit_open`, `budget_threshold`, `injection_blocked`, `endpoint_down`, `endpoint_recovered`, `auth_failure`, `panic_activated`. `endpoint_down` is defined but no code emits it.
+
+A webhook URL that resolves to a private or reserved address is rejected and that endpoint is skipped.
 
 ## Budget
 
 ```yaml
 budget:
-  daily_limit: 50.0          # Hard daily cap (USD)
-  soft_limit: 40.0           # Warning threshold (USD)
-  fallback_to_local_on_limit: true  # Use local LLM when exhausted
+  daily_limit: 50.0          # Hard daily cap (USD). A request that would reach
+                             # it is refused with 402.
+  soft_limit: 40.0           # Warning threshold (USD): budget_threshold
+                             # webhook event. Must not exceed daily_limit.
 ```
 
 ## Connection Pool
 
-The ceiling on concurrent upstream work, and the only one — nothing above it
-performs admission control, so requests beyond `max_connections` wait inside
-aiohttp's connector rather than being refused.
+Sizes the aiohttp connector used for upstream requests. Requests beyond
+`max_connections` wait inside the connector; [admission control](#admission-control)
+refuses excess requests before they get there.
 
 ```yaml
 connection_pool:
@@ -260,22 +283,17 @@ connection_pool:
 
 ## Admission Control
 
-The ceiling on how many data-plane requests are in flight at once. Without it
-the only bound was the connector's `max_connections`, and past that requests
-waited in aiohttp's unbounded internal queue with no deadline — so overload
-became latency and memory growth rather than a refusal a client could act on.
-The rate limiter does not cover this: it is per-IP and per-key, so many
-well-behaved callers can saturate the proxy without any of them being
-throttled.
+The ceiling on how many data-plane requests are in flight at once. Up to
+`max_in_flight` requests are served; up to `max_queued` more wait for a slot;
+beyond that a request is refused with 503 and a `Retry-After` header. The rate
+limiter does not cover this: it is per key and per IP, so many callers that
+each stay under their limit can still saturate the proxy.
 
-Applied to `/v1/*` only. Shedding an operator's config-apply because inference
-is busy would be the wrong trade.
+Applied to `/v1/*` only.
 
 ```yaml
 admission:
-  max_in_flight: 100          # Defaults to connection_pool.max_connections —
-                              # admitting more than the connector can serve
-                              # just moves the queue back into aiohttp
+  max_in_flight: 100          # Defaults to connection_pool.max_connections
   queue_factor: 2.0           # Waiting room = max_in_flight × this
   max_queued: 200             # Or set it directly; beyond it, 503
   retry_after_s: 1            # Retry-After header on a shed request
@@ -285,9 +303,10 @@ Set `max_in_flight: 0` to disable. `llm_proxy_load_shed_total` counts refusals.
 
 ## Circuit Breaker
 
-Per-endpoint failure isolation. Backed by Redis when `caching.redis_url` is
-set — the state transition runs as a Lua script so the check-and-transition is
-atomic across processes — and by in-process state otherwise.
+Per-endpoint failure isolation. Backed by Redis when `caching.redis_url` or the
+`REDIS_URL` environment variable is set — the state transition runs as a Lua
+script so the check-and-transition is atomic across processes — and by
+in-process state otherwise. The shipped `docker-compose.yml` sets `REDIS_URL`.
 
 ```yaml
 circuit_breaker:
@@ -297,10 +316,11 @@ circuit_breaker:
 
 ## Threat Ledger
 
-Cross-request correlation of injection scores, keyed by client IP and by API
-key prefix. An actor whose scores sum past the threshold within the window is
-blocked. Note the nesting: this lives **under `security:`**, not at the top
-level, because SecurityShield reads it from its own section.
+Cross-request correlation of injection scores, keyed by client IP and by the
+first eight characters of the session id (which is derived from the caller's
+key). An actor whose scores sum past the threshold within the window is
+blocked. The ledger is held in process memory. Note the nesting: this lives
+**under `security:`**, not at the top level.
 
 ```yaml
 security:
@@ -309,8 +329,8 @@ security:
     threshold: 3.0            # Summed score at which an actor is blocked
     window_seconds: 600       # How far back scores are counted
     min_events: 3             # Fewer events than this never block, whatever
-                              # the sum — one bad request is not a pattern
-    max_actors: 50000         # LRU bound on tracked actors
+                              # the sum
+    max_actors: 50000         # Bound on tracked actors
 ```
 
 ## GDPR
@@ -322,10 +342,45 @@ gdpr:
                               # once per day by retention_purge_loop
 ```
 
+## Audit
+
+```yaml
+audit:
+  head_log_interval_seconds: 3600   # Period of the AUDIT HEAD line in the
+                                    # process log; 0 turns it off
+```
+
+## Quotas
+
+```yaml
+rbac:
+  db_path: "data/rbac.db"     # SQLite file holding per-key quotas
+```
+
 ## Rate Limiting
+
+Off by default. The shipped `config.yaml` has no `rate_limiting` section.
 
 ```yaml
 rate_limiting:
-  enabled: true
-  requests_per_minute: 60    # Global rate limit
+  enabled: false
+  requests_per_minute: 60    # Sustained rate per bearer token, or per client
+                             # IP when the request carries no token
+  burst: 10                  # Extra capacity above the sustained rate
+  exempt_paths: ["/health", "/ready", "/metrics"]
+  redis_url: null            # Share buckets through Redis. Absent: buckets
+                             # are held in process memory.
 ```
+
+## Keys that no code reads
+
+The shipped `config.yaml` contains these entries. Nothing under `core/`, `proxy/`, `store/`, `plugins/` or `main.py` reads them, so changing them has no effect:
+
+- `server.vllm` (`enabled`, `model_path`, `fallback_threshold`)
+- `rotation` (`strategy`, `failover.*`). Endpoint selection is described in the [configuration guide](/guide/configuration#endpoint-selection).
+- `logging` (`level`, `format`, `output`, `audit_trail.*`). The application log is written at INFO to standard error in a fixed format, and to no file.
+- `rate_limit` (`rpm`, `tpm`) under an endpoint
+- `budget.fallback_to_local_on_limit`
+- `observability.tracing.console_exporter`. The key the code reads is `console_export`.
+- `local_llm`
+- `chatops`

@@ -1,191 +1,217 @@
 # Marketplace Plugins
 
-18 plugins using the BasePlugin SDK. Two are enabled in the shipped manifest (Agentic Loop Breaker and Smart Budget Guard, the latter with a 5 USD daily budget per API key); the others are off. Enable or disable them in `manifest.yaml` or the admin UI.
+18 `BasePlugin` classes in `plugins/marketplace/`. Two are enabled in the shipped manifest (Agentic Loop Breaker and Smart Budget Guard, the latter with a 5 USD daily budget per API key); the others are off. Enable or disable them in `plugins/manifest.yaml`.
+
+In the tables below, **Default** is the value in the shipped manifest. The number after each name is the plugin's `priority` in its ring.
+
+Several plugins keep their state in the memory of the process (loop history, rate windows, A/B assignments, latency samples). That state is lost on restart and is not shared between instances.
+
+Five plugins do not do what their name says in the shipped code, because an input they read is never set or the action is not implemented. They are marked **Not wired** below, with what they do instead.
 
 ## Pre-Flight Ring
 
-### Max Tokens Enforcer {#max-tokens-enforcer}
+### Tool Guard (6) {#tool-guard}
 
-Clamps `max_tokens` to a hard ceiling. Clients cannot exceed it. Optional default injection when the field is absent.
+Looks at the `tools` (or `functions`) array of the request and acts on the tools whose name is in `restricted_tools`: `strip` removes them from the request, `block` refuses the request with HTTP 403. It matches by name only.
 
-| Config | Default | Description |
-|--------|---------|-------------|
-| `ceiling` | 4096 | Hard upper bound on max_tokens |
-| `inject_default` | false | Inject ceiling when client omits max_tokens |
-| `log_clamp` | true | Log warning on clamp events |
+**Not wired.** A caller is exempt when one of its roles is in `admin_roles`. The roles are read from `ctx.metadata["_user_roles"]`, which nothing sets, so the restriction applies to every caller.
 
-### System Prompt Enforcer {#system-prompt-enforcer}
-
-Injects, prepends, appends, or replaces the system prompt in every request. Clients cannot bypass it.
+This plugin filters what a request offers to the model. The policy on which tools a response may call is a separate feature: see [Tool Policy](/security/tool-policy).
 
 | Config | Default | Description |
 |--------|---------|-------------|
-| `prompt` | `""` | The enforced system prompt |
-| `mode` | `"prepend"` | `prepend`, `append`, or `replace` |
-| `skip_if_empty` | false | Skip when request has no messages |
+| `restricted_tools` | `["execute_bash", "drop_table", "delete_database"]` | Tool names to act on |
+| `action` | `"strip"` | `strip` (remove from the request) or `block` (refuse the request) |
+| `admin_roles` | `["admin"]` | Roles exempt from the restriction |
 
-### Smart Budget Guard {#smart-budget-guard}
+### Max Tokens Enforcer (7) {#max-tokens-enforcer}
 
-Per-session and per-team budget enforcement with SQLite persistence and cost estimation.
-
-| Config | Default | Description |
-|--------|---------|-------------|
-| `session_budget_usd` | 5.0 | Max spend per session |
-| `team_budget_usd` | 100.0 | Max spend per team/API key |
-| `warn_threshold` | 0.8 | Warning at this % of budget |
-
-### Agentic Loop Breaker {#agentic-loop-breaker}
-
-Detects AI agents stuck in retry loops via SHA-256 prompt hashing with sliding window.
+Lowers `max_tokens` to `ceiling` when the request asks for more. It reads the `max_tokens` field only; it does not look at `max_completion_tokens`.
 
 | Config | Default | Description |
 |--------|---------|-------------|
-| `max_repeats` | 3 | Identical prompts before blocking |
-| `window_seconds` | 120 | Sliding window duration |
-| `hash_messages` | 3 | Trailing messages to fingerprint |
+| `ceiling` | 4096 | Upper bound on `max_tokens` |
+| `inject_default` | false | Set `max_tokens` to the ceiling when the request omits it |
+| `log_clamp` | true | Log a warning when a request is lowered |
 
-### Per-Model Rate Limiter {#per-model-rate-limiter}
+### System Prompt Enforcer (8) {#system-prompt-enforcer}
 
-Granular rate limiting per (tenant, model) pair with sliding window counters.
-
-| Config | Default | Description |
-|--------|---------|-------------|
-| `default_rpm` | 60 | Requests per minute for unlisted models |
-| `window_seconds` | 60 | Sliding window duration |
-
-### Topic Blocklist {#topic-blocklist}
-
-Blocks requests containing forbidden topics via keyword, whole-word, or regex matching.
+Adds a system message to every request. It does nothing while `prompt` is empty, which is the shipped value.
 
 | Config | Default | Description |
 |--------|---------|-------------|
-| `topics` | `[]` | Keywords or regex patterns to block |
+| `prompt` | `""` | The system message to add |
+| `mode` | `"prepend"` | `prepend`: insert before the first system message, or first if there is none. `append`: existing system messages first, then the other messages, then the added one. `replace`: remove all system messages and put the added one first |
+| `skip_if_empty` | false | Do nothing when the request has no messages. Otherwise the added message becomes the only one |
+
+### Topic Blocklist (9) {#topic-blocklist}
+
+Searches the text of the messages whose role is in `scan_roles` for the configured topics. Only `block` refuses the request (HTTP 400); `warn` and `log` write a log line and let it through.
+
+| Config | Default | Description |
+|--------|---------|-------------|
+| `topics` | `["how to make a bomb", "how to make explosives", "csam"]` | Strings or regular expressions |
 | `action` | `"block"` | `block`, `warn`, or `log` |
-| `match_mode` | `"keyword"` | `keyword`, `whole_word`, or `regex` |
+| `match_mode` | `"keyword"` | `keyword` (substring), `whole_word`, or `regex` |
 | `case_sensitive` | false | Case-sensitive matching |
 | `scan_roles` | `["user"]` | Message roles to scan |
 
-### Prompt Complexity Scorer {#prompt-complexity-scorer}
+### Smart Budget Guard (11, enabled) {#smart-budget-guard}
 
-Scores prompt complexity (0-1) on 4 signals for intelligent model routing.
+Estimates the cost of a request before it is forwarded and refuses it (HTTP 429) when the estimate would take the caller over the budget. The token count comes from `core/tokenizer.py` and the price from `core/pricing.py`.
 
-| Config | Default | Description |
-|--------|---------|-------------|
-| `depth_weight` | 0.3 | Weight for token depth signal |
-| `turns_weight` | 0.2 | Weight for conversation turn count |
-| `code_weight` | 0.25 | Weight for code block density |
-| `instruction_weight` | 0.25 | Weight for instruction density |
-
-### Model Downgrader {#model-downgrader}
-
-Automatically downgrades expensive models for simple prompts (10-20x cost savings). Works with the Complexity Scorer.
+- A "session" is one API key: the session id is derived from the caller's credential.
+- The totals are per day. They start again when the date changes.
+- The totals are estimates. Nothing corrects them with the usage the provider reports.
+- The totals are saved in the proxy's store and read back on the first request after a start.
+- The team total is keyed by `ctx.metadata["api_key"]`, which nothing sets, so it falls back to the session id. With the shipped values the session budget is always reached first.
 
 | Config | Default | Description |
 |--------|---------|-------------|
-| `complexity_threshold` | 0.3 | Downgrade when complexity is below this score |
+| `session_budget_usd` | 5.0 | Daily budget per API key |
+| `team_budget_usd` | 100.0 | Second daily budget (see above) |
+| `avg_output_ratio` | 0.5 | Assumed output tokens per input token |
+| `warn_threshold` | 0.8 | Log a warning when the session total passes this fraction of the budget |
 
-### Tool Guard {#tool-guard}
+The manifest also lists `cost_per_1k_input` and `cost_per_1k_output`. The plugin does not read them.
 
-Strips or blocks restricted tools/functions from agentic AI requests based on user RBAC roles. Prevents tool injection attacks in autonomous agent workflows.
+### Agentic Loop Breaker (12, enabled) {#agentic-loop-breaker}
 
-| Config | Default | Description |
-|--------|---------|-------------|
-| `restricted_tools` | `[]` | Tool/function names that require admin role |
-| `action` | `"strip"` | `strip` (remove silently) or `block` (reject request) |
-| `admin_roles` | `["admin"]` | Roles allowed to use restricted tools |
-
-### Context Window Guard {#context-window-guard}
-
-Blocks requests exceeding the target model's context window (returns clear 413 instead of cryptic upstream 400).
+Hashes the last `hash_messages` messages of each request (role, text and tool calls, SHA-256) and keeps the hashes per session for `window_seconds`. When the same hash has already been seen `max_repeats` times in the window, the request is refused with HTTP 429 and the session's history is cleared.
 
 | Config | Default | Description |
 |--------|---------|-------------|
-| `safety_margin` | 0.9 | Block at this fraction of context window |
+| `max_repeats` | 3 | Identical requests allowed in the window; the next one is refused |
+| `window_seconds` | 120 | Length of the window |
+| `hash_messages` | 3 | Trailing messages included in the hash |
+
+### Per-Model Rate Limiter (13) {#per-model-rate-limiter}
+
+Counts requests per session and model over `window_seconds` and refuses with HTTP 429 above the limit. The limit for a model comes from `model_limits` (a table built into the plugin unless the config provides one), otherwise `default_rpm`.
+
+| Config | Default | Description |
+|--------|---------|-------------|
+| `default_rpm` | 60 | Requests per window for models without their own limit |
+| `window_seconds` | 60 | Length of the window |
+
+### Prompt Complexity Scorer (14) {#prompt-complexity-scorer}
+
+Computes a score from 0 to 1 out of four signals and writes it to `ctx.metadata["_prompt_complexity"]`, with a tier (`simple` below 0.3, `moderate` below 0.7, `complex`) in `_complexity_tier`. It never refuses a request. The only reader of the score is the Model Downgrader.
+
+| Config | Default | Description |
+|--------|---------|-------------|
+| `depth_weight` | 0.3 | Weight of the text length |
+| `turns_weight` | 0.2 | Weight of the number of messages |
+| `code_weight` | 0.25 | Weight of the code block density |
+| `instruction_weight` | 0.25 | Weight of the instruction density |
+
+### Model Downgrader (16) {#model-downgrader}
+
+Replaces the requested model when the complexity score is below `complexity_threshold` and the model has an entry in the plugin's replacement table (`downgrade_map`, built in unless the config provides one). It does nothing unless the Prompt Complexity Scorer is also enabled.
+
+| Config | Default | Description |
+|--------|---------|-------------|
+| `complexity_threshold` | 0.3 | Replace the model when the score is below this |
+
+### Context Window Guard (18) {#context-window-guard}
+
+Estimates the prompt's tokens and refuses the request with HTTP 413 when the estimate exceeds `safety_margin` times the model's context window. The windows come from a table built into the plugin (`model_windows` in the config replaces it). A model that is not in the table is treated as having a window of 8192 tokens.
+
+| Config | Default | Description |
+|--------|---------|-------------|
+| `safety_margin` | 0.9 | Fraction of the context window above which the request is refused |
 
 ## Routing Ring
 
-### A/B Model Router {#ab-model-router}
+Both plugins run before the Smart Router (priority 50).
 
-Routes a configurable percentage of traffic to a variant model for live A/B experimentation. Supports sticky sessions.
+### Tenant QoS Router (44) {#tenant-qos-router}
 
-| Config | Default | Description |
-|--------|---------|-------------|
-| `control_model` | `"gpt-4o"` | Primary model |
-| `variant_model` | `"gpt-4o-mini"` | Model under test |
-| `split_pct` | 0.1 | Fraction routed to variant |
-| `sticky` | true | Pin sessions to the same arm |
-| `experiment_id` | `"ab_test"` | Tag for audit log tracking |
+Replaces the requested model with the one mapped to the caller's tier. An empty mapping leaves the model unchanged.
 
-### Tenant QoS Router {#tenant-qos-router}
-
-Routes requests to different models based on user/tenant tier. Free-tier users get redirected to cheaper models, premium users get the model they requested. SaaS B2B cost control.
+**Not wired.** The tier is derived from `ctx.metadata["_user_roles"]` and `ctx.metadata["_tenant_tier"]`, which nothing sets, so every caller gets `default_tier`. With the shipped values, enabling the plugin rewrites the model of every request to `gpt-4o-mini`.
 
 | Config | Default | Description |
 |--------|---------|-------------|
-| `tier_mapping` | `{free: gpt-4o-mini, premium: ""}` | Maps tier name to target model (empty = use requested) |
-| `default_tier` | `"free"` | Tier for users with no explicit mapping |
-| `force_downgrade` | true | Always downgrade non-premium users |
+| `tier_mapping` | `{free: gpt-4o-mini, basic: gpt-4o-mini, premium: ""}` | Tier name to model (empty = keep the requested model) |
+| `default_tier` | `"free"` | Tier of a caller with no role and no explicit tier |
+| `force_downgrade` | true | When false the plugin does nothing |
+
+### A/B Model Router (45) {#ab-model-router}
+
+Acts on requests whose model is `control_model` or `variant_model` (or that name no model): it sets the model to the variant with probability `split_pct` and to the control otherwise. A request that asked for the variant is reassigned in the same way. The chosen arm is written into the request body under `_ab_meta`; no other code reads that key.
+
+| Config | Default | Description |
+|--------|---------|-------------|
+| `control_model` | `"gpt-4o"` | Control model |
+| `variant_model` | `"gpt-4o-mini"` | Variant model |
+| `split_pct` | 0.1 | Fraction assigned to the variant |
+| `sticky` | true | Keep a session on the same arm (the assignment is held in memory) |
+| `experiment_id` | `"ab_test"` | Label written into `_ab_meta` |
 
 ## Post-Flight Ring
 
-### Response Quality Gate {#response-quality-gate}
+Post-flight plugins read the response body. A streamed response has none, so these plugins see streamed responses as empty.
 
-Detects empty, refused ("I cannot..."), apology-only, and truncated LLM responses.
+### Response Quality Gate (75) {#response-quality-gate}
 
-| Config | Default | Description |
-|--------|---------|-------------|
-| `min_length` | 20 | Minimum response length (chars) |
-| `refusal_threshold` | 2 | Refusal patterns to flag |
-| `check_truncation` | true | Detect mid-sentence cutoff |
-
-### Latency SLA Guard {#latency-sla-guard}
-
-Measures TTFT and total latency with rolling percentiles, flags SLA violations.
+Looks for an empty answer, a very short one, refusal phrases, an apology with nothing else, and text that ends without punctuation. It writes `_quality_score`, `_quality_status` and `_quality_issues` to the context metadata. It never refuses a response, and no other code reads these keys.
 
 | Config | Default | Description |
 |--------|---------|-------------|
-| `ttft_p95_ms` | 500 | TTFT P95 target |
-| `total_p95_ms` | 3000 | Total latency P95 target |
-| `hard_limit_ms` | 10000 | Hard SLA breach threshold |
-| `window_size` | 500 | Rolling window size |
+| `min_length` | 20 | Minimum answer length in characters |
+| `refusal_threshold` | 2 | Number of refusal patterns that must match |
+| `check_truncation` | true | Check for an ending without punctuation |
 
-### Canary Detector {#canary-detector}
+### Latency SLA Guard (76) {#latency-sla-guard}
 
-Detects system prompt leakage in responses (data exfiltration protection). Optional auto-block mode.
+Compares the request's total latency and time to first token with the configured thresholds and writes `_sla_status` to the context metadata. It never refuses a response.
 
-| Config | Default | Description |
-|--------|---------|-------------|
-| `min_leak_chars` | 50 | Minimum leaked characters to trigger |
-| `similarity_threshold` | 0.6 | Fraction of system prompt found |
-| `block_on_leak` | false | Auto-block leaked responses |
-
-### Schema Enforcer {#schema-enforcer}
-
-Validates LLM JSON responses against a client-provided JSON schema. Catches semantically invalid responses (missing required fields, wrong types) before they reach the client application. Supports `warn` (pass through with log) and `block` (return 422) modes.
+**Not wired.** The timestamps are read from `ctx.metadata["_request_start_time"]` and `ctx.metadata["_ttft_time"]`, which nothing sets. The measured latency is therefore 0, the status is never `warning` or `breach`, and no samples are recorded.
 
 | Config | Default | Description |
 |--------|---------|-------------|
-| `action` | `"warn"` | `warn` (pass through) or `block` (return 422) |
-| `max_schema_size` | 8192 | Maximum schema size in bytes |
+| `ttft_p95_ms` | 500 | Threshold for the time to first token |
+| `total_p95_ms` | 3000 | Threshold for the total latency |
+| `hard_limit_ms` | 10000 | Latency above which the status is `breach` |
+| `window_size` | 500 | Number of samples kept |
+
+### Canary Detector (77) {#canary-detector}
+
+Checks whether the response repeats the request's system prompt word for word (the whole prompt, or runs of consecutive words), ignoring case. A paraphrase or a translation is not detected. On a match it writes `_canary_leak` to the context metadata; with `block_on_leak` it refuses the response with HTTP 403.
+
+| Config | Default | Description |
+|--------|---------|-------------|
+| `min_leak_chars` | 50 | System prompts shorter than this are not checked |
+| `similarity_threshold` | 0.6 | Fraction of the system prompt that must be found |
+| `block_on_leak` | false | Refuse the response on a match |
+
+### Schema Enforcer (78) {#schema-enforcer}
+
+Validates a JSON answer against a JSON schema (`type`, `required`, `properties`, `items`, `enum`, `minLength`, `minimum`, `maximum`).
+
+**Not wired.** The schema is read from `ctx.metadata["_expected_schema"]`, which nothing sets, and the answer is read from `ctx.body`, which is the request. Enabled as shipped, the plugin lets every response through.
+
+| Config | Default | Description |
+|--------|---------|-------------|
+| `action` | `"warn"` | `warn` (log) or `block` (HTTP 422) |
+| `max_schema_size` | 8192 | Maximum schema size in characters |
 
 ## Background Ring
 
-### Token Counter {#token-counter}
+### Token Counter (95) {#token-counter}
 
-Extracts real token counts from API responses and corrects budget heuristic estimates with actual data.
+Reads `usage.prompt_tokens` and `usage.completion_tokens` from a non-streamed response, prices them with `core/pricing.py` and adds them to totals kept in memory. It writes the figures to the context metadata. It does not change the totals of the Smart Budget Guard.
 
-| Config | Default | Description |
-|--------|---------|-------------|
-| `cost_per_1k_input` | 0.003 | USD per 1K input tokens |
-| `cost_per_1k_output` | 0.015 | USD per 1K output tokens |
+The manifest lists `cost_per_1k_input` and `cost_per_1k_output` for this plugin. The plugin does not read them.
 
-### Shadow Traffic {#shadow-traffic}
+### Shadow Traffic (96) {#shadow-traffic}
 
-Dark launch / A/B model comparison. After the primary response is returned to the user, asynchronously sends the same prompt to a "shadow" model for comparison. Results are stored in SQLite for SOC dashboard analysis. Enables safe model migration evaluation with real production traffic.
+**Not wired.** The plugin sends no request to the shadow model. For a sampled request it looks for a registered endpoint that matches `shadow_provider` or lists `shadow_model`; if it finds one and `store_responses` is on, it saves a record in the proxy's store: the two model names, the session id, the time, and the first 200 characters of the last message. The `latency_ms` of the record is the time the lookup took.
 
 | Config | Default | Description |
 |--------|---------|-------------|
-| `shadow_model` | `""` | Model to send shadow traffic to |
-| `shadow_provider` | `""` | Provider for shadow model (empty = auto-detect) |
-| `sample_rate` | 0.05 | Fraction of requests to shadow (0.0-1.0) |
-| `store_responses` | true | Persist comparison data to SQLite |
+| `shadow_model` | `""` | Model to look for. Empty disables the plugin |
+| `shadow_provider` | `""` | Substring to match in the endpoint URL |
+| `sample_rate` | 0.05 | Fraction of requests sampled (0.0-1.0) |
+| `store_responses` | true | Save the record |

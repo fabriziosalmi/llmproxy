@@ -1,36 +1,35 @@
-# Models View
+# Models
 
-The Models view provides an aggregated registry of all LLM models available across configured providers.
+The Models screen lists what `GET /v1/models` returns: the models declared under `endpoints.<name>.models` in `config.yaml`. A model id declared by more than one endpoint appears once. The list does not depend on whether an endpoint is reachable. It refreshes every 30 seconds.
 
-![Models View](/screenshots/soc-models.png)
+## Counters
 
-## KPI Cards
+| Tile | What it shows |
+|------|---------------|
+| **Active Models** | Number of models in the list |
+| **Providers** | Number of distinct `owned_by` values |
+| **Embedding Models** | Number of models whose id matches one of the embedding name patterns in `ui/src/views/models/types.ts` (for example `text-embedding`) |
 
-| Card | Description |
-|------|-------------|
-| **Active Models** | Total models available across all live providers |
-| **Providers** | Number of configured LLM providers |
-| **Embedding Models** | Models supporting the embeddings endpoint |
+## Model tables
 
-## Model Registry
+Chat models are listed first and embedding models in a second table. A search box filters both by model id or provider.
 
-A searchable table listing every model from every configured provider:
+| Column | Content |
+|--------|---------|
+| **Model ID** | The model id, with an `EMB` badge on embedding models |
+| **Provider** | `owned_by`: the endpoint's `provider`, or the endpoint name when no provider is set |
+| **Actions** | Copy ID, and Inspect, which opens the model's detail panel |
 
-- **Model ID** -- Full model identifier (e.g. `gpt-4o`, `claude-sonnet-4-20250514`)
-- **Provider** -- Which endpoint serves this model
-- **Type** -- Chat, completion, or embedding
-- **Status** -- Live, discovered, or offline
-
-Models are aggregated automatically from all configured endpoints in `config.yaml`. The `/v1/models` API endpoint serves the same data in OpenAI-compatible format for clients like Cursor, Continue, and OpenWebUI.
+The tables can be sorted by model id or provider.
 
 ## API
 
 ```bash
-# OpenAI-compatible model discovery
+# OpenAI-compatible model list
 curl http://localhost:8090/v1/models \
   -H "Authorization: Bearer your-key"
 
-# Single model info
+# One model
 curl http://localhost:8090/v1/models/gpt-4o \
   -H "Authorization: Bearer your-key"
 ```

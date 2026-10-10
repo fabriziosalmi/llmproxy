@@ -30,7 +30,7 @@ export default defineConfig({
       { text: 'Security', link: '/security/overview' },
       { text: 'Plugins', link: '/plugins/overview' },
       { text: 'API', link: '/api/proxy' },
-      { text: 'SOC', link: '/soc/overview' },
+      { text: 'Admin UI', link: '/soc/overview' },
       {
         text: 'Reference',
         items: [
@@ -97,12 +97,12 @@ export default defineConfig({
       ],
       '/soc/': [
         {
-          text: 'SOC Dashboard',
+          text: 'Admin UI',
           items: [
             { text: 'Overview', link: '/soc/overview' },
-            { text: 'Threats', link: '/soc/threats' },
+            { text: 'Home (Threats)', link: '/soc/threats' },
             { text: 'Guards', link: '/soc/guards' },
-            { text: 'Plugins Panel', link: '/soc/plugins' },
+            { text: 'Plugins', link: '/soc/plugins' },
             { text: 'Models', link: '/soc/models' },
             { text: 'Analytics', link: '/soc/analytics' },
             { text: 'Endpoints', link: '/soc/endpoints' },

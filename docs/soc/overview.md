@@ -1,41 +1,57 @@
-# SOC Dashboard
+# Admin UI
 
-The Security Operations Center is a real-time monitoring dashboard built with vanilla JS, Tailwind CSS, Chart.js, and xterm.js. Access it at `http://localhost:8090/ui`.
+The admin UI is a browser application served by the proxy at `http://localhost:8090/ui`. It is written in JavaScript and TypeScript without a framework and uses Tailwind CSS, Chart.js and xterm.js. The scripts and fonts are served from the proxy itself (`ui/public/vendor/`); the page loads nothing from a CDN.
 
-![SOC Dashboard](/screenshots/soc-dashboard.png)
+The proxy serves the built assets from `ui/dist/` when that directory exists, and the source tree otherwise.
 
-## Views
+## Signing in
 
-| View | Description |
-|------|-------------|
-| [Threats](/soc/threats) | KPI cards, threat timeline chart, real-time security event feed |
-| [Guards](/soc/guards) | Master proxy toggle, per-guard enable/disable controls |
-| [Plugins](/soc/plugins) | Ring-based plugin pipeline grid, hot-swap, per-plugin stats |
-| [Models](/soc/models) | Aggregated model registry, provider counts |
-| [Analytics](/soc/analytics) | Spend breakdown by model and provider |
-| [Endpoints](/soc/endpoints) | LLM endpoint registry with toggle/delete actions |
-| [Live Logs](/soc/logs) | xterm.js terminal with real-time SSE log stream |
-| Settings | Identity, RBAC, webhooks, data export configuration |
+A sign-in overlay asks for an API key and checks it against `GET /api/v1/identity/me`. When SSO providers are configured, the overlay also offers them. The key is kept in the browser's `localStorage` and sent as a bearer token on every call. The Home screen reads `/metrics`, which requires an admin key.
+
+## Screens
+
+The sidebar has ten entries.
+
+| Screen | Content |
+|--------|---------|
+| [Home](/soc/threats) | Counters, budget, firewall statistics, ring latency, security event feed. Its page title is "Threats" |
+| [Guards](/soc/guards) | Proxy on/off switch, priority steering, guard switches, cache statistics, reset actions |
+| [Plugins](/soc/plugins) | A card for each loaded plugin, with statistics and actions |
+| [Models](/soc/models) | The models returned by `/v1/models` |
+| [Analytics](/soc/analytics) | Spend by model and by provider |
+| Security | Audit chain check, GDPR export and erase, the semantic pattern list, audit log query |
+| [Endpoints](/soc/endpoints) | The endpoint registry, with test, toggle and delete actions |
+| [Live Logs](/soc/logs) | A terminal fed by the log stream |
+| Settings | Configuration (guided editor and raw YAML), access and identity, rate limits and routing, webhooks and API reference, version, health and data export, appearance |
+| Docs | A short built-in help page |
+
+The screen is selected by the URL fragment, for example `/ui/#/endpoints`.
 
 ## Keyboard Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
-| `Cmd+K` / `Ctrl+K` | Command palette with fuzzy search |
-| `F` | Cinema mode (distraction-free) |
+| `Cmd+K` / `Ctrl+K` | Open or close the command palette |
+| `Esc` | Close the command palette |
+| `Shift+F` | Cinema mode on or off (ignored while typing in a field) |
 
-## Features
+The command palette filters its commands by substring. Typing `>` switches it to a lookup of endpoints (`>ep`), models (`>model`), plugins (`>plugin`) and request ids (`>req`).
 
-- **Real-time updates**: SSE streams for threats, logs, and telemetry
-- **Network heartbeat**: 5-second ping, LIVE/OFFLINE status indicator
-- **Kill switch**: Emergency halt button in sidebar footer
-- **Glassmorphism dark theme**: Rose accent matching the security brand
-- **Responsive**: Mobile menu, sidebar collapse
+## Other controls
 
-## Tech Stack
+- **Updates.** The screens poll the API: every 10 seconds on Home and Guards, every 30 seconds on Plugins, Models and Analytics and for the endpoint registry. The security event feed and Live Logs read one server-sent event stream, `/api/v1/logs`.
+- **Status indicator.** Every 5 seconds the page calls `/api/v1/proxy/status` and shows `Live` or `Offline`.
+- **Kill switch.** The button at the bottom of the sidebar asks for confirmation and then calls `POST /api/v1/panic`, which disables the proxy.
+- **Theme.** A header button switches between the dark and the light theme.
+- **Density and time range.** The header has an Overview / Investigate switch and a time-range selector.
+- **Layout.** The sidebar collapses, and there is a menu button for narrow screens.
 
-- **UI**: Vanilla JS ES Modules (no framework)
-- **Styling**: Tailwind CSS CDN + glassmorphism effects
-- **Charts**: Chart.js for threat timeline and analytics
-- **Terminal**: xterm.js with WebGL renderer for live logs
-- **Streaming**: Server-Sent Events (SSE) for real-time data
+## Known limitations
+
+- The Settings screen has "Audit trail" and "Mask PII in audit log" switches bound to `logging.audit_trail.enabled` and `logging.audit_trail.mask_pii`. No backend code reads these keys. The switches change the file and nothing else.
+- A configuration change that lowers the security posture cannot be applied from the UI. The backend asks for a confirm token for such a change (`proxy/routes/config.py`), and the UI sends only the YAML.
+- The "Verify Chain" button on the Security screen calls `GET /api/v1/audit/verify` without an anchor.
+- The Plugins screen lists loaded plugins only, and its Reload button reports success when the hot-swap was rolled back (see [Plugins](/soc/plugins)).
+- The "PII Masked" counter on Home does not count masked PII (see [Home](/soc/threats)).
+- The header labels `ENV: PROD`, `SCOPE: ADMIN` and `WORKSPACE: DEFAULT` are fixed text.
+- `ui/chat.html` is built and served at `/ui/chat.html`, but no screen links to it.

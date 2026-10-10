@@ -16,7 +16,7 @@ Re-run: `pytest tests/test_owasp_corpus.py -v` (writes this file).
 | Specificity | 97.7% |
 | PII masking | 8/8 |
 
-Measured against the LIVE pipeline (ASGI firewall + SecurityShield threat-score/composite + PII), NOT a harness-only path. False negatives are counted honestly (known gaps included) — with AI escalation enabled in prod, gray-zone misses are additionally adjudicated by a model.
+This is the regression corpus: it was written alongside the detector, so these figures show that a build did not get worse on prompts the detector already knew. They are not a measure of detection; that is in docs/security/benchmark.md. The entries are run through the firewall and the shield's scoring, without the per-session checks. No model adjudicates borderline cases: none is wired to the shield.
 
 ## Summary
 

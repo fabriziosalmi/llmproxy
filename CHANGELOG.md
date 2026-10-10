@@ -2,6 +2,39 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.39.2] — 2026-10-10
+
+### A fallback sends the fallback provider's key; the rest of the docs checked against the code (patch)
+
+**Upgrading.** Nothing to do.
+
+- **A fallback attempt went out without the fallback provider's key.** The fallback
+  target was built from the configuration without its `api_key_env`, which is the only
+  place the forwarder looks for a key. Falling back to any provider that needs a key ended
+  in that provider's `401`: the fallback chains in the shipped configuration could not
+  work across providers.
+- **A key entered when adding an endpoint through the API or the admin UI was never
+  sent.** It was stored on the configuration entry and not on the endpoint the forwarder
+  reads. It is still held in process memory only and gone after a restart.
+- **Documentation.** The remaining pages were checked statement by statement against the
+  code: guides, configuration and endpoint reference, metrics, the API reference, the
+  security pages, the plugin and admin-UI pages, the threat model and `SECURITY.md`.
+  Statements the code contradicts were corrected, those it cannot support removed.
+  Among them: the configuration reference now lists the keys that no code reads
+  (`rotation`, `logging`, `server.vllm`, `local_llm`, `chatops`, endpoint `rate_limit`,
+  `budget.fallback_to_local_on_limit`); the plugin API examples send the fields the routes
+  require; the trajectory rule, the PII placeholder format and the FQDN risk weights are
+  the ones in the code; the WASM page states that the runner cannot currently execute a
+  plugin in the pipeline; the Helm section states that the chart does not deploy with its
+  default values; `SECURITY.md` no longer names a contact address and response times the
+  project cannot back, and points to GitHub private vulnerability reporting. The `AUDIT
+  HEAD` line goes to standard error, not standard output. The web interface is called the
+  admin UI throughout.
+- **The regression-corpus report says what it is.** `docs/OWASP_LLM_COVERAGE.md` is
+  generated; its text claimed a measurement "against the live pipeline" with model
+  escalation "in prod". No model is wired to the shield, and the figures are a regression
+  check on prompts the detector was written against.
+
 ## [1.39.1] — 2026-10-10
 
 ### The firewall keeps its signatures under a mounted volume; README and docs rewritten from the code (patch)

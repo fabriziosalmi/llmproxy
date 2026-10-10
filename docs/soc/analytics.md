@@ -1,43 +1,43 @@
-# Analytics View
+# Analytics
 
-The Analytics view provides spend tracking and cost analysis.
+The Analytics screen shows the spend recorded in the proxy's store, as counters and tables. It refreshes every 30 seconds. The screen sends no date range, so the figures cover every record in the store.
 
-![Analytics View](/screenshots/soc-analytics.png)
+## Counters
 
-## KPI Cards
+| Tile | What it shows |
+|------|---------------|
+| **Total Requests** | Number of recorded requests |
+| **Total Spend** | Sum of the recorded cost, in USD |
+| **Prompt Tokens** | Sum of input tokens |
+| **Completion Tokens** | Sum of output tokens |
 
-| Card | Description |
-|------|-------------|
-| **Total Requests** | Request count in selected period |
-| **Total Spend** | Cumulative cost in USD |
-| **Prompt Tokens** | Total input tokens consumed |
-| **Completion Tokens** | Total output tokens generated |
+## Tables
 
-## Spend Breakdown
+- **Spend by Model** and **Spend by Provider**: requests, cost and average latency per group, from `GET /api/v1/analytics/spend`
+- **Cost Efficiency**: requests, total cost, average cost per request and average tokens per request for each model, from `GET /api/v1/analytics/cost-efficiency`
 
-Interactive charts showing cost distribution:
+Each table has a button that saves its rows as a CSV file. The screen has no charts.
 
-- **By Model**: Which models are consuming the most budget
-- **By Provider**: Cost distribution across LLM providers
-- **Over Time**: Daily/hourly spend trends
+## Budget
 
-## Budget Tracking
+The cost of a request is computed from the per-model prices in `core/pricing.py`.
 
-LLMProxy tracks per-model pricing for 30+ models:
+- `budget.daily_limit` is the daily cap. A request whose estimated cost would take the day's total over it is refused with HTTP 402
+- `budget.soft_limit` is a warning threshold for the budget webhook
+- The day's total is saved in the store and read back at startup
 
-- Accurate cost estimation using verified provider pricing
-- Daily budget with hard cap and soft warning threshold
-- Budget persisted to SQLite (survives restarts)
-- Automatic fallback to local LLM when budget is exhausted
+The shipped `config.yaml` also sets `budget.fallback_to_local_on_limit`. No code reads that key: there is no fallback to a local model when the budget is exhausted.
 
 ## API
 
 ```bash
-# Spend breakdown
-curl "http://localhost:8090/api/v1/analytics/spend?group_by=model&from=2024-01-01" \
+# Spend grouped by model, from a date
+curl "http://localhost:8090/api/v1/analytics/spend?group_by=model&from=2026-01-01" \
   -H "Authorization: Bearer your-key"
 
 # Top models by cost
 curl http://localhost:8090/api/v1/analytics/spend/topmodels \
   -H "Authorization: Bearer your-key"
 ```
+
+`group_by` accepts `model`, `provider`, `key_prefix` or `date`; any other value is treated as `model`. `from` and `to` bound the period by date.

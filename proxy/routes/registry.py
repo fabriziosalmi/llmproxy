@@ -350,7 +350,15 @@ def create_router(agent: RegistryAgent) -> APIRouter:
             id=ep_id,
             url=url,  # type: ignore
             status=EndpointStatus.VERIFIED,
-            metadata={"provider": provider, "priority": priority, "models": models},
+            # api_key_env is how the forwarder finds the key: it reads the
+            # stored endpoint, not the config entry above. Left out, a key
+            # entered here was accepted and then never sent.
+            metadata={
+                "provider": provider,
+                "priority": priority,
+                "models": models,
+                "api_key_env": entry.get("api_key_env", ""),
+            },
         )
         try:
             await agent.store.add_endpoint(ep)

@@ -332,6 +332,15 @@ class RequestForwarder:
                     url=base_url,
                     provider=provider,
                     provider_type=provider,
+                    # The provider's key is looked up through this, as it is
+                    # for a stored endpoint. Without it a fallback attempt went
+                    # out with no credential at all: falling back to any
+                    # provider that needs a key ended in its 401.
+                    metadata={
+                        "provider": provider,
+                        "api_key_env": ep_config.get("api_key_env", ""),
+                        "models": ep_config.get("models", []),
+                    },
                 )
         return None
 

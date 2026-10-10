@@ -1,42 +1,42 @@
-# Plugins Panel
+# Plugins
 
-The Plugins view shows the ring-based plugin pipeline with management controls.
+The Plugins screen shows one card for each loaded plugin and has controls to reload, roll back, install and uninstall. It refreshes every 30 seconds.
 
-![Plugins Panel](/screenshots/soc-plugins.png)
+## What is listed
 
-## Ring Pipeline View
+The cards come from `GET /api/v1/plugins`, which returns the plugins the engine has loaded. A plugin that is disabled in the manifest is not loaded and has no card, so it cannot be enabled from this screen. With the shipped manifest the screen shows 11 plugins.
 
-Plugins are displayed grouped by their ring assignment:
+The cards are shown in one grid. They are not grouped by ring.
 
-1. **Ingress** — identity enrichment
-2. **Pre-Flight** — Budget, Loop Breaker, PII, Cache
-3. **Routing** — Model Selection, A/B Router
-4. **Post-Flight** — Sanitization, Quality Gate, SLA Guard
-5. **Background** — Telemetry, Token Counter
+## Plugin card
 
-Each plugin card shows:
-- Name, version, author
-- Ring assignment and priority
-- Enabled/disabled state
-- Invocation count, error count, average latency
-- Configuration form (auto-generated from `ui_schema`)
+Each card shows:
+
+- Name, and version when the manifest gives one
+- Ring, timeout and fail policy
+- A dot for the enabled state
+- Description
+- Calls, blocks, error rate and average latency, from `GET /api/v1/plugins/stats`
+- P50, P95 and P99 latency, once there are samples
+- The fields of the plugin's `ui_schema` with their `default` values, marked read-only. These are the defaults declared in the schema, not the values in use
+
+The timeout on the card is the manifest's `timeout_ms`. For a class plugin the engine enforces the class attribute instead, which can differ.
+
+The screen has no form to change a plugin's configuration, and the API has no route for it. A plugin's settings are the `config` block of its manifest entry.
 
 ## Actions
 
-- **Toggle**: Enable/disable individual plugins
-- **Hot-Swap**: Reload all plugins with zero downtime
-- **Rollback**: Revert to previous plugin state
-- **Install/Uninstall**: Add or remove marketplace plugins
+| Control | Call | Notes |
+|---------|------|-------|
+| **Inspect** | none | Opens the plugin's detail panel |
+| **Disable / Enable** | `POST /api/v1/plugins/toggle` | Writes `enabled` in `plugins/manifest.yaml`, then hot-swaps |
+| **Uninstall** | `DELETE /api/v1/plugins/{name}` | Removes an entry of `plugins/installed/manifest.yaml`. For a plugin of the bundled manifest the API answers 404 |
+| **Reload** | `POST /api/v1/plugins/hot-swap` | Reloads the manifest |
+| **Rollback** | `POST /api/v1/plugins/rollback` | Restores the rings that were live before the last successful hot-swap |
+| **+ Install** | `POST /api/v1/plugins/install` | Opens a form: name, ring, entrypoint, timeout, fail policy, description |
 
-## Configuration Forms
+## Limits
 
-Marketplace plugins with `ui_schema` get auto-generated configuration forms in the SOC UI. Supported field types:
-
-- Text inputs
-- Number inputs with min/max constraints
-- Boolean toggles
-- Dropdown selects
-- Textarea for multi-line content
-- Array/tag inputs
-
-Changes are applied via hot-swap.
+- **Hot-swap is rolled back with the shipped manifest.** The engine's health check fails on the default plugins (see [Hot-swap](/plugins/overview#hot-swap)). The API answers HTTP 200 with `{"status": "rolled_back"}`, and the Reload button shows "Plugins hot-swapped" for any 200 answer.
+- **Disable changes the file, not the running plugin set.** The toggle writes the manifest and then hot-swaps; the hot-swap is rolled back and the API answers HTTP 500. The change takes effect at the next restart.
+- **The install form cannot install a Python plugin.** It sends `type: python` without `allow_inprocess`, and the engine refuses Python plugins from the installed manifest unless that flag is set. The refused entry stays in `plugins/installed/manifest.yaml` and makes every later load of the manifests fail until it is removed (see [Developing Plugins](/plugins/developing#loading-the-plugin)).

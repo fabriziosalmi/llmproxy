@@ -320,7 +320,7 @@ async def audit_head_loop(agent, interval: int = 3600):
     they cannot reach; GET /api/v1/audit/verify?anchor_id=&anchor_hash= later
     checks a recorded head against the chain.
 
-    The head goes to the process log (stdout, so the container log) as well as
+    The head goes to the process log (standard error, so the container log) as well as
     to the in-app security feed. It used to go to the feed only, which is a
     ring buffer in this process's memory: three documents said the line reached
     the SIEM and it never left the process. A line in the container log is a

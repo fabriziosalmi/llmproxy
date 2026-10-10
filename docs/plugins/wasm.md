@@ -1,12 +1,29 @@
 # WASM Plugins
 
-LLMProxy supports WebAssembly plugins via the [Extism](https://extism.org/) SDK, enabling Rust, Go, and C plugins to run in a memory-safe sandbox.
+LLMProxy can run WebAssembly modules as plugins through the [Extism](https://extism.org/) Python SDK (`core/wasm_runner.py`).
 
-## Why WASM?
+## Status
 
-- **Memory-safe sandboxing**: WASM plugins run in an isolated VM — crashes cannot affect the Python process
-- **Language freedom**: Write plugins in Rust, Go, C, or any language that compiles to WASM
-- **Same guarantees**: Timeout enforcement, per-plugin metrics, and fail policies apply identically to WASM and Python plugins
+- The `extism` package is commented out in `requirements.txt` and is not in the published image. Without it, WASM plugins are skipped.
+- The shipped manifest declares no WASM plugin, and the repository tracks no compiled `.wasm` module.
+- The tests of the runner use a mocked Extism. No test runs a real module.
+- **In the request pipeline, a WASM plugin call fails before it reaches the module.** The runner serialises the context metadata with `json.dumps`, and the pipeline always puts the orchestrator object in that metadata (`ctx.metadata["rotator"]`), which is not JSON-serialisable. The engine records the failure as an error of the plugin: in a fail-closed ring the request is refused with `Plugin <name> failed`, in a fail-open ring the plugin is skipped. The rest of this page describes the runner's contract as written.
+
+## What the runner does and does not do
+
+- The module is loaded with `extism.Plugin(wasm_bytes, wasi=True)`. The runner passes Extism no allowed paths and no allowed hosts.
+- The runner sets no memory limit and no instruction limit of its own.
+- Calls run on a dedicated pool of 8 threads, so they do not block the event loop.
+- Calls to one module are serialised by a lock: a module handles one request at a time.
+- The engine waits for `timeout_ms` (500 ms if the manifest entry sets none). When the wait expires the request moves on; the call itself is not interrupted and keeps its thread and the module's lock until it returns.
+
+## Failure handling
+
+Once the input has been serialised, a WASM plugin does not follow the ring's fail policy. A timeout, an exception inside the Extism call, an empty result or a result that is not valid JSON are all treated as a passthrough, whatever `fail_policy` says. Timeouts are counted in the plugin's `timeouts` and `errors` statistics.
+
+A failure to serialise the input (see Status) is the exception: it is handled like the failure of any other plugin, under the fail policy.
+
+A WASM plugin can still refuse a request by returning a `block` action.
 
 ## Prerequisites
 
@@ -14,11 +31,11 @@ LLMProxy supports WebAssembly plugins via the [Extism](https://extism.org/) SDK,
 pip install extism
 ```
 
-If the `extism` python package or the underlying system shared library `libextism` is missing or incompatible, WASM plugins are skipped to prevent crashes, but LLMProxy logs clear diagnostic warnings/errors at startup detailing the root cause to assist operators in troubleshooting.
+If the `extism` package or the `libextism` shared library cannot be loaded, the runner logs the cause as an error at load time and the plugin is skipped: the request passes through it unchanged.
 
 ## JSON I/O Protocol
 
-WASM plugins communicate via JSON:
+The runner calls the module's exported function **`handle`** with a JSON document and reads a JSON document back.
 
 **Input:**
 ```json
@@ -30,106 +47,46 @@ WASM plugins communicate via JSON:
 }
 ```
 
+`body` and `metadata` are the context's; `config` is the `config` block of the manifest entry. The input is built with `json.dumps`, so every value in the context metadata must be JSON-serialisable for the call to happen (see Status).
+
 **Output:**
 ```json
 {
-  "action": "ALLOW",
-  "body": { "messages": [...] },
-  "status_code": 200,
-  "message": "Processed"
+  "action": "block",
+  "status_code": 403,
+  "error_type": "wasm_block",
+  "message": "Refused by the plugin"
 }
 ```
 
 ### Actions
 
-| WASM Action | Maps To | Effect |
-|-------------|---------|--------|
-| `ALLOW` | `passthrough` | Let request continue |
-| `BLOCK` | `block` | Stop chain, return error |
-| `MODIFIED` | `modify` | Body was mutated, continue |
+`action` is case-insensitive. An unknown action is a passthrough.
 
-## Rust Plugin Template
+| `action` | Fields read | Effect |
+|----------|-------------|--------|
+| `passthrough` or `allow` | none | The request continues |
+| `modify` or `modified` | `body`, `message` | `body`, if present, replaces the request body |
+| `block` | `status_code` (default 403), `error_type` (default `wasm_block`), `message` or `reason` | The chain stops with that error |
+| `cache_hit` | `response` | `response` becomes the response and the chain stops |
 
-```rust
-// lib.rs
-use extism_pdk::*;
-use serde::{Deserialize, Serialize};
+## Writing a module
 
-#[derive(Deserialize)]
-struct PluginInput {
-    body: serde_json::Value,
-    metadata: serde_json::Value,
-    session_id: String,
-    config: serde_json::Value,
-}
-
-#[derive(Serialize)]
-struct PluginOutput {
-    action: String,
-    body: serde_json::Value,
-    status_code: u32,
-    message: String,
-}
-
-#[plugin_fn]
-pub fn execute(input: String) -> FnResult<String> {
-    let ctx: PluginInput = serde_json::from_str(&input)?;
-
-    let output = PluginOutput {
-        action: "ALLOW".to_string(),
-        body: ctx.body,
-        status_code: 200,
-        message: "Processed by WASM plugin".to_string(),
-    };
-
-    Ok(serde_json::to_string(&output)?)
-}
-```
-
-### Cargo.toml
-
-```toml
-[package]
-name = "my-wasm-plugin"
-version = "0.1.0"
-edition = "2021"
-
-[lib]
-crate-type = ["cdylib"]
-
-[dependencies]
-extism-pdk = "1"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-```
-
-### Build
-
-```bash
-cargo build --release --target wasm32-wasi
-# Output: target/wasm32-wasi/release/my_wasm_plugin.wasm
-```
-
-## Execution Model
-
-- All WASM calls run via `asyncio.to_thread()`, releasing the GIL
-- The event loop stays free for other requests
-- Timeout enforcement applies identically to Python plugins
-- Non-blocking by design
+Any language with an Extism PDK can produce a module, as long as it exports `handle` and follows the protocol above. `plugins/wasm/README.md` in the repository has a Rust walkthrough; it is not built or tested by this project's CI.
 
 ## Registration
 
-Register WASM plugins in `manifest.yaml`:
+Register a WASM plugin in `plugins/manifest.yaml`. The `entrypoint` is the path of the module relative to `plugins/`, without the `.wasm` extension:
 
 ```yaml
-- name: "My WASM Plugin"
-  hook: "pre_flight"
-  priority: 25
-  enabled: true
-  type: "wasm"
-  entrypoint: "plugins/wasm/my_plugin.wasm"
-  version: "0.1.0"
-  timeout_ms: 100
-  config:
-    my_setting: "value"
+  - name: "My WASM Plugin"
+    hook: "pre_flight"
+    priority: 25
+    enabled: true
+    type: "wasm"
+    entrypoint: "wasm/my_plugin"    # plugins/wasm/my_plugin.wasm
+    version: "0.1.0"
+    timeout_ms: 100
+    config:
+      my_setting: "value"
 ```

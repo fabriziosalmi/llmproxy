@@ -1,56 +1,62 @@
-# Endpoints View
+# Endpoints
 
-The Endpoints view provides a management interface for the LLM endpoint registry.
+The Endpoints screen shows the endpoint registry (`GET /api/v1/registry`) and lets an operator add, test, toggle and delete endpoints. The registry is fetched every 30 seconds.
 
-![Endpoints View](/screenshots/soc-endpoints.png)
+## Endpoint table
 
-## Endpoint Table
-
-Each configured endpoint is displayed with:
-
-- **Name** -- Endpoint identifier from `config.yaml`
-- **Provider** -- Adapter type (openai, anthropic, google, azure, ollama, etc.)
-- **Status** -- Live (healthy), offline (failed health check), or discovered (auto-detected)
-- **Models** -- Number of models served by this endpoint
-- **Latency** -- Current EMA-weighted response latency
-- **Circuit** -- Circuit breaker state (closed = healthy, open = failing)
+| Column | Content |
+|--------|---------|
+| **Endpoint** | Name (the host of the endpoint's URL) and the URL |
+| **Status** | `Live` for a verified endpoint; otherwise the registry status (`FOUND`, `IGNORED`, `DISCOVERED`) |
+| **Circuit** | Circuit breaker state: `CLOSED`, `OPEN` or `HALF` |
+| **Latency** | The latency stored for the endpoint, or `--` |
+| **Priority** | The endpoint's priority, with buttons to lower and raise it |
+| **Actions** | See below |
 
 ## Actions
 
-| Action | Description |
-|--------|-------------|
-| **Test** | Run a model-listing probe and refresh status/latency/model metadata |
-| **Toggle** | Enable or disable an endpoint without removing it |
-| **Delete** | Remove an endpoint from the registry |
-| **Priority** | Set routing priority for endpoint selection |
+| Action | Call | Effect |
+|--------|------|--------|
+| **Copy cURL** | none | Copies a curl command for the endpoint |
+| **Test** | `POST /api/v1/registry/{id}/probe` | Sends a model-listing request to the endpoint (no inference) and stores the measured latency |
+| **Inspect** | none | Opens the endpoint's detail panel |
+| **Reset CB** | `POST /api/v1/circuit-breaker/{id}/reset` | Resets the endpoint's circuit breaker |
+| **Toggle** | `POST /api/v1/registry/{id}/toggle` | Sets a verified endpoint to `IGNORED`, and any other endpoint to verified |
+| **Delete** | `DELETE /api/v1/registry/{id}` | Removes the endpoint from the registry, after a confirmation |
+| **Priority − / +** | `POST /api/v1/registry/{id}/priority` | Sets the endpoint's priority |
 
-## Circuit Breaker
+## Adding an endpoint
 
-Endpoints that fail repeatedly are automatically circuit-broken:
+"+ Add Endpoint" opens a form with name, base URL, provider, priority, API key (optional) and a comma-separated list of models. It posts to `POST /api/v1/registry`. "Scan local" probes well-known local ports (`POST /api/v1/registry/scan`) and fills in the form.
 
-- **Closed** -- Endpoint is healthy, accepting traffic
-- **Open** -- Endpoint has failed, traffic is routed to fallback chain
-- **Half-Open** -- Testing recovery with a single probe request
+## Circuit breaker
 
-Circuit state is visible per-endpoint and triggers `circuit_open` / `endpoint_recovered` webhook events.
+Each endpoint has a circuit breaker (`core/circuit_breaker.py`):
+
+- **Closed**: the endpoint takes traffic
+- **Open**: the endpoint has reached the failure threshold; the router leaves it out
+- **Half-open**: after the recovery timeout, one probe request is let through
+
+The defaults in the code are 5 failures and 60 seconds. The proxy dispatches the webhook events `circuit_open` and `endpoint_recovered`.
 
 ## API
 
 ```bash
-# Full registry state
+# The registry
 curl http://localhost:8090/api/v1/registry \
   -H "Authorization: Bearer your-key"
 
-# Toggle endpoint
+# Toggle an endpoint
 curl -X POST http://localhost:8090/api/v1/registry/openai/toggle \
   -H "Authorization: Bearer your-key"
 
-# Test endpoint without inference
+# Test an endpoint without inference
 curl -X POST http://localhost:8090/api/v1/registry/openai/probe \
   -H "Authorization: Bearer your-key"
 
-# Set priority
+# Set the priority
 curl -X POST http://localhost:8090/api/v1/registry/openai/priority \
   -H "Authorization: Bearer your-key" \
+  -H "Content-Type: application/json" \
   -d '{"priority": 1}'
 ```

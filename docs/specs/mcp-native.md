@@ -4,27 +4,17 @@
 | ---------- | ------ | ---------- | ----------- | ------ | ----------- |
 | DEFERRED   | fab    | 2026-05-20 | 2026-09-09  | none   | @fab (solo) |
 
-> **Status, 2026-09-09 — DEFERRED, not shipped.** The target below was 1.22.0.
-> The project is at 1.34.0 and no MCP code exists in `core/`, `proxy/`,
-> `plugins/` or `store/`. Nothing here has been built. The design still stands
-> and the review changelog is worth keeping, but the table said REVIEWED-1
-> against a release that had long since shipped without it, so a reader — or
-> anyone evaluating whether this proxy speaks MCP — would reasonably conclude
-> it had landed. Re-target it before starting work rather than leaving a date
-> in the past.
+> **Status: DEFERRED design document.** Nothing described on this page has
+> been built. The repository contains no MCP code: no bridge to MCP servers, no
+> MCP proxy and no MCP endpoint. The version numbers, phases and estimates
+> below are those of the original proposal. They are not commitments.
 
-> **Re-scope, 2026-10-09 — read this before the rest.** The competitive claim
-> this spec was written around is no longer true (see "Wedge" below), and the
-> three-layer design (bridge + proxy + native MCP server) is **not** going to be
-> built. What remains on the roadmap is **MCP-lite**: policy and audit for tool
-> calls that already pass through `/v1/chat/completions` — allow/deny per tool
-> and per key or role, an audit row for every tool call, and injection scoring
-> of tool *results* (opt-in, text outputs only). No bridge to MCP servers and no
-> native MCP endpoint: that is the ground of agentgateway (Linux Foundation) and
-> Bifrost. Estimate: 3-4 weeks, after the audit-integrity work (see ROADMAP).
+> **Current scope.** What the proxy does for tool use is a policy on the tool
+> calls that pass through `/v1/chat/completions`, with an audit record of each
+> refusal: see [Tool Policy](/security/tool-policy). The three-layer design
+> below (bridge, proxy, native MCP server) is not planned.
 
-> **Review 1 changelog (2026-05-20)** — Timeline reframed to 3–4 weeks for a
-> solo dev (was 2 weeks, optimistic). Streaming-tool-call state machine
+> **Review 1 changelog (2026-05-20)** — Streaming-tool-call state machine
 > spelled out. Tool-output threat scoring scoped (filesystem dumps are
 > not user-controlled prompts; ledger restricted to text/* tool outputs
 > and only after explicit operator opt-in). Stdio sandboxing matrix made
@@ -41,12 +31,11 @@
 
 ## TL;DR
 
-Turn LLMProxy into the **first open-source AI gateway with first-class
-support for the Model Context Protocol (MCP)** — Anthropic's emerging
-standard for connecting LLM clients to external tools, resources, and
-prompts.
+The proposal was to add support for the Model Context Protocol (MCP) to
+LLMProxy. MCP is a protocol for connecting LLM clients to external tools,
+resources and prompts.
 
-Concretely, in 1.22 LLMProxy will:
+The design has three components. None of them exists:
 
 1. **Bridge** — expose configured MCP servers as standard OpenAI
    `tools` in `/v1/chat/completions`, so any existing OpenAI-compatible

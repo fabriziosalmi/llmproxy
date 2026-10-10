@@ -1,43 +1,50 @@
 # UI Contributing Guide
 
-> Audience: anyone touching the admin console (`ui/`). Covers the build pipeline, the primitive system, the C.2 view-migration pattern, and the test contract. Backend contribution rules live in [`CONTRIBUTING.md`](https://github.com/fabriziosalmi/llmproxy/blob/main/CONTRIBUTING.md) at the repo root.
+> Audience: anyone changing the admin UI (`ui/`). Covers the build, the primitive components, the pattern for moving a view to TypeScript, and the tests. Backend contribution rules live in [`CONTRIBUTING.md`](https://github.com/fabriziosalmi/llmproxy/blob/main/CONTRIBUTING.md) at the repo root.
 
 ## TL;DR
 
 ```bash
 make build-ui     # Install npm deps + Vite production build (writes ui/dist/)
 make dev-ui       # Vite dev server with HMR on :5173 (proxies API to :8090)
-make test-ui      # Vitest unit suite (fast, ~2s)
-make e2e-ui       # Playwright e2e (auto-starts the backend on :8090)
+make test-ui      # Vitest unit suite
+make e2e-ui       # Playwright e2e against the backend on :8090
 make lint-ui      # ESLint + Prettier check
 ```
 
-CI runs the same four checks on every PR via `.github/workflows/frontend.yml`. Lint and Prettier are zero-warning.
+`make e2e-ui` starts the backend itself (`python main.py` from the repository's `venv`) unless, outside CI, one is already answering on `:8090`. Set `LLMPROXY_SKIP_WEB_SERVER=1` to stop it from doing so.
+
+`.github/workflows/frontend.yml` runs ESLint, the Prettier check, the type check, the unit tests with coverage, `npm audit`, the build and the e2e suite. It runs on pushes to `main` and on pull requests that change `ui/**`, `proxy/app_factory.py` or the workflow file; other changes do not trigger it. ESLint runs with `--max-warnings=0`.
 
 ## Architecture
 
 ```
 ui/
-├── index.html            # admin console entry point (Vite-bundled)
-├── chat.html             # chat surface entry point
-├── main.js               # legacy boot shell — wires up tabs, login, palette
-├── components/           # legacy tab shells (one per view, *.js)
-├── services/             # cross-cutting helpers (api, store, drilldown,
-│                         # explain, timerange, toast)
-├── public/               # static assets (chart.min.js, xterm, fonts)
-└── src/                  # ⭐ all new code lives here
-    ├── ui/               # primitive components (TS, framework-free)
-    ├── views/            # one folder per migrated tab (TS)
-    ├── services/         # TS services (logger, rum)
-    └── dev/              # Storybook-lite gallery
+├── index.html            # admin UI entry point (Vite input)
+├── chat.html             # chat page (Vite input; no screen links to it)
+├── oauth-callback.html   # SSO callback page (Vite input)
+├── main.js               # boot shell: tabs, login, command palette
+├── components/           # one shell per view (*.js)
+├── services/             # JS helpers (api, auth, file_actions, store,
+│                         # timerange, toast, urlstate)
+├── public/vendor/        # static assets (chart.min.js, xterm, fonts)
+├── e2e/                  # Playwright specs and fixtures
+└── src/                  # new code goes here
+    ├── ui/               # primitive components (TS, no framework)
+    ├── views/            # one folder per view written in TS
+    ├── services/         # TS services (drilldown, explain, logger,
+    │                     # perf, rum, theme)
+    └── dev/              # primitives gallery
 ```
 
 Two layers, on purpose:
 
-- `components/*.js` and `services/*.js` are the **legacy boot shell**. They render the raw HTML in `index.html` so the page works even without a Vite build (source-tree fallback). They never accumulate new logic — every new feature ships in `src/`.
+- `components/*.js` and `services/*.js` are the **boot shell**. They drive the markup in `index.html`, so the page works without a Vite build: the proxy serves `ui/dist/` when it exists and the source tree otherwise. New code goes in `src/`.
 - `src/views/<tab>/` holds the **TypeScript view**. The legacy shell dynamic-imports it (`import('../src/views/<tab>/index')`) and the TS view replaces the legacy markup via `replaceChildren`. A `_tsMounted` flag in the legacy shell stops legacy renderers from clobbering TS state on subsequent store updates.
 
-This is a **strangler-fig migration**: legacy stays for fallback, TS owns the runtime.
+With a build, the TypeScript view is what runs; the shell's own renderers are the fallback.
+
+Seven views have a TypeScript implementation in `src/views/`: threats, guards, plugins, endpoints, models, security and settings. Security is imported directly by `main.js`; the other six are loaded through their shell in `components/`. Analytics and Live Logs exist only as `components/analytics.js` and `components/logs.js`.
 
 ## Adding a new primitive
 
@@ -69,7 +76,7 @@ Rules:
 1. **Factory function returning an `HTMLElement`.** No virtual DOM, no framework. Tests render directly with happy-dom.
 2. **Options object** with `testId?` and `className?` extension hooks. The `testId` lands on the most-interactive element (the `<button>` for Toggle, not the wrapper `<div>`).
 3. **Uses other primitives** from `./` (e.g. Card composes Button) — never reach across to `views/`.
-4. **ARIA done right.** Buttons use native `<button>`, switches use `role="switch"` + `aria-checked`, modals use `role="dialog"` + `aria-modal`. Test the ARIA in the unit suite.
+4. **ARIA.** Buttons use native `<button>`, switches use `role="switch"` + `aria-checked`, modals use `role="dialog"` + `aria-modal`. Test the ARIA in the unit suite.
 5. **Tailwind utilities directly.** No styled-components. The `tailwind.config.js` content scanner reads the .ts files; literal class strings only (no template-string interpolation that would defeat the scanner).
 6. **Add a story.** Drop a variant or three into `ui/src/dev/stories.ts` so the gallery covers the new primitive. View it with `make dev-ui` then `http://localhost:5173/ui/dev/primitives.html`.
 7. **Export from the barrel** `ui/src/ui/index.ts` so callers import via `from '../../ui'` not the deep path.
@@ -77,7 +84,7 @@ Rules:
 
 ## Adding a new view (or migrating a legacy tab)
 
-The pattern was crystallised in Phase C.2 (Threats) and validated five more times in Phase F+G. Six tabs migrated end-to-end follow this template.
+The views that are loaded through a shell in `components/` follow this template.
 
 ### 1. Audit the legacy view
 
@@ -165,23 +172,21 @@ Critical: every legacy renderer that the store can re-trigger needs the early `i
 
 ### 5. Tests
 
-- **Unit (Vitest, happy-dom)**: per section, exercise rendering + callbacks + state transitions. Use `data-testid` attributes for stable selectors. ~5-10 tests per non-trivial section.
+- **Unit (Vitest, happy-dom)**: per section, exercise rendering, callbacks and state transitions. Use `data-testid` attributes for stable selectors.
 - **E2E (Playwright)**: one `e2e/<NN>-<tab>.spec.ts` covering the operator's main flow. Stub backend routes via `page.route()` so tests are deterministic. Use the auth fixture (`e2e/fixtures/auth.ts`) and any other shared fixture before rolling your own.
 
-Target: 5-10 unit tests + 4-6 e2e tests per migrated view.
+### 6. Version and changelog
 
-### 6. Bump the version
-
-Each migrated view ships a minor (`1.x.0`) bump. Add a `CHANGELOG.md` entry under "Operator console — `<Tab>` vertical slice".
+Update `VERSION` and add a `CHANGELOG.md` entry in the same change.
 
 ## Coding conventions
 
-- **TypeScript medium-strict** (`tsconfig.json`). New code is fully typed. Legacy `.js` is untyped (`checkJs: false`) but isolated.
+- **TypeScript** with `strict: true` and `noImplicitAny: false` (`tsconfig.json`). `.js` files are not type-checked (`checkJs: false`).
 - **No barrel re-exports across boundaries.** A view imports primitives from `'../../ui'`; primitives never import from views.
 - **`cx()` for class composition.** Do not template-string-interpolate Tailwind classes — the content scanner can't see them.
 - **Dynamic import for legacy → TS.** Always `import('../src/views/.../index')` (bare, no extension). That resolves to `.ts` at build time and 404s in source-tree fallback (which is what we want — `.catch()` keeps the legacy shell live).
 - **`testId` attribute** on every interactive element. Format: `<context>-<action>-<id>` (e.g. `ep-delete-flaky`).
-- **Commit conventions**: `feat(ui):`, `fix(ui):`, `chore(ui):`. One commit per sub-phase, separate `chore` commit for VERSION + CHANGELOG bumps.
+- **Commit messages** use a type and a scope: `feat(ui):`, `fix(ui):`, `chore(ui):`.
 
 ## Test patterns
 
@@ -238,14 +243,14 @@ test('Settings → Identity surfaces the authenticated user', async ({ authedPag
 - **Importing a `.ts` file with explicit `.ts` extension.** Symptom: build error. Fix: use the bare path.
 - **Missing the `keepalive: true` on backend log POSTs.** Symptom: in-flight log batches lost on tab close. Fix: see `backendSink` in `src/services/logger.ts`.
 
-## Storybook-lite gallery
+## Primitives gallery
 
 ```bash
 make dev-ui
 open http://localhost:5173/ui/dev/primitives.html
 ```
 
-The gallery is dev-only; never bundled in `dist/`. Add a story when you ship a new primitive variant by extending `ui/src/dev/stories.ts`. Stories are typed (`Story` interface), grouped automatically by `primitive`.
+The gallery is served by the dev server only. It is not one of the build's inputs, so it is not in `dist/`. Add a story when you ship a new primitive variant by extending `ui/src/dev/stories.ts`. Stories are typed (`Story` interface), grouped automatically by `primitive`.
 
 ## Pull-request checklist (UI)
 
@@ -264,8 +269,8 @@ The gallery is dev-only; never bundled in `dist/`. Add a story when you ship a n
 |---|---|
 | A new primitive | `ui/src/ui/<Name>.ts` + barrel re-export in `ui/src/ui/index.ts` |
 | A new view (tab migration) | `ui/src/views/<tab>/` + delegation from `ui/components/<tab>.js` |
-| A new API method | `ui/services/api.js` (legacy) — typed signatures end up in the per-view `types.ts` |
+| A new API method | `ui/services/api.js`; the typed signatures go in the view's `types.ts` |
 | A test fixture | `ui/e2e/fixtures/` |
 | A story | `ui/src/dev/stories.ts` |
-| A primitive variant for Storybook-lite | `ui/src/dev/stories.ts` |
+| A primitive variant for the gallery | `ui/src/dev/stories.ts` |
 | A new backend endpoint surfaced in the UI | `proxy/routes/` (Python) + `ui/services/api.js` + per-view consumer |

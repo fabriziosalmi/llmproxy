@@ -328,10 +328,12 @@ def _format_report(results: list[dict[str, Any]]) -> str:
     out.append(f"| PII masking | {sc['pii_caught']}/{sc['pii_total']} |")
     out.append("")
     out.append(
-        "Measured against the LIVE pipeline (ASGI firewall + SecurityShield "
-        "threat-score/composite + PII), NOT a harness-only path. False negatives "
-        "are counted honestly (known gaps included) — with AI escalation enabled "
-        "in prod, gray-zone misses are additionally adjudicated by a model."
+        "This is the regression corpus: it was written alongside the detector, "
+        "so these figures show that a build did not get worse on prompts the "
+        "detector already knew. They are not a measure of detection; that is in "
+        "docs/security/benchmark.md. The entries are run through the firewall "
+        "and the shield's scoring, without the per-session checks. No model "
+        "adjudicates borderline cases: none is wired to the shield."
     )
     out.append("")
 

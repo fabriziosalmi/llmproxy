@@ -560,3 +560,32 @@ async def test_a_dead_endpoint_opens_its_circuit_from_non_streaming_traffic():
 def test_the_shared_probe_expires_too():
     """In Redis the probe key had no TTL: a leaked probe outlived the process."""
     assert circuit_breaker.LUA_CHECK_SCRIPT.count("'EX'") == 2
+
+
+# ── the provider's key reaches the provider ─────────────────────────────────
+
+
+async def test_a_fallback_attempt_carries_the_fallback_providers_key(upstreams, monkeypatch):
+    """The fallback target had no way to name its key, so the request went out
+    with no credential and every keyed provider answered 401."""
+    seen = {}
+
+    async def backup(request):
+        seen["authorization"] = request.headers.get("Authorization")
+        return web.json_response({"choices": [{"message": {"content": "fallback"}}], "usage": {}})
+
+    backup_base, _ = await upstreams(backup)
+    monkeypatch.setenv("BACKUP_PROVIDER_KEY", "sk-backup-secret")
+    config = _chain_config(backup_base)
+    config["endpoints"]["backup"]["api_key_env"] = "BACKUP_PROVIDER_KEY"
+    fwd = _forwarder(config)
+    session = build_http_session({})
+    try:
+        response = await fwd.forward_with_fallback(
+            _ctx(Store(), stream=False), _target("http://127.0.0.1:9"), {}, session, {}
+        )
+    finally:
+        await session.close()
+
+    assert response.status_code == 200
+    assert seen["authorization"] == "Bearer sk-backup-secret"

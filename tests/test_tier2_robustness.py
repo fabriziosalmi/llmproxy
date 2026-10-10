@@ -143,6 +143,25 @@ async def test_registering_a_url_under_a_second_id_is_a_409():
     assert "two" not in (agent.config.get("endpoints") or {})
 
 
+async def test_a_key_entered_with_a_new_endpoint_is_the_one_the_forwarder_will_send():
+    """The forwarder finds a provider key through the stored endpoint's
+    ``api_key_env``. The route put it in the config entry only, so a key typed
+    into the admin UI was accepted and then never sent."""
+    import os
+
+    agent = _two_tier_agent()
+    body = {"id": "regolo", "url": "https://api.example.org/v1", "provider": "openai-compatible",
+            "api_key": "sk-provider-secret", "models": ["some-model"]}
+    async with await _client(agent) as c:
+        resp = await c.post("/api/v1/registry", json=body)
+
+    assert resp.status_code == 200, resp.text
+    stored = next(e for e in await agent.store.get_all() if e.id == "regolo")
+    key_env = stored.metadata.get("api_key_env")
+    assert key_env and os.environ.get(key_env) == "sk-provider-secret"
+    os.environ.pop(key_env, None)
+
+
 # ── main.py ───────────────────────────────────────────────────────────────────
 
 
