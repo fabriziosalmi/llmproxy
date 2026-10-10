@@ -26,8 +26,8 @@ All notable changes to LLMProxy are documented here.
   require; the trajectory rule, the PII placeholder format and the FQDN risk weights are
   the ones in the code; the WASM page states that the runner cannot currently execute a
   plugin in the pipeline; the Helm section states that the chart does not deploy with its
-  default values; `SECURITY.md` no longer names a contact address and response times the
-  project cannot back, and points to GitHub private vulnerability reporting. The `AUDIT
+  default values; `SECURITY.md` names the maintainer's address as the contact and no longer
+  promises response times or a PGP key the project cannot back. The `AUDIT
   HEAD` line goes to standard error, not standard output. The web interface is called the
   admin UI throughout.
 - **The regression-corpus report says what it is.** `docs/OWASP_LLM_COVERAGE.md` is

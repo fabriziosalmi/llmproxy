@@ -4,10 +4,9 @@
 
 **Please do NOT open public GitHub issues for security vulnerabilities.**
 
-Report a vulnerability through GitHub private vulnerability reporting:
+Report a vulnerability by email to <fabrizio.salmi@gmail.com>.
 
-1. Open the repository's **Security** tab and choose **Report a vulnerability**, or go to <https://github.com/fabriziosalmi/llmproxy/security/advisories/new>.
-2. **Include**: description, reproduction steps, affected versions, and potential impact.
+Include a description, reproduction steps, the affected versions and the potential impact.
 
 ## Response
 
