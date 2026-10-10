@@ -48,7 +48,7 @@ docker run -d --name llmproxy -p 8090:8090 \
   -e LLM_PROXY_ADMIN_KEYS=sk-admin-change-me \
   -e OPENAI_API_KEY=$OPENAI_API_KEY \
   -v llmproxy-data:/app/data \
-  ghcr.io/fabriziosalmi/llmproxy:1.39.4
+  ghcr.io/fabriziosalmi/llmproxy:1.39.5
 ```
 
 - `LLM_PROXY_API_KEYS` is required: the shipped configuration authenticates every

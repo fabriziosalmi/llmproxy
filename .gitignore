@@ -73,7 +73,9 @@ CLAUDE.md
 OGGI.md
 FEATURES.md
 OPPORTUNITIES.md
-AUDIT*.md
+# Root only: unanchored, and on a case-insensitive filesystem, this pattern
+# also matched docs/security/audit-log.md, which was then never committed.
+/AUDIT*.md
 UI_AUDIT.md
 UI_REVIEW.md
 ROADMAP.md

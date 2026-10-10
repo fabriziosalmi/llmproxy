@@ -2,6 +2,18 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.39.5] — 2026-10-10
+
+### The audit-log page is actually published (patch)
+
+- **The audit-log page announced in 1.39.4 was not in that release.** A `.gitignore`
+  pattern for personal notes (`AUDIT*.md`) was not anchored to the repository root and, on
+  a case-insensitive filesystem, matched `docs/security/audit-log.md`: the page was built
+  locally, linked from the home page and the sidebar, and never committed, so the site
+  answered 404 for it. The pattern is anchored, the page is in, and
+  `tests/test_docs_site_is_complete.py` fails when a page the navigation links to is not
+  tracked by git, or when a page exists that no menu links to.
+
 ## [1.39.4] — 2026-10-10
 
 ### The documentation site reorganised around the audit log; two plugins renamed (patch)
