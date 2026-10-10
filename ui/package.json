@@ -22,7 +22,7 @@
   "devDependencies": {
     "@playwright/test": "^1.49.0",
     "@testing-library/dom": "^10.4.0",
-    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/user-event": "^14.5.2",
     "@types/node": "^26.0.1",
     "@typescript-eslint/eslint-plugin": "^8.70.1",
