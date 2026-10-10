@@ -46,6 +46,14 @@ The held-out set by family (stopped / prompts):
 | benign | multilingual | 0 / 4 | 1 / 4 |
 | benign | fiction | 0 / 4 | 1 / 4 |
 
+The tool policy on the indirect-injection benchmark (the model is assumed to obey the planted instruction; the policy is `after_tool_result: ["*Get*", "*Read*", "*Search*", "*View*", "*List*", "*Navigate*"]`):
+
+| Attack type | Cases | Attacker's call refused |
+|---|---:|---:|
+| direct harm | 510 | 510 |
+| data stealing | 544 | 544 |
+| the user's own call, refused by mistake | 1,054 | 0 |
+
 The classifier at other thresholds (attacks stopped; hard benign prompts stopped by mistake):
 
 | Threshold | Attacks | Hard benign |

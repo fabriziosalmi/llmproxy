@@ -2,6 +2,41 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.39.0] — 2026-10-10
+
+### The detection figures are measured; a tool policy that stops indirect injection without detecting it (minor)
+
+**Upgrading.** Nothing changes unless you turn the tool policy on
+(`security.tool_policy.enabled`). Start with `mode: log_only`.
+
+- **The README no longer claims 100% coverage of prompt injection.** That figure came
+  from a corpus written alongside the detector. On 5,147 prompts it was not written
+  against (four public datasets, the InjecAgent indirect-injection benchmark and a
+  held-out set) the firewall and the shield stop **21%** of attacks, **0%** of the
+  instructions planted in a tool result, and refuse **0.1%** of benign prompts. An open
+  classifier run on the same prompts stops 79% and refuses 43% of benign text that merely
+  contains trigger words: neither is a gate to rely on.
+- **The published figures are generated and tested.** `scripts/waf_eval/` holds the method
+  (pinned downloads, scoring with the proxy's own classes), `results.json` the outcome,
+  and `render.py` writes the tables in the README and `docs/security/benchmark.md` from
+  it. `tests/test_waf_benchmark.py` fails if the tables drift from the file, if the
+  held-out set stops giving the recorded figures, or if the old claim returns.
+  `make waf-bench` reproduces it.
+- **Tool policy** (`security.tool_policy`, off by default; `docs/security/tool-policy.md`).
+  `allow` / `deny` say which tools a response may call. `after_tool_result` lists the
+  tools that may be called in a turn that follows a tool result: with the read-only tools
+  listed there, the call a planted instruction asks for is refused without the
+  instruction being read, and goes through once the user confirms it. On the InjecAgent
+  benchmark, assuming the model obeys the instruction, the attacker's call is refused in
+  1,054 of 1,054 cases and none of the 1,054 calls the users' own tasks need. A refusal
+  is a `403` (or, on a stream, an error event sent before the call's name is complete), a
+  row in the audit chain with the tool's name, and
+  `llm_proxy_tool_policy_total{decision}`. It does not cover untrusted text placed in the
+  user's own message, judges names and position rather than arguments, and is global
+  (no per-key policies yet).
+- **Corrected counts in the README**: 178 signatures (not 180), 157 trigram patterns
+  (not 156, and lexical, not "20+ languages" of semantics), 30 scoring patterns (not 16).
+
 ## [1.38.1] — 2026-10-10
 
 ### Streams read as events, a breaker that recovers, a timeout that does not bill twice (patch)

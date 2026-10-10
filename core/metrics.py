@@ -82,6 +82,11 @@ RING_LATENCY = Histogram(
 INJECTION_BLOCKED = Counter(
     "llm_proxy_injection_blocked_total", "Injection attempts blocked"
 )
+TOOL_POLICY = Counter(
+    "llm_proxy_tool_policy_total",
+    "Tool calls the tool policy refused, or would have refused in log_only mode",
+    ["decision"],  # refused | would_refuse
+)
 AUTH_FAILURES = Counter(
     "llm_proxy_auth_failures_total", "Authentication failures", ["reason"]
 )
@@ -237,6 +242,10 @@ class MetricsTracker:
     @staticmethod
     def track_injection_blocked():
         INJECTION_BLOCKED.inc()
+
+    @staticmethod
+    def track_tool_policy(decision: str):
+        TOOL_POLICY.labels(decision=decision).inc()
 
     @staticmethod
     def track_auth_failure(reason: str):

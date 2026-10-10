@@ -14,7 +14,6 @@ import time
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-logging.disable(logging.CRITICAL)
 
 from core.firewall_asgi import ByteLevelFirewallMiddleware  # noqa: E402
 from core.security import SecurityShield  # noqa: E402
@@ -45,6 +44,9 @@ async def verdict(firewall: ByteLevelFirewallMiddleware, messages: list, session
 
 
 async def main(work: str) -> None:
+    # Thousands of blocked prompts would each log a line. Only when run as a
+    # script: this module is also imported by the test suite.
+    logging.disable(logging.CRITICAL)
     firewall = make_firewall()
     n, started = 0, time.time()
     with open(f"{work}/samples.jsonl") as f, open(f"{work}/preds_waf.jsonl", "w") as out:

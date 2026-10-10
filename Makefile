@@ -71,7 +71,8 @@ waf-bench: ## Measure the detection layer on public datasets (downloads ~750 MB 
 	.waf-bench/venv/bin/python scripts/waf_eval/build_samples.py .waf-bench
 	. venv/bin/activate && python scripts/waf_eval/predict_waf.py .waf-bench
 	.waf-bench/venv/bin/python scripts/waf_eval/predict_classifier.py .waf-bench
-	. venv/bin/activate && python scripts/waf_eval/report.py .waf-bench && python scripts/waf_eval/render.py
+	. venv/bin/activate && python scripts/waf_eval/report.py .waf-bench \
+		&& python scripts/waf_eval/tool_policy_eval.py .waf-bench && python scripts/waf_eval/render.py
 
 waf-bench-check: ## The part of the detection benchmark that needs no download
 	. venv/bin/activate && python -m pytest tests/test_waf_benchmark.py -q

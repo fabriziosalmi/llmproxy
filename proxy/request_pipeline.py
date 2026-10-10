@@ -36,6 +36,7 @@ from core.plugin_engine import PluginContext, PluginHook
 from core.pricing import estimate_cost
 from core.stream_faker import fake_stream
 from core.tokenizer import count_messages_tokens
+from core.tool_policy import ToolPolicy, called_tools, follows_tool_result
 from core.tracing import TraceManager
 from core.webhooks import EventType
 from proxy.audit_backlog import submit as submit_audit
@@ -88,12 +89,15 @@ async def process_proxy_request(
 
         cached = await _pre_flight(orchestrator, ctx)
         if cached is not _CONTINUE:
+            # A cached answer is an answer: it does not skip the tool policy.
+            await _tool_policy(orchestrator, ctx)
             return cached
 
         _resolve_model(orchestrator, ctx)
         await _flag_budget(orchestrator, ctx, request, body)
         await _route(orchestrator, ctx)
         await _forward(orchestrator, ctx)
+        await _tool_policy(orchestrator, ctx)
         await _post_flight(orchestrator, ctx)
 
         orchestrator._spawn_task(_background_ring(orchestrator, ctx))
@@ -445,6 +449,45 @@ async def _forward(orchestrator: Any, ctx: PluginContext) -> None:
         bool(success),
         redis_client=getattr(orchestrator, "redis_client", None),
     )
+
+
+async def _tool_policy(orchestrator: Any, ctx: PluginContext) -> None:
+    """Refuse a response whose tool calls the policy does not allow.
+
+    Non-streaming responses only: a stream is judged by the forwarder as the
+    call appears (see RequestForwarder._handle_streaming). The refusal is a
+    403 raised from here, so it is recorded like every other refusal, in the
+    audit chain, with the tool's name.
+    """
+    policy = ToolPolicy.from_config(orchestrator.config)
+    raw = getattr(ctx.response, "body", None)
+    if not policy.enabled or not raw or isinstance(ctx.response, StreamingResponse):
+        return
+    try:
+        choices = json.loads(raw).get("choices") or []
+    except (ValueError, AttributeError, UnicodeDecodeError):
+        return
+    after_data = follows_tool_result(ctx.body.get("messages"))
+    for choice in choices:
+        message = choice.get("message") if isinstance(choice, dict) else None
+        for name in called_tools(message):
+            reason = policy.refusal(name, after_data)
+            if reason is None:
+                continue
+            if not policy.enforce:
+                MetricsTracker.track_tool_policy("would_refuse")
+                await orchestrator._add_log(
+                    f"TOOL POLICY (log only): call to '{name}' would be refused: {reason}",
+                    level="SECURITY",
+                )
+                continue
+            MetricsTracker.track_tool_policy("refused")
+            await orchestrator._add_log(
+                f"TOOL POLICY: call to '{name}' refused: {reason}", level="SECURITY"
+            )
+            raise HTTPException(
+                status_code=403, detail=f"Tool call '{name}' refused by policy: {reason}"
+            )
 
 
 async def _post_flight(orchestrator: Any, ctx: PluginContext) -> None:

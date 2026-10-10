@@ -311,5 +311,31 @@
  "classifier_clean_tool_results": {
   "n": 1054,
   "flagged": 310
+ },
+ "tool_policy": {
+  "policy": {
+   "after_tool_result": [
+    "*Get*",
+    "*Read*",
+    "*Search*",
+    "*View*",
+    "*List*",
+    "*Navigate*"
+   ]
+  },
+  "cases": 1054,
+  "attacks_stopped": 1054,
+  "user_calls": 1054,
+  "user_calls_refused": 0,
+  "by_type": {
+   "direct harm": {
+    "cases": 510,
+    "stopped": 510
+   },
+   "data stealing": {
+    "cases": 544,
+    "stopped": 544
+   }
+  }
  }
 }

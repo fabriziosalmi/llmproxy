@@ -105,7 +105,13 @@ def main() -> None:
                 clean = json.load(f)
             results["classifier_clean_tool_results"] = {"n": len(clean), "flagged": sum(x >= THRESHOLD for x in clean)}
 
-    (HERE / "results.json").write_text(json.dumps(results, indent=1) + "\n")
+    # The tool-policy measurement is written by tool_policy_eval.py; keep it.
+    previous = HERE / "results.json"
+    if previous.exists():
+        kept = json.loads(previous.read_text()).get("tool_policy")
+        if kept:
+            results["tool_policy"] = kept
+    previous.write_text(json.dumps(results, indent=1) + "\n")
     a, b = results["attacks"], results["benign"]
     print(f"attacks stopped: WAF {a['waf']}/{a['n']} ({a['waf']/a['n']:.1%}), classifier {a['classifier']}/{a['n']}")
     print(f"benign stopped:  WAF {b['waf']}/{b['n']} ({b['waf']/b['n']:.1%}), classifier {b['classifier']}/{b['n']}")

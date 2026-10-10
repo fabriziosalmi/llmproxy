@@ -18,6 +18,7 @@ from fastapi import HTTPException
 from fastapi.responses import Response, StreamingResponse
 
 from core.metrics import MetricsTracker
+from core.tool_policy import ToolPolicy, called_tools, follows_tool_result
 
 from .adapters.base import UpstreamStatusError
 from .adapters.sse import SSEReassembler
@@ -142,12 +143,18 @@ class _StreamObserver:
     scanned, conservatively.
     """
 
-    __slots__ = ("_events", "_buf", "_usage")
+    __slots__ = ("_events", "_buf", "_usage", "_tools")
 
     def __init__(self, buf: "_BoundedStreamBuffer", usage: dict[str, Any]):
         self._events = SSEReassembler()
         self._buf = buf
         self._usage = usage
+        self._tools: list[str] = []
+
+    def take_tool_names(self) -> list[str]:
+        """The tools the stream has started to call since this was last asked."""
+        names, self._tools = self._tools, []
+        return names
 
     def feed(self, chunk: bytes) -> None:
         for event in self._events.feed(chunk):
@@ -181,6 +188,7 @@ class _StreamObserver:
                 for choice in choices:
                     if isinstance(choice, dict):
                         self._buf.append(_choice_text(choice))
+                        self._tools.extend(called_tools(choice.get("delta")))
             elif not usage:
                 self._buf.append(payload.decode("utf-8", errors="replace"))
 
@@ -645,6 +653,8 @@ class RequestForwarder:
 
         stream_usage: dict[str, Any] = {}
         observer = _StreamObserver(stream_buf, stream_usage)
+        tool_policy = ToolPolicy.from_config(self._live_config())
+        after_data = tool_policy.enabled and follows_tool_result(ctx.body.get("messages"))
         # How the stream ended, for the spend/audit rows and the outcome counter.
         # The status line already said 200, so this is the only place the truth
         # is kept: a guardrail kill, an upstream failure mid-stream and a client
@@ -830,6 +840,33 @@ class RequestForwarder:
                         observer.feed(chunk)
                     except Exception:
                         logger.debug("Stream observation skipped", exc_info=True)
+                    # The tool policy, as the call appears. The chunk that
+                    # completes the call's name is not sent on: the client is
+                    # left with an unfinished call it cannot execute, and an
+                    # error event saying why.
+                    refused = None
+                    if tool_policy.enabled:
+                        for name in observer.take_tool_names():
+                            reason = tool_policy.refusal(name, after_data)
+                            if reason is None:
+                                continue
+                            if tool_policy.enforce:
+                                refused = (name, reason)
+                                break
+                            MetricsTracker.track_tool_policy("would_refuse")
+                            logger.warning(
+                                "TOOL POLICY (log only): call to '%s' would be refused: %s",
+                                name, reason,
+                            )
+                    if refused is not None:
+                        MetricsTracker.track_tool_policy("refused")
+                        logger.warning("TOOL POLICY: call to '%s' refused: %s", *refused)
+                        outcome.update(blocked=True, reason=f"tool_refused:{refused[0]}"[:200])
+                        yield (
+                            b'data: {"error":"tool_refused",'
+                            b'"message":"Tool call refused by policy"}\n\n'
+                        )
+                        return
                     if buffered_gate:
                         held_chunks.append(chunk)
                         held_bytes += len(chunk)

@@ -36,6 +36,15 @@ def summary(r: dict) -> str:
         f"| of which: an instruction hidden in a tool result ({indirect['n']:,}) | **{_pct(indirect['waf'], indirect['n'])}** |",
         f"| Benign prompts ({b['n']:,}), stopped by mistake | **{_pct(b['waf'], b['n'])}** |",
     ]
+    tp = r.get("tool_policy")
+    if tp:
+        lines += [
+            "",
+            f"With the [tool policy](docs/security/tool-policy.md) on (read-only tools after a tool result), the call "
+            f"the planted instruction asks for is refused in **{tp['attacks_stopped']:,} of {tp['cases']:,}** of those "
+            f"cases, and {tp['user_calls_refused']} of the {tp['user_calls']:,} calls the users' own tasks need. "
+            "That figure assumes the model obeys the instruction; no text is read to reach it.",
+        ]
     return "\n".join(lines)
 
 
@@ -67,6 +76,14 @@ def full(r: dict) -> str:
     ]
     for f in r["heldout_families"]:
         lines.append(f"| {f['kind']} | {f['family']} | {f['waf']} / {f['n']} | {f['classifier']} / {f['n']} |")
+    tp = r.get("tool_policy")
+    if tp:
+        lines += ["", "The tool policy on the indirect-injection benchmark (the model is assumed to obey the planted "
+                  "instruction; the policy is `after_tool_result: " + json.dumps(tp["policy"]["after_tool_result"]) + "`):",
+                  "", "| Attack type | Cases | Attacker's call refused |", "|---|---:|---:|"]
+        for label, v in tp["by_type"].items():
+            lines.append(f"| {label} | {v['cases']:,} | {v['stopped']:,} |")
+        lines.append(f"| the user's own call, refused by mistake | {tp['user_calls']:,} | {tp['user_calls_refused']} |")
     if scored:
         hard, clean = r["benign_hard"], r.get("classifier_clean_tool_results")
         lines += ["", "The classifier at other thresholds (attacks stopped; hard benign prompts stopped by mistake):", "",

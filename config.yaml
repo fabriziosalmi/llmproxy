@@ -71,6 +71,17 @@ server:
 
 # Security shield — read by SecurityShield at root level
 security:
+  # Which tools a model's response may call, and when. Off by default.
+  # after_tool_result is what stops an indirect injection: in a turn that
+  # follows a tool result only the tools listed there may be called (list the
+  # read-only ones), so the call a planted instruction asks for is refused
+  # without reading it. See docs/security/tool-policy.md.
+  tool_policy:
+    enabled: false
+    mode: enforce              # log_only: record what would be refused
+    allow: ["*"]
+    deny: []
+    # after_tool_result: ["*Get*", "*Read*", "*Search*", "*View*", "*List*"]
   enabled: true
   max_payload_size_kb: 512
   max_messages: 50

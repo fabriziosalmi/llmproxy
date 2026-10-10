@@ -65,7 +65,7 @@ docker run -d --name llmproxy -p 8090:8090 \
   -e LLM_PROXY_ADMIN_KEYS=sk-admin-test \
   -e OPENAI_API_KEY=$OPENAI_API_KEY \
   -v llmproxy-data:/app/data \
-  ghcr.io/fabriziosalmi/llmproxy:1.38.1
+  ghcr.io/fabriziosalmi/llmproxy:1.39.0
 ```
 
 Each release publishes `:latest`, the full semver (`:X.Y.Z`), the minor (`:X.Y`), plus a per-commit short SHA tag for reproducible deploys. Pin the newest release rather than copying the number above — it ages, and this example pinned `1.32.0` for two releases, which meant anyone following it literally deployed the version *before* the control-plane key tier, the salt relocation and the Redis timeouts landed.
@@ -174,6 +174,8 @@ Measured 2026-10-10 on llmproxy 1.38.1, default configuration, 5,147 prompts fro
 | Attack prompts (3,035) | **21%** |
 | of which: an instruction hidden in a tool result (1,054) | **0%** |
 | Benign prompts (2,112), stopped by mistake | **0.1%** |
+
+With the [tool policy](docs/security/tool-policy.md) on (read-only tools after a tool result), the call the planted instruction asks for is refused in **1,054 of 1,054** of those cases, and 0 of the 1,054 calls the users' own tasks need. That figure assumes the model obeys the instruction; no text is read to reach it.
 <!-- waf-bench:end -->
 
 The firewall and the shield are lexical: they recognise known phrasings and their

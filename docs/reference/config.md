@@ -73,6 +73,14 @@ server:
 ```yaml
 security:
   enabled: true               # Enable security pipeline
+  tool_policy:                # Which tools a response may call, and when
+    enabled: false            # (see /security/tool-policy). Off by default.
+    mode: enforce             # log_only: record what would be refused
+    allow: ["*"]              # Tools callable at all (case-sensitive patterns)
+    deny: []                  # Never, whatever allow says
+    after_tool_result: null   # Tools callable in a turn that follows a tool
+                              # result. null: no restriction. List the
+                              # read-only tools to stop an indirect injection.
   max_payload_size_kb: 512    # Maximum request body size
   max_messages: 50            # Maximum messages per request
   max_nesting_depth: 64       # Deepest {/[ nesting a body may contain. Size
