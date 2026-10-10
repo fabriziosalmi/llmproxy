@@ -1,0 +1,6 @@
+# Only for the benchmark's own environment (dataset parsing and the reference
+# classifier). Nothing here is a dependency of the proxy.
+pyarrow
+onnxruntime
+tokenizers
+numpy

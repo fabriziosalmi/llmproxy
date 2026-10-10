@@ -94,6 +94,9 @@ exports/
 .coverage
 htmlcov/
 
+# Detection benchmark work directory (datasets, classifier, predictions)
+.waf-bench/
+
 # Runtime
 dlq.jsonl
 

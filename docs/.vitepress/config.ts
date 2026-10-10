@@ -66,6 +66,7 @@ export default defineConfig({
             { text: 'ASGI Firewall', link: '/security/firewall' },
             { text: 'PII Detection', link: '/security/pii-detection' },
             { text: 'Injection Scoring', link: '/security/injection-scoring' },
+            { text: 'Detection Benchmark', link: '/security/benchmark' },
             { text: 'Identity & SSO', link: '/security/identity' },
           ]
         }

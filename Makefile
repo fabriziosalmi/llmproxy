@@ -64,6 +64,18 @@ test-pg: ## Run test suite against a throwaway Postgres (no skipped schema tests
 test-all: ## Run all tests including optional deps
 	. venv/bin/activate && python -m pytest tests/ -q --tb=short
 
+waf-bench: ## Measure the detection layer on public datasets (downloads ~750 MB into .waf-bench/)
+	./scripts/waf_eval/fetch.sh .waf-bench
+	test -d .waf-bench/venv || python3 -m venv .waf-bench/venv
+	.waf-bench/venv/bin/pip install -q -r scripts/waf_eval/requirements.txt
+	.waf-bench/venv/bin/python scripts/waf_eval/build_samples.py .waf-bench
+	. venv/bin/activate && python scripts/waf_eval/predict_waf.py .waf-bench
+	.waf-bench/venv/bin/python scripts/waf_eval/predict_classifier.py .waf-bench
+	. venv/bin/activate && python scripts/waf_eval/report.py .waf-bench && python scripts/waf_eval/render.py
+
+waf-bench-check: ## The part of the detection benchmark that needs no download
+	. venv/bin/activate && python -m pytest tests/test_waf_benchmark.py -q
+
 bench: ## Run performance benchmarks
 	. venv/bin/activate && python -m pytest tests/test_benchmarks.py \
 		--benchmark-only --benchmark-disable-gc -v

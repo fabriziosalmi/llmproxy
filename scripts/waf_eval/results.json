@@ -1,0 +1,315 @@
+{
+ "measured": "2026-10-10",
+ "llmproxy_version": "1.38.1",
+ "classifier": {
+  "id": "protectai/deberta-v3-base-prompt-injection-v2",
+  "licence": "Apache-2.0",
+  "threshold": 0.5,
+  "scored": true
+ },
+ "datasets": [
+  {
+   "name": "deepset",
+   "kind": "attack",
+   "source": "deepset/prompt-injections",
+   "licence": "Apache-2.0",
+   "note": "Short prompts, English and German",
+   "n": 263,
+   "firewall": 3,
+   "shield": 12,
+   "waf": 12,
+   "classifier": 109,
+   "either": 109
+  },
+  {
+   "name": "gandalf",
+   "kind": "attack",
+   "source": "Lakera/gandalf_ignore_instructions",
+   "licence": "MIT",
+   "note": "Direct override attempts from the Gandalf game",
+   "n": 1000,
+   "firewall": 156,
+   "shield": 373,
+   "waf": 387,
+   "classifier": 1000,
+   "either": 1000
+  },
+  {
+   "name": "heldout",
+   "kind": "attack",
+   "source": "scripts/waf_eval/heldout.py",
+   "licence": "this repository",
+   "note": "Written without sight of the signatures; 11 attack families, hard negatives",
+   "n": 52,
+   "firewall": 8,
+   "shield": 10,
+   "waf": 14,
+   "classifier": 47,
+   "either": 49
+  },
+  {
+   "name": "injecagent",
+   "kind": "attack",
+   "source": "uiuc-kang-lab/InjecAgent",
+   "licence": "MIT",
+   "note": "Indirect: an instruction inside a tool result",
+   "n": 1054,
+   "firewall": 0,
+   "shield": 0,
+   "waf": 0,
+   "classifier": 693,
+   "either": 693
+  },
+  {
+   "name": "jackhhao",
+   "kind": "attack",
+   "source": "jackhhao/jailbreak-classification",
+   "licence": "Apache-2.0",
+   "note": "Long role-play jailbreaks and ordinary prompts",
+   "n": 666,
+   "firewall": 153,
+   "shield": 90,
+   "waf": 212,
+   "classifier": 560,
+   "either": 569
+  },
+  {
+   "name": "deepset",
+   "kind": "benign",
+   "source": "deepset/prompt-injections",
+   "licence": "Apache-2.0",
+   "note": "Short prompts, English and German",
+   "n": 399,
+   "firewall": 0,
+   "shield": 0,
+   "waf": 0,
+   "classifier": 4,
+   "either": 4
+  },
+  {
+   "name": "heldout",
+   "kind": "benign",
+   "source": "scripts/waf_eval/heldout.py",
+   "licence": "this repository",
+   "note": "Written without sight of the signatures; 11 attack families, hard negatives",
+   "n": 42,
+   "firewall": 2,
+   "shield": 2,
+   "waf": 2,
+   "classifier": 16,
+   "either": 16
+  },
+  {
+   "name": "jackhhao",
+   "kind": "benign",
+   "source": "jackhhao/jailbreak-classification",
+   "licence": "Apache-2.0",
+   "note": "Long role-play jailbreaks and ordinary prompts",
+   "n": 1332,
+   "firewall": 0,
+   "shield": 1,
+   "waf": 1,
+   "classifier": 8,
+   "either": 9
+  },
+  {
+   "name": "notinject",
+   "kind": "benign",
+   "source": "leolee99/NotInject",
+   "licence": "MIT",
+   "note": "Benign text that contains trigger words",
+   "n": 339,
+   "firewall": 0,
+   "shield": 0,
+   "waf": 0,
+   "classifier": 145,
+   "either": 145
+  }
+ ],
+ "attacks": {
+  "n": 3035,
+  "waf": 625,
+  "classifier": 2409,
+  "either": 2420
+ },
+ "benign": {
+  "n": 2112,
+  "waf": 3,
+  "classifier": 173,
+  "either": 174
+ },
+ "benign_ordinary": {
+  "n": 1731,
+  "waf": 1,
+  "classifier": 12,
+  "either": 13
+ },
+ "benign_hard": {
+  "n": 381,
+  "waf": 2,
+  "classifier": 161,
+  "either": 161
+ },
+ "heldout_families": [
+  {
+   "kind": "attack",
+   "family": "direct",
+   "n": 3,
+   "waf": 1,
+   "classifier": 3
+  },
+  {
+   "kind": "attack",
+   "family": "paraphrase",
+   "n": 6,
+   "waf": 0,
+   "classifier": 6
+  },
+  {
+   "kind": "attack",
+   "family": "extraction",
+   "n": 6,
+   "waf": 2,
+   "classifier": 6
+  },
+  {
+   "kind": "attack",
+   "family": "roleplay",
+   "n": 6,
+   "waf": 2,
+   "classifier": 3
+  },
+  {
+   "kind": "attack",
+   "family": "multilingual",
+   "n": 8,
+   "waf": 4,
+   "classifier": 8
+  },
+  {
+   "kind": "attack",
+   "family": "obfuscation",
+   "n": 8,
+   "waf": 5,
+   "classifier": 7
+  },
+  {
+   "kind": "attack",
+   "family": "indirect",
+   "n": 5,
+   "waf": 0,
+   "classifier": 4
+  },
+  {
+   "kind": "attack",
+   "family": "exfiltration",
+   "n": 2,
+   "waf": 0,
+   "classifier": 2
+  },
+  {
+   "kind": "attack",
+   "family": "authority",
+   "n": 3,
+   "waf": 0,
+   "classifier": 3
+  },
+  {
+   "kind": "attack",
+   "family": "hypothetical",
+   "n": 3,
+   "waf": 0,
+   "classifier": 3
+  },
+  {
+   "kind": "attack",
+   "family": "agent",
+   "n": 2,
+   "waf": 0,
+   "classifier": 2
+  },
+  {
+   "kind": "benign",
+   "family": "ordinary",
+   "n": 6,
+   "waf": 0,
+   "classifier": 1
+  },
+  {
+   "kind": "benign",
+   "family": "security-talk",
+   "n": 6,
+   "waf": 2,
+   "classifier": 4
+  },
+  {
+   "kind": "benign",
+   "family": "instruction-words",
+   "n": 10,
+   "waf": 0,
+   "classifier": 3
+  },
+  {
+   "kind": "benign",
+   "family": "devops",
+   "n": 8,
+   "waf": 0,
+   "classifier": 2
+  },
+  {
+   "kind": "benign",
+   "family": "document",
+   "n": 4,
+   "waf": 0,
+   "classifier": 4
+  },
+  {
+   "kind": "benign",
+   "family": "multilingual",
+   "n": 4,
+   "waf": 0,
+   "classifier": 1
+  },
+  {
+   "kind": "benign",
+   "family": "fiction",
+   "n": 4,
+   "waf": 0,
+   "classifier": 1
+  }
+ ],
+ "waf_latency_ms": {
+  "median": 0.43
+ },
+ "classifier_latency_ms": {
+  "median": 16,
+  "p95": 195
+ },
+ "classifier_thresholds": [
+  {
+   "threshold": 0.5,
+   "attacks_stopped": 2409,
+   "attacks": 3035,
+   "hard_benign_stopped": 161,
+   "hard_benign": 381
+  },
+  {
+   "threshold": 0.99,
+   "attacks_stopped": 1918,
+   "attacks": 3035,
+   "hard_benign_stopped": 112,
+   "hard_benign": 381
+  },
+  {
+   "threshold": 0.9999,
+   "attacks_stopped": 1509,
+   "attacks": 3035,
+   "hard_benign_stopped": 60,
+   "hard_benign": 381
+  }
+ ],
+ "classifier_clean_tool_results": {
+  "n": 1054,
+  "flagged": 310
+ }
+}

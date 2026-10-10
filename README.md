@@ -120,12 +120,12 @@ The admin UI reflects the live WAF state and the reason it's off. The switch is 
 Client Request
   |
   +-- RateLimitMiddleware         Token bucket per IP/key (O(1) LRU, 50k max)
-  +-- ByteLevelFirewall           180 signatures, 8 encoding layers, iterative chain decoding
+  +-- ByteLevelFirewall           178 signatures, decoded encodings, iterative chain decoding
   +-- CORSMiddleware
   +-- Global Auth (fail-closed)   Deny-all for /api/v1/*, /admin/*, /metrics
   +-- SecurityShield              Injection scoring, PII masking, trajectory analysis
   |     +-- ThreatLedger          Cross-session IP + key aggregation
-  |     +-- SemanticAnalyzer      156 patterns, 20+ languages, leetspeak normalization
+  |     +-- SemanticAnalyzer      157 trigram patterns, leetspeak normalization
   |
   +-- Ring 1: INGRESS             Auth, Zero-Trust, rate limiting
   +-- Ring 2: PRE-FLIGHT          PII masking, budget guard, cache, complexity scoring
@@ -151,9 +151,9 @@ Endpoints are scored using an EMA-weighted formula: `score = (success^2 / latenc
 
 | Layer                     | What it does                                                                                                                                                                                     |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **ASGI Firewall**         | 180 injection signatures (164 banned + 16 ROT13) across 8 encoding layers (URL, Unicode, Base64, hex, ROT13) with iterative chain decoding. Loaded from `data/signatures.yaml` (hot-reloadable). |
-| **SecurityShield**        | Threat scoring (16 regex patterns, threshold 0.7), multi-turn trajectory detection, cross-session ThreatLedger.                                                                                  |
-| **Semantic Analyzer**     | 156-pattern trigram Jaccard corpus across 20+ languages. Leetspeak normalization, Cyrillic/Greek confusable mapping. Bounded executor with 5s timeout.                                           |
+| **ASGI Firewall**         | 178 injection signatures (162 banned + 16 ROT13), matched after decoding URL, Unicode, Base64, hex and ROT13 encodings, iteratively. Loaded from `data/signatures.yaml` (hot-reloadable). |
+| **SecurityShield**        | Threat scoring (30 regex patterns, threshold 0.7), multi-turn trajectory detection, cross-session ThreatLedger.                                                                                  |
+| **Semantic Analyzer**     | 157-pattern character-trigram corpus (lexical similarity, not embeddings), with entries in several languages. Leetspeak normalization, Cyrillic/Greek confusable mapping. Bounded executor with 5s timeout.                                           |
 | **PII Detection**         | Dual-mode: Presidio NLP (11 entity types) or regex fallback (email, phone, SSN, credit card, IBAN, IP, API keys). Vault-based mask/demask roundtrip.                                             |
 | **Response Sanitization** | Entropy guard, steganography detection (bidi overrides, zero-width chars, homoglyphs), prompt leak detection.                                                                                    |
 | **Audit Ledger**          | SHA256 hash-chained audit log with tamper detection. GDPR compliance: right to erasure, DSAR export, configurable retention.                                                                     |
@@ -164,22 +164,30 @@ HMAC-SHA256 response signing proves the response was not modified after leaving 
 
 See [SECURITY.md](SECURITY.md) for the full security architecture and vulnerability disclosure policy.
 
-### OWASP LLM Top 10 coverage
+### What the detection layer stops, measured
 
-A curated adversarial corpus runs as a regression test on every build. Current per-category pass rate against `tests/corpus/owasp_llm_top10.yaml`:
+<!-- waf-bench:start -->
+Measured 2026-10-10 on llmproxy 1.38.1, default configuration, 5,147 prompts from four public datasets, one indirect-injection benchmark and a held-out set:
 
-| Category                      |  Coverage | Notes                                                                                                                                                                             |
-| ----------------------------- | --------: | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| LLM01 — Prompt Injection      | **100 %** | All 27 corpus variants caught: direct, base64/hex/zero-width-encoded, leetspeak, role-play, suffix-injection, **multilingual (it/de/fr/es/pt/zh/ru)**, jailbreak-framing, refusal-suppression, tool-call injection |
-| LLM02 — Sensitive Info (PII)  | **100 %** | Email · SSN · Visa · Amex · IBAN · phones · API keys                                                                                                                              |
-| LLM07 — System Prompt Leakage | **100 %** | Direct + indirect + continuation + translation + meta-instruction + persona-rebase                                                                                                |
-| Benign false-positive rate    |   **6 %** | 18 controls incl. roleplay/fiction/multilingual benigns; only meta-discussion of attacks ("explain how prompt injection works") trips, on purpose                                 |
+| | Stopped |
+|---|---|
+| Attack prompts (3,035) | **21%** |
+| of which: an instruction hidden in a tool result (1,054) | **0%** |
+| Benign prompts (2,112), stopped by mistake | **0.1%** |
+<!-- waf-bench:end -->
 
-LLM03/04/06/08/09/10 are **out-of-scope for the proxy itself** (build-time, training-time, caller-side, model-side) — documented as N/A in the report.
+The firewall and the shield are lexical: they recognise known phrasings and their
+encodings, quickly and with almost no false positives, and they miss a reworded attack
+and an instruction planted in a document or a tool result. An open classifier stops far
+more of the same prompts and also refuses a large share of legitimate ones. Neither is a
+reason to trust model output: restrict what a response can do (tools, links, secrets)
+rather than rely on spotting the attack. Per-dataset results, the comparison, the method
+and how to reproduce it: [docs/security/benchmark.md](docs/security/benchmark.md).
 
-Full per-entry results + known gaps + reproduction steps: [docs/OWASP_LLM_COVERAGE.md](docs/OWASP_LLM_COVERAGE.md). Re-generate with `pytest tests/test_owasp_corpus.py`.
-
-The corpus deliberately includes the AI-judgment-bypass path: deterministic checks only. The `ai_analyze_threat` gray-zone escalation (when configured) catches a fraction of the listed gaps in real deployments, but it depends on an upstream model being available — so it doesn't ship in the regression number.
+The repository also carries a regression corpus (`tests/corpus/owasp_llm_top10.yaml`,
+report in [docs/OWASP_LLM_COVERAGE.md](docs/OWASP_LLM_COVERAGE.md)). It was written
+alongside the detector, so it shows that a build did not get worse on prompts the
+detector already knew; it is not a measure of detection.
 
 ---
 
