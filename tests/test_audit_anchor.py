@@ -328,6 +328,21 @@ async def test_the_loop_publishes_the_head_to_the_security_log():
     )
 
 
+async def test_the_head_reaches_the_process_log_not_only_the_in_memory_feed(caplog):
+    """The security feed is a ring buffer in this process: a head recorded only
+    there is recorded nowhere. The container log is what leaves the database."""
+    import logging
+
+    agent = MagicMock()
+    agent.store.get_audit_head = AsyncMock(return_value={"id": 12, "hash": "cd" * 32, "count": 12})
+    agent._add_log = AsyncMock()
+
+    with caplog.at_level(logging.INFO, logger="llmproxy.background"):
+        await _run_one_iteration(agent)
+
+    assert f"AUDIT HEAD id=12 hash={'cd' * 32} count=12" in caplog.text
+
+
 async def test_the_loop_stays_quiet_on_an_empty_chain():
     agent = MagicMock()
     agent.store.get_audit_head = AsyncMock(return_value={"id": 0, "hash": "GENESIS", "count": 0})

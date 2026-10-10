@@ -33,8 +33,9 @@ The format never goes down along the chain: a row in an older format after a
 newer one is a break, so a keyed chain cannot be continued unkeyed.
 
 Both stores share this module so the two backends cannot disagree about what a
-valid chain is. It imports the standard library only, so the same code verifies
-an exported chain offline (``python -m store.audit_chain``).
+valid chain is. It imports the standard library only, so that the same code can
+verify an exported chain away from the proxy; there is no export or command for
+that yet.
 """
 
 from __future__ import annotations

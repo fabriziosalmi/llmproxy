@@ -161,11 +161,12 @@ audit:
 and each erasure records the hashes around the removed rows
 (see the [audit API](/api/admin#audit-integrity)).
 
-The audit chain is keyless SHA-256, so it detects accidental damage and unrecorded
-edits, not someone who can write the database and recomputes it. To cover that,
-the proxy writes an `AUDIT HEAD id=... hash=... count=...` line to the security log
-every `audit.head_log_interval_seconds`, which reaches the SIEM and webhook
-exports. Keep one of those lines (or `GET /api/v1/audit/head`) somewhere the
+Without `LLM_PROXY_AUDIT_KEY` the audit chain is plain SHA-256, so it detects
+accidental damage and unrecorded edits, not someone who can write the database and
+recomputes it; with the key they still can cut off the newest rows. To cover that,
+the proxy writes an `AUDIT HEAD id=... hash=... count=...` line to the process log
+(stdout) every `audit.head_log_interval_seconds`. It is not sent to the SIEM or
+webhook exports. Keep one of those lines (or `GET /api/v1/audit/head`) somewhere the
 database's writers cannot reach, and later check the chain against it with
 `GET /api/v1/audit/verify?anchor_id=<id>&anchor_hash=<hash>`.
 

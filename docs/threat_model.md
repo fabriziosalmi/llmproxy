@@ -100,8 +100,9 @@ deliberate: signature evasion at one layer is caught by scoring at the next.
   prompts or responses. **Not in the chain:** requests rejected before the
   pipeline (a missing or wrong key, the rate limiter, the byte-level firewall,
   which runs before authentication) and control-plane changes (a configuration
-  apply, a feature toggle, a plugin install). Those go to the security log and
-  the SIEM export, which is not tamper-evident.
+  apply, a feature toggle, a plugin install). Those show up in the metrics, the
+  process log and the in-app security feed (a ring buffer in memory); none of
+  that is tamper-evident.
 - **Who a row is attributed to.** `key_prefix` is the first eight characters of
   the API key, or the signed-in user's email (or subject) for an identity token;
   `session_id` is an HMAC of the credential. Two keys that share their first
@@ -130,8 +131,9 @@ deliberate: signature evasion at one layer is caught by scoring at the next.
   `LLM_PROXY_AUDIT_KEY_PREVIOUS` for as long as rows sealed with them are
   retained.
 - **The head can be kept outside the database.** `GET /api/v1/audit/head` and an
-  hourly `AUDIT HEAD` security-log line (exported to the SIEM) give a copy of the
-  chain's newest row that the database's writers cannot alter;
+  hourly `AUDIT HEAD` line in the process log (stdout, so the container log)
+  give the chain's newest row. It is out of the database writers' reach only
+  where you put it: ship the log off the host, or record the head yourself;
   `/api/v1/audit/verify?anchor_id=&anchor_hash=` checks the chain against one. That
   catches a consistent rewrite of rows before the anchor and a truncation of the
   tail, keyed or not, and reports how many rows have been removed since

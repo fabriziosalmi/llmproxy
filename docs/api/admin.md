@@ -268,7 +268,7 @@ Without `LLM_PROXY_AUDIT_KEY` the chain is plain SHA-256: someone who can write 
 GET /api/v1/audit/head
 ```
 
-Permission `logs:read`. Returns `{"id": N, "hash": "<64 hex>", "count": N}`: the newest audit row and the row count (`{"id": 0, "hash": "GENESIS", "count": 0}` when empty). This is the value to record elsewhere. The proxy also writes it to the security log hourly (`AUDIT HEAD id=... hash=... count=...`, `audit.head_log_interval_seconds`).
+Permission `logs:read`. Returns `{"id": N, "hash": "<64 hex>", "count": N}`: the newest audit row and the row count (`{"id": 0, "hash": "GENESIS", "count": 0}` when empty). This is the value to record elsewhere. The proxy also writes it to the process log (stdout) hourly (`AUDIT HEAD id=... hash=... count=...`, `audit.head_log_interval_seconds`).
 
 ## Runtime tuning
 

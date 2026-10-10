@@ -37,6 +37,10 @@ cannot be removed without verification failing.
   write the database but does not hold the key cannot alter, remove or append rows without
   verification failing. `LLM_PROXY_AUDIT_KEY_PREVIOUS` keeps rows sealed with retired keys
   verifiable. A key shorter than 32 characters is refused at start.
+- **The hourly `AUDIT HEAD` line is written to the process log.** It went only to the
+  in-app security feed, a ring buffer in memory, while three documents said it reached the
+  SIEM: the head meant to be kept outside the database never left the process. It is now
+  in the container log; it is still not sent to the SIEM or webhook exports.
 - **`POST /api/v1/gdpr/erase/GDPR_SYSTEM` deleted the record of every earlier erasure.**
   The names the chain files its own rows under are refused as subjects (`400`).
 - **The erasure record carries the subject's SHA-256, not the subject.** It outlives the

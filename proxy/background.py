@@ -312,14 +312,19 @@ async def retention_purge_loop(store, retention_days: int = 90, interval: int = 
 
 
 async def audit_head_loop(agent, interval: int = 3600):
-    """Publish the audit chain head through the security log, hourly by default.
+    """Write the audit chain head to the process log, hourly by default.
 
-    The chain is keyless SHA-256: someone who can write the database can rewrite
-    a row and recompute everything after it, or delete the newest rows, and it
-    still verifies against itself. The only defence is a head recorded where they
-    cannot reach. The security log is exported (SIEM, webhooks, the log pipeline),
-    so a line there is a copy outside the database; GET /api/v1/audit/verify
-    ?anchor_id=&anchor_hash= later checks a recorded head against the chain.
+    Someone who can write the database can delete the newest rows (and, on an
+    unkeyed chain, rewrite a row and recompute everything after it) and the
+    chain still verifies against itself. The defence is a head recorded where
+    they cannot reach; GET /api/v1/audit/verify?anchor_id=&anchor_hash= later
+    checks a recorded head against the chain.
+
+    The head goes to the process log (stdout, so the container log) as well as
+    to the in-app security feed. It used to go to the feed only, which is a
+    ring buffer in this process's memory: three documents said the line reached
+    the SIEM and it never left the process. A line in the container log is a
+    copy outside the database, and off the host once the log is shipped.
     ``audit.head_log_interval_seconds`` sets the period; 0 turns it off.
     """
     if interval <= 0:
@@ -328,10 +333,9 @@ async def audit_head_loop(agent, interval: int = 3600):
         try:
             head = await agent.store.get_audit_head()
             if head["count"]:
-                await agent._add_log(
-                    f"AUDIT HEAD id={head['id']} hash={head['hash']} count={head['count']}",
-                    level="SECURITY",
-                )
+                line = f"AUDIT HEAD id={head['id']} hash={head['hash']} count={head['count']}"
+                logger.info(line)
+                await agent._add_log(line, level="SECURITY")
             _iteration_ok("audit_head")
         except Exception as e:
             logger.warning(f"Audit head publication error: {e}")
