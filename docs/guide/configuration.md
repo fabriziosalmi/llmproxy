@@ -8,7 +8,8 @@ LLMProxy is configured via `config.yaml` in the project root. Changes can be hot
 server:
   host: 0.0.0.0
   port: 8090
-  timeout: 30s
+  timeout: 30s             # longest silence on a streamed response
+  response_timeout: 600s   # longest a non-streaming response may take
   keep_alive: 60s
   tls:
     enabled: false

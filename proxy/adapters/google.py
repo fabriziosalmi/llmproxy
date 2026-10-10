@@ -20,7 +20,9 @@ from typing import Any
 import aiohttp
 from starlette.responses import Response
 
+from ..http_session import response_timeout
 from .base import BaseModelAdapter, raise_for_stream_status
+from .sse import SSEReassembler, usage_chunk
 
 
 class GoogleAdapter(BaseModelAdapter):
@@ -231,8 +233,14 @@ class GoogleAdapter(BaseModelAdapter):
             },
         }
 
-    def translate_stream_chunk(self, chunk: bytes) -> bytes:
-        """Translate Gemini SSE chunks to OpenAI SSE format."""
+    def translate_stream_chunk(self, chunk: bytes, state: dict | None = None) -> bytes:
+        """Translate Gemini SSE events to OpenAI SSE format.
+
+        ``state`` is the per-stream scratch dict ``stream`` passes. Gemini
+        reports ``usageMetadata`` on its events; the last one seen is sent as a
+        usage chunk before ``[DONE]``. It used to be dropped, so a streamed
+        Gemini answer never carried usage and was billed on a guess.
+        """
         text = chunk.decode("utf-8", errors="replace")
         lines = text.strip().split("\n")
         output_lines = []
@@ -245,6 +253,8 @@ class GoogleAdapter(BaseModelAdapter):
                     continue
                 try:
                     data = json.loads(data_str)
+                    if state is not None and isinstance(data.get("usageMetadata"), dict):
+                        state["usage"] = data["usageMetadata"]
                     candidates = data.get("candidates", [])
                     if candidates:
                         parts = candidates[0].get("content", {}).get("parts", [])
@@ -270,9 +280,11 @@ class GoogleAdapter(BaseModelAdapter):
                             output_lines.append(f"data: {json.dumps(openai_chunk)}\n\n")
 
                         finish_reason = candidates[0].get("finishReason")
-                        if finish_reason and finish_reason != "STOP":
-                            pass  # handled at end
-                        elif finish_reason == "STOP":
+                        # Any finish reason ends the stream. Only STOP did: a
+                        # response cut by MAX_TOKENS or by a safety filter sent
+                        # neither a finish_reason nor [DONE], and the client
+                        # could not tell a finished answer from a dropped one.
+                        if finish_reason:
                             openai_chunk = {
                                 "id": f"gemini-{int(time.time())}",
                                 "object": "chat.completion.chunk",
@@ -282,11 +294,21 @@ class GoogleAdapter(BaseModelAdapter):
                                     {
                                         "index": 0,
                                         "delta": {},
-                                        "finish_reason": "stop",
+                                        "finish_reason": _FINISH_REASONS.get(
+                                            finish_reason, "stop"
+                                        ),
                                     }
                                 ],
                             }
                             output_lines.append(f"data: {json.dumps(openai_chunk)}\n\n")
+                            usage = (state or {}).get("usage")
+                            if usage:
+                                output_lines.append(
+                                    usage_chunk(
+                                        usage.get("promptTokenCount", 0) or 0,
+                                        usage.get("candidatesTokenCount", 0) or 0,
+                                    )
+                                )
                             output_lines.append("data: [DONE]\n\n")
 
                 except (json.JSONDecodeError, KeyError):
@@ -301,7 +323,9 @@ class GoogleAdapter(BaseModelAdapter):
         headers: dict[str, str],
         session: aiohttp.ClientSession,
     ) -> Response:
-        async with session.post(url, json=body, headers=headers) as resp:
+        async with session.post(
+            url, json=body, headers=headers, **response_timeout(session)
+        ) as resp:
             content = await resp.read()
             status = resp.status
 
@@ -326,10 +350,31 @@ class GoogleAdapter(BaseModelAdapter):
     ) -> AsyncGenerator[bytes, None]:
         async with session.post(url, json=body, headers=headers) as resp:
             await raise_for_stream_status(resp)
+            # Whole events only (see adapters/sse.py).
+            events = SSEReassembler()
+            state: dict = {}
             async for chunk in resp.content.iter_any():
-                translated = self.translate_stream_chunk(chunk)
+                for event in events.feed(chunk):
+                    translated = self.translate_stream_chunk(event, state)
+                    if translated:
+                        yield translated
+            tail = events.flush()
+            if tail:
+                translated = self.translate_stream_chunk(tail, state)
                 if translated:
                     yield translated
+
+
+#: Gemini finishReason → OpenAI finish_reason.
+_FINISH_REASONS = {
+    "STOP": "stop",
+    "MAX_TOKENS": "length",
+    "SAFETY": "content_filter",
+    "RECITATION": "content_filter",
+    "BLOCKLIST": "content_filter",
+    "PROHIBITED_CONTENT": "content_filter",
+    "SPII": "content_filter",
+}
 
 
 def _translate_multimodal_parts(content_list: list) -> list:

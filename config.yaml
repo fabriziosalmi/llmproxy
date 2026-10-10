@@ -3,7 +3,13 @@
 server:
   host: 0.0.0.0
   port: 8090
+  # Longest silence allowed on a streamed upstream response (between chunks).
   timeout: 30s
+  # Longest a NON-streaming upstream may take to answer. Such a response sends
+  # nothing until the whole completion exists, so this bounds the generation
+  # itself. When it expires the caller gets a 504 and the request is NOT sent to
+  # the next provider: it was delivered, and is probably being billed.
+  response_timeout: 600s
   keep_alive: 60s
   tls:
     enabled: false

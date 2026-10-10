@@ -8,7 +8,14 @@ Complete reference for `config.yaml`. All fields with their types, defaults, and
 server:
   host: 0.0.0.0              # Bind address
   port: 8090                  # Listen port
-  timeout: 30s                # Request timeout
+  timeout: 30s                # Longest silence on a streamed upstream
+                              # response (between chunks).
+  response_timeout: 600s      # Longest a non-streaming upstream may take to
+                              # answer. It sends nothing until the completion
+                              # is whole, so this bounds the generation. On
+                              # expiry: 504, and no fallback to the next
+                              # provider (the request was delivered and is
+                              # probably being billed).
   keep_alive: 60s             # Keep-alive duration
   tls:
     enabled: false            # Enable TLS
@@ -33,9 +40,10 @@ server:
                               # whose generation runs longer, and the forwarder
                               # then retries the truncated request against the
                               # next provider — so the caller waits twice and
-                              # two providers bill. sock_read (server.timeout)
-                              # is the bound that matters. Set this only if you
-                              # want a hard cap and accept that.
+                              # two providers bill. server.timeout (streams)
+                              # and server.response_timeout (everything else)
+                              # are the bounds that matter. Set this only if
+                              # you want a hard cap and accept that.
   metrics:
     enabled: false            # Enable the standalone Prometheus exporter
     port: 9091                # Metrics port

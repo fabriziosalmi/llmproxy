@@ -10,15 +10,48 @@ Extracted from proxy/rotator.py.
 
 from __future__ import annotations
 
+import weakref
 from typing import Any
 
 import aiohttp
+
+#: Default wait for a non-streaming upstream response (server.response_timeout).
+DEFAULT_RESPONSE_TIMEOUT_S = 600
+
+#: The per-request timeout a session's non-streaming calls use. Kept beside the
+#: session rather than on it (aiohttp discourages custom attributes), and weak
+#: so a closed session takes its entry with it.
+_RESPONSE_TIMEOUTS: weakref.WeakKeyDictionary[Any, aiohttp.ClientTimeout] = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _seconds(value: Any, default: int) -> int:
+    try:
+        return int(str(value).rstrip("s"))
+    except (TypeError, ValueError):
+        return default
+
+
+def response_timeout(session: Any) -> dict[str, Any]:
+    """``timeout=`` for a non-streaming request on ``session``, as keyword arguments.
+
+    Empty for a session this module did not build (a test double), so the call
+    is made exactly as before.
+    """
+    try:
+        timeout = _RESPONSE_TIMEOUTS.get(session)
+    except TypeError:
+        return {}
+    return {"timeout": timeout} if timeout is not None else {}
 
 
 def build_http_session(config: dict[str, Any]) -> aiohttp.ClientSession:
     """Construct a fresh aiohttp.ClientSession from the proxy config.
 
-    Reads `server.timeout` (default 30s, applied as sock_read),
+    Reads `server.timeout` (default 30s, applied as sock_read: the longest
+    silence allowed on a stream), `server.response_timeout` (default 600s: how
+    long a non-streaming response may take, see below),
     `server.total_timeout` (optional overall ceiling, default none) and
     `connection_pool.*` for pool
     sizing, DNS cache TTL, keepalive, and per-host limits. Connector has
@@ -48,11 +81,21 @@ def build_http_session(config: dict[str, Any]) -> aiohttp.ClientSession:
     # (no overall ceiling) and is opt-in via server.total_timeout for operators
     # who want one.
     total_timeout = http_cfg.get("total_timeout")
-    return aiohttp.ClientSession(
-        timeout=aiohttp.ClientTimeout(
-            total=int(str(total_timeout).rstrip("s")) if total_timeout else None,
-            sock_connect=pool_cfg.get("connect_timeout", 10),
-            sock_read=timeout_s,
-        ),
+    total = int(str(total_timeout).rstrip("s")) if total_timeout else None
+    connect = pool_cfg.get("connect_timeout", 10)
+    session = aiohttp.ClientSession(
+        timeout=aiohttp.ClientTimeout(total=total, sock_connect=connect, sock_read=timeout_s),
         connector=connector,
     )
+    # A non-streaming upstream sends nothing until the whole answer exists, so
+    # for it sock_read is not "the stream went quiet": it is a ceiling on the
+    # generation, and removing `total` above did not remove that ceiling. At
+    # the 30 s default a long or reasoning-heavy completion was cut and, the
+    # timeout being retryable, sent again to the next provider. Non-streaming
+    # calls get their own, longer bound (see response_timeout()).
+    _RESPONSE_TIMEOUTS[session] = aiohttp.ClientTimeout(
+        total=total,
+        sock_connect=connect,
+        sock_read=_seconds(http_cfg.get("response_timeout"), DEFAULT_RESPONSE_TIMEOUT_S),
+    )
+    return session

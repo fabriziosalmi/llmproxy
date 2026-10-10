@@ -14,6 +14,7 @@ from typing import Any
 import aiohttp
 from starlette.responses import Response
 
+from ..http_session import response_timeout
 from .base import BaseModelAdapter, raise_for_stream_status
 
 _O_SERIES_PREFIXES = ("o1", "o3", "o4")
@@ -96,7 +97,9 @@ class OpenAIAdapter(BaseModelAdapter):
         headers: dict[str, str],
         session: aiohttp.ClientSession,
     ) -> Response:
-        async with session.post(url, json=body, headers=headers) as resp:
+        async with session.post(
+            url, json=body, headers=headers, **response_timeout(session)
+        ) as resp:
             content = await resp.read()
             status = resp.status
             content_type = resp.content_type or "application/json"

@@ -160,7 +160,7 @@ docker run -d --name llmproxy \
   -p 8090:8090 \
   -v llmproxy-data:/app/data \
   --env-file /path/to/keys.env \
-  ghcr.io/fabriziosalmi/llmproxy:1.38.0
+  ghcr.io/fabriziosalmi/llmproxy:1.38.1
 ```
 
 Mounting that volume is not optional. Without it the database is written into

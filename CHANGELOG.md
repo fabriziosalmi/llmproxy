@@ -2,6 +2,54 @@
 
 All notable changes to LLMProxy are documented here.
 
+## [1.38.1] — 2026-10-10
+
+### Streams read as events, a breaker that recovers, a timeout that does not bill twice (patch)
+
+The first four items of the 1.38.0 review backlog, each confirmed in the code first.
+
+**Upgrading.** Nothing to do. Two behaviours change: a non-streaming request whose
+upstream does not answer within `server.response_timeout` (new, default 600 s) now gets a
+`504` and is not retried on the next provider; and streamed requests without a usage
+record cost what their text costs, which is far less than what was being charged.
+
+- **A stream is read as events, not as TCP reads.** The Anthropic and Google translators
+  parsed each socket read on its own and dropped whatever did not parse, so an event that
+  straddled two reads vanished: a word, a tool-call fragment or the final `[DONE]` missing
+  from the client's answer, with no error anywhere. Events are now reassembled first
+  (`proxy/adapters/sse.py`); the tests cut each stream at every byte.
+- **Streamed Claude, Gemini and Azure answers carry their usage.** The Anthropic translator
+  dropped the token counts in `message_start` and `message_delta`, the Google one dropped
+  `usageMetadata`, and the Azure adapter never asked for the usage record. All three were
+  billed on an estimate, every time.
+- **That estimate counted the SSE framing, not the text.** With no usage record the
+  completion was tokenised from the raw stream (`data: {"id":...,"choices":[{"delta":...`),
+  40 to 100 times the real count: a few dozen such answers exhausted the daily budget, and
+  the spend and audit rows carried the invented figures. The forwarder now keeps what the
+  model wrote (content, tool-call fragments) and counts that. The usage record itself was
+  searched for one read at a time and lost when a read cut it; it is now found wherever
+  the reads fall.
+- **The mid-stream guard scans the answer, not its envelope.** It was fed the same raw
+  stream, where a phrase split across deltas is never contiguous, so it matched nothing.
+- **A Gemini stream cut by `MAX_TOKENS` or a safety filter ends properly.** Only `STOP`
+  produced a `finish_reason` and `[DONE]`.
+- **The circuit breaker recovers without Redis.** The routing filter, `/health` and the
+  dashboard asked "which endpoints are usable" with the call that *takes* the half-open
+  probe; the forwarder then found the probe gone and refused. An endpoint that opened once
+  stayed at "circuit open" until a restart unless the health prober covered it (it skips
+  localhost endpoints and those with no model list). The filter is now a read.
+- **Every exit reports to the breaker, and a lost probe expires.** A non-streaming network
+  error or timeout reported nothing, so a dead endpoint never opened its circuit from
+  non-streaming traffic; a stream answered with a 4xx reported nothing either. A probe
+  whose outcome never arrives (the caller disconnected) is released after one recovery
+  period, in memory and in Redis, where the probe key had no expiry and outlived restarts.
+- **`server.timeout` no longer caps a non-streaming generation.** A non-streaming upstream
+  sends nothing until the answer is whole, so the 30 s read timeout meant to catch a stalled
+  stream was a ceiling on the whole completion; the timeout was then treated as retryable
+  and the request sent to the next provider, with both billing. Non-streaming calls get
+  `server.response_timeout` (600 s); when it expires the caller gets `504` and the request
+  is not sent again. A connection that could not be made is still retried elsewhere.
+
 ## [1.38.0] — 2026-10-10
 
 ### The audit chain proves what it says; refusals are on the record; the daily budget counts every request (minor)

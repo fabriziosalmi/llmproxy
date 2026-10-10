@@ -20,6 +20,7 @@ from fastapi.responses import Response, StreamingResponse
 from core.metrics import MetricsTracker
 
 from .adapters.base import UpstreamStatusError
+from .adapters.sse import SSEReassembler
 
 logger = logging.getLogger("llmproxy.forwarder")
 
@@ -36,6 +37,22 @@ def _log_finalizer_failure(task: asyncio.Task) -> None:
 #: Upstream statuses that count against the endpoint and send the request to
 #: the next provider. Everything else is the caller's answer and is relayed.
 _RETRYABLE_UPSTREAM_STATUSES = frozenset({429, 500, 502, 503, 504})
+
+
+class UpstreamReadTimeout(HTTPException):
+    """The upstream took the request and did not answer in time.
+
+    Not sent to the next provider. A connection that could not be made cost
+    nothing and is worth retrying elsewhere; a request that was delivered is
+    most likely still being generated, and billed, so sending it again makes
+    the caller wait twice and pay twice for an answer that was already late.
+    """
+
+
+def _is_read_timeout(exc: BaseException) -> bool:
+    if isinstance(exc, getattr(aiohttp, "ConnectionTimeoutError", ())):
+        return False  # never connected: nothing was sent
+    return isinstance(exc, TimeoutError)
 
 
 def _endpoint_provider(endpoint: Any) -> str | None:
@@ -101,6 +118,90 @@ class _BoundedStreamBuffer:
 
     def text(self) -> str:
         return "".join(self.chunks)
+
+
+class _StreamObserver:
+    """Reads a stream as events, for accounting and for the mid-stream guard.
+
+    The bytes sent to the client are not touched; this only looks at them. It
+    replaces two things that worked on raw TCP reads:
+
+    * The usage record was parsed out of whichever read contained the string
+      ``"usage"``; when that event straddled two reads it was lost and the
+      request was billed on an estimate.
+    * The estimate, and the guard, were fed the raw stream:
+      ``data: {"id":...,"choices":[{"delta":{"content":"Hi"}}]}`` rather than
+      ``Hi``. Counting tokens over the framing overstated the completion 40 to
+      100 times, enough for a few dozen streamed answers without a usage record
+      to exhaust the daily budget; and a phrase split across deltas was never
+      contiguous in what the guard scanned, so it matched nothing.
+
+    What the model wrote (``delta.content``, legacy ``text``, tool-call names
+    and arguments) goes into ``buf``. An event that is not in the chat-chunk
+    shape is appended as it came, so an unfamiliar stream is still counted and
+    scanned, conservatively.
+    """
+
+    __slots__ = ("_events", "_buf", "_usage")
+
+    def __init__(self, buf: "_BoundedStreamBuffer", usage: dict[str, Any]):
+        self._events = SSEReassembler()
+        self._buf = buf
+        self._usage = usage
+
+    def feed(self, chunk: bytes) -> None:
+        for event in self._events.feed(chunk):
+            self._observe(event)
+
+    def finish(self) -> None:
+        tail = self._events.flush()
+        if tail:
+            self._observe(tail)
+
+    def _observe(self, event: bytes) -> None:
+        for raw in event.split(b"\n"):
+            if not raw.startswith(b"data:"):
+                continue
+            payload = raw[5:].strip()
+            if not payload or payload == b"[DONE]":
+                continue
+            try:
+                data = json.loads(payload)
+            except ValueError:
+                self._buf.append(payload.decode("utf-8", errors="replace"))
+                continue
+            if not isinstance(data, dict):
+                continue
+            usage = data.get("usage") or data.get("usageMetadata")
+            if isinstance(usage, dict) and usage:
+                self._usage.clear()
+                self._usage.update(usage)
+            choices = data.get("choices")
+            if isinstance(choices, list):
+                for choice in choices:
+                    if isinstance(choice, dict):
+                        self._buf.append(_choice_text(choice))
+            elif not usage:
+                self._buf.append(payload.decode("utf-8", errors="replace"))
+
+
+def _choice_text(choice: dict[str, Any]) -> str:
+    """What one stream choice adds to the answer: text and tool-call fragments."""
+    delta = choice.get("delta")
+    parts: list[str] = []
+    if isinstance(delta, dict):
+        content = delta.get("content")
+        if isinstance(content, str):
+            parts.append(content)
+        for call in delta.get("tool_calls") or []:
+            fn = call.get("function") if isinstance(call, dict) else None
+            if isinstance(fn, dict):
+                parts.append(str(fn.get("name") or ""))
+                parts.append(str(fn.get("arguments") or ""))
+    text = choice.get("text")
+    if isinstance(text, str):
+        parts.append(text)
+    return "".join(parts)
 
 
 # Actionable hints surfaced in 4xx/quota error details so operators reading
@@ -238,9 +339,22 @@ class RequestForwarder:
         endpoint_id,
     ):
         """Forward a single request (non-streaming) with circuit breaker tracking."""
-        response = await adapter.request(
-            target_url, translated_body, translated_headers, session
-        )
+        try:
+            response = await adapter.request(
+                target_url, translated_body, translated_headers, session
+            )
+        except (TimeoutError, aiohttp.ClientError, OSError) as e:
+            # The breaker hears about this. It did not: a network error or a
+            # timeout left here without a report, so a dead endpoint never
+            # opened its circuit from non-streaming traffic, and when the
+            # request was the half-open probe the probe was never given back.
+            await cb.report_failure()
+            if _is_read_timeout(e):
+                raise UpstreamReadTimeout(
+                    status_code=504,
+                    detail=f"Upstream {endpoint_id} did not answer in time",
+                ) from e
+            raise
         if response.status_code in _RETRYABLE_UPSTREAM_STATUSES:
             await cb.report_failure()
             # Provider hint surfaces an actionable next-step (key dashboard /
@@ -400,6 +514,9 @@ class RequestForwarder:
                     )
                     return ctx.response
 
+            except UpstreamReadTimeout:
+                ctx.body["model"] = original_model
+                raise
             except (TimeoutError, aiohttp.ClientError, OSError) as e:
                 # Retryable: network/timeout errors → try next provider
                 last_error = e
@@ -469,6 +586,9 @@ class RequestForwarder:
                 ) from e
             # Any other status passes through with the upstream's own body, as
             # it does for a non-streaming call (a 401 or 400 is the caller's).
+            # The endpoint answered, which is what the breaker asks: without
+            # this a half-open probe that got a 4xx was never given back.
+            await cb.report_success()
             ctx.response = Response(
                 content=e.content, status_code=e.status, media_type=e.media_type
             )
@@ -524,6 +644,7 @@ class RequestForwarder:
         held_bytes = 0
 
         stream_usage: dict[str, Any] = {}
+        observer = _StreamObserver(stream_buf, stream_usage)
         # How the stream ended, for the spend/audit rows and the outcome counter.
         # The status line already said 200, so this is the only place the truth
         # is kept: a guardrail kill, an upstream failure mid-stream and a client
@@ -564,8 +685,9 @@ class RequestForwarder:
                     "candidatesTokenCount", 0
                 )
             else:
-                # Fallback: estimate tokens from accumulated text when
-                # provider omits usage chunk (prevents budget bypass).
+                # Fallback: estimate tokens from the text the model wrote
+                # (see _StreamObserver) when the provider sends no usage
+                # record, so a stream without one is still charged.
                 prompt_text = " ".join(
                     str(m.get("content", "")) for m in ctx.body.get("messages", [])
                 )
@@ -702,32 +824,12 @@ class RequestForwarder:
                         ttft = time.perf_counter() - ttft_start
                         MetricsTracker.track_ttft(endpoint_id, ttft)
                         ctx.metadata["ttft_ms"] = round(ttft * 1000, 2)
-                    # Extract usage from final SSE chunks (OpenAI/Anthropic/Google)
-                    if b'"usage"' in chunk or b'"usageMetadata"' in chunk:
-                        try:
-                            for line in chunk.decode("utf-8", errors="replace").split(
-                                "\n"
-                            ):
-                                if (
-                                    line.startswith("data: ")
-                                    and line[6:].strip() != "[DONE]"
-                                ):
-                                    d = json.loads(line[6:])
-                                    u = d.get("usage") or d.get("usageMetadata", {})
-                                    if u:
-                                        stream_usage.clear()
-                                    stream_usage.update(u)
-                        except (json.JSONDecodeError, KeyError, UnicodeDecodeError):
-                            logger.debug(
-                                "Stream usage chunk parse skipped", exc_info=True
-                            )
-                    # Feed decoded text to the speculative analyzer via the
-                    # bounded rolling-window buffer.
-                    if speculative_task is not None:
-                        try:
-                            stream_buf.append(chunk.decode("utf-8", errors="replace"))
-                        except Exception:
-                            logger.debug("Stream buffer append skipped", exc_info=True)
+                    # The usage record, and the text the model wrote: for the
+                    # accounting when no usage record comes, and for the guard.
+                    try:
+                        observer.feed(chunk)
+                    except Exception:
+                        logger.debug("Stream observation skipped", exc_info=True)
                     if buffered_gate:
                         held_chunks.append(chunk)
                         held_bytes += len(chunk)
@@ -772,6 +874,10 @@ class RequestForwarder:
                 outcome.update(status=499, reason="client_disconnect")
                 raise
             finally:
+                try:
+                    observer.finish()
+                except Exception:
+                    logger.debug("Stream observation skipped", exc_info=True)
                 # Signal speculative task to stop and cancel if still running
                 kill_event.set()
                 if speculative_task is not None and not speculative_task.done():

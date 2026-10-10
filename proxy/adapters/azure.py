@@ -13,6 +13,7 @@ from typing import Any
 import aiohttp
 from starlette.responses import Response
 
+from ..http_session import response_timeout
 from .base import BaseModelAdapter, raise_for_stream_status
 
 
@@ -65,6 +66,11 @@ class AzureAdapter(BaseModelAdapter):
 
         # Body is identical to OpenAI — model field is ignored (deployment determines it)
         azure_body = dict(body)
+        # Ask for the usage record on streams, as the OpenAI adapter does. It
+        # was never requested here, so every streamed Azure answer was billed
+        # on an estimate.
+        if azure_body.get("stream") and "stream_options" not in azure_body:
+            azure_body["stream_options"] = {"include_usage": True}
 
         return url, azure_body, azure_headers
 
@@ -79,7 +85,9 @@ class AzureAdapter(BaseModelAdapter):
         headers: dict[str, str],
         session: aiohttp.ClientSession,
     ) -> Response:
-        async with session.post(url, json=body, headers=headers) as resp:
+        async with session.post(
+            url, json=body, headers=headers, **response_timeout(session)
+        ) as resp:
             content = await resp.read()
             status = resp.status
             content_type = resp.content_type or "application/json"

@@ -19,7 +19,9 @@ from typing import Any
 import aiohttp
 from starlette.responses import Response
 
+from ..http_session import response_timeout
 from .base import BaseModelAdapter, raise_for_stream_status
+from .sse import SSEReassembler, usage_chunk
 
 
 class AnthropicAdapter(BaseModelAdapter):
@@ -164,8 +166,15 @@ class AnthropicAdapter(BaseModelAdapter):
             },
         }
 
-    def translate_stream_chunk(self, chunk: bytes) -> bytes:
-        """Translate Anthropic SSE chunks to OpenAI SSE format."""
+    def translate_stream_chunk(self, chunk: bytes, state: dict | None = None) -> bytes:
+        """Translate Anthropic SSE events to OpenAI SSE format.
+
+        ``state`` is the per-stream scratch dict ``stream`` passes: the token
+        counts Anthropic reports in ``message_start`` (input) and
+        ``message_delta`` (output) are kept there and sent as one usage chunk
+        before ``[DONE]``. They used to be dropped, so a streamed Claude answer
+        never carried usage and was billed on a guess.
+        """
         text = chunk.decode("utf-8", errors="replace")
         lines = text.strip().split("\n")
         output_lines = []
@@ -179,6 +188,9 @@ class AnthropicAdapter(BaseModelAdapter):
                 try:
                     data = json.loads(data_str)
                     event_type = data.get("type", "")
+
+                    if state is not None:
+                        _note_usage(state, data)
 
                     if event_type == "content_block_delta":
                         delta = data.get("delta", {})
@@ -224,6 +236,13 @@ class AnthropicAdapter(BaseModelAdapter):
                             output_lines.append(f"data: {json.dumps(openai_chunk)}\n\n")
 
                     elif event_type == "message_stop":
+                        if state and ("prompt_tokens" in state or "completion_tokens" in state):
+                            output_lines.append(
+                                usage_chunk(
+                                    state.get("prompt_tokens", 0),
+                                    state.get("completion_tokens", 0),
+                                )
+                            )
                         output_lines.append("data: [DONE]\n\n")
 
                 except (json.JSONDecodeError, KeyError):
@@ -241,7 +260,9 @@ class AnthropicAdapter(BaseModelAdapter):
         headers: dict[str, str],
         session: aiohttp.ClientSession,
     ) -> Response:
-        async with session.post(url, json=body, headers=headers) as resp:
+        async with session.post(
+            url, json=body, headers=headers, **response_timeout(session)
+        ) as resp:
             content = await resp.read()
             status = resp.status
 
@@ -267,10 +288,33 @@ class AnthropicAdapter(BaseModelAdapter):
     ) -> AsyncGenerator[bytes, None]:
         async with session.post(url, json=body, headers=headers) as resp:
             await raise_for_stream_status(resp)
+            # Whole events only: a read can end anywhere, and an event cut in
+            # two parsed as nothing and was dropped (see adapters/sse.py).
+            events = SSEReassembler()
+            state: dict = {}
             async for chunk in resp.content.iter_any():
-                translated = self.translate_stream_chunk(chunk)
+                for event in events.feed(chunk):
+                    translated = self.translate_stream_chunk(event, state)
+                    if translated:
+                        yield translated
+            tail = events.flush()
+            if tail:
+                translated = self.translate_stream_chunk(tail, state)
                 if translated:
                     yield translated
+
+
+def _note_usage(state: dict, data: dict) -> None:
+    """Keep the token counts an Anthropic stream event carries."""
+    usage = data.get("usage")
+    if data.get("type") == "message_start":
+        usage = (data.get("message") or {}).get("usage")
+    if not isinstance(usage, dict):
+        return
+    if usage.get("input_tokens") is not None:
+        state["prompt_tokens"] = int(usage["input_tokens"] or 0)
+    if usage.get("output_tokens") is not None:
+        state["completion_tokens"] = int(usage["output_tokens"] or 0)
 
 
 def _translate_content(content):

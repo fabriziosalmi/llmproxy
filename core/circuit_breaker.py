@@ -36,16 +36,19 @@ elseif state == 'open' then
     local last_fail = tonumber(redis.call('get', last_fail_key) or 0)
     if (now - last_fail) > timeout then
         redis.call('set', state_key, 'half_open')
-        redis.call('set', probe_key, '1')
+        redis.call('set', probe_key, '1', 'EX', math.max(1, math.floor(timeout)))
         return 2
     end
     return 0
 elseif state == 'half_open' then
+    -- The probe key expires: a probe whose outcome is never reported (the
+    -- caller disconnected, the process died) used to hold the slot for good,
+    -- across restarts, and the endpoint stayed half-open and refused forever.
     local probe = redis.call('get', probe_key)
     if probe == '1' then
         return 0
     else
-        redis.call('set', probe_key, '1')
+        redis.call('set', probe_key, '1', 'EX', math.max(1, math.floor(timeout)))
         return 2
     end
 end
@@ -96,6 +99,15 @@ class BaseCircuitBreaker:
     async def can_execute(self) -> bool:
         raise NotImplementedError
 
+    def would_admit(self) -> bool:
+        """Whether a request might be admitted, WITHOUT admitting one.
+
+        ``can_execute`` is not a question: on an open circuit that is due it
+        takes the single half-open probe. Anything that only wants to know
+        (routing choosing among candidates, /health, the dashboard) asks this.
+        """
+        raise NotImplementedError
+
     async def report_success(self):
         raise NotImplementedError
 
@@ -139,22 +151,45 @@ class LocalCircuitBreaker(BaseCircuitBreaker):
         self._on_state_change = on_state_change
         self._lock = asyncio.Lock()
         self._half_open_probe_active = False
+        self._probe_started: float = 0
+
+    def _probe_in_flight(self, now: float) -> bool:
+        """A probe was admitted and its outcome is still awaited.
+
+        Not for ever: a probe whose outcome is never reported (the caller went
+        away mid-request, an exit path that forgot) used to hold the slot for
+        good, and the endpoint stayed half-open, refusing every request, until
+        a restart. After one recovery period the slot is free again.
+        """
+        return self._half_open_probe_active and (now - self._probe_started) <= self.recovery_timeout
+
+    def would_admit(self) -> bool:
+        now = time.time()
+        if self.state == CircuitState.CLOSED:
+            return True
+        if self.state == CircuitState.OPEN:
+            return now - self.last_failure_time > self.recovery_timeout
+        # Half-open: admissible unless a probe is in flight right now.
+        return not self._probe_in_flight(now)
 
     async def can_execute(self) -> bool:
         async with self._lock:
+            now = time.time()
             if self.state == CircuitState.CLOSED:
                 return True
             if self.state == CircuitState.OPEN:
-                if time.time() - self.last_failure_time > self.recovery_timeout:
+                if now - self.last_failure_time > self.recovery_timeout:
                     self.state = CircuitState.HALF_OPEN
                     self._half_open_probe_active = True
+                    self._probe_started = now
                     logger.info(f"CircuitBreaker ({self.name}): OPEN → HALF_OPEN, admitting probe.")
                     return True
                 return False
             if self.state == CircuitState.HALF_OPEN:
-                if self._half_open_probe_active:
+                if self._probe_in_flight(now):
                     return False
                 self._half_open_probe_active = True
+                self._probe_started = now
                 return True
             return False
 
@@ -263,6 +298,11 @@ class RedisCircuitBreaker(BaseCircuitBreaker):
                 self._on_state_change(self.name, old_state, new_state)
             except Exception as e:
                 logger.error(f"CircuitBreaker state change callback error: {e}")
+
+    def would_admit(self) -> bool:
+        # Only reached when Redis could not be read; the shared state is
+        # answered by CircuitManager.filter_executable from one MGET.
+        return self._local_fallback.would_admit()
 
     async def can_execute(self) -> bool:
         try:
@@ -427,10 +467,17 @@ class CircuitManager:
             return set()
 
         if not self.redis_client:
+            # A read here too. This branch called can_execute(), the very thing
+            # the paragraph above says not to: with no Redis (the default), the
+            # filter took the half-open probe of every candidate, the
+            # forwarder's own can_execute() then found the probe taken and
+            # refused, and nothing ever reported an outcome. An endpoint that
+            # opened once stayed at "circuit open" until a restart, unless the
+            # health prober happened to cover it.
             executable = set()
             for endpoint_id in endpoint_ids:
                 breaker = await self.get_breaker(endpoint_id)
-                if await breaker.can_execute():
+                if breaker.would_admit():
                     executable.add(endpoint_id)
             return executable
 
@@ -452,7 +499,7 @@ class CircuitManager:
             executable = set()
             for endpoint_id in endpoint_ids:
                 breaker = await self.get_breaker(endpoint_id)
-                if await breaker.can_execute():
+                if breaker.would_admit():
                     executable.add(endpoint_id)
             return executable
 
