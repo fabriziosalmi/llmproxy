@@ -2,6 +2,25 @@
 
 All notable changes to LLMProxy are documented here.
 
+## Unreleased
+
+### Dependency files follow the pip-compile convention, so Dependabot can keep the lock in sync
+
+- `requirements.txt` (the manifest) is now `requirements.in`, and
+  `requirements.lock` (the hash-pinned lock) is now `requirements.txt`. The
+  resolved set is unchanged: the same 70 pins, the same hashes.
+- Dependabot recognises the `.in`/`.txt` pair and regenerates the lock in the
+  same pull request. With the old names it bumped only the manifest, and every
+  pip pull request failed the Lockfile In Sync job.
+- `pip install -r requirements.txt` (`install.sh`, `make setup`, the dev
+  container) now installs the lock, with hashes checked, instead of resolving
+  the manifest at install time. The lock is compiled for Linux and also
+  installs on macOS. `requirements-dev.txt` includes `requirements.in`, because
+  pip's hash mode rejects its unhashed test dependencies next to the lock.
+- If you regenerate the lock by hand: `uv pip compile requirements.in
+  --generate-hashes --python-version 3.12 --python-platform linux
+  --output-file requirements.txt`.
+
 ## [1.39.5] — 2026-10-10
 
 ### The audit-log page is actually published (patch)

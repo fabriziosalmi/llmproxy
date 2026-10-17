@@ -133,8 +133,8 @@ jobs:
           cache: pip
       - run: pip install pip-audit
       - name: pip-audit
-        # Audits the LOCK, which is what the image installs. Auditing
-        # requirements.txt audited an input manifest whose 27 transitive
+        # Audits the LOCK (requirements.txt), which is what the image installs.
+        # Auditing the manifest (requirements.in) audited one whose 27 transitive
         # packages were resolved fresh at build time, so the verdict applied to
         # a resolution nobody recorded rather than to the artefact.
         # BLOCKING: a security gateway must fail CI on known dependency CVEs.
@@ -148,11 +148,11 @@ jobs:
         #
         #   PYSEC-2024-62 — review by 2026-12-01, @fab. Assessed as not
         #   applicable to this usage. Re-examine or remove at that date.
-        run: pip-audit -r requirements.lock --skip-editable --ignore-vuln PYSEC-2024-62
+        run: pip-audit -r requirements.txt --skip-editable --ignore-vuln PYSEC-2024-62
       - name: Install the lock (as the image does)
         # Also a second signal that the lock is installable with its hashes on
         # a clean machine, which until now only the Docker build proved.
-        run: pip install --require-hashes -r requirements.lock
+        run: pip install --require-hashes -r requirements.txt
       - name: Licence gate
         # BLOCKING on strong/network copyleft only. llmproxy is MIT and ships
         # as an image users run as a network service, so an AGPL or SSPL
@@ -171,18 +171,22 @@ jobs:
       - name: Recompile and diff
         # A lock that has drifted from its manifest is worse than no lock: the
         # image would install a set nobody has reviewed while the manifest
-        # implies otherwise. A Dependabot PR that bumps requirements.txt
-        # without regenerating fails here rather than shipping.
+        # implies otherwise. A PR that edits requirements.in without
+        # regenerating fails here rather than shipping. The .in/.txt naming is
+        # the pip-compile convention Dependabot recognises: it bumps the
+        # manifest and regenerates the lock in the same PR. With the old
+        # requirements.txt/requirements.lock pair it bumped only the manifest
+        # and every pip PR failed this job.
         #
         # Compiled in place and compared with git rather than to a temp file:
         # uv records its own command line in the header, so a different output
         # path is a spurious diff on every run.
         run: |
-          uv pip compile requirements.txt --generate-hashes \
+          uv pip compile requirements.in --generate-hashes \
             --python-version 3.12 --python-platform linux \
-            --output-file requirements.lock --quiet
-          if ! git diff --exit-code -- requirements.lock; then
-            echo "::error::requirements.lock is out of sync with requirements.txt."
+            --output-file requirements.txt --quiet
+          if ! git diff --exit-code -- requirements.txt; then
+            echo "::error::requirements.txt is out of sync with requirements.in."
             echo "Regenerate with the command in the lockfile header and commit it."
             exit 1
           fi

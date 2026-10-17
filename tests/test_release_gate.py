@@ -116,10 +116,10 @@ def test_base_images_are_digest_pinned(image):
 
 
 def test_the_python_lock_exists_and_is_hash_pinned():
-    """requirements.txt is an input manifest: 25 packages, six open-ended, with
+    """requirements.in is an input manifest: 25 packages, six open-ended, with
     27 transitive packages resolved fresh at every build and nothing recording
-    what was chosen."""
-    lock = _read("requirements.lock")
+    what was chosen. requirements.txt is the lock compiled from it."""
+    lock = _read("requirements.txt")
 
     assert "--hash=sha256:" in lock
     pinned = len([ln for ln in lock.splitlines() if "==" in ln and not ln.startswith("#")])
@@ -129,15 +129,15 @@ def test_the_python_lock_exists_and_is_hash_pinned():
 def test_the_image_installs_from_the_lock_with_hashes():
     dockerfile = _read("Dockerfile")
 
-    assert "--require-hashes -r requirements.lock" in dockerfile
-    assert "pip install --no-cache-dir -r requirements.txt" not in dockerfile
+    assert "--require-hashes -r requirements.txt" in dockerfile
+    assert "-r requirements.in" not in dockerfile
 
 
 def test_ci_audits_the_lock_not_the_manifest():
-    """Auditing requirements.txt audited a resolution nobody recorded."""
+    """Auditing the manifest audited a resolution nobody recorded."""
     ci = _read(".github/workflows/ci.yml")
 
-    assert "pip-audit -r requirements.lock" in ci
+    assert "pip-audit -r requirements.txt" in ci
 
 
 def test_ci_fails_when_the_lock_drifts():
@@ -146,7 +146,8 @@ def test_ci_fails_when_the_lock_drifts():
     job = ci["jobs"]["lockfile"]
     runs = " ".join(str(s.get("run", "")) for s in job["steps"])
 
-    assert "uv pip compile" in runs
+    assert "uv pip compile requirements.in" in runs
+    assert "--output-file requirements.txt" in runs
     assert "git diff --exit-code" in runs
 
 

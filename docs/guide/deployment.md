@@ -177,8 +177,8 @@ Overridable parameters in `values.yaml`:
 - **Workflow hardening**: every action reference is pinned to a commit SHA that exists
 - **Lint**: `ruff check`
 - **Type check**: mypy on `core/`, `proxy/`, `store/`, `plugins/`
-- **Dependency audit**: `pip-audit` on `requirements.lock`, and a licence gate
-- **Lockfile**: `requirements.lock` is in sync with `requirements.txt`
+- **Dependency audit**: `pip-audit` on `requirements.txt` (the lock), and a licence gate
+- **Lockfile**: `requirements.txt` is in sync with `requirements.in`
 - **Secret scan**: gitleaks over the full history
 - **Supply chain**: `scripts/verify_deps.py --strict` and a `.pth` file audit
 - **Test**: pytest with branch coverage, failing under 73%, with Postgres and Redis service containers
@@ -292,13 +292,13 @@ it, for example:
 
 ### What is hash-pinned
 
-The Docker image installs from `requirements.lock` with `--require-hashes`; CI
-runs `pip-audit` on that same lock file. `install.sh` and `make setup`
-(the bare-metal path) install `requirements.txt` instead, unhashed and resolved
-at install time. The lock is compiled for Linux and Python 3.12. If you run
-bare-metal, you can resolve your own lock on your platform (`uv pip compile
-requirements.txt --generate-hashes --output-file requirements.lock`) and
-install it with `pip install --require-hashes -r`.
+`requirements.in` is the manifest; `requirements.txt` is the lock compiled from
+it with hashes, for Linux and Python 3.12. The Docker image installs the lock
+with `--require-hashes`, CI runs `pip-audit` on it, and `install.sh` and
+`make setup` (the bare-metal path) install the same file, so pip checks the
+hashes there too. The same lock also installs on macOS. To resolve a lock of
+your own on another platform: `uv pip compile requirements.in
+--generate-hashes --output-file requirements.txt`.
 
 ## Upgrading and rolling back
 
