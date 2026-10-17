@@ -41,6 +41,6 @@
     "vitest": "^5.0.4"
   },
   "dependencies": {
-    "highlight.js": "^11.9.0"
+    "highlight.js": "^11.12.0"
   }
 }
