@@ -31,6 +31,22 @@ updates:
     labels:
       - dependencies
       - frontend
+    # vitest and its @vitest/* plugins pin each other to the same version
+    # (@vitest/coverage-v8 4.1.9 peers vitest 4.1.9): bumped one at a time, as
+    # in #229, every npm ci fails with ERESOLVE.
+    groups:
+      vitest:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+    # Tailwind 4 is a migration, not a bump: #238 arrived as a security update
+    # for postcss-selector-parser and moved tailwindcss 3 -> 4 without naming
+    # it, and the build failed on the new PostCSS plugin. The advisories it
+    # would clear are in the dev build chain, outside the production audit
+    # gate. Remove this ignore when the UI is migrated.
+    ignore:
+      - dependency-name: "tailwindcss"
+        update-types: ["version-update:semver-major"]
 
   # Base images are digest-pinned in the Dockerfile, so patches arrive only
   # through this. Without it, pinning would trade a moving base for a frozen
