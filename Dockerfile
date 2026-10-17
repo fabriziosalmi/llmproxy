@@ -6,7 +6,7 @@
 # by a CI job. Dependabot's `docker` ecosystem proposes the digest bumps, so
 # patching stays routine rather than becoming manual.
 # ── Stage 1 — UI build ────────────────────────────────────────────────────────
-FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS ui-builder
+FROM node:25-alpine@sha256:bdf2cca6fe3dabd014ea60163eca3f0f7015fbd5c7ee1b0e9ccb4ced6eb02ef4 AS ui-builder
 
 WORKDIR /ui
 
