@@ -68,3 +68,11 @@ updates:
     open-pull-requests-limit: 3
     labels:
       - ci
+    # CodeQL's init, autobuild, analyze and upload-sarif are one release and
+    # must run at one version: #219 moved autobuild alone to 4.38.3 and both
+    # Analyze jobs failed ("Loaded a configuration file for version 4.37.9,
+    # but running version 4.38.3").
+    groups:
+      codeql:
+        patterns:
+          - "github/codeql-action*"
