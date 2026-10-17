@@ -148,7 +148,7 @@ def test_ci_fails_when_the_lock_drifts():
 
     assert "uv pip compile requirements.in" in runs
     assert "--output-file requirements.txt" in runs
-    assert "git diff --exit-code" in runs
+    assert "scripts/check_lock_sync.py" in runs
 
 
 def test_dependabot_updates_the_digests():

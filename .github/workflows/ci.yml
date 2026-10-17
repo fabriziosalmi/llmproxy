@@ -168,7 +168,7 @@ jobs:
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-      - name: Recompile and diff
+      - name: Recompile and compare
         # A lock that has drifted from its manifest is worse than no lock: the
         # image would install a set nobody has reviewed while the manifest
         # implies otherwise. A PR that edits requirements.in without
@@ -178,14 +178,17 @@ jobs:
         # requirements.txt/requirements.lock pair it bumped only the manifest
         # and every pip PR failed this job.
         #
-        # Compiled in place and compared with git rather than to a temp file:
-        # uv records its own command line in the header, so a different output
-        # path is a spurious diff on every run.
+        # Compiled in place, so uv keeps the committed versions as preferences,
+        # then compared by content (name, version, hashes) against the
+        # committed copy: Dependabot's uv writes the same resolution with
+        # different extras and comments, and a text diff failed #223 and #230
+        # on formatting alone. scripts/check_lock_sync.py says why.
         run: |
+          cp requirements.txt "$RUNNER_TEMP/requirements.committed.txt"
           uv pip compile requirements.in --generate-hashes \
             --python-version 3.12 --python-platform linux \
             --output-file requirements.txt --quiet
-          if ! git diff --exit-code -- requirements.txt; then
+          if ! python3 scripts/check_lock_sync.py "$RUNNER_TEMP/requirements.committed.txt" requirements.txt; then
             echo "::error::requirements.txt is out of sync with requirements.in."
             echo "Regenerate with the command in the lockfile header and commit it."
             exit 1
