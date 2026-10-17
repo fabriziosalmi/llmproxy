@@ -4,7 +4,7 @@ LLMProxy can run WebAssembly modules as plugins through the [Extism](https://ext
 
 ## Status
 
-- The `extism` package is commented out in `requirements.txt` and is not in the published image. Without it, WASM plugins are skipped.
+- The `extism` package is commented out in `requirements.in` and is not in the published image. Without it, WASM plugins are skipped.
 - The shipped manifest declares no WASM plugin, and the repository tracks no compiled `.wasm` module.
 - The tests of the runner use a mocked Extism. No test runs a real module.
 - **In the request pipeline, a WASM plugin call fails before it reaches the module.** The runner serialises the context metadata with `json.dumps`, and the pipeline always puts the orchestrator object in that metadata (`ctx.metadata["rotator"]`), which is not JSON-serialisable. The engine records the failure as an error of the plugin: in a fail-closed ring the request is refused with `Plugin <name> failed`, in a fail-open ring the plugin is skipped. The rest of this page describes the runner's contract as written.

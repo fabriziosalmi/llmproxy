@@ -1,5 +1,5 @@
 # Development/test dependencies — install with: pip install -r requirements-dev.txt
--r requirements.txt
+-r requirements.in
 
 # Test runners
 pytest-cov>=5.0.0
