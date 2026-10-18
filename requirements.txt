@@ -569,9 +569,9 @@ cryptography==50.0.2 \
     --hash=sha256:fa8f5efb344d6908a1ce62f4a24e2e5780f825d6f53f5f50ec5ffacac72936cb \
     --hash=sha256:fdd28f912fccfec1846a94e2e1e8f9b0012f557f0c46fe4f3eb0d7a87afcf90b
     # via -r requirements.in
-fastapi==0.141.1 \
-    --hash=sha256:bfb91aa2d334c61cb35ba9a116fc123b3d3df31640b801cf57a7a78ec3f603b3 \
-    --hash=sha256:e8822fc40db1e1858054d7a949a888695bc9bdce70139178e33bd2871a453ca1
+fastapi==0.143.1 \
+    --hash=sha256:4cafaab64df8534758bf0fce61947f5e27e6cd512798ccbbaad5425086c3b664 \
+    --hash=sha256:687beb445804e4c4dbe2a76fd83c25e9b973ac48c267defb86f791e099baecc4
     # via
     #   -r requirements.in
     #   sentry-sdk
@@ -1015,6 +1015,7 @@ opentelemetry-api==1.44.0 \
     --hash=sha256:94b98c893a91b88657eaac1e3ba89618cdb85be6918196705354f34728b2cdef
     # via
     #   -r requirements.in
+    #   fastapi
     #   opentelemetry-exporter-otlp-proto-grpc
     #   opentelemetry-exporter-otlp-proto-http
     #   opentelemetry-instrumentation
