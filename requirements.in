@@ -4,7 +4,7 @@ uvicorn[standard]==0.54.0
 PyYAML==6.0.3
 
 # HTTP
-aiohttp==3.14.3
+aiohttp==3.14.5
 
 # Database
 aiosqlite==0.22.1
