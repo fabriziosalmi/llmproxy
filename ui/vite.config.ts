@@ -24,19 +24,25 @@ const proxyConfig = Object.fromEntries(
 // FastAPI mounts the built UI at `/ui`. Mirror that in dev so window.location.origin
 // + same-origin fetches behave identically across dev and prod.
 export default defineConfig({
-    root: __dirname,
+    root: import.meta.dirname,
     base: '/ui/',
     publicDir: 'public',
     build: {
         outDir: 'dist',
         emptyOutDir: true,
         sourcemap: true,
-        rollupOptions: {
+        rolldownOptions: {
             input: {
-                main: resolve(__dirname, 'index.html'),
-                chat: resolve(__dirname, 'chat.html'),
-                oauth: resolve(__dirname, 'oauth-callback.html'),
+                main: resolve(import.meta.dirname, 'index.html'),
+                chat: resolve(import.meta.dirname, 'chat.html'),
+                oauth: resolve(import.meta.dirname, 'oauth-callback.html'),
             },
+            // Rolldown merges shared code, its runtime helpers included, into an entry chunk
+            // unless entry signatures are strict. Here it picked the `chat` entry, so the
+            // dashboard imported that entry and ran chat.js's page setup on index.html, which
+            // throws before main.js shows the login overlay. Strict keeps shared code in common
+            // chunks, so each page runs only its own entry.
+            preserveEntrySignatures: 'strict',
         },
     },
     server: {
