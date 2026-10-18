@@ -104,7 +104,7 @@ def test_the_pth_scan_reports_how_many_files_it_examined():
 # ── base images are pinned, and something updates the pins ──────────────────
 
 
-@pytest.mark.parametrize("image", ["python:3.12-slim", "node:20-alpine"])
+@pytest.mark.parametrize("image", ["python:3.12-slim", "node:24-alpine"])
 def test_base_images_are_digest_pinned(image):
     dockerfile = _read("Dockerfile")
     pattern = re.compile(rf"FROM {re.escape(image)}@sha256:[0-9a-f]{{64}}")

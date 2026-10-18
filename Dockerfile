@@ -1,12 +1,12 @@
 # syntax=docker/dockerfile:1.6
 # Base images are pinned by digest so a rebuild of a given commit produces
-# the same foundation. `python:3.12-slim` and `node:20-alpine` are mutable
+# the same foundation. `python:3.12-slim` and `node:24-alpine` are mutable
 # tags rebuilt upstream, which made the largest input to the image the one
 # nobody pinned — while every GitHub Action here is SHA-pinned and enforced
 # by a CI job. Dependabot's `docker` ecosystem proposes the digest bumps, so
 # patching stays routine rather than becoming manual.
 # ── Stage 1 — UI build ────────────────────────────────────────────────────────
-FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS ui-builder
+FROM node:24-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS ui-builder
 
 WORKDIR /ui
 

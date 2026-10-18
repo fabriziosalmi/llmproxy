@@ -261,7 +261,7 @@ build_ui_if_possible() {
     if ! command -v npm >/dev/null 2>&1; then
         warn "npm not found — skipping UI build."
         warn "The admin console will load but Tailwind classes will not be styled."
-        hint "Install Node 20+ for the optimized bundle: https://nodejs.org/"
+        hint "Install Node 24+ for the optimized bundle: https://nodejs.org/"
         return 0
     fi
     info "Building UI bundle (Vite)..."
