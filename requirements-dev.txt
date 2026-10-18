@@ -8,4 +8,4 @@ httpx>=0.27.0
 hypothesis>=6.169.1
 
 # Linters — pinned so CI and local runs agree (ci.yml installs the same pin).
-ruff==0.15.7
+ruff==0.17.0
