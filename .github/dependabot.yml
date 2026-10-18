@@ -60,6 +60,13 @@ updates:
     labels:
       - dependencies
       - docker
+    # The UI builder follows Node's even-numbered LTS lines. Dependabot would
+    # propose every major, odd ones included (it opened node 25, a line with
+    # no LTS that was already end-of-life), so majors are moved by hand to the
+    # next LTS together with the CI node-version; digests and minors still flow.
+    ignore:
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: "/"
