@@ -149,7 +149,7 @@ function renderNeedsAttention(issues: TriageIssue[], onRefreshRequest?: () => vo
 
     // Fetch muted/acknowledged metadata
     const activeMutes = getActiveMutes();
-    let acknowledged: string[] = [];
+    let acknowledged: string[];
     try {
         acknowledged = JSON.parse(localStorage.getItem('llmproxy:acknowledged_issues') || '[]');
     } catch {
