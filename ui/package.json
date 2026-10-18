@@ -20,6 +20,7 @@
     "e2e:install": "playwright install --with-deps chromium"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.64.1",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/jest-dom": "^7.0.1",
@@ -29,7 +30,7 @@
     "@typescript-eslint/parser": "^8.71.2",
     "@vitest/coverage-v8": "^5.0.4",
     "autoprefixer": "^10.6.1",
-    "eslint": "^9.17.0",
+    "eslint": "^10.13.0",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.13.0",
     "happy-dom": "21.0.1",
