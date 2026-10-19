@@ -1,5 +1,5 @@
 # Core
-fastapi==0.143.1
+fastapi==0.143.3
 uvicorn[standard]==0.54.0
 PyYAML==6.0.3
 
