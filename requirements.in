@@ -19,7 +19,7 @@ PyJWT==2.15.1
 
 # Export & Observability
 aiofiles==25.1.0
-sentry-sdk[fastapi]==2.72.0
+sentry-sdk[fastapi]==2.73.0
 
 # Observability
 opentelemetry-api>=1.25.0
@@ -31,7 +31,7 @@ opentelemetry-instrumentation-aiohttp-server>=0.63b1
 opentelemetry-exporter-otlp>=1.25.0
 
 # Utilities
-cachetools==7.2.1
+cachetools==7.2.6
 
 # Type stubs
 types-PyYAML>=6.0.12.20260906
