@@ -4,6 +4,37 @@ All notable changes to LLMProxy are documented here.
 
 ## Unreleased
 
+## [1.39.6] — 2026-10-31
+
+### Dependency advisories fixed in the image (patch)
+
+- **certifi 2026.10.23** (PYSEC-2026-4320) and **OpenTelemetry 1.45.2**, contrib
+  0.66b2 (CVE-2026-114603 in opentelemetry-api 1.44.0). The Dependency Audit
+  job had failed on every pull request since the advisories were published;
+  `pip-audit` on the lock reports no known vulnerabilities again. 1.45 adds two
+  packages it split out, `opentelemetry-exporter-http-transport` and
+  `opentelemetry-exporter-otlp-common`.
+- Dependency updates merged since 1.39.5, among them FastAPI 0.162.0,
+  uvicorn 0.54.0, sentry-sdk 2.73.0, PyJWT 2.15.1 and aiohttp 3.14.5.
+
+### The UI builds on Node 24 LTS with Vite 8 and ESLint 10
+
+- **Node 24 LTS** in the image's UI build stage and in CI (Node 20 is
+  end-of-life). Dependabot no longer proposes Node majors, odd-numbered
+  non-LTS lines included; they move by hand to the next LTS.
+- **Vite 8.** Rolldown had merged its runtime helpers into the chat page's
+  entry chunk, so the dashboard ran the chat page's setup and threw before the
+  login overlay appeared; `preserveEntrySignatures: 'strict'` keeps shared code
+  in common chunks.
+- **ESLint 10**, with `@eslint/js` declared directly (ESLint 10 no longer
+  installs it).
+- vitest 5 lands together with its coverage plugin.
+
+### CI
+
+- CodeQL actions move as one group; the lock check compares content, so a lock
+  Dependabot regenerates passes when it resolves the same set.
+
 ### Dependency files follow the pip-compile convention, so Dependabot can keep the lock in sync
 
 - `requirements.txt` (the manifest) is now `requirements.in`, and
