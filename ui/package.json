@@ -34,7 +34,7 @@
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.13.0",
     "happy-dom": "21.0.4",
-    "postcss": "8.5.30",
+    "postcss": "8.5.32",
     "prettier": "^3.9.10",
     "tailwindcss": "^3.4.17",
     "typescript": "^6.0.3",
