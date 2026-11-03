@@ -44,8 +44,15 @@ updates:
     # it, and the build failed on the new PostCSS plugin. The advisories it
     # would clear are in the dev build chain, outside the production audit
     # gate. Remove this ignore when the UI is migrated.
+    # TypeScript 7 ships without the classic compiler API that
+    # typescript-eslint needs: #279 failed at npm ci (ERESOLVE, the plugin
+    # peers typescript ">=4.8.4 <6.1.0") and eslint aborts with
+    # "typescript-eslint does not support TS 7.0". Remove this ignore when a
+    # typescript-eslint release peers typescript 7.
     ignore:
       - dependency-name: "tailwindcss"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
 
   # Base images are digest-pinned in the Dockerfile, so patches arrive only
