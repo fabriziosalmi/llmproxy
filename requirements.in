@@ -34,7 +34,7 @@ opentelemetry-exporter-otlp>=1.25.0
 cachetools==7.2.7
 
 # Type stubs
-types-PyYAML>=6.0.12.20261030
+types-PyYAML>=6.0.12.20261103
 types-cachetools>=5.0.0
 types-aiofiles>=24.1.0
 
