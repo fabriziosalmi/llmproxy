@@ -1,6 +1,8 @@
 version: 2
 updates:
   - package-ecosystem: pip
+    cooldown:
+      default-days: 7
     directory: "/"
     schedule:
       interval: weekly
@@ -13,6 +15,8 @@ updates:
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: npm
+    cooldown:
+      default-days: 7
     directory: "/docs"
     schedule:
       interval: weekly
@@ -23,6 +27,8 @@ updates:
       - documentation
 
   - package-ecosystem: npm
+    cooldown:
+      default-days: 7
     directory: "/ui"
     schedule:
       interval: weekly
@@ -59,6 +65,8 @@ updates:
   # through this. Without it, pinning would trade a moving base for a frozen
   # one — the worse of the two.
   - package-ecosystem: docker
+    cooldown:
+      default-days: 7
     directory: "/"
     schedule:
       interval: weekly
@@ -76,6 +84,8 @@ updates:
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
+    cooldown:
+      default-days: 7
     directory: "/"
     schedule:
       interval: weekly
